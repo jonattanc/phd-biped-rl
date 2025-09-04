@@ -1,3 +1,4 @@
 pybullet==3.2.*
-numpy=2.3.*
+xacrodoc==1.2.*
+numpy==2.3.*
 black==25.1.*

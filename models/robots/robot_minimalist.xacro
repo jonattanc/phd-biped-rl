@@ -1,0 +1,81 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="myrobot">
+  <xacro:property name="body_radius" value="0.2" />
+  <xacro:property name="body_length" value="0.6" />
+  <xacro:property name="leg_radius" value="0.1" />
+  <xacro:property name="leg_length" value="0.4" />
+  <xacro:property name="leg_offset" value="0.25" />
+  <xacro:property name="head_radius" value="0.15" />
+  
+  <material name="robot_material">
+    <color rgba="0.37 0.09 0.09 1"/>
+  </material>
+   
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <cylinder length="${body_length}" radius="${body_radius}"/>
+      </geometry>
+	  <material name="robot_material"/>
+    </visual>
+	<collision>
+      <geometry>
+        <cylinder length="${body_length}" radius="${body_radius}"/>
+      </geometry>
+    </collision>
+	<inertial>
+      <mass value="10"/>
+      <inertia ixx="0.4" ixy="0.0" ixz="0.0" iyy="0.4" iyz="0.0" izz="0.2"/>
+    </inertial>
+  </link>
+  
+  <xacro:macro name="leg" params="prefix reflect">
+	  <link name="${prefix}_leg_link">
+		<visual>
+		  <geometry>
+			<cylinder length="${leg_length}" radius="${leg_radius}"/>
+		  </geometry>
+		  <origin rpy="0 0 0" xyz="0 0 -${leg_length/2}"/>
+		  <material name="robot_material"/>
+		</visual>
+		<collision>
+		  <geometry>
+			<cylinder length="${leg_length}" radius="${leg_radius}"/>
+		  </geometry>
+		  <origin rpy="0 0 0" xyz="0 0 -${leg_length/2}"/>
+		</collision>
+	  </link>
+
+	  <joint name="base_to_${prefix}_leg" type="continuous">
+		<parent link="base_link"/>
+		<child link="${prefix}_leg_link"/>
+		<origin xyz="0 ${leg_offset*reflect} -${body_length/2}"/>
+		<axis xyz="0 1 0"/>
+	  </joint>
+  </xacro:macro>
+  
+  <xacro:leg prefix="right" reflect="-1" />
+  <xacro:leg prefix="left" reflect="1" />
+  
+  <link name="head_link">
+    <visual>
+      <geometry>
+        <sphere radius="${head_radius}"/>
+      </geometry>
+	  <origin rpy="0 0 0" xyz="0 0 ${head_radius}"/>
+      <material name="robot_material"/>
+    </visual>
+	<collision>
+      <geometry>
+        <sphere radius="${head_radius}"/>
+      </geometry>
+	  <origin rpy="0 0 0" xyz="0 0 ${head_radius}"/>
+    </collision>
+  </link>
+  
+  <joint name="base_to_head" type="fixed">
+    <parent link="base_link"/>
+    <child link="head_link"/>
+	<origin xyz="0 0 ${body_length/2}"/>
+  </joint>
+</robot>

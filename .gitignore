@@ -17,7 +17,6 @@ ENV/
 logs/
 runs/
 checkpoints/
-models/
 
 # OS-specific
 .DS_Store
@@ -25,3 +24,6 @@ Thumbs.db
 
 # Jupyter notebooks
 .ipynb_checkpoints/
+
+# Others
+tmp/
