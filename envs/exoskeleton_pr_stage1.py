@@ -8,14 +8,14 @@ from robot import Robot
 
 class ExoskeletonPRst1:
     """
-    Ambiente de Simulação para o circuito PR (Piso Regular) SEM depender da biblioteca gymnasium.
+    Ambiente de Simulação para o circuito PR (Piso Regular).
     Usa o robô 'robot_stage1' com apenas 2 articulações.
     """
 
     def __init__(
         self,
         robot_name: str = "robot_stage1",
-        plane_name: str = "PR",  # Agora usado para construir o caminho do arquivo
+        plane_name: str = "PR",  
         enable_gui: bool = False,
         time_limit: float = 20.0,
         target_distance: float = 10.0,
@@ -24,7 +24,7 @@ class ExoskeletonPRst1:
     ):
         # Parâmetros
         self.robot_name = robot_name
-        self.plane_name = plane_name  # Corrigido: estava 'palne_name'
+        self.plane_name = plane_name 
         self.enable_gui = enable_gui
         self.time_limit = time_limit
         self.target_distance = target_distance
@@ -39,7 +39,7 @@ class ExoskeletonPRst1:
         # Estado da simulação
         self.physics_client = None
         self.robot = None
-        self.plane_id = None  # Armazena o ID do plano carregado
+        self.plane_id = None
         self.current_time = 0.0
         self.distance_traveled = 0.0
         self.prev_x_pos = 0.0
@@ -83,7 +83,7 @@ class ExoskeletonPRst1:
             raise FileNotFoundError(f"Arquivo de ambiente não encontrado: {plane_urdf_path}")
 
         # Carrega o piso a partir do arquivo URDF personalizado
-        self.plane_id = p.loadURDF(f"{self.plane_name}.urdf")  # Agora busca em 'models_env_path'
+        self.plane_id = p.loadURDF(f"{self.plane_name}.urdf")
 
         # Se precisar configurar o atrito dinamicamente após o carregamento, descomente:
         # p.changeDynamics(self.plane_id, -1, lateralFriction=0.8)
