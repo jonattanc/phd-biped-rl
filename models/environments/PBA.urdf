@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<robot name="low_friction_plane">
+  <link name="plane_link">
+    <contact>
+      <!-- Coeficiente de atrito reduzido para 0.1, conforme tese -->
+      <lateral_friction value="0.1"/>
+      <rolling_friction value="0.0"/>
+      <spinning_friction value="0.0"/>
+    </contact>
+    <inertial>
+      <origin xyz="0 0 0"/>
+      <mass value="10000"/>
+      <inertia ixx="1000" ixy="0" ixz="0" iyy="1000" iyz="0" izz="1000"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0"/>
+      <geometry>
+        <box size="10.0 1.5 0.1"/>
+      </geometry>
+      <material name="blue_ice">
+        <color rgba="0.5 0.8 1.0 1"/> <!-- Cor para indicar piso escorregadio -->
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0"/>
+      <geometry>
+        <box size="10.0 1.5 0.1"/>
+      </geometry>
+    </collision>
+  </link>
+</robot>

@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<robot name="high_friction_plane">
+  <link name="plane_link">
+    <contact>
+      <lateral_friction value="0.8"/>
+      <rolling_friction value="0.0"/>
+      <spinning_friction value="0.0"/>
+    </contact>
+    <inertial>
+      <origin xyz="0 0 0"/>
+      <mass value="10000"/> <!-- Massa muito alta para ser imóvel -->
+      <inertia ixx="1000" ixy="0" ixz="0" iyy="1000" iyz="0" izz="1000"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0"/>
+      <geometry>
+        <box size="10.0 1.5 0.1"/> <!-- Comprimento (X) 10m, Largura (Y) 1.5m, Altura (Z) 0.1m -->
+      </geometry>
+      <material name="grey">
+        <color rgba="0.8 0.8 0.8 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0"/>
+      <geometry>
+        <box size="10.0 1.5 0.1"/>
+      </geometry>
+    </collision>
+  </link>
+</robot>

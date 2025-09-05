@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<robot name="ascending_ramp">
+  <link name="ramp_link">
+    <contact>
+      <lateral_friction value="0.5"/> <!-- Atrito padrão conforme tese -->
+      <rolling_friction value="0.0"/>
+      <spinning_friction value="0.0"/>
+    </contact>
+    <inertial>
+      <origin xyz="0 0 0"/>
+      <mass value="10000"/>
+      <inertia ixx="1000" ixy="0" ixz="0" iyy="1000" iyz="0" izz="1000"/>
+    </inertial>
+    <visual>
+      <!-- A rampa tem 10m de comprimento e sobe 1.48m, resultando em uma inclinação.
+         Para criar a rampa, usamos um box e o rotacionamos.
+         A altura do centro do box precisa ser ajustada para que a base fique no chão.
+         A altura do centro = (altura da rampa / 2) * sin(angulo) -->
+      <origin xyz="5.0 0 0.74" rpy="0.145 0 0"/> <!-- rpy: ~8.33° em radianos (0.145 rad) -->
+      <geometry>
+        <box size="10.0 1.5 0.1"/>
+      </geometry>
+      <material name="grey_ramp">
+        <color rgba="0.6 0.6 0.6 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="5.0 0 0.74" rpy="0.145 0" xyz="0 0 0"/>
+      <geometry>
+        <box size="10.0 1.5 0.1"/>
+      </geometry>
+    </collision>
+  </link>
+</robot>

@@ -41,11 +41,23 @@ if __name__ == "__main__":
 
     initial_base_position = [0, 0, 0.7]  # x, y, z
     initial_base_orientation = [0, 0, 0]  # Euler angles: x roll, y pitch, z yaw
-    selected_robot = "robot_minimalist"
+
+    # Escolha o robo desejado:
+    selected_robot = "robot_stage1"
+    # selected_robot = "robot_stage2"
+    # selected_robot = "robot_stage3"
+
 
     robot = Robot(name=selected_robot, base_position=initial_base_position, base_orientation=initial_base_orientation)
 
-    plane = "plane.urdf"
+    # Escolha o ambiente desejado:
+    plane = "models/environments/PR.urdf"       # Plano Regular
+    # plane = "models/environments/PBA.urdf"    # Plano Baixo Atrito
+    # plane = "models/environments/PRA.urdf"    # Plano Rampa Ascendente
+    # plane = "models/environments/PRD.urdf"    # Plano Rampa Descendente
+    # plane = "models/environments/PG.urdf"     # Plano Granular
+    # plane = "models/environments/PRB.urdf"     # Plano Regular com Bloqueio
+    
 
     sim = Simulation(robot, plane, enable_gui=enable_gui, enable_real_time=enable_real_time)
     sim.setup()

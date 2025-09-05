@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<robot name="descending_ramp">
+  <link name="ramp_link">
+    <contact>
+      <lateral_friction value="0.5"/>
+      <rolling_friction value="0.0"/>
+      <spinning_friction value="0.0"/>
+    </contact>
+    <inertial>
+      <origin xyz="0 0 0"/>
+      <mass value="10000"/>
+      <inertia ixx="1000" ixy="0" ixz="0" iyy="1000" iyz="0" izz="1000"/>
+    </inertial>
+    <visual>
+      <!-- Para a rampa descendente, a rotação é negativa -->
+      <origin xyz="5.0 0 -0.74" rpy="-0.145 0 0"/> <!-- rpy: ~ -8.33° em radianos -->
+      <geometry>
+        <box size="10.0 1.5 0.1"/>
+      </geometry>
+      <material name="dark_grey_ramp">
+        <color rgba="0.4 0.4 0.4 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="5.0 0 -0.74" rpy="-0.145 0 0"/>
+      <geometry>
+        <box size="10.0 1.5 0.1"/>
+      </geometry>
+    </collision>
+  </link>
+</robot>

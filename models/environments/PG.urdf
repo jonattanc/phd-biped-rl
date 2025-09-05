@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<robot name="granular_plane">
+  <link name="plane_link">
+    <contact>
+      <!-- Para simular areia, o atrito pode ser mais alto, mas a principal característica
+           é a deformação. O PyBullet não modela deformação granular de forma nativa com URDF simples.
+           Uma abordagem prática é usar um atrito mais alto e talvez um damping maior.
+           Para uma simulação mais fiel, seria necessário usar o plugin de heightfield ou malhas complexas,
+           o que está além do escopo deste modelo URDF básico. -->
+      <lateral_friction value="0.6"/>
+      <rolling_friction value="0.05"/> <!-- Adiciona um pouco de resistência ao rolamento -->
+      <spinning_friction value="0.05"/>
+      <!-- Parâmetros de damping podem ser ajustados via changeDynamics após o carregamento -->
+    </contact>
+    <inertial>
+      <origin xyz="0 0 0"/>
+      <mass value="10000"/>
+      <inertia ixx="1000" ixy="0" ixz="0" iyy="1000" iyz="0" izz="1000"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0"/>
+      <geometry>
+        <box size="10.0 1.5 0.1"/>
+      </geometry>
+      <material name="beige_sand">
+        <color rgba="0.9 0.8 0.6 1"/> <!-- Cor de areia -->
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0"/>
+      <geometry>
+        <box size="10.0 1.5 0.1"/>
+      </geometry>
+    </collision>
+  </link>
+</robot>

@@ -24,7 +24,7 @@ class Simulation:
 
         p.setGravity(0, 0, -9.807)
         p.setAdditionalSearchPath(pybullet_data.getDataPath())  # Sets path to search for files
-        self.plane_id = p.loadURDF(self.plane)
+        self.plane_id = p.loadURDF(self.plane, useFixedBase=True) # Alterei para fixar o plano
         self.robot.load_in_simulation()
 
     def run(self, steps=2000):
