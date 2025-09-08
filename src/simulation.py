@@ -30,11 +30,23 @@ class Simulation:
     def reset(self):
         self.robot.reset_base_position_and_orientation()
 
-    def run(self, steps=2000):
-        for i in range(steps):
-            p.stepSimulation()  # Default period 1/240 s. Check setTimeStep and setPhysicsEngineParameter
+    def run(self, num_episodes=3, episode_time_limit_ms=3000):
+        for episode in range(num_episodes):
+            self.logger.info(f"Starting episode {episode + 1}/{num_episodes}")
+            self.reset()
+            self.logger.info("Robot and environment reset.")
+            self.run_episode(episode_time_limit_ms)
 
-            time.sleep(1 / 240.0)
+        p.disconnect()
+
+    def run_episode(self, time_limit_ms):
+        timestep_s = 1 / 240.0
+        timestep_ms = timestep_s * 1000
+        steps = int(time_limit_ms / timestep_ms)
+
+        for i in range(steps):
+            p.stepSimulation()
+            time.sleep(timestep_s)
 
             self.agent.set_state(i)
             velocity = self.agent.get_action()
@@ -53,4 +65,3 @@ class Simulation:
         body_position, body_orientation = p.getBasePositionAndOrientation(self.robot.get_body_id())
         self.logger.info(f"Final body_position: {body_position}")
         self.logger.info(f"Final body_orientation: {p.getEulerFromQuaternion(body_orientation)}")
-        p.disconnect()
