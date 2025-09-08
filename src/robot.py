@@ -29,10 +29,10 @@ class Robot:
         return self.body_id
 
     def reset_base_position_and_orientation(self, base_position=None, base_orientation=None):
-        if base_position is not None:
+        if base_position is None:
             base_position = self.base_position
 
-        if base_orientation is not None:
+        if base_orientation is None:
             base_orientation = self.base_orientation
 
         p.resetBasePositionAndOrientation(self.body_id, base_position, base_orientation)
