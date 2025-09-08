@@ -6,14 +6,14 @@ import logging
 
 
 class Simulation:
-    def __init__(self, robot, plane, enable_gui=True, enable_real_time=False):
+    def __init__(self, robot, environment, agent, enable_gui=True, enable_real_time=False):
         self.robot = robot
-        self.plane = plane
+        self.environment = environment
+        self.agent = agent
         self.enable_gui = enable_gui
         self.enable_real_time = enable_real_time
         self.logger = logging.getLogger(__name__)
         self.physics_client = None
-        self.plane_id = None
 
     def setup(self):
         if self.enable_gui:
@@ -24,8 +24,12 @@ class Simulation:
 
         p.setGravity(0, 0, -9.807)
         p.setAdditionalSearchPath(pybullet_data.getDataPath())  # Sets path to search for files
-        self.plane_id = p.loadURDF(self.plane, useFixedBase=True)  # Alterei para fixar o plano
+
+        self.environment.load_in_simulation(use_fixed_base=True)
         self.robot.load_in_simulation()
+
+    def reset(self):
+        self.robot.reset_base_position_and_orientation()
 
     def run(self, steps=2000):
         if self.enable_real_time:
@@ -37,10 +41,8 @@ class Simulation:
 
             time.sleep(1 / 240.0)
 
-            velocity = -15 * math.sin(i / 50)
-
-            # p.setJointMotorControl2(self.robot.get_body_id(), jointIndex=0, controlMode=p.VELOCITY_CONTROL, targetVelocity=velocity)
-            # p.setJointMotorControl2(self.robot.get_body_id(), jointIndex=1, controlMode=p.VELOCITY_CONTROL, targetVelocity=velocity)
+            self.agent.set_state(i)
+            velocity = self.agent.get_action()
 
             p.setJointMotorControlArray(
                 self.robot.get_body_id(),
@@ -48,8 +50,6 @@ class Simulation:
                 controlMode=p.VELOCITY_CONTROL,
                 targetVelocities=[velocity, velocity],
             )
-
-            # self.robot.reset_base_position_and_orientation()
 
             if i % 100 == 0:
                 state = p.getJointState(self.robot.get_body_id(), jointIndex=0)
