@@ -6,12 +6,11 @@ import logging
 
 
 class Simulation:
-    def __init__(self, robot, environment, agent, enable_gui=True, enable_real_time=False):
+    def __init__(self, robot, environment, agent, enable_gui=True):
         self.robot = robot
         self.environment = environment
         self.agent = agent
         self.enable_gui = enable_gui
-        self.enable_real_time = enable_real_time
         self.logger = logging.getLogger(__name__)
         self.physics_client = None
 
@@ -32,12 +31,8 @@ class Simulation:
         self.robot.reset_base_position_and_orientation()
 
     def run(self, steps=2000):
-        if self.enable_real_time:
-            p.setRealTimeSimulation(1)
-
         for i in range(steps):
-            if not self.enable_real_time:
-                p.stepSimulation()  # Default period 1/240 s. Check setTimeStep and setPhysicsEngineParameter
+            p.stepSimulation()  # Default period 1/240 s. Check setTimeStep and setPhysicsEngineParameter
 
             time.sleep(1 / 240.0)
 

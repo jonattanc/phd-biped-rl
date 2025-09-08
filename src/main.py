@@ -38,7 +38,6 @@ if __name__ == "__main__":
     setup_folders()
     logger = setup_logger()
 
-    enable_real_time = True
     enable_gui = True
 
     initial_base_position = [0, 0, 0.7]  # x, y, z
@@ -52,6 +51,6 @@ if __name__ == "__main__":
 
     agent = Agent()
 
-    sim = Simulation(robot, environment, agent, enable_gui=enable_gui, enable_real_time=enable_real_time)
+    sim = Simulation(robot, environment, agent, enable_gui=enable_gui)
     sim.setup()
     sim.run()
