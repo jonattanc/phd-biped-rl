@@ -6,6 +6,7 @@ import numpy as np
 from typing import Tuple, Dict, Any
 from robot import Robot
 
+
 class ExoskeletonPRst1:
     """
     Ambiente de Simulação para o circuito PR (Piso Regular).
@@ -15,16 +16,16 @@ class ExoskeletonPRst1:
     def __init__(
         self,
         robot_name: str = "robot_stage1",
-        plane_name: str = "PR",  
+        plane_name: str = "PR",
         enable_gui: bool = False,
         time_limit: float = 20.0,
         target_distance: float = 10.0,
-        timestep: float = 1/240.0,
+        timestep: float = 1 / 240.0,
         control_freq: int = 30,
     ):
         # Parâmetros
         self.robot_name = robot_name
-        self.plane_name = plane_name 
+        self.plane_name = plane_name
         self.enable_gui = enable_gui
         self.time_limit = time_limit
         self.target_distance = target_distance
@@ -46,7 +47,7 @@ class ExoskeletonPRst1:
 
         # Conectar ao PyBullet
         self._connect_physics_client()
-        self.reset() # Inicializa o ambiente
+        self.reset()  # Inicializa o ambiente
 
     def _connect_physics_client(self):
         """Conecta ao servidor PyBullet."""
@@ -77,7 +78,7 @@ class ExoskeletonPRst1:
 
         # Constrói o caminho completo para o arquivo URDF do ambiente
         plane_urdf_path = os.path.join(self.models_env_path, f"{self.plane_name}.urdf")
-        
+
         # Verifica se o arquivo existe
         if not os.path.exists(plane_urdf_path):
             raise FileNotFoundError(f"Arquivo de ambiente não encontrado: {plane_urdf_path}")
@@ -93,11 +94,7 @@ class ExoskeletonPRst1:
         initial_base_orientation = [0, 0, 0]
 
         # Cria e carrega o robô
-        self.robot = Robot(
-            name=self.robot_name,
-            base_position=initial_base_position,
-            base_orientation=initial_base_position
-        )
+        self.robot = Robot(name=self.robot_name, base_position=initial_base_position, base_orientation=initial_base_position)
         self.robot.load_in_simulation()
 
         # Pequena perturbação aleatória nas articulações (±5°)
@@ -113,7 +110,7 @@ class ExoskeletonPRst1:
 
         # Retorna observação inicial
         obs = self._get_observation()
-        info = {'reset': True}
+        info = {"reset": True}
         return obs, info
 
     def step(self, action: np.ndarray) -> Tuple[np.ndarray, float, bool, bool, Dict]:
@@ -129,12 +126,7 @@ class ExoskeletonPRst1:
             info: Dicionário com informações adicionais.
         """
         # Aplica a ação (torques)
-        p.setJointMotorControlArray(
-            self.robot.get_body_id(),
-            jointIndices=[0, 1],
-            controlMode=p.TORQUE_CONTROL,
-            forces=action
-        )
+        p.setJointMotorControlArray(self.robot.get_body_id(), jointIndices=[0, 1], controlMode=p.TORQUE_CONTROL, forces=action)
 
         # Executa a simulação
         for _ in range(self.control_steps_per_env_step):
@@ -155,14 +147,16 @@ class ExoskeletonPRst1:
         terminated, truncated, info = self._check_termination()
 
         # Informações adicionais
-        info.update({
-            'distance_traveled': self.distance_traveled,
-            'reward_components': {
-                'distance': distance_reward,
-                'penalty': penalty,
-            },
-            'time': self.current_time,
-        })
+        info.update(
+            {
+                "distance_traveled": self.distance_traveled,
+                "reward_components": {
+                    "distance": distance_reward,
+                    "penalty": penalty,
+                },
+                "time": self.current_time,
+            }
+        )
 
         return obs, reward, terminated, truncated, info
 
@@ -176,13 +170,21 @@ class ExoskeletonPRst1:
         joint_states = p.getJointStates(body_id, jointIndices=[0, 1])
         joint_positions = [state[0] for state in joint_states]
         joint_velocities = [state[1] for state in joint_states]
-        obs = np.array([
-            pos[0], pos[2],
-            vel[0], vel[2],
-            pitch, ang_vel[1],
-            joint_positions[0], joint_velocities[0],
-            joint_positions[1], joint_velocities[1],
-        ], dtype=np.float32)
+        obs = np.array(
+            [
+                pos[0],
+                pos[2],
+                vel[0],
+                vel[2],
+                pitch,
+                ang_vel[1],
+                joint_positions[0],
+                joint_velocities[0],
+                joint_positions[1],
+                joint_velocities[1],
+            ],
+            dtype=np.float32,
+        )
         return obs
 
     def _compute_reward(self) -> Tuple[float, float, float]:
