@@ -26,6 +26,7 @@ class Simulation:
 
         self.environment.load_in_simulation(use_fixed_base=True)
         self.robot.load_in_simulation()
+        self.agent.set_revolute_indices(self.robot.revolute_indices)
 
     def reset(self):
         self.robot.reset_base_position_and_orientation()
