@@ -51,13 +51,13 @@ class Simulation:
                 time.sleep(timestep_s)
 
             self.agent.set_state(i)
-            velocity = self.agent.get_action()
+            velocities = self.agent.get_action()
 
             p.setJointMotorControlArray(
                 self.robot.get_body_id(),
-                jointIndices=[0, 1],
+                jointIndices=self.robot.revolute_indices,
                 controlMode=p.VELOCITY_CONTROL,
-                targetVelocities=[velocity, velocity],
+                targetVelocities=velocities,
             )
 
             if i % 100 == 0:

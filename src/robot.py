@@ -28,6 +28,10 @@ class Robot:
     def load_in_simulation(self):
         self.body_id = p.loadURDF(self.urdf_path)
 
+        num_joints = p.getNumJoints(self.body_id)
+        self.revolute_indices = [i for i in range(num_joints) if p.getJointInfo(self.body_id, i)[2] == p.JOINT_REVOLUTE]
+        self.logger.info(f"Robot {self.name} loaded with {num_joints} joints, revolute joints at indices: {self.revolute_indices}")
+
         self.initial_position, self.initial_orientation = p.getBasePositionAndOrientation(self.body_id)
 
         self.initial_joint_states = []
