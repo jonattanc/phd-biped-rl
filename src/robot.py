@@ -5,10 +5,8 @@ from xacrodoc import XacroDoc
 
 
 class Robot:
-    def __init__(self, name, base_position=[0, 0, 0], base_orientation=[0, 0, 0]):
+    def __init__(self, name):
         self.name = name
-        self.base_position = base_position
-        self.base_orientation = p.getQuaternionFromEuler(base_orientation)  # x roll, y pitch, z yaw -> x, y, z, w
 
         self.tmp_dir = "tmp"
         self.models_dir = os.path.join("models", "robots")
@@ -28,17 +26,23 @@ class Robot:
         return urdf_path
 
     def load_in_simulation(self):
-        self.body_id = p.loadURDF(self.urdf_path, self.base_position, self.base_orientation)
+        self.body_id = p.loadURDF(self.urdf_path)
+
+        self.initial_position, self.initial_orientation = p.getBasePositionAndOrientation(self.body_id)
+
+        self.initial_joint_states = []
+
+        for j in range(p.getNumJoints(self.body_id)):
+            joint_info = p.getJointState(self.body_id, j)
+            self.initial_joint_states.append(joint_info[0])
+
         return self.body_id
 
     def get_body_id(self):
         return self.body_id
 
-    def reset_base_position_and_orientation(self, base_position=None, base_orientation=None):
-        if base_position is None:
-            base_position = self.base_position
+    def reset_base_position_and_orientation(self):
+        p.resetBasePositionAndOrientation(self.body_id, self.initial_position, self.initial_orientation)
 
-        if base_orientation is None:
-            base_orientation = self.base_orientation
-
-        p.resetBasePositionAndOrientation(self.body_id, base_position, base_orientation)
+        for j, angle in enumerate(self.initial_joint_states):
+            p.resetJointState(self.body_id, j, angle)

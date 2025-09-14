@@ -39,13 +39,13 @@ def setup_logger(env, selected_robot):
     return logging.getLogger(__name__)
 
 
-def train_in_process(selected_environment, selected_robot, initial_base_position, initial_base_orientation):
+def train_in_process(selected_environment, selected_robot):
     logger = setup_logger(selected_environment, selected_robot)
 
     environment = Environment(name=selected_environment)
-    robot = Robot(name=selected_robot, base_position=initial_base_position, base_orientation=initial_base_orientation)
+    robot = Robot(name=selected_robot)
     agent = Agent()
-    sim = Simulation(robot, environment, agent, enable_gui=False)
+    sim = Simulation(robot, environment, agent, enable_gui=True)
 
     sim.setup()
     sim.run()
@@ -54,17 +54,14 @@ def train_in_process(selected_environment, selected_robot, initial_base_position
 if __name__ == "__main__":
     setup_folders()
 
-    initial_base_position = [0, 0, 0.7]  # x, y, z
-    initial_base_orientation = [0, 0, 0]  # Euler angles: x roll, y pitch, z yaw
-
     selected_robot = "robot_stage1"
 
-    environment_list = ["PR", "PBA"]
+    environment_list = ["PR"]
 
     processes = []
 
     for selected_environment in environment_list:
-        p = multiprocessing.Process(target=train_in_process, args=(selected_environment, selected_robot, initial_base_position, initial_base_orientation))
+        p = multiprocessing.Process(target=train_in_process, args=(selected_environment, selected_robot))
         p.start()
         processes.append(p)
 
