@@ -1,5 +1,15 @@
 <?xml version="1.0"?>
-<robot name="high_friction_plane">
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="high_friction_plane">
+  <!-- Plane properties -->
+  <xacro:property name="plane_length" value="10.0" />
+  <xacro:property name="plane_width" value="1.5" />
+  <xacro:property name="plane_height" value="0.1" />
+  <xacro:property name="plane_mass" value="10000" />
+  <xacro:property name="plane_ixx" value="1000" />
+  <xacro:property name="plane_iyy" value="1000" />
+  <xacro:property name="plane_izz" value="1000" />
+
+  <!-- Plane -->
   <link name="plane_link">
     <contact>
       <lateral_friction value="0.8"/>
@@ -8,22 +18,22 @@
     </contact>
     <inertial>
       <origin xyz="0 0 0"/>
-      <mass value="10000"/> <!-- Massa muito alta para ser imóvel -->
-      <inertia ixx="1000" ixy="0" ixz="0" iyy="1000" iyz="0" izz="1000"/>
+      <mass value="${plane_mass}"/>
+      <inertia ixx="${plane_ixx}" ixy="0" ixz="0" iyy="${plane_iyy}" iyz="0" izz="${plane_izz}"/>
     </inertial>
     <visual>
-      <origin xyz="0 0 0"/>
+  <origin xyz="0 0 -${plane_height/2}"/>
       <geometry>
-        <box size="10.0 1.5 0.1"/> <!-- Comprimento (X) 10m, Largura (Y) 1.5m, Altura (Z) 0.1m -->
+        <box size="${plane_length} ${plane_width} ${plane_height}"/>
       </geometry>
       <material name="grey">
         <color rgba="0.8 0.8 0.8 1"/>
       </material>
     </visual>
     <collision>
-      <origin xyz="0 0 0"/>
+  <origin xyz="0 0 -${plane_height/2}"/>
       <geometry>
-        <box size="10.0 1.5 0.1"/>
+        <box size="${plane_length} ${plane_width} ${plane_height}"/>
       </geometry>
     </collision>
   </link>
