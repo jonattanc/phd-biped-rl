@@ -1,22 +1,25 @@
 import os
 import pybullet as p
-import pybullet_data
+from xacrodoc import XacroDoc
 
 
 class Environment:
     def __init__(self, name):
         self.name = name
-        self.models_dir = "models/environments"
+        self.tmp_dir = "tmp"
+        self.models_dir = os.path.join("models", "environments")
+        self.models_tmp_dir = os.path.join(self.tmp_dir, self.models_dir)
 
-        self.urdf_path = self._get_urdf_path()
+        if not os.path.exists(self.models_tmp_dir):
+            os.makedirs(self.models_tmp_dir, exist_ok=True)
+
+        self.urdf_path = self._generate_urdf()
         self.plane_id = None
 
-    def _get_urdf_path(self):
-        urdf_path = os.path.join(self.models_dir, f"{self.name}.urdf")
-
-        if not os.path.exists(urdf_path):
-            raise FileNotFoundError(f"Environment URDF not found: {urdf_path}")
-
+    def _generate_urdf(self):
+        xacro_path = os.path.join(self.models_dir, f"{self.name}.xacro")
+        urdf_path = os.path.join(self.models_tmp_dir, f"{self.name}.urdf")
+        XacroDoc.from_file(xacro_path).to_urdf_file(urdf_path)
         return urdf_path
 
     def get_urdf_path(self):
