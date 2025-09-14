@@ -31,7 +31,7 @@ class Simulation:
     def reset(self):
         self.robot.reset_base_position_and_orientation()
 
-    def run(self, num_episodes=3, episode_time_limit_ms=3000):
+    def run(self, num_episodes=3, episode_time_limit_ms=5000):
         for episode in range(num_episodes):
             self.logger.info(f"Starting episode {episode + 1}/{num_episodes}")
             self.reset()
