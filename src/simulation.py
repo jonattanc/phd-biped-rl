@@ -46,7 +46,9 @@ class Simulation:
 
         for i in range(steps):
             p.stepSimulation()
-            time.sleep(timestep_s)
+
+            if self.enable_gui:
+                time.sleep(timestep_s)
 
             self.agent.set_state(i)
             velocity = self.agent.get_action()
