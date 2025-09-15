@@ -36,8 +36,16 @@ class Robot:
         self.revolute_indices = [i for i in range(num_joints) if p.getJointInfo(self.body_id, i)[2] == p.JOINT_REVOLUTE]
         self.logger.info(f"Robot {self.name} loaded with {num_joints} joints, revolute joints at indices: {self.revolute_indices}")
 
-        self.initial_position, self.initial_orientation = p.getBasePositionAndOrientation(self.body_id)
-
+        initial_position = (0, 0, 0.45)  # Eleva o centro do corpo
+        initial_orientation = p.getQuaternionFromEuler([0, 0, 0])
+        p.resetBasePositionAndOrientation(self.body_id, initial_position, initial_orientation)
+        for j in range(p.getNumJoints(self.body_id)):
+            p.resetJointState(self.body_id, j, 0.0)
+        
+        # Salva o estado inicial para resets futuros
+        self.initial_position = initial_position
+        self.initial_orientation = initial_orientation
+        
         self.initial_joint_states = []
 
         for j in range(p.getNumJoints(self.body_id)):

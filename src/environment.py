@@ -1,3 +1,4 @@
+#environment.py
 import os
 import pybullet as p
 from xacrodoc import XacroDoc

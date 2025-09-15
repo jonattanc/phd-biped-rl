@@ -8,6 +8,7 @@ import queue
 import logging
 import os
 import time
+import pybullet as p
 from simulation import Simulation
 from robot import Robot
 from environment import Environment
@@ -78,6 +79,7 @@ class TrainingGUI:
 
         self.canvas = FigureCanvasTkAgg(self.fig, master=graph_frame)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        self.canvas.draw()
 
         # Logs
         log_frame = ttk.LabelFrame(main_frame, text="Log de Treinamento", padding="10")
@@ -126,15 +128,13 @@ class TrainingGUI:
             sim.setup()
             
             self.logger.info(f"Iniciando treinamento para {self.current_env} com agente {self.current_robot}")
-
-            
             episode = 0
             seed = 42
             hiperparametros = "PPO_NA"
             from logger import EpisodeLogger
             log_dir = "logs/data"
             os.makedirs(log_dir, exist_ok=True)
-            episode_logger = EpisodeLogger(output_dir=log_dir)
+            episode_logger = EpisodeLogger(output_dir=log_dir)      
 
             while self.running:
                 result = sim.run()
@@ -176,28 +176,39 @@ class TrainingGUI:
         """Atualiza os gráficos com novos dados da fila"""
         while not self.training_queue.empty():
             data = self.training_queue.get()
-            self.episode_data["episodes"].append(data["episode"])
-            self.episode_data["rewards"].append(data["reward"])
-            self.episode_data["times"].append(data["time"])
-            self.episode_data["distances"].append(data["distance"])
+            if data.get("type") == "log":
+                # Atualiza a caixa de texto de log
+                self.log_text.config(state=tk.NORMAL)
+                self.log_text.insert(tk.END, data["message"] + "\n")
+                self.log_text.see(tk.END)
+                self.log_text.config(state=tk.DISABLED)
+            else:
+                # É um dado de desempenho (recompensa, tempo, distância)
+                self.episode_data["episodes"].append(data["episode"])
+                self.episode_data["rewards"].append(data["reward"])
+                self.episode_data["times"].append(data["time"])
+                self.episode_data["distances"].append(data["distance"])
 
-            # Atualizar gráficos
-            self.axs[0].clear()
-            self.axs[0].plot(self.episode_data["episodes"], self.episode_data["rewards"], label="Recompensa")
-            self.axs[0].legend()
-            self.axs[0].set_title("Recompensa por Episódio")
+                # Atualizar gráficos
+                self.axs[0].clear()
+                self.axs[0].plot(self.episode_data["episodes"], self.episode_data["rewards"], label="Recompensa", marker='o', linestyle='-')
+                self.axs[0].legend()
+                self.axs[0].set_title("Recompensa por Episódio")
+                self.axs[0].grid(True)
 
-            self.axs[1].clear()
-            self.axs[1].plot(self.episode_data["episodes"], self.episode_data["times"], label="Duração (s)", color='orange')
-            self.axs[1].legend()
-            self.axs[1].set_title("Duração do Episódio (s)")
+                self.axs[1].clear()
+                self.axs[1].plot(self.episode_data["episodes"], self.episode_data["times"], label="Duração (s)", color='orange', marker='s', linestyle='-')
+                self.axs[1].legend()
+                self.axs[1].set_title("Duração do Episódio (s)")
+                self.axs[1].grid(True)
 
-            self.axs[2].clear()
-            self.axs[2].plot(self.episode_data["episodes"], self.episode_data["distances"], label="Distância (m)", color='green')
-            self.axs[2].legend()
-            self.axs[2].set_title("Distância Percorrida (m)")
+                self.axs[2].clear()
+                self.axs[2].plot(self.episode_data["episodes"], self.episode_data["distances"], label="Distância (m)", color='green', marker='^', linestyle='-')
+                self.axs[2].legend()
+                self.axs[2].set_title("Distância Percorrida (m)")
+                self.axs[2].grid(True)
 
-            self.canvas.draw()
+                self.canvas.draw()
 
         # Atualizar periodicamente
         self.root.after(1000, self.update_plots)
@@ -243,22 +254,26 @@ class TrainingGUI:
         messagebox.showinfo("Visualização", "Funcionalidade de visualização em tempo real ainda não implementada.\n\nUse `enable_gui=True` na simulação direta.")
 
     def update_logs(self):
-        """Atualiza a caixa de log com mensagens do logging"""
-        log_file = os.path.join("logs", f"log__{self.current_env}__{self.current_robot}__proc{os.getpid()}.txt")
+        """Atualiza a caixa de log com as últimas linhas do arquivo de log principal"""
+        log_file = os.path.join("logs", "training_log.txt") 
         if os.path.exists(log_file):
-            with open(log_file, 'r') as f:
-                lines = f.readlines()
-                last_lines = lines[-20:]  # Mostrar últimas 20 linhas
-                self.log_text.config(state=tk.NORMAL)
-                self.log_text.delete(1.0, tk.END)
-                self.log_text.insert(tk.END, ''.join(last_lines))
-                self.log_text.see(tk.END)  # Rolagem automática
-                self.log_text.config(state=tk.DISABLED)
-
+            try:
+                with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:  # <-- IGNORA CARACTERES INVÁLIDOS
+                    lines = f.readlines()
+                    # Mostrar as últimas 50 linhas (ou menos, se o arquivo for pequeno)
+                    last_lines = lines[-50:] if len(lines) > 50 else lines
+                    log_content = ''.join(last_lines)
+                    self.log_text.config(state=tk.NORMAL)
+                    self.log_text.delete(1.0, tk.END)
+                    self.log_text.insert(tk.END, log_content)
+                    self.log_text.see(tk.END)  # Rolagem automática para o final
+                    self.log_text.config(state=tk.DISABLED)
+            except Exception as e:
+                self.logger.error(f"Erro ao ler o arquivo de log: {e}")
         # Atualizar periodicamente
         self.root.after(2000, self.update_logs)
     
     def start(self):
-        self.update_plots()  # Começa a atualizar gráficos
-        self.update_logs()       # Começa a atualizar logs
+        self.root.after(500, self.update_plots)
+        self.root.after(500, self.update_logs)       # Começa a atualizar logs
         self.root.mainloop()
