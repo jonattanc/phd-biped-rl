@@ -72,6 +72,7 @@ class Simulation:
         while steps < self.max_steps:
             # Obter observação
             pos, _ = p.getBasePositionAndOrientation(self.robot_id)
+            print(f"[DEBUG] Posição inicial do robô (base_link): x={pos[0]:.3f}, y={pos[1]:.3f}, z={pos[2]:.3f}")
             current_x_pos = pos[0]
             distance_traveled = current_x_pos - initial_x_pos  # Agora, initial_x_pos é SEMPRE 0.0
 
