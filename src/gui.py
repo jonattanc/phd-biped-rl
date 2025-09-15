@@ -15,8 +15,9 @@ from environment import Environment
 from agent import Agent
 
 class TrainingGUI:
-    def __init__(self, root):
+    def __init__(self, root, agent=None):
         self.root = root
+        self.agent = agent
         self.root.title("Cruzada Generalization - Training Dashboard")
         self.root.geometry("1200x800")
 
@@ -114,63 +115,24 @@ class TrainingGUI:
         self.thread.start()
 
     def run_training_loop(self):
+        
         """Loop principal de treinamento em thread"""
         try:
-            # Inicializar componentes
-            environment = Environment(name=self.current_env)
-            robot = Robot(name=self.current_robot)
-            agent = Agent()
+            self.logger.info(f"Iniciando treinamento PPO para {self.current_env} com agente {self.current_robot}")
 
-            # Instanciar simulação (SEM GUI interna — usamos a GUI Tkinter)
-            sim = Simulation(robot, environment, agent, enable_gui=False)
+            # Treinar o agente por 100k passos
+            self.agent.train(total_timesteps=100_000)
 
-            # Setup da simulação (cria conexão PyBullet)
-            sim.setup()
-            
-            self.logger.info(f"Iniciando treinamento para {self.current_env} com agente {self.current_robot}")
-            episode = 0
-            seed = 42
-            hiperparametros = "PPO_NA"
-            from logger import EpisodeLogger
-            log_dir = "logs/data"
-            os.makedirs(log_dir, exist_ok=True)
-            episode_logger = EpisodeLogger(output_dir=log_dir)      
-
-            while self.running:
-                result = sim.run()
-                episode += 1
-
-                episode_logger.log_episode(
-                    circuito=self.current_env,
-                    avatar=self.current_robot,
-                    papel="AE",
-                    semente=seed,
-                    repeticao=episode,
-                    tempo_total=result["time_total"],
-                    sucesso=result["success"],
-                    hiperparametros=hiperparametros
-                )
-
-                self.training_queue.put({
-                    "episode": episode,
-                    "reward": result["reward"],
-                    "time": result["time_total"],
-                    "distance": result["distance"],
-                    "success": result["success"]
-                })
-
-                self.logger.info(f"EP {episode}: R={result['reward']:.2f}, T={result['time_total']:.2f}s, D={result['distance']:.2f}m, S={result['success']}")
-
-                time.sleep(0.05)
-
-            # FINALIZAÇÃO SEGURA: Só chega aqui se self.running == False
-            self.logger.info("Sinal de parada recebido. Finalizando simulação...")
-            p.disconnect()
-            self.logger.info("Conexão PyBullet desconectada.")
+            self.logger.info("Treinamento concluído!")
 
         except Exception as e:
             self.logger.error(f"Erro inesperado no treinamento: {e}", exc_info=True)
-            self.stop_training()
+        finally:
+            self.running = False
+            self.start_btn.config(state=tk.NORMAL)
+            self.pause_btn.config(state=tk.DISABLED)
+            self.stop_btn.config(state=tk.DISABLED)
+            self.save_btn.config(state=tk.NORMAL)  # Habilita salvar o modelo treinado
 
     def update_plots(self):
         """Atualiza os gráficos com novos dados da fila"""
@@ -227,25 +189,19 @@ class TrainingGUI:
         messagebox.showinfo("Treinamento Finalizado", "Treinamento encerrado.")
 
     def save_snapshot(self):
-        """Salva o estado atual do agente (ex: pesos, parâmetros)"""
-        # Por enquanto, só salva o nome do ambiente e número de episódios
+        """Salva o estado atual do agente (pesos do modelo PPO)"""
+        if self.agent.model is None:
+            messagebox.showwarning("Aviso", "Nenhum modelo treinado para salvar.")
+            return
+
         filename = filedialog.asksaveasfilename(
-            defaultextension=".pkl",
-            filetypes=[("Pickle files", "*.pkl")],
-            title="Salvar Snapshot do Agente"
+            defaultextension=".zip",
+            filetypes=[("Model files", "*.zip")],
+            title="Salvar Modelo Treinado"
         )
         if filename:
-            snapshot = {
-                "env": self.current_env,
-                "robot": self.current_robot,
-                "episodes_completed": len(self.episode_data["episodes"]),
-                "hyperparameters": self.hyperparams,
-                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
-            }
-            with open(filename, 'wb') as f:
-                import pickle
-                pickle.dump(snapshot, f)
-            messagebox.showinfo("Snapshot Salvo", f"Snapshot salvo em:\n{filename}")
+            self.agent.model.save(filename)
+            messagebox.showinfo("Modelo Salvo", f"Modelo salvo em:\n{filename}")
 
     def toggle_visualization(self):
         """Abre uma nova janela com simulação em tempo real (GUI Bullet)"""
