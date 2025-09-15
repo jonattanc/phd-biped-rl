@@ -1,9 +1,9 @@
+# simulation.py
 import pybullet as p
 import pybullet_data
 import time
-import math
 import logging
-
+from datetime import datetime
 
 class Simulation:
     def __init__(self, robot, environment, agent, enable_gui=True):
@@ -13,58 +13,116 @@ class Simulation:
         self.enable_gui = enable_gui
         self.logger = logging.getLogger(__name__)
         self.physics_client = None
+        self.plane_id = None
+        self.robot_id = None
+
+        # Configurações de simulação
+        self.time_step = 1 / 240.0
+        self.max_steps = 5000  # ~20.8 segundos (240 * 20.8)
+        self.success_distance = 10.0
+        self.fall_threshold = 0.3  # altura mínima para considerar queda
 
     def setup(self):
+        """Conecta ao PyBullet e carrega ambiente e robô"""
         if self.enable_gui:
             self.physics_client = p.connect(p.GUI)
-
         else:
             self.physics_client = p.connect(p.DIRECT)
 
         p.setGravity(0, 0, -9.807)
-        p.setAdditionalSearchPath(pybullet_data.getDataPath())  # Sets path to search for files
+        p.setTimeStep(self.time_step)
 
-        self.environment.load_in_simulation(use_fixed_base=True)
-        self.robot.load_in_simulation()
+        # Carregar ambiente
+        self.plane_id = self.environment.load_in_simulation(use_fixed_base=True)
+
+        # Carregar robô
+        self.robot_id = self.robot.load_in_simulation()
+
+        # Passar índices das juntas para o agente
         self.agent.set_revolute_indices(self.robot.revolute_indices)
 
-    def reset(self):
-        self.robot.reset_base_position_and_orientation()
+        self.logger.info(f"Simulação configurada: {len(self.robot.revolute_indices)} DOFs")
+        self.logger.info(f"Robô: {self.robot.name}")
+        self.logger.info(f"Ambiente: {self.environment.name}")
 
-    def run(self, num_episodes=3, episode_time_limit_ms=5000):
-        for episode in range(num_episodes):
-            self.logger.info(f"Starting episode {episode + 1}/{num_episodes}")
-            self.reset()
-            self.logger.info("Robot and environment reset.")
-            self.run_episode(episode_time_limit_ms)
+    def run(self):
+        """Executa um episódio completo e retorna métricas"""
+        start_time = time.time()
+        distance_traveled = 0.0
+        prev_x_pos = 0.0
+        steps = 0
+        success = False
+        reward = 0.0
 
-        p.disconnect()
+        # ✅ PASSO CRÍTICO: REMOVER O ROBÔ ANTIGO E CARREGAR UM NOVO
+        if self.robot_id is not None:
+            p.removeBody(self.robot_id)
 
-    def run_episode(self, time_limit_ms):
-        timestep_s = 1 / 240.0
-        timestep_ms = timestep_s * 1000
-        steps = int(time_limit_ms / timestep_ms)
+        # Recarregar ambiente (opcional, mas recomendado para garantir piso limpo)
+        if self.plane_id is not None:
+            p.removeBody(self.plane_id)
+        self.plane_id = self.environment.load_in_simulation(use_fixed_base=True)
 
-        for i in range(steps):
-            p.stepSimulation()
+        # Recarregar o robô → isso garante que ele começa sempre na posição original definida no URDF
+        self.robot_id = self.robot.load_in_simulation()
 
-            if self.enable_gui:
-                time.sleep(timestep_s)
+        # Atualizar os índices das juntas (caso tenham mudado)
+        self.agent.set_revolute_indices(self.robot.revolute_indices)
 
-            self.agent.set_state(i)
-            velocities = self.agent.get_action()
+        # Obter posição inicial do novo robô
+        pos, _ = p.getBasePositionAndOrientation(self.robot_id)
+        initial_x_pos = pos[0]  # Posição inicial do episódio
 
+        while steps < self.max_steps:
+            # Obter observação
+            pos, _ = p.getBasePositionAndOrientation(self.robot_id)
+            print(f"[DEBUG] Posição inicial do robô (base_link): x={pos[0]:.3f}, y={pos[1]:.3f}, z={pos[2]:.3f}")
+            current_x_pos = pos[0]
+            distance_traveled = current_x_pos - initial_x_pos  # Variação relativa ao início!
+
+            # Calcular recompensa
+            progress_reward = (distance_traveled - prev_x_pos) * 100
+            reward += progress_reward
+            prev_x_pos = distance_traveled
+
+            # Verificar queda
+            if pos[2] < self.fall_threshold:
+                reward -= 100
+                self.logger.info(f"Robô caiu após {steps} passos. Distância: {distance_traveled:.2f}m")
+                break
+
+            # Verificar sucesso
+            if distance_traveled >= self.success_distance:
+                reward += 50
+                success = True
+                self.logger.info(f"Sucesso! Percurso concluído em {steps} passos ({distance_traveled:.2f}m)")
+                break
+
+            # Obter ação do agente
+            action = self.agent.get_action()
+
+            # Aplicar ação
             p.setJointMotorControlArray(
-                self.robot.get_body_id(),
+                bodyUniqueId=self.robot_id,
                 jointIndices=self.robot.revolute_indices,
-                controlMode=p.VELOCITY_CONTROL,
-                targetVelocities=velocities,
+                controlMode=p.TORQUE_CONTROL,
+                forces=action
             )
 
-            if i % 100 == 0:
-                state = p.getJointState(self.robot.get_body_id(), jointIndex=0)
-                self.logger.info(f"Step {i}: position={state[0]:.4f}, velocity={state[1]:.4f}")
+            # Avançar simulação
+            p.stepSimulation()
+            steps += 1
 
-        body_position, body_orientation = p.getBasePositionAndOrientation(self.robot.get_body_id())
-        self.logger.info(f"Final body_position: {body_position}")
-        self.logger.info(f"Final body_orientation: {p.getEulerFromQuaternion(body_orientation)}")
+            if steps % 100 == 0:
+                self.logger.debug(f"Passo {steps} | Distância: {distance_traveled:.2f}m")
+
+        total_time = time.time() - start_time
+        self.logger.info(f"Episódio finalizado. Distância: {distance_traveled:.2f}m | Tempo: {total_time:.2f}s | Sucesso: {success}")
+
+        return {
+            "reward": reward,
+            "time_total": total_time,
+            "distance": distance_traveled,
+            "success": success,
+            "steps": steps
+        }

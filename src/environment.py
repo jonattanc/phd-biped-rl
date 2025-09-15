@@ -1,13 +1,13 @@
 import os
 import pybullet as p
 from xacrodoc import XacroDoc
-
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 class Environment:
     def __init__(self, name):
         self.name = name
         self.tmp_dir = "tmp"
-        self.models_dir = os.path.join("models", "environments")
+        self.models_dir = os.path.join(PROJECT_ROOT, "models", "environments")
         self.models_tmp_dir = os.path.join(self.tmp_dir, self.models_dir)
 
         if not os.path.exists(self.models_tmp_dir):
