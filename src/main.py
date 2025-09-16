@@ -8,7 +8,7 @@ from gui import TrainingGUI
 import tkinter as tk
 
 def setup_folders():
-    for folder in ["tmp", "logs", "logs/data", "logs/tensorboard", "models"]:
+    for folder in ["tmp", "logs", "logs/data", "logs/data/models", "logs/tensorboard", "models"]:
         path = os.path.abspath(folder)
         if os.path.exists(path):
             shutil.rmtree(path)

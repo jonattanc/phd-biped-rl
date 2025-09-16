@@ -54,47 +54,54 @@ class Agent:
             # Fallback para ação aleatória (útil para testes iniciais)
             return [random.uniform(-10, 10) for _ in range(self.len_revolute_indices)]
     
-    def evaluate(self, env, num_episodes=2):
+    def evaluate(self, env, num_episodes=20):
         """
         Avalia o agente treinado em um ambiente.
-        Executa `num_episodes` episódios com ações determinísticas e retorna métricas estatísticas.
+        Retorna métricas completas incluindo contagem de sucessos.
         """
         if self.model is None:
             raise ValueError("Nenhum modelo PPO treinado carregado para avaliação.")
-
+    
         total_times = []
         success_count = 0
-
+        total_rewards = []
+    
         for episode in range(num_episodes):
-            obs = env.reset()
+            obs, _ = env.reset()
             done = False
             steps = 0
-
+            episode_reward = 0
+            episode_success = False
+    
             while not done:
-                # Ação determinística (sem exploração)
                 action, _ = self.model.predict(obs, deterministic=True)
-                obs, reward, done, info = env.step(action)
+                obs, reward, done, _, info = env.step(action)
                 steps += 1
-
-                # Verifica se o episódio terminou por sucesso
-                if info.get("success", False):
+                episode_reward += reward
+    
+                # Verificar sucesso
+                if info.get("success", False) or info.get("termination") == "success":
+                    episode_success = True
                     success_count += 1
                     break
-
-            # Calcula duração do episódio em segundos
-            episode_time = steps * (1 / 240.0)  # PyBullet usa 240 Hz
+                
+            episode_time = steps * (1 / 240.0)
             total_times.append(episode_time)
-
-        # Calcula métricas
-        avg_time = np.mean(total_times)
-        std_time = np.std(total_times)
+            total_rewards.append(episode_reward)
+    
+        # Calcular métricas
+        avg_time = np.mean(total_times) if total_times else 0
+        std_time = np.std(total_times) if len(total_times) > 1 else 0
         success_rate = success_count / num_episodes
-
+    
         metrics = {
             "avg_time": avg_time,
             "std_time": std_time,
             "success_rate": success_rate,
-            "total_times": total_times  # Para análise detalhada, se necessário
+            "success_count": success_count,
+            "total_times": total_times,
+            "total_rewards": total_rewards,
+            "num_episodes": num_episodes
         }
-
+    
         return metrics

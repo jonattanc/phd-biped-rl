@@ -196,13 +196,12 @@ class TrainingGUI:
             return
 
         # --- Passo 1: Salvar o modelo PPO ---
-        model_filename = filedialog.asksaveasfilename(
-            defaultextension=".zip",
-            filetypes=[("Model files", "*.zip")],
-            title="Salvar Modelo Treinado"
-        )
-        if not model_filename:
-            return  # Usuário cancelou
+        # Alterado: Salvar em logs/data/models em vez de perguntar ao usuário
+        models_dir = "logs/data/models"
+        os.makedirs(models_dir, exist_ok=True)
+
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        model_filename = os.path.join(models_dir, f"model_{self.current_env}_{self.current_robot}_{timestamp}.zip")
 
         self.agent.model.save(model_filename)
         self.logger.info(f"Modelo salvo em: {model_filename}")
@@ -218,22 +217,41 @@ class TrainingGUI:
             messagebox.showerror("Erro", f"Erro ao criar ambiente de avaliação: {str(e)}")
             return
 
-        # --- Passo 3: Executar Avaliação ---
+        # --- Passo 3: Executar Avaliação usando a função do evaluate_model ---
         try:
             self.logger.info("Iniciando avaliação do agente treinado (20 episódios, deterministic=True)...")
-            metrics = self._evaluate_agent(eval_env, num_episodes=20)
 
-            self.logger.info(f"Avaliação concluída. "
-                             f"Sucesso: {metrics['success_rate']*100:.1f}% | "
-                             f"Tm: {metrics['avg_time']:.2f}s ± {metrics['std_time']:.2f}s")
+            # Usar a função de avaliação do evaluate_model
+            metrics = self.evaluate_and_save(model_filename, self.current_env, self.current_robot)
 
-            # --- Passo 4: Salvar Métricas ---
-            metrics_file = self._save_complexity_metrics(metrics, self.current_env)
+            if metrics:
+                self.logger.info(f"Avaliação concluída. "
+                                 f"Sucesso: {metrics['success_rate']*100:.1f}% | "
+                                 f"Tm: {metrics['avg_time']:.2f}s ± {metrics['std_time']:.2f}s")
 
-            messagebox.showinfo("Avaliação Concluída",
-                                f"Métricas salvas em:\n{metrics_file}\n\n"
-                                f"Taxa de Sucesso: {metrics['success_rate']*100:.1f}%\n"
-                                f"Tempo Médio: {metrics['avg_time']:.2f}s ± {metrics['std_time']:.2f}s")
+                # --- Passo 4: Compilar resultados e gerar relatório ---
+                from metrics_saver import compile_results, generate_report
+
+                # Compilar todos os resultados
+                compiled_df = compile_results()
+
+                if compiled_df is not None:
+                    # Gerar relatório completo
+                    generate_report()
+
+                    messagebox.showinfo("Avaliação Concluída",
+                                        f"Modelo salvo em: {model_filename}\n\n"
+                                        f"Taxa de Sucesso: {metrics['success_rate']*100:.1f}%\n"
+                                        f"Tempo Médio: {metrics['avg_time']:.2f}s ± {metrics['std_time']:.2f}s\n\n"
+                                        f"Relatório completo gerado em logs/data/")
+                else:
+                    messagebox.showinfo("Avaliação Concluída",
+                                        f"Modelo salvo em: {model_filename}\n\n"
+                                        f"Taxa de Sucesso: {metrics['success_rate']*100:.1f}%\n"
+                                        f"Tempo Médio: {metrics['avg_time']:.2f}s ± {metrics['std_time']:.2f}s")
+
+            else:
+                messagebox.showerror("Erro", "Falha na avaliação do modelo.")
 
         except Exception as e:
             self.logger.error(f"Erro durante a avaliação: {e}", exc_info=True)
@@ -244,76 +262,48 @@ class TrainingGUI:
             except:
                 pass
 
-    def _evaluate_agent(self, env, num_episodes=20):
-        """Método auxiliar para avaliar o agente treinado."""
-        if self.agent.model is None:
-            raise ValueError("Nenhum modelo PPO treinado carregado para avaliação.")
+    def evaluate_and_save(self, model_path, circuit_name="PR", avatar_name="robot_stage1", 
+                         role="AE", num_episodes=20, seed=42):
+        """Avalia um modelo e salva as métricas - integração com evaluate_model.py"""
 
-        total_times = []
-        success_count = 0
+        self.logger.info(f"Avaliando {avatar_name} no circuito {circuit_name}...")
 
-        for episode in range(num_episodes):
-            obs, _ = env.reset()  # <-- Retorna (obs, info)
-            done = False
-            steps = 0
+        try:
+            from gym_env import ExoskeletonPRst1
+            env = ExoskeletonPRst1(enable_gui=False, seed=seed)
 
-            while not done:
-                # Ação determinística (sem exploração)
-                action, _ = self.agent.model.predict(obs, deterministic=True)
-                obs, reward, done, _, info = env.step(action)  # <-- Retorna 5 valores
-                steps += 1
+            # Carregar o agente com o modelo salvo
+            agent = Agent(model_path=model_path)
+            metrics = agent.evaluate(env, num_episodes=num_episodes)
 
-                # Verifica se o robô chegou aos 10m (sucesso)
-                if info.get("distance", 0) >= 10.0:
-                    success_count += 1
-                    break
+            hyperparams = {
+                "algorithm": "PPO",
+                "learning_rate": 3e-4,
+                "total_timesteps": 100000  # Ajustado para o treinamento da GUI
+            }
 
-                # Se cair ou timeout, o episódio termina
-                if done:
-                    break
+            # Salvar métricas usando metrics_saver
+            from metrics_saver import save_complexity_metrics
+            save_complexity_metrics(
+                metrics=metrics,
+                circuit_name=circuit_name,
+                avatar_name=avatar_name,
+                role=role,
+                seed=seed,
+                hyperparams=hyperparams
+            )
 
-            # Calcula duração do episódio em segundos
-            episode_time = steps * (1 / 240.0)  # PyBullet usa 240 Hz
-            total_times.append(episode_time)
+            self.logger.info(f"Sucesso: {metrics['success_rate']*100:.1f}% | Tempo: {metrics['avg_time']:.2f}s")
+            return metrics
 
-        # Calcula métricas finais
-        import numpy as np
-        avg_time = np.mean(total_times)
-        std_time = np.std(total_times)
-        success_rate = success_count / num_episodes
-
-        metrics = {
-            "avg_time": avg_time,
-            "std_time": std_time,
-            "success_rate": success_rate,
-            "total_times": total_times
-        }
-
-        return metrics
-
-    def _save_complexity_metrics(self, metrics, circuit_name, output_dir="logs/data"):
-        """Método auxiliar para salvar as métricas de complexidade em CSV."""
-        import os
-        import time
-        os.makedirs(output_dir, exist_ok=True)
-        filename = f"{circuit_name}.csv"
-        filepath = os.path.join(output_dir, filename)
-
-        with open(filepath, 'w', newline='', encoding='utf-8') as csvfile:
-            fieldnames = ['timestamp', 'avg_time', 'std_time', 'success_rate', 'num_episodes']
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-
-            writer.writeheader()
-            writer.writerow({
-                'timestamp': time.strftime("%Y-%m-%d %H:%M:%S"),
-                'avg_time': metrics['avg_time'],
-                'std_time': metrics['std_time'],
-                'success_rate': metrics['success_rate'],
-                'num_episodes': len(metrics['total_times'])
-            })
-
-        self.logger.info(f"Métricas de complexidade salvas em: {filepath}")
-        return filepath
+        except Exception as e:
+            self.logger.error(f"Erro na avaliação: {e}")
+            return None
+        finally:
+            try:
+                env.close()
+            except:
+                pass
 
     def toggle_visualization(self):
         """Abre uma nova janela com simulação em tempo real (GUI Bullet)"""
