@@ -22,7 +22,7 @@
       <inertia ixx="${plane_ixx}" ixy="0" ixz="0" iyy="${plane_iyy}" iyz="0" izz="${plane_izz}"/>
     </inertial>
     <visual>
-  <origin xyz="0 0 -${plane_height/2}"/>
+  <origin xyz="0 0 -${plane_height/2 - 0.3}"/>
       <geometry>
         <box size="${plane_length} ${plane_width} ${plane_height}"/>
       </geometry>
@@ -31,7 +31,7 @@
       </material>
     </visual>
     <collision>
-  <origin xyz="0 0 -${plane_height/2}"/>
+  <origin xyz="0 0 -${plane_height/2 - 0.3}"/>
       <geometry>
         <box size="${plane_length} ${plane_width} ${plane_height}"/>
       </geometry>

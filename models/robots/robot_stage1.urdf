@@ -1,0 +1,201 @@
+<?xml version="1.0" ?>
+<robot name="myrobot">
+  <!-- Materials -->
+  <material name="robot_material">
+    <color rgba="0.37 0.09 0.09 1"/>
+  </material>
+  <!-- Body (main cylinder) -->
+  <link name="base_link">
+    <!-- CENTRO DE MASSA NO MEIO DO CORPO (Z = 0.45m) -->
+    <origin xyz="0 0 0"/>
+    <visual>
+      <!-- Alinha a geometria visual com o CM -->
+      <!-- Como o cilindro tem 0.6m de altura, e CM está no meio,
+         a base do cilindro fica em Z = 0.3 - 0.3 = 0.0 (no chão) -->
+      <origin xyz="0 0 0"/>
+      <geometry>
+        <cylinder length="0.6" radius="0.2"/>
+      </geometry>
+      <material name="robot_material"/>
+    </visual>
+    <collision>
+      <!-- Mesma lógica: colisão alinhada ao CM -->
+      <origin xyz="0 0 0"/>
+      <geometry>
+        <cylinder length="0.6" radius="0.2"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="2"/>
+      <inertia ixx="0.4" ixy="0.0" ixz="0.0" iyy="0.4" iyz="0.0" izz="0.2"/>
+    </inertial>
+  </link>
+  <!-- IMU (simulated sensor, offset from body center) -->
+  <link name="imu_link">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <box size="0.03 0.05 0.05"/>
+      </geometry>
+      <material name="robot_material"/>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <box size="0.03 0.05 0.05"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="0.01"/>
+      <inertia ixx="0.0001" ixy="0.0" ixz="0.0" iyy="0.0001" iyz="0.0" izz="0.0001"/>
+    </inertial>
+  </link>
+  <joint name="base_to_imu" type="fixed">
+    <parent link="base_link"/>
+    <child link="imu_link"/>
+    <!-- Since the body is positioned at 0 0 0, move the joint considering the length of the legs and part of the body -->
+    <!-- Z: Move the IMU shin_length + thigh_length, to place it above the legs -->
+    <!-- Z: Move the IMU body_length/3 to place it around the middle of the body -->
+    <!-- X: Move the IMU body_radius to place it at the edge of the body -->
+    <origin xyz="0 0 0"/>
+  </joint>
+  <!-- Head (sphere) -->
+  <link name="head_link">
+    <visual>
+      <!-- head_radius shifts the Z plane from the heads's center to its base -->
+      <origin rpy="0 0 0" xyz="0 0 0.15"/>
+      <geometry>
+        <sphere radius="0.15"/>
+      </geometry>
+      <material name="robot_material"/>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0.15"/>
+      <geometry>
+        <sphere radius="0.15"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="0.1"/>
+      <inertia ixx="0.01" ixy="0.0" ixz="0.0" iyy="0.01" iyz="0.0" izz="0.01"/>
+    </inertial>
+  </link>
+  <joint name="base_to_head" type="fixed">
+    <parent link="base_link"/>
+    <child link="head_link"/>
+    <!-- Since the body is positioned at 0 0 0, move the joint up considering the length of the legs and the body -->
+    <origin xyz="0 0 1.05"/>
+  </joint>
+  <!-- Thigh -->
+  <link name="right_thigh_link">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 -0.125"/>
+      <geometry>
+        <cylinder length="0.25" radius="0.1"/>
+      </geometry>
+      <material name="robot_material"/>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 -0.125"/>
+      <geometry>
+        <cylinder length="0.25" radius="0.1"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="2"/>
+      <inertia ixx="0.02" ixy="0.0" ixz="0.0" iyy="0.02" iyz="0.0" izz="0.01"/>
+    </inertial>
+  </link>
+  <!-- Hip joint: base_link to thigh -->
+  <joint name="base_to_right_thigh" type="revolute">
+    <parent link="base_link"/>
+    <child link="right_thigh_link"/>
+    <origin xyz="0 -0.30000000000000004 0.45"/>
+    <axis xyz="0 1 0"/>
+    <limit effort="50" lower="-1.57" upper="1.57" velocity="5"/>
+  </joint>
+  <!-- Shin -->
+  <link name="right_shin_link">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 -0.1"/>
+      <geometry>
+        <cylinder length="0.2" radius="0.05"/>
+      </geometry>
+      <material name="robot_material"/>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 -0.1"/>
+      <geometry>
+        <cylinder length="0.2" radius="0.05"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="1.5"/>
+      <inertia ixx="0.015" ixy="0.0" ixz="0.0" iyy="0.015" iyz="0.0" izz="0.008"/>
+    </inertial>
+  </link>
+  <!-- Knee joint: thigh to shin -->
+  <joint name="right_knee" type="revolute">
+    <parent link="right_thigh_link"/>
+    <child link="right_shin_link"/>
+    <origin xyz="0 -0.15000000000000002 -0.125"/>
+    <axis xyz="0 1 0"/>
+    <limit effort="40" lower="0" upper="2.36" velocity="5"/>
+  </joint>
+  <!-- Thigh -->
+  <link name="left_thigh_link">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 -0.125"/>
+      <geometry>
+        <cylinder length="0.25" radius="0.1"/>
+      </geometry>
+      <material name="robot_material"/>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 -0.125"/>
+      <geometry>
+        <cylinder length="0.25" radius="0.1"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="2"/>
+      <inertia ixx="0.02" ixy="0.0" ixz="0.0" iyy="0.02" iyz="0.0" izz="0.01"/>
+    </inertial>
+  </link>
+  <!-- Hip joint: base_link to thigh -->
+  <joint name="base_to_left_thigh" type="revolute">
+    <parent link="base_link"/>
+    <child link="left_thigh_link"/>
+    <origin xyz="0 0.30000000000000004 0.45"/>
+    <axis xyz="0 1 0"/>
+    <limit effort="50" lower="-1.57" upper="1.57" velocity="5"/>
+  </joint>
+  <!-- Shin -->
+  <link name="left_shin_link">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 -0.1"/>
+      <geometry>
+        <cylinder length="0.2" radius="0.05"/>
+      </geometry>
+      <material name="robot_material"/>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 -0.1"/>
+      <geometry>
+        <cylinder length="0.2" radius="0.05"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="1.5"/>
+      <inertia ixx="0.015" ixy="0.0" ixz="0.0" iyy="0.015" iyz="0.0" izz="0.008"/>
+    </inertial>
+  </link>
+  <!-- Knee joint: thigh to shin -->
+  <joint name="left_knee" type="revolute">
+    <parent link="left_thigh_link"/>
+    <child link="left_shin_link"/>
+    <origin xyz="0 0.15000000000000002 -0.125"/>
+    <axis xyz="0 1 0"/>
+    <limit effort="40" lower="0" upper="2.36" velocity="5"/>
+  </joint>
+</robot>
