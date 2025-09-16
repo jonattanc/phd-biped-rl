@@ -7,35 +7,46 @@
   <xacro:property name="body_ixx" value="0.4" />
   <xacro:property name="body_iyy" value="0.4" />
   <xacro:property name="body_izz" value="0.2" />
+
+  <!-- Hip properties -->
+  <xacro:property name="hip_radius" value="0.1" />
+
   <!-- Thigh properties -->
   <xacro:property name="thigh_radius" value="0.1" />
-  <xacro:property name="thigh_length" value="0.25" />
+  <xacro:property name="thigh_length" value="0.35" />
   <xacro:property name="thigh_mass" value="2" />
   <xacro:property name="thigh_ixx" value="0.02" />
   <xacro:property name="thigh_iyy" value="0.02" />
   <xacro:property name="thigh_izz" value="0.01" />
+
+  <!-- Knee properties -->
+  <xacro:property name="knee_radius" value="0.06" />
+
   <!-- Shin properties -->
-  <xacro:property name="shin_radius" value="0.05" />
-  <xacro:property name="shin_length" value="0.2" />
+  <xacro:property name="shin_radius" value="0.06" />
+  <xacro:property name="shin_length" value="0.25" />
   <xacro:property name="shin_mass" value="1.5" />
   <xacro:property name="shin_ixx" value="0.015" />
   <xacro:property name="shin_iyy" value="0.015" />
   <xacro:property name="shin_izz" value="0.008" />
+
   <!-- Foot properties -->
-  <xacro:property name="foot_length" value="0.3" />
-  <xacro:property name="foot_width" value="0.2" />
+  <xacro:property name="foot_length" value="0.4" />
+  <xacro:property name="foot_width" value="0.25" />
   <xacro:property name="foot_height" value="0.05" />
+  <xacro:property name="foot_offset_front" value="0.05" />
   <xacro:property name="foot_mass" value="0.5" />
   <xacro:property name="foot_ixx" value="0.002" />
   <xacro:property name="foot_iyy" value="0.002" />
   <xacro:property name="foot_izz" value="0.001" />
-  <xacro:property name="leg_offset" value="0.0" />
+
   <!-- Head properties -->
   <xacro:property name="head_radius" value="0.15" />
   <xacro:property name="head_mass" value="0.1" />
   <xacro:property name="head_ixx" value="0.01" />
   <xacro:property name="head_iyy" value="0.01" />
   <xacro:property name="head_izz" value="0.01" />
+
   <!-- IMU properties -->
   <xacro:property name="imu_length" value="0.03" />
   <xacro:property name="imu_width" value="0.05" />
@@ -44,36 +55,39 @@
   <xacro:property name="imu_ixx" value="0.0001" />
   <xacro:property name="imu_iyy" value="0.0001" />
   <xacro:property name="imu_izz" value="0.0001" />
+  
   <!-- Materials -->
-  <material name="robot_material">
+  <material name="robot_material_1">
     <color rgba="0.37 0.09 0.09 1"/>
   </material>
+  <material name="robot_material_2">
+    <color rgba="0.37 0.09 1.00 1"/>
+  </material>
+   
   <!-- Body (main cylinder) -->
-<link name="base_link">
-  <!-- CENTRO DE MASSA NO MEIO DO CORPO (Z = 0.45m) -->
-  <origin xyz="0 0 0"/>
-  <visual>
-    <!-- Alinha a geometria visual com o CM -->
-    <!-- Como o cilindro tem 0.6m de altura, e CM está no meio,
-         a base do cilindro fica em Z = 0.3 - 0.3 = 0.0 (no chão) -->
+  <link name="base_link">
     <origin xyz="0 0 0"/>
-    <geometry>
-      <cylinder length="0.6" radius="0.2"/>
-    </geometry>
-    <material name="robot_material"/>
-  </visual>
-  <collision>
-    <!-- Mesma lógica: colisão alinhada ao CM -->
-    <origin xyz="0 0 0"/>
-    <geometry>
-      <cylinder length="0.6" radius="0.2"/>
-    </geometry>
-  </collision>
-  <inertial>
-    <mass value="2"/>
-    <inertia ixx="0.4" ixy="0.0" ixz="0.0" iyy="0.4" iyz="0.0" izz="0.2"/>
-  </inertial>
-</link>
+    <visual>
+      <!-- Z: body_length/2 shifts the Z plane from the cylinder's center to its base -->
+      <!-- Z: thigh_length + shin_length + foot_height gives space for the legs -->
+      <origin xyz="0 0 ${body_length/2 + thigh_length + shin_length + foot_height}"/>
+      <geometry>
+        <cylinder length="${body_length}" radius="${body_radius}"/>
+      </geometry>
+      <material name="robot_material_1"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 ${body_length/2 + thigh_length + shin_length + foot_height}"/>
+      <geometry>
+        <cylinder length="${body_length}" radius="${body_radius}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="${body_mass}"/>
+      <inertia ixx="${body_ixx}" ixy="0.0" ixz="0.0" iyy="${body_iyy}" iyz="0.0" izz="${body_izz}"/>
+    </inertial>
+  </link>
+
   <!-- IMU (simulated sensor, offset from body center) -->
   <link name="imu_link">
     <visual>
@@ -81,7 +95,7 @@
       <geometry>
         <box size="${imu_length} ${imu_width} ${imu_height}"/>
       </geometry>
-      <material name="robot_material"/>
+      <material name="robot_material_2"/>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -94,24 +108,26 @@
       <inertia ixx="${imu_ixx}" ixy="0.0" ixz="0.0" iyy="${imu_iyy}" iyz="0.0" izz="${imu_izz}"/>
     </inertial>
   </link>
+
   <joint name="base_to_imu" type="fixed">
     <parent link="base_link"/>
     <child link="imu_link"/>
-    <!-- Since the body is positioned at 0 0 0, move the joint considering the length of the legs and part of the body -->
-    <!-- Z: Move the IMU shin_length + thigh_length, to place it above the legs -->
+    <!-- Z: Since the body is positioned at 0 0 0, move the joint considering the length of the legs and part of the body -->
+    <!-- Z: Move the IMU foot_height + shin_length + thigh_length, to place it above the legs -->
     <!-- Z: Move the IMU body_length/3 to place it around the middle of the body -->
     <!-- X: Move the IMU body_radius to place it at the edge of the body -->
-    <origin xyz="0 0 0"/>
+    <origin xyz="${body_radius} 0 ${foot_height + shin_length + thigh_length + body_length/3 }" rpy="0 0 0"/>
   </joint>
+  
   <!-- Head (sphere) -->
   <link name="head_link">
     <visual>
-      <!-- head_radius shifts the Z plane from the heads's center to its base -->
+      <!-- Z: head_radius shifts the Z plane from the heads's center to its base -->
       <origin rpy="0 0 0" xyz="0 0 ${head_radius}"/>
       <geometry>
         <sphere radius="${head_radius}"/>
       </geometry>
-      <material name="robot_material"/>
+      <material name="robot_material_2"/>
     </visual>
     <collision>
       <origin rpy="0 0 0" xyz="0 0 ${head_radius}"/>
@@ -124,25 +140,30 @@
       <inertia ixx="${head_ixx}" ixy="0.0" ixz="0.0" iyy="${head_iyy}" iyz="0.0" izz="${head_izz}"/>
     </inertial>
   </link>
+
+  <!-- Head joint: body to head -->
   <joint name="base_to_head" type="fixed">
     <parent link="base_link"/>
     <child link="head_link"/>
-    <!-- Since the body is positioned at 0 0 0, move the joint up considering the length of the legs and the body -->
-	  <origin xyz="0 0 ${shin_length + thigh_length + body_length}"/>
+    <!-- Z: Since the body is positioned at 0 0 0, move the joint up considering the length of the legs and the body -->
+	  <origin xyz="0 0 ${foot_height + shin_length + thigh_length + body_length}"/>
   </joint>
+
   <!-- Leg macro (creates left/right leg: thigh, shin, foot) -->
   <xacro:macro name="leg" params="prefix reflect">
     <!-- Thigh -->
     <link name="${prefix}_thigh_link">
       <visual>
-        <origin rpy="0 0 0" xyz="0 0 -${thigh_length/2}"/>
+        <!-- Z: thigh_length/2 shifts the Z plane from the thigh's center to its base -->
+        <!-- Z: hip_radius takes the thigh outside of the hip -->
+        <origin rpy="0 0 0" xyz="0 0 ${-thigh_length/2 - hip_radius}"/>
         <geometry>
           <cylinder length="${thigh_length}" radius="${thigh_radius}"/>
         </geometry>
-        <material name="robot_material"/>
+        <material name="robot_material_2"/>
       </visual>
       <collision>
-        <origin rpy="0 0 0" xyz="0 0 -${thigh_length/2}"/>
+        <origin rpy="0 0 0" xyz="0 0 ${-thigh_length/2 - hip_radius}"/>
         <geometry>
           <cylinder length="${thigh_length}" radius="${thigh_radius}"/>
         </geometry>
@@ -152,25 +173,33 @@
         <inertia ixx="${thigh_ixx}" ixy="0.0" ixz="0.0" iyy="${thigh_iyy}" iyz="0.0" izz="${thigh_izz}"/>
       </inertial>
     </link>
+
     <!-- Hip joint: base_link to thigh -->
     <joint name="base_to_${prefix}_thigh" type="revolute">
       <parent link="base_link"/>
       <child link="${prefix}_thigh_link"/>
-      <origin xyz="0 ${(body_radius + thigh_radius + leg_offset) * reflect} ${thigh_length + shin_length}"/>
+      <!-- Z: Since the body is positioned at 0 0 0, move the joint up considering the length of the legs -->
+      <!-- Z: Move the joint hip_radius to make it's bottom coincide with the body's bottom -->
+      <!-- Y: Move the joint body_radius to place it at the edge of the body -->
+      <!-- Y: Move the joint hip_radius to take it outside of the body -->
+      <origin xyz="0 ${(body_radius + hip_radius) * reflect} ${thigh_length + shin_length + foot_height + hip_radius}"/>
       <axis xyz="0 1 0"/>
       <limit lower="-1.57" upper="1.57" effort="50" velocity="5"/>
     </joint>
+
     <!-- Shin -->
     <link name="${prefix}_shin_link">
       <visual>
-        <origin rpy="0 0 0" xyz="0 0 -${shin_length/2}"/>
+        <!-- Z: shin_length/2 shifts the Z plane from the thigh's center to its base -->
+        <!-- Z: knee_radius takes the thigh outside of the hip -->
+        <origin rpy="0 0 0" xyz="0 0 ${-shin_length/2 - knee_radius}"/>
         <geometry>
           <cylinder length="${shin_length}" radius="${shin_radius}"/>
         </geometry>
-        <material name="robot_material"/>
+        <material name="robot_material_1"/>
       </visual>
       <collision>
-        <origin rpy="0 0 0" xyz="0 0 -${shin_length/2}"/>
+        <origin rpy="0 0 0" xyz="0 0 ${-shin_length/2 - knee_radius}"/>
         <geometry>
           <cylinder length="${shin_length}" radius="${shin_radius}"/>
         </geometry>
@@ -180,16 +209,55 @@
         <inertia ixx="${shin_ixx}" ixy="0.0" ixz="0.0" iyy="${shin_iyy}" iyz="0.0" izz="${shin_izz}"/>
       </inertial>
     </link>
+
     <!-- Knee joint: thigh to shin -->
     <joint name="${prefix}_knee" type="revolute">
       <parent link="${prefix}_thigh_link"/>
       <child link="${prefix}_shin_link"/>
-      <origin xyz="0 ${(thigh_radius + shin_radius + leg_offset) * reflect} ${-thigh_length/2}"/>
+      <!-- Z: Move the joint hip_radius + thigh_length to make it's center coincide with the thigh's bottom -->
+      <!-- Z: Move the joint knee_radius to make it's bottom coincide with the thigh's bottom -->
+      <!-- Y: Move the joint thigh_radius to place it at the edge of the thigh -->
+      <!-- Y: Move the joint knee_radius to take it outside of the thigh -->
+      <origin xyz="0 ${(-thigh_radius + -knee_radius) * reflect} ${-hip_radius - thigh_length + knee_radius}"/>
       <axis xyz="0 1 0"/>
       <limit lower="0" upper="2.36" effort="40" velocity="5"/>
     </joint>
+
+    <!-- Foot -->
+    <link name="${prefix}_foot_link">
+      <visual>
+        <!-- Z: foot_height/2 shifts the Z plane from the foots's center to its top -->
+        <!-- X: foot_offset_front shifts the foot to the front -->
+        <origin rpy="0 0 0" xyz="${foot_offset_front} 0 ${-foot_height/2}"/>
+        <geometry>
+          <box size="${foot_length} ${foot_width} ${foot_height}"/>
+        </geometry>
+        <material name="robot_material_2"/>
+      </visual>
+      <collision>
+        <origin rpy="0 0 0" xyz="0 0 ${-foot_height/2}"/>
+        <geometry>
+          <box size="${foot_length} ${foot_width} ${foot_height}"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <mass value="${foot_mass}"/>
+        <inertia ixx="${foot_ixx}" ixy="0.0" ixz="0.0" iyy="${foot_iyy}" iyz="0.0" izz="${foot_izz}"/>
+      </inertial>
+    </link>
+
+    <!-- Foot joint: shin to foot -->
+    <joint name="${prefix}_foot_joint" type="fixed">
+      <parent link="${prefix}_shin_link"/>
+      <child link="${prefix}_foot_link"/>
+      <!-- Z: Move the joint knee_radius + shin_length to make it's center coincide with the shin's bottom -->
+      <origin xyz="0 0 ${-knee_radius - shin_length}"/>
+    </joint>
+
   </xacro:macro>
+
   <!-- Instantiate right and left legs -->
   <xacro:leg prefix="right" reflect="-1" />
   <xacro:leg prefix="left" reflect="1" />
+  
 </robot>
