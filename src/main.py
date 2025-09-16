@@ -2,7 +2,7 @@
 import os
 import shutil
 import logging
-from gym_env import ExoskeletonPRst1  # <-- Importa o novo ambiente
+from gym_env import ExoskeletonPRst1 
 from agent import Agent
 from gui import TrainingGUI
 import tkinter as tk
@@ -29,14 +29,11 @@ if __name__ == "__main__":
     setup_folders()
     setup_logger()
     logging.info("Inicializando interface de treinamento...")
-
-    # Cria o ambiente Gym
-    env = ExoskeletonPRst1(enable_gui=False)
-
-    # Cria o agente PPO
+    
+    env = ExoskeletonPRst1(enable_gui=False, seed=42)
     agent = Agent(env=env)
-
+    
     # Inicia a GUI
     root = tk.Tk()
-    app = TrainingGUI(root, agent)  # <-- Passa o agente para a GUI
+    app = TrainingGUI(root, agent)  
     app.start()

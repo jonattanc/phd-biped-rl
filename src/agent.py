@@ -1,5 +1,6 @@
 # agent.py
 import random
+import numpy as np
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv
 
@@ -17,17 +18,17 @@ class Agent:
                 "MlpPolicy",
                 self.env,
                 verbose=1,
-                learning_rate=0.0003,
-                n_steps=2048,
-                batch_size=64,
-                n_epochs=10,
+                learning_rate=1e-4,
+                n_steps=4096,
+                batch_size=128,
+                n_epochs=20,
                 gamma=0.99,
                 gae_lambda=0.95,
                 clip_range=0.2,
-                ent_coef=0.0,
-                vf_coef=0.5,
-                max_grad_norm=0.5,
-                tensorboard_log="./logs/tensorboard/"
+                ent_coef=0.001,
+                vf_coef=0.7,
+                max_grad_norm=0.8,
+                tensorboard_log="./logs/"
             )
         elif model_path is not None:
             # Carregar modelo treinado
@@ -52,3 +53,48 @@ class Agent:
         else:
             # Fallback para ação aleatória (útil para testes iniciais)
             return [random.uniform(-10, 10) for _ in range(self.len_revolute_indices)]
+    
+    def evaluate(self, env, num_episodes=2):
+        """
+        Avalia o agente treinado em um ambiente.
+        Executa `num_episodes` episódios com ações determinísticas e retorna métricas estatísticas.
+        """
+        if self.model is None:
+            raise ValueError("Nenhum modelo PPO treinado carregado para avaliação.")
+
+        total_times = []
+        success_count = 0
+
+        for episode in range(num_episodes):
+            obs = env.reset()
+            done = False
+            steps = 0
+
+            while not done:
+                # Ação determinística (sem exploração)
+                action, _ = self.model.predict(obs, deterministic=True)
+                obs, reward, done, info = env.step(action)
+                steps += 1
+
+                # Verifica se o episódio terminou por sucesso
+                if info.get("success", False):
+                    success_count += 1
+                    break
+
+            # Calcula duração do episódio em segundos
+            episode_time = steps * (1 / 240.0)  # PyBullet usa 240 Hz
+            total_times.append(episode_time)
+
+        # Calcula métricas
+        avg_time = np.mean(total_times)
+        std_time = np.std(total_times)
+        success_rate = success_count / num_episodes
+
+        metrics = {
+            "avg_time": avg_time,
+            "std_time": std_time,
+            "success_rate": success_rate,
+            "total_times": total_times  # Para análise detalhada, se necessário
+        }
+
+        return metrics

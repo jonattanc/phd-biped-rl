@@ -13,8 +13,10 @@ class ExoskeletonPRst1(gym.Env):
     Ambiente Gym para o robô robot_stage1 no circuito PR.
     """
 
-    def __init__(self, enable_gui=False):
+    def __init__(self, enable_gui=False, seed=42):
         super(ExoskeletonPRst1, self).__init__()
+        np.random.seed(seed)
+        random.seed(seed)
 
         # Inicializar componentes
         self.robot = Robot(name="robot_stage1")
@@ -89,45 +91,69 @@ class ExoskeletonPRst1(gym.Env):
             targetVelocities=action,
             forces=[100] * len(action)
         )
-
+    
         # Avançar simulação
         p.stepSimulation()
         self.steps += 1
-
+    
         # Obter observação
         obs = self._get_observation()
         pos, _ = p.getBasePositionAndOrientation(self.sim.robot_id)
         current_x_pos = pos[0]
         distance_traveled = current_x_pos - self.initial_x_pos
-
-        # Calcular recompensa (mesma lógica da simulação)
-        progress = distance_traveled - (self.initial_x_pos if self.steps == 1 else self.prev_distance)
-        if progress > 0:
-            progress_reward = progress * 10
-        else:
-            progress_reward = progress * 20
-        reward = progress_reward
-
-        # Penalidades e bônus
+    
+        # --- Estratégia de Recompensa Melhorada ---
+        # 1. Recompensa principal por progresso (mais generosa)
+        progress_reward = distance_traveled * 5.0  # Recompensa por distância total percorrida
+        
+        # 2. Recompensa incremental por movimento para frente
+        if hasattr(self, 'prev_distance'):
+            step_progress = distance_traveled - self.prev_distance
+            if step_progress > 0:
+                progress_reward += step_progress * 20.0  # Grande recompensa por progresso positivo
+            else:
+                progress_reward += step_progress * 10.0  # Penalidade por movimento para trás
+        
+        # 3. Recompensa por estabilidade (menor penalidade por movimento)
+        joint_velocities = []
+        for i in self.sim.robot.revolute_indices:
+            joint_state = p.getJointState(self.sim.robot_id, i)
+            joint_velocities.append(abs(joint_state[1]))
+        
+        # Penalidade muito menor por movimento
+        movement_penalty = -0.001 * sum(joint_velocities)
+        
+        # 4. Recompensa por permanecer em pé
+        standing_reward = 0.5 if pos[2] > 0.4 else -1.0
+        
+        # 5. Combina todas as recompensas
+        reward = progress_reward + movement_penalty + standing_reward
+    
+        # 6. Penalidades e bônus finais
         done = False
+        info = {"distance": distance_traveled, "success": False}
+        
+        # Queda
         if pos[2] < self.fall_threshold:
-            reward -= 100
+            reward -= 200  # Penalidade maior por queda
             done = True
+            info["termination"] = "fell"
+        # Sucesso
         elif distance_traveled >= self.success_distance:
-            reward += 50
+            reward += 500  # Bônus muito maior por sucesso
             done = True
+            info["success"] = True
+            info["termination"] = "success"
+        # Timeout
         elif self.steps >= self.max_steps:
             done = True
-
+            info["termination"] = "timeout"
+            # Recompensa adicional baseada no progresso final
+            reward += distance_traveled * 2.0
+    
         # Atualizar distância anterior
         self.prev_distance = distance_traveled
-
-        # Informações adicionais
-        info = {
-            "distance": distance_traveled,
-            "success": distance_traveled >= self.success_distance and not done
-        }
-
+    
         return obs, reward, done, False, info
 
     def _get_observation(self):
