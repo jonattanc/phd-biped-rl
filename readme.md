@@ -74,11 +74,8 @@ phd-biped-rl/
 │   ├── robot.py       # Classe Robot. Carrega .xacro, obtém juntas.
 │   ├── simulation.py  # Lógica principal de simulação e cálculo de recompensa.
 │   └── logger.py      # EpisodeLogger. Salva CSVs com metadados por episódio.
-├── models/
-│   ├── robots/
-│   │   └── robot_stage1.xacro      # Robô inicial (2 DOF por perna).
-│   └── environments/
-│       └── PR.xacro                # Ambiente Plano Regular (implementado).
+│── robots/            # Modelos de robôs .xacro
+│── environments/      # Modelos de ambientes/cenários .xacro
 ├── tmp/                            # URDFs gerados em tempo de execução.
 └── logs/
     ├── training_log.txt            # Log principal da aplicação.
