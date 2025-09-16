@@ -1,8 +1,10 @@
-#environment.py
+# environment.py
 import os
 import pybullet as p
 from xacrodoc import XacroDoc
+
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 
 class Environment:
     def __init__(self, name):

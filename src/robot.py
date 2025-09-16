@@ -1,9 +1,11 @@
-#robot.py
+# robot.py
 import os
 import logging
 import pybullet as p
 from xacrodoc import XacroDoc
+
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 
 class Robot:
     def __init__(self, name):
@@ -42,11 +44,11 @@ class Robot:
         p.resetBasePositionAndOrientation(self.body_id, initial_position, initial_orientation)
         for j in range(p.getNumJoints(self.body_id)):
             p.resetJointState(self.body_id, j, 0.0)
-        
+
         # Salva o estado inicial para resets futuros
         self.initial_position = initial_position
         self.initial_orientation = initial_orientation
-        
+
         self.initial_joint_states = []
 
         for j in range(p.getNumJoints(self.body_id)):

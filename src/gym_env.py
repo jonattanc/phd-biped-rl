@@ -8,6 +8,7 @@ from robot import Robot
 from environment import Environment
 from agent import Agent
 
+
 class ExoskeletonPRst1(gym.Env):
     """
     Ambiente Gym para o robô robot_stage1 no circuito PR.
@@ -29,21 +30,11 @@ class ExoskeletonPRst1(gym.Env):
 
         # Definir espaço de ação e observação
         # Ação: velocidade alvo para cada junta revolute (4 juntas)
-        self.action_space = gym.spaces.Box(
-            low=-10.0,
-            high=10.0,
-            shape=(4,),  # robot_stage1 tem 4 juntas revolute
-            dtype=np.float32
-        )
+        self.action_space = gym.spaces.Box(low=-10.0, high=10.0, shape=(4,), dtype=np.float32)  # robot_stage1 tem 4 juntas revolute
 
         # Observação: [posição X, velocidade X, orientação (roll, pitch, yaw), 4 ângulos de junta, 4 velocidades de junta]
         # Total: 1 + 1 + 3 + 4 + 4 = 13 valores
-        self.observation_space = gym.spaces.Box(
-            low=-np.inf,
-            high=np.inf,
-            shape=(13,),
-            dtype=np.float32
-        )
+        self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(13,), dtype=np.float32)
 
         # Variáveis de estado
         self.steps = 0
@@ -77,62 +68,56 @@ class ExoskeletonPRst1(gym.Env):
 
         # Retornar observação inicial
         obs = self._get_observation()
-        return obs, {} 
+        return obs, {}
 
     def step(self, action):
         """
         Executa uma ação e retorna (observação, recompensa, done, info).
         """
         # Aplicar ação
-        p.setJointMotorControlArray(
-            bodyUniqueId=self.sim.robot_id,
-            jointIndices=self.sim.robot.revolute_indices,
-            controlMode=p.VELOCITY_CONTROL,
-            targetVelocities=action,
-            forces=[100] * len(action)
-        )
-    
+        p.setJointMotorControlArray(bodyUniqueId=self.sim.robot_id, jointIndices=self.sim.robot.revolute_indices, controlMode=p.VELOCITY_CONTROL, targetVelocities=action, forces=[100] * len(action))
+
         # Avançar simulação
         p.stepSimulation()
         self.steps += 1
-    
+
         # Obter observação
         obs = self._get_observation()
         pos, _ = p.getBasePositionAndOrientation(self.sim.robot_id)
         current_x_pos = pos[0]
         distance_traveled = current_x_pos - self.initial_x_pos
-    
+
         # --- Estratégia de Recompensa Melhorada ---
         # 1. Recompensa principal por progresso (mais generosa)
         progress_reward = distance_traveled * 5.0  # Recompensa por distância total percorrida
-        
+
         # 2. Recompensa incremental por movimento para frente
-        if hasattr(self, 'prev_distance'):
+        if hasattr(self, "prev_distance"):
             step_progress = distance_traveled - self.prev_distance
             if step_progress > 0:
                 progress_reward += step_progress * 20.0  # Grande recompensa por progresso positivo
             else:
                 progress_reward += step_progress * 10.0  # Penalidade por movimento para trás
-        
+
         # 3. Recompensa por estabilidade (menor penalidade por movimento)
         joint_velocities = []
         for i in self.sim.robot.revolute_indices:
             joint_state = p.getJointState(self.sim.robot_id, i)
             joint_velocities.append(abs(joint_state[1]))
-        
+
         # Penalidade muito menor por movimento
         movement_penalty = -0.001 * sum(joint_velocities)
-        
+
         # 4. Recompensa por permanecer em pé
         standing_reward = 0.5 if pos[2] > 0.4 else -1.0
-        
+
         # 5. Combina todas as recompensas
         reward = progress_reward + movement_penalty + standing_reward
-    
+
         # 6. Penalidades e bônus finais
         done = False
         info = {"distance": distance_traveled, "success": False}
-        
+
         # Queda
         if pos[2] < self.fall_threshold:
             reward -= 200  # Penalidade maior por queda
@@ -150,10 +135,10 @@ class ExoskeletonPRst1(gym.Env):
             info["termination"] = "timeout"
             # Recompensa adicional baseada no progresso final
             reward += distance_traveled * 2.0
-    
+
         # Atualizar distância anterior
         self.prev_distance = distance_traveled
-    
+
         return obs, reward, done, False, info
 
     def _get_observation(self):
@@ -180,16 +165,11 @@ class ExoskeletonPRst1(gym.Env):
             joint_velocities.append(joint_state[1])
 
         # Montar vetor de observação
-        obs = np.array([
-            x_pos, x_vel,
-            roll, pitch, yaw,
-            *joint_angles,
-            *joint_velocities
-        ], dtype=np.float32)
+        obs = np.array([x_pos, x_vel, roll, pitch, yaw, *joint_angles, *joint_velocities], dtype=np.float32)
 
         return obs
 
-    def render(self, mode='human'):
+    def render(self, mode="human"):
         pass  # O modo GUI é controlado por enable_gui no construtor
 
     def close(self):

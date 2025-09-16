@@ -15,6 +15,7 @@ from robot import Robot
 from environment import Environment
 from agent import Agent
 
+
 class TrainingGUI:
     def __init__(self, root, agent=None):
         self.root = root
@@ -116,7 +117,6 @@ class TrainingGUI:
         self.thread.start()
 
     def run_training_loop(self):
-        
         """Loop principal de treinamento em thread"""
         try:
             self.logger.info(f"Iniciando treinamento PPO para {self.current_env} com agente {self.current_robot}")
@@ -154,19 +154,19 @@ class TrainingGUI:
 
                 # Atualizar gráficos
                 self.axs[0].clear()
-                self.axs[0].plot(self.episode_data["episodes"], self.episode_data["rewards"], label="Recompensa", marker='o', linestyle='-')
+                self.axs[0].plot(self.episode_data["episodes"], self.episode_data["rewards"], label="Recompensa", marker="o", linestyle="-")
                 self.axs[0].legend()
                 self.axs[0].set_title("Recompensa por Episódio")
                 self.axs[0].grid(True)
 
                 self.axs[1].clear()
-                self.axs[1].plot(self.episode_data["episodes"], self.episode_data["times"], label="Duração (s)", color='orange', marker='s', linestyle='-')
+                self.axs[1].plot(self.episode_data["episodes"], self.episode_data["times"], label="Duração (s)", color="orange", marker="s", linestyle="-")
                 self.axs[1].legend()
                 self.axs[1].set_title("Duração do Episódio (s)")
                 self.axs[1].grid(True)
 
                 self.axs[2].clear()
-                self.axs[2].plot(self.episode_data["episodes"], self.episode_data["distances"], label="Distância (m)", color='green', marker='^', linestyle='-')
+                self.axs[2].plot(self.episode_data["episodes"], self.episode_data["distances"], label="Distância (m)", color="green", marker="^", linestyle="-")
                 self.axs[2].legend()
                 self.axs[2].set_title("Distância Percorrida (m)")
                 self.axs[2].grid(True)
@@ -209,6 +209,7 @@ class TrainingGUI:
         # --- Passo 2: Criar ambiente de avaliação ---
         try:
             from gym_env import ExoskeletonPRst1
+
             eval_env = ExoskeletonPRst1(enable_gui=False, seed=42)
         except ImportError:
             messagebox.showerror("Erro", "Ambiente Gym 'ExoskeletonPRst1' não encontrado. Verifique se gym_env.py existe.")
@@ -225,9 +226,7 @@ class TrainingGUI:
             metrics = self.evaluate_and_save(model_filename, self.current_env, self.current_robot)
 
             if metrics:
-                self.logger.info(f"Avaliação concluída. "
-                                 f"Sucesso: {metrics['success_rate']*100:.1f}% | "
-                                 f"Tm: {metrics['avg_time']:.2f}s ± {metrics['std_time']:.2f}s")
+                self.logger.info(f"Avaliação concluída. " f"Sucesso: {metrics['success_rate']*100:.1f}% | " f"Tm: {metrics['avg_time']:.2f}s ± {metrics['std_time']:.2f}s")
 
                 # --- Passo 4: Compilar resultados e gerar relatório ---
                 from metrics_saver import compile_results, generate_report
@@ -239,16 +238,18 @@ class TrainingGUI:
                     # Gerar relatório completo
                     generate_report()
 
-                    messagebox.showinfo("Avaliação Concluída",
-                                        f"Modelo salvo em: {model_filename}\n\n"
-                                        f"Taxa de Sucesso: {metrics['success_rate']*100:.1f}%\n"
-                                        f"Tempo Médio: {metrics['avg_time']:.2f}s ± {metrics['std_time']:.2f}s\n\n"
-                                        f"Relatório completo gerado em logs/data/")
+                    messagebox.showinfo(
+                        "Avaliação Concluída",
+                        f"Modelo salvo em: {model_filename}\n\n"
+                        f"Taxa de Sucesso: {metrics['success_rate']*100:.1f}%\n"
+                        f"Tempo Médio: {metrics['avg_time']:.2f}s ± {metrics['std_time']:.2f}s\n\n"
+                        f"Relatório completo gerado em logs/data/",
+                    )
                 else:
-                    messagebox.showinfo("Avaliação Concluída",
-                                        f"Modelo salvo em: {model_filename}\n\n"
-                                        f"Taxa de Sucesso: {metrics['success_rate']*100:.1f}%\n"
-                                        f"Tempo Médio: {metrics['avg_time']:.2f}s ± {metrics['std_time']:.2f}s")
+                    messagebox.showinfo(
+                        "Avaliação Concluída",
+                        f"Modelo salvo em: {model_filename}\n\n" f"Taxa de Sucesso: {metrics['success_rate']*100:.1f}%\n" f"Tempo Médio: {metrics['avg_time']:.2f}s ± {metrics['std_time']:.2f}s",
+                    )
 
             else:
                 messagebox.showerror("Erro", "Falha na avaliação do modelo.")
@@ -262,36 +263,26 @@ class TrainingGUI:
             except:
                 pass
 
-    def evaluate_and_save(self, model_path, circuit_name="PR", avatar_name="robot_stage1", 
-                         role="AE", num_episodes=20, seed=42):
+    def evaluate_and_save(self, model_path, circuit_name="PR", avatar_name="robot_stage1", role="AE", num_episodes=20, seed=42):
         """Avalia um modelo e salva as métricas - integração com evaluate_model.py"""
 
         self.logger.info(f"Avaliando {avatar_name} no circuito {circuit_name}...")
 
         try:
             from gym_env import ExoskeletonPRst1
+
             env = ExoskeletonPRst1(enable_gui=False, seed=seed)
 
             # Carregar o agente com o modelo salvo
             agent = Agent(model_path=model_path)
             metrics = agent.evaluate(env, num_episodes=num_episodes)
 
-            hyperparams = {
-                "algorithm": "PPO",
-                "learning_rate": 3e-4,
-                "total_timesteps": 100000  # Ajustado para o treinamento da GUI
-            }
+            hyperparams = {"algorithm": "PPO", "learning_rate": 3e-4, "total_timesteps": 100000}  # Ajustado para o treinamento da GUI
 
             # Salvar métricas usando metrics_saver
             from metrics_saver import save_complexity_metrics
-            save_complexity_metrics(
-                metrics=metrics,
-                circuit_name=circuit_name,
-                avatar_name=avatar_name,
-                role=role,
-                seed=seed,
-                hyperparams=hyperparams
-            )
+
+            save_complexity_metrics(metrics=metrics, circuit_name=circuit_name, avatar_name=avatar_name, role=role, seed=seed, hyperparams=hyperparams)
 
             self.logger.info(f"Sucesso: {metrics['success_rate']*100:.1f}% | Tempo: {metrics['avg_time']:.2f}s")
             return metrics
@@ -313,14 +304,14 @@ class TrainingGUI:
 
     def update_logs(self):
         """Atualiza a caixa de log com as últimas linhas do arquivo de log principal"""
-        log_file = os.path.join("logs", "training_log.txt") 
+        log_file = os.path.join("logs", "training_log.txt")
         if os.path.exists(log_file):
             try:
-                with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:  # <-- IGNORA CARACTERES INVÁLIDOS
+                with open(log_file, "r", encoding="utf-8", errors="ignore") as f:  # <-- IGNORA CARACTERES INVÁLIDOS
                     lines = f.readlines()
                     # Mostrar as últimas 50 linhas (ou menos, se o arquivo for pequeno)
                     last_lines = lines[-50:] if len(lines) > 50 else lines
-                    log_content = ''.join(last_lines)
+                    log_content = "".join(last_lines)
                     self.log_text.config(state=tk.NORMAL)
                     self.log_text.delete(1.0, tk.END)
                     self.log_text.insert(tk.END, log_content)
@@ -330,8 +321,8 @@ class TrainingGUI:
                 self.logger.error(f"Erro ao ler o arquivo de log: {e}")
         # Atualizar periodicamente
         self.root.after(2000, self.update_logs)
-    
+
     def start(self):
         self.root.after(500, self.update_plots)
-        self.root.after(500, self.update_logs)       # Começa a atualizar logs
+        self.root.after(500, self.update_logs)  # Começa a atualizar logs
         self.root.mainloop()

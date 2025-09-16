@@ -6,6 +6,7 @@ import time
 import logging
 from datetime import datetime
 
+
 class Simulation:
     def __init__(self, robot, environment, agent, enable_gui=True):
         self.robot = robot
@@ -102,13 +103,7 @@ class Simulation:
             action = self.agent.get_action()
 
             # Aplicar ação
-            p.setJointMotorControlArray(
-                bodyUniqueId=self.robot_id,
-                jointIndices=self.robot.revolute_indices,
-                controlMode=p.VELOCITY_CONTROL,
-                targetVelocities=action,
-                forces=[100] * len(action)
-            )
+            p.setJointMotorControlArray(bodyUniqueId=self.robot_id, jointIndices=self.robot.revolute_indices, controlMode=p.VELOCITY_CONTROL, targetVelocities=action, forces=[100] * len(action))
 
             # Avançar simulação
             p.stepSimulation()
@@ -120,10 +115,4 @@ class Simulation:
         total_time = time.time() - start_time
         self.logger.info(f"Episódio finalizado. Distância: {distance_traveled:.2f}m | Tempo: {total_time:.2f}s | Sucesso: {success}")
 
-        return {
-            "reward": reward,
-            "time_total": total_time,
-            "distance": distance_traveled,
-            "success": success,
-            "steps": steps
-        }
+        return {"reward": reward, "time_total": total_time, "distance": distance_traveled, "success": success, "steps": steps}
