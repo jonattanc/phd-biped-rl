@@ -14,16 +14,20 @@ from simulation import Simulation
 from robot import Robot
 from environment import Environment
 from agent import Agent
+import utils
+import train_process
+import multiprocessing
 
 
 class TrainingGUI:
-    def __init__(self, root, agent=None):
-        self.root = root
-        self.agent = agent
+    def __init__(self):
+        self.root = tk.Tk()
         self.root.title("Cruzada Generalization - Training Dashboard")
         self.root.geometry("1200x800")
 
-        # Dados de treinamento
+        self.processes = []
+
+        # Dados de treinamento # TODO: Revisar
         self.training_queue = queue.Queue()
         self.running = False
         self.current_env = ""
@@ -46,32 +50,49 @@ class TrainingGUI:
         control_frame = ttk.LabelFrame(main_frame, text="Controle de Treinamento", padding="10")
         control_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=10)
 
+        # Seleção de ambiente
+        xacro_env_files = [file.replace(".xacro", "") for file in os.listdir(utils.ENVIRONMENT_PATH) if file.endswith(".xacro")]
+
+        if len(xacro_env_files) == 0:
+            messagebox.showerror("Erro", f"Nenhum arquivo .xacro encontrado em {utils.ENVIRONMENT_PATH}.")
+            self.root.destroy()
+            return
+
         ttk.Label(control_frame, text="Ambiente:").grid(row=0, column=0, sticky=tk.W)
-        self.env_var = tk.StringVar(value="PR")
-        env_combo = ttk.Combobox(control_frame, textvariable=self.env_var, values=["PR", "P<μ", "RamA", "RamD", "PG", "PRB"])
+        self.env_var = tk.StringVar(value=xacro_env_files[0])
+        env_combo = ttk.Combobox(control_frame, textvariable=self.env_var, values=xacro_env_files)
         env_combo.grid(row=0, column=1, padx=5)
 
+        # Seleção de robô
+        xacro_robot_files = [file.replace(".xacro", "") for file in os.listdir(utils.ROBOTS_PATH) if file.endswith(".xacro")]
+
+        if len(xacro_robot_files) == 0:
+            messagebox.showerror("Erro", f"Nenhum arquivo .xacro encontrado em {utils.ROBOTS_PATH}.")
+            self.root.destroy()
+            return
+
         ttk.Label(control_frame, text="Robô:").grid(row=0, column=2, sticky=tk.W)
-        self.robot_var = tk.StringVar(value="robot_stage1")
-        robot_combo = ttk.Combobox(control_frame, textvariable=self.robot_var, values=["robot_stage1"])
+        self.robot_var = tk.StringVar(value=xacro_robot_files[0])
+        robot_combo = ttk.Combobox(control_frame, textvariable=self.robot_var, values=xacro_robot_files)
         robot_combo.grid(row=0, column=3, padx=5)
 
+        # Botões de controle
         self.start_btn = ttk.Button(control_frame, text="Iniciar Treinamento", command=self.start_training)
         self.start_btn.grid(row=0, column=4, padx=5)
 
-        self.pause_btn = ttk.Button(control_frame, text="Pausar", command=self.pause_training, state=tk.DISABLED)
+        self.pause_btn = ttk.Button(control_frame, text="Pausar", command=self.pause_training, state=tk.DISABLED)  # TODO: Revisar
         self.pause_btn.grid(row=0, column=5, padx=5)
 
-        self.stop_btn = ttk.Button(control_frame, text="Finalizar", command=self.stop_training, state=tk.DISABLED)
+        self.stop_btn = ttk.Button(control_frame, text="Finalizar", command=self.stop_training, state=tk.DISABLED)  # TODO: Revisar
         self.stop_btn.grid(row=0, column=6, padx=5)
 
-        self.save_btn = ttk.Button(control_frame, text="Salvar Snapshot", command=self.save_snapshot, state=tk.DISABLED)
+        self.save_btn = ttk.Button(control_frame, text="Salvar Snapshot", command=self.save_snapshot, state=tk.DISABLED)  # TODO: Revisar
         self.save_btn.grid(row=0, column=7, padx=5)
 
-        self.visualize_btn = ttk.Button(control_frame, text="Visualizar Simulação", command=self.toggle_visualization)
+        self.visualize_btn = ttk.Button(control_frame, text="Visualizar Simulação", command=self.toggle_visualization)  # TODO: Revisar
         self.visualize_btn.grid(row=0, column=8, padx=5)
 
-        # Gráficos
+        # Gráficos # TODO: Revisar
         graph_frame = ttk.LabelFrame(main_frame, text="Desempenho em Tempo Real", padding="10")
         graph_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=10)
 
@@ -84,7 +105,7 @@ class TrainingGUI:
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
         self.canvas.draw()
 
-        # Logs
+        # Logs # TODO: Revisar
         log_frame = ttk.LabelFrame(main_frame, text="Log de Treinamento", padding="10")
         log_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=10, rowspan=2)
         self.log_text = tk.Text(log_frame, height=10, state=tk.DISABLED)
@@ -103,6 +124,7 @@ class TrainingGUI:
     def start_training(self):
         if self.running:
             return
+
         self.running = True
         self.start_btn.config(state=tk.DISABLED)
         self.pause_btn.config(state=tk.NORMAL)
@@ -112,11 +134,12 @@ class TrainingGUI:
         self.current_env = self.env_var.get()
         self.current_robot = self.robot_var.get()
 
-        # Iniciar treinamento em thread separada
-        self.thread = threading.Thread(target=self.run_training_loop, daemon=True)
-        self.thread.start()
+        # Iniciar treinamento em processo separado
+        p = multiprocessing.Process(target=train_process.process_runner, args=(self.env_var.get(), self.robot_var.get()))
+        p.start()
+        self.processes.append(p)
 
-    def run_training_loop(self):
+    def run_training_loop(self):  # TODO: Revisar
         """Loop principal de treinamento em thread"""
         try:
             self.logger.info(f"Iniciando treinamento PPO para {self.current_env} com agente {self.current_robot}")
@@ -322,7 +345,12 @@ class TrainingGUI:
         # Atualizar periodicamente
         self.root.after(2000, self.update_logs)
 
+    def on_closing(self):
+        self.logger.info("Gui fechada pelo usuário.")
+        self.root.quit()  # Terminates the mainloop
+
     def start(self):
-        self.root.after(500, self.update_plots)
-        self.root.after(500, self.update_logs)  # Começa a atualizar logs
+        # self.root.after(500, self.update_plots) # TODO: Revisar
+        # self.root.after(500, self.update_logs) # TODO: Revisar
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)  # Function called when the window is closed
         self.root.mainloop()

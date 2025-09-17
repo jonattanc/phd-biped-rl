@@ -44,10 +44,10 @@ class Agent:
         if self.model is not None:
             self.model.learn(total_timesteps=total_timesteps, reset_num_timesteps=False)
         else:
-            raise ValueError("Modelo PPO não foi inicializado.")
+            raise ValueError("Modelo não foi inicializado.")
 
     def get_action(self, obs=None):
-        """Obtém uma ação do modelo PPO ou, se não houver modelo, retorna uma ação aleatória."""
+        """Obtém uma ação do modelo ou, se não houver modelo, retorna uma ação aleatória."""
         if self.model is not None and obs is not None:
             action, _ = self.model.predict(obs, deterministic=False)
             return action.flatten()  # Garante que é um array 1D
@@ -55,13 +55,13 @@ class Agent:
             # Fallback para ação aleatória (útil para testes iniciais)
             return [random.uniform(-10, 10) for _ in range(self.len_revolute_indices)]
 
-    def evaluate(self, env, num_episodes=20):
+    def evaluate(self, env, num_episodes=20):  # TODO: Avaliação não deve fazer parte do agente
         """
         Avalia o agente treinado em um ambiente.
         Retorna métricas completas incluindo contagem de sucessos.
         """
         if self.model is None:
-            raise ValueError("Nenhum modelo PPO treinado carregado para avaliação.")
+            raise ValueError("Nenhum modelo treinado carregado para avaliação.")
 
         total_times = []
         success_count = 0

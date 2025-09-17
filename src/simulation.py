@@ -45,22 +45,22 @@ class Simulation:
     def run(self):
         """Executa múltiplos episódios e retorna métricas"""
         all_metrics = []
-        
+
         for episode in range(self.num_episodes):
             self.logger.info(f"=== INICIANDO EPISÓDIO {episode + 1}/{self.num_episodes} ===")
-            
+
             episode_metrics = self.run_episode()
             all_metrics.append(episode_metrics)
-            
+
             self.logger.info(f"=== EPISÓDIO {episode + 1} FINALIZADO ===")
             self.logger.info(f"Recompensa: {episode_metrics['reward']:.2f}")
             self.logger.info(f"Distância: {episode_metrics['distance']:.2f}m")
             self.logger.info(f"Sucesso: {episode_metrics['success']}")
             self.logger.info(f"Passos: {episode_metrics['steps']}")
             self.logger.info("")
-        
+
         return all_metrics
-    
+
     def run_episode(self):
         """Executa um episódio completo e retorna métricas"""
         start_time = time.time()
@@ -94,7 +94,7 @@ class Simulation:
             # Obter observação
             pos, _ = p.getBasePositionAndOrientation(self.robot_id)
             current_x_pos = pos[0]
-            distance_traveled = current_x_pos - initial_x_pos  
+            distance_traveled = current_x_pos - initial_x_pos
 
             # Calcular recompensa
             progress = distance_traveled - prev_x_pos

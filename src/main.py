@@ -3,78 +3,30 @@ import os
 import shutil
 import logging
 import multiprocessing
-from robot import Robot
-from simulation import Simulation
-from environment import Environment
-from agent import Agent
 from gui import TrainingGUI
-import tkinter as tk
 import utils
 
 
 def setup_folders():
-    if os.path.exists(utils.TMP_PATH):
-        shutil.rmtree(utils.TMP_PATH)
-    os.makedirs(utils.TMP_PATH, exist_ok=True)
+    for folder in [utils.TMP_PATH, utils.LOGS_PATH]:
+        if os.path.exists(folder):
+            shutil.rmtree(folder)
 
-    # Criar diretório de logs se não existir
-    logs_dir = os.path.join(utils.PROJECT_ROOT, "logs")
-    os.makedirs(logs_dir, exist_ok=True)
-
-
-def setup_logger(description):
-    proc = multiprocessing.current_process()
-    proc_num = proc._identity[0] if proc._identity else os.getpid()
-
-    log_name = "__".join(description)
-    log_filename = os.path.join(utils.PROJECT_ROOT, "logs", f"log__{log_name}__proc{proc_num}.txt")
-
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(message)s",
-        handlers=[
-            logging.StreamHandler(),
-            logging.FileHandler(log_filename, mode="w", encoding="utf-8"),
-        ],
-    )
-
-    return logging.getLogger(__name__)
-
-
-def train_in_process(selected_environment, selected_robot):
-    logger = setup_logger([selected_environment, selected_robot])
-
-    environment = Environment(name=selected_environment)
-    robot = Robot(name=selected_robot)
-    agent = Agent()
-
-    # Alterar o num_episodes para multiplos
-    sim = Simulation(robot, environment, agent, enable_gui=True, num_episodes=200)
-
-    sim.setup()
-    sim.run()
+        os.makedirs(folder, exist_ok=True)
 
 
 if __name__ == "__main__":
     setup_folders()
-    setup_logger(["main"])
+    utils.setup_logger(["main"])
 
     logging.info(f"Executando em {utils.PROJECT_ROOT}")
 
-    selected_robot = "robot_stage1"
-    environment_list = ["PR"]
+    logging.info("Iniciando GUI...")
+    app = TrainingGUI()
+    app.start()
+    logging.info("GUI finalizada.")
 
-    processes = []
+    logging.info("Aguardando processos de treinamento terminarem...")
 
-    for selected_environment in environment_list:
-        p = multiprocessing.Process(target=train_in_process, args=(selected_environment, selected_robot))
-        p.start()
-        processes.append(p)
-
-    # # Inicia a GUI
-    # root = tk.Tk()
-    # app = TrainingGUI(root, agent)
-    # app.start()
-
-    for p in processes:
+    for p in app.processes:
         p.join()
