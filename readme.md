@@ -40,15 +40,6 @@ pip install -r requirements.txt
 
 It's recommended to use Visual Studio Code with the Python extension. This should be enough to activate the Black lint extension when saving files.
 
-## Usage
-
-### Activate the virtual environment
-
-```
-source .venv/bin/activate # Linux/macOS
-.venv\Scripts\activate # Windows
-```
-
 ### Run
 
 ```

@@ -17,6 +17,10 @@ def setup_folders():
         shutil.rmtree(utils.TMP_PATH)
     os.makedirs(utils.TMP_PATH, exist_ok=True)
 
+    # Criar diretório de logs se não existir
+    logs_dir = os.path.join(utils.PROJECT_ROOT, "logs")
+    os.makedirs(logs_dir, exist_ok=True)
+
 
 def setup_logger(description):
     proc = multiprocessing.current_process()
@@ -43,7 +47,9 @@ def train_in_process(selected_environment, selected_robot):
     environment = Environment(name=selected_environment)
     robot = Robot(name=selected_robot)
     agent = Agent()
-    sim = Simulation(robot, environment, agent, enable_gui=True)
+
+    # Alterar o num_episodes para multiplos
+    sim = Simulation(robot, environment, agent, enable_gui=True, num_episodes=200)
 
     sim.setup()
     sim.run()

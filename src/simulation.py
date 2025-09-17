@@ -8,7 +8,7 @@ from datetime import datetime
 
 
 class Simulation:
-    def __init__(self, robot, environment, agent, enable_gui=True):
+    def __init__(self, robot, environment, agent, enable_gui=True, num_episodes=1):
         self.robot = robot
         self.environment = environment
         self.agent = agent
@@ -17,6 +17,7 @@ class Simulation:
         self.physics_client = None
         self.plane_id = None
         self.robot_id = None
+        self.num_episodes = num_episodes
         # Configurações de simulação
         self.time_step = 1 / 240.0
         self.max_steps = 5000  # ~20.8 segundos (240 * 20.8)
@@ -42,6 +43,25 @@ class Simulation:
         self.logger.info(f"Ambiente: {self.environment.name}")
 
     def run(self):
+        """Executa múltiplos episódios e retorna métricas"""
+        all_metrics = []
+        
+        for episode in range(self.num_episodes):
+            self.logger.info(f"=== INICIANDO EPISÓDIO {episode + 1}/{self.num_episodes} ===")
+            
+            episode_metrics = self.run_episode()
+            all_metrics.append(episode_metrics)
+            
+            self.logger.info(f"=== EPISÓDIO {episode + 1} FINALIZADO ===")
+            self.logger.info(f"Recompensa: {episode_metrics['reward']:.2f}")
+            self.logger.info(f"Distância: {episode_metrics['distance']:.2f}m")
+            self.logger.info(f"Sucesso: {episode_metrics['success']}")
+            self.logger.info(f"Passos: {episode_metrics['steps']}")
+            self.logger.info("")
+        
+        return all_metrics
+    
+    def run_episode(self):
         """Executa um episódio completo e retorna métricas"""
         start_time = time.time()
         distance_traveled = 0.0
@@ -67,15 +87,14 @@ class Simulation:
         # Forçar a referência de distância para 0.0
         initial_x_pos = 0.0
 
-        # Atualizar os índices das juntas (caso tenham mudado)
+        # Atualizar os índices das juntas
         self.agent.set_revolute_indices(self.robot.revolute_indices)
 
         while steps < self.max_steps:
             # Obter observação
             pos, _ = p.getBasePositionAndOrientation(self.robot_id)
-            print(f"[DEBUG] Posição inicial do robô (base_link): x={pos[0]:.3f}, y={pos[1]:.3f}, z={pos[2]:.3f}")
             current_x_pos = pos[0]
-            distance_traveled = current_x_pos - initial_x_pos  # Agora, initial_x_pos é SEMPRE 0.0
+            distance_traveled = current_x_pos - initial_x_pos  
 
             # Calcular recompensa
             progress = distance_traveled - prev_x_pos
