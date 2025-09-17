@@ -13,7 +13,7 @@ Treinar 6 agentes especialistas (AE), cada um em um circuito distinto (PR, P<μ,
 
 ### Install Python
 
-This project is being developped with python 3.12.7.
+This project is being developped with python 3.12.
 
 ### Clone the repository
 
@@ -33,8 +33,7 @@ source .venv/bin/activate # Linux/macOS
 ### Install dependencies
 
 ```
-pip install pybullet xacrodoc numpy matplotlib
-pip install stable-baselines3[extra] gym==0.23.1 tensorboard
+pip install -r requirements.txt
 ```
 
 ### Setup the development environment
@@ -53,7 +52,7 @@ source .venv/bin/activate # Linux/macOS
 ### Run
 
 ```
-python main.py
+python src/main.py
 ```
 
 ### Interface Gráfica
@@ -65,21 +64,22 @@ Logs: A caixa de texto exibe os logs mais recentes.
 ### Estrutura de Arquivos
 phd-biped-rl/
 ├── src/
-│   ├── main.py        # Ponto de entrada. Inicializa a GUI.
-│   ├── gui.py         # Interface Tkinter + Gráficos Matplotlib + Logger integrado.
-│   ├── agent.py       # Classe Agent. Ações aleatórias (placeholder para PPO).
-│   ├── environment.py # Classe Environment. Carrega .xacro de ambientes.
-│   ├── gym_env.py     # Ambiente no padrão gym. Implementa step e reset.
-│   ├── metrics_saver.py  # Calcula métricas estatisticas e salva.
-│   ├── robot.py       # Classe Robot. Carrega .xacro, obtém juntas.
-│   ├── simulation.py  # Lógica principal de simulação e cálculo de recompensa.
-│   └── logger.py      # EpisodeLogger. Salva CSVs com metadados por episódio.
-│── robots/            # Modelos de robôs .xacro
-│── environments/      # Modelos de ambientes/cenários .xacro
-├── tmp/                            # URDFs gerados em tempo de execução.
+│   ├── agent.py          # Classe agente de RL.
+│   ├── environment.py    # Classe ambiente/cenário. Carrega .xacro de ambientes.
+│   ├── evaluate_model.py # Calcula métricas estatisticas e salva.
+│   ├── gui.py            # Interface Tkinter + Gráficos Matplotlib + Logger integrado.
+│   ├── gym_env.py        # Ambiente no padrão gym. Implementa step e reset.
+│   ├── logger.py         # EpisodeLogger. Salva CSVs com metadados por episódio.
+│   ├── main.py           # Ponto de entrada. Inicializa a GUI e processos.
+│   ├── robot.py          # Classe Robot. Carrega .xacro, obtém juntas.
+│   ├── simulation.py     # Lógica principal de simulação e cálculo de recompensa.
+│   └── utils.py          # Utilidades gerais, como manipulação de arquivos e paths.
+│── robots/               # Modelos de robôs .xacro.
+│── environments/         # Modelos de ambientes/cenários .xacro.
+├── tmp/                  # Diversos arquivos temporários, como URDFs gerados em tempo de execução.
 └── logs/
-    ├── training_log.txt            # Log principal da aplicação.
-    └── data/                       # CSVs com metadados de cada episódio.
+    ├── log__{log_description}__proc{proc_num}.txt  # Log principal de cada processo.
+    └── data/                                       # CSVs com metadados de cada episódio.
 
 ### Cronograma Implementado
 
@@ -107,4 +107,4 @@ Análise de Resultados e Elaboração de Tese.
 Gráficos, conclusões sobre generalização.
 
 ### Licença
-Este projeto é de uso acadêmico. Para mais detalhes, consulte o arquivo LICENSE.
+Para mais detalhes, consulte o arquivo LICENSE.

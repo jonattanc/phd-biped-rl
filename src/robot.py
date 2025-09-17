@@ -1,35 +1,32 @@
 # robot.py
+import utils
 import os
 import logging
 import pybullet as p
 from xacrodoc import XacroDoc
-
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 class Robot:
     def __init__(self, name):
         self.name = name
 
-        self.tmp_dir = "tmp"
-        self.models_dir = os.path.join(PROJECT_ROOT, "robots")
-        self.models_tmp_dir = os.path.join(self.tmp_dir, self.models_dir)
+        self.robots_dir = os.path.join(utils.PROJECT_ROOT, "robots")
+        self.robots_tmp_dir = os.path.join(utils.TMP_PATH, "robots")
 
-        if not os.path.exists(self.models_tmp_dir):
-            os.makedirs(self.models_tmp_dir, exist_ok=True)
+        if not os.path.exists(self.robots_tmp_dir):
+            os.makedirs(self.robots_tmp_dir, exist_ok=True)
 
         self.urdf_path = self._generate_urdf()
         self.body_id = None
         self.logger = logging.getLogger(__name__)
 
     def _generate_urdf(self):
-        xacro_path = os.path.join(self.models_dir, f"{self.name}.xacro")
-        urdf_path = os.path.join(self.models_tmp_dir, f"{self.name}.urdf")
+        xacro_path = os.path.join(self.robots_dir, f"{self.name}.xacro")
+        urdf_path = os.path.join(self.robots_tmp_dir, f"{self.name}.urdf")
 
-        if os.path.exists(urdf_path):
-            os.remove(urdf_path)
+        if not os.path.exists(urdf_path):
+            XacroDoc.from_file(xacro_path).to_urdf_file(urdf_path)
 
-        XacroDoc.from_file(xacro_path).to_urdf_file(urdf_path)
         return urdf_path
 
     def load_in_simulation(self):
@@ -39,15 +36,7 @@ class Robot:
         self.revolute_indices = [i for i in range(num_joints) if p.getJointInfo(self.body_id, i)[2] == p.JOINT_REVOLUTE]
         self.logger.info(f"Robot {self.name} loaded with {num_joints} joints, revolute joints at indices: {self.revolute_indices}")
 
-        initial_position = (0, 0, 0.45)  # Eleva o centro do corpo
-        initial_orientation = p.getQuaternionFromEuler([0, 0, 0])
-        p.resetBasePositionAndOrientation(self.body_id, initial_position, initial_orientation)
-        for j in range(p.getNumJoints(self.body_id)):
-            p.resetJointState(self.body_id, j, 0.0)
-
-        # Salva o estado inicial para resets futuros
-        self.initial_position = initial_position
-        self.initial_orientation = initial_orientation
+        self.initial_position, self.initial_orientation = p.getBasePositionAndOrientation(self.body_id)
 
         self.initial_joint_states = []
 

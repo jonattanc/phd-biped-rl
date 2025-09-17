@@ -1,28 +1,30 @@
 # environment.py
+import utils
 import os
 import pybullet as p
 from xacrodoc import XacroDoc
-
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 class Environment:
     def __init__(self, name):
         self.name = name
-        self.tmp_dir = "tmp"
-        self.models_dir = os.path.join(PROJECT_ROOT, "environments")
-        self.models_tmp_dir = os.path.join(self.tmp_dir, self.models_dir)
 
-        if not os.path.exists(self.models_tmp_dir):
-            os.makedirs(self.models_tmp_dir, exist_ok=True)
+        self.environment_dir = os.path.join(utils.PROJECT_ROOT, "environments")
+        self.environment_tmp_dir = os.path.join(utils.TMP_PATH, "environments")
+
+        if not os.path.exists(self.environment_tmp_dir):
+            os.makedirs(self.environment_tmp_dir, exist_ok=True)
 
         self.urdf_path = self._generate_urdf()
         self.plane_id = None
 
     def _generate_urdf(self):
-        xacro_path = os.path.join(self.models_dir, f"{self.name}.xacro")
-        urdf_path = os.path.join(self.models_tmp_dir, f"{self.name}.urdf")
-        XacroDoc.from_file(xacro_path).to_urdf_file(urdf_path)
+        xacro_path = os.path.join(self.environment_dir, f"{self.name}.xacro")
+        urdf_path = os.path.join(self.environment_tmp_dir, f"{self.name}.urdf")
+
+        if not os.path.exists(urdf_path):
+            XacroDoc.from_file(xacro_path).to_urdf_file(urdf_path)
+
         return urdf_path
 
     def get_urdf_path(self):
