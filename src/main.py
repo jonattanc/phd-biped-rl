@@ -13,12 +13,9 @@ import utils
 
 
 def setup_folders():
-    for folder in utils.TEMPORARY_FOLDERS:
-        path = os.path.abspath(folder)
-        full_path = os.path.join(utils.PROJECT_ROOT, path)
-        if os.path.exists(full_path):
-            shutil.rmtree(full_path)
-        os.makedirs(full_path, exist_ok=True)
+    if os.path.exists(utils.TMP_PATH):
+        shutil.rmtree(utils.TMP_PATH)
+    os.makedirs(utils.TMP_PATH, exist_ok=True)
 
 
 def setup_logger(description):
