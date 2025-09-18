@@ -29,6 +29,8 @@ class TrainingGUI:
         self.pause_values = []
         self.exit_values = []
         self.enable_real_time_values = []
+        self.ipc_queue = multiprocessing.Queue()
+        self.ipc_thread = threading.Thread(target=self.ipc_runner, daemon=True)
 
         # Dados de treinamento # TODO: Revisar
         self.training_queue = queue.Queue()
@@ -137,27 +139,11 @@ class TrainingGUI:
         self.pause_values.append(multiprocessing.Value("b", 0))
         self.exit_values.append(multiprocessing.Value("b", 0))
         self.enable_real_time_values.append(multiprocessing.Value("b", 0))
-        p = multiprocessing.Process(target=train_process.process_runner, args=(self.env_var.get(), self.robot_var.get(), self.pause_values[-1], self.exit_values[-1], self.enable_real_time_values[-1]))
+        p = multiprocessing.Process(
+            target=train_process.process_runner, args=(self.env_var.get(), self.robot_var.get(), self.ipc_queue, self.pause_values[-1], self.exit_values[-1], self.enable_real_time_values[-1])
+        )
         p.start()
         self.processes.append(p)
-
-    def run_training_loop(self):  # TODO: Revisar
-        """Loop principal de treinamento em thread"""
-        try:
-            self.logger.info(f"Iniciando treinamento PPO para {self.current_env} com agente {self.current_robot}")
-
-            # Treinar o agente por 100k passos
-            self.agent.train(total_timesteps=100_000)
-
-            self.logger.info("Treinamento concluído!")
-
-        except Exception as e:
-            self.logger.error(f"Erro inesperado no treinamento: {e}", exc_info=True)
-        finally:
-            self.start_btn.config(state=tk.NORMAL)
-            self.pause_btn.config(state=tk.DISABLED)
-            self.stop_btn.config(state=tk.DISABLED)
-            self.save_btn.config(state=tk.NORMAL)  # Habilita salvar o modelo treinado
 
     def update_plots(self):
         """Atualiza os gráficos com novos dados da fila"""
@@ -338,6 +324,25 @@ class TrainingGUI:
             except:
                 pass
 
+    def ipc_runner(self):
+        """Thread para monitorar a fila IPC e atualizar logs"""
+        while True:
+            msg = self.ipc_queue.get()
+
+            if msg is None:
+                break
+
+            elif msg == "done":
+                self.logger.info("Processo de treinamento finalizado.")
+                self.start_btn.config(state=tk.NORMAL)
+                self.pause_btn.config(state=tk.DISABLED)
+                self.stop_btn.config(state=tk.DISABLED)
+                self.save_btn.config(state=tk.NORMAL)
+                self.visualize_btn.config(state=tk.DISABLED)
+
+            else:
+                self.logger.info(f"Mensagem IPC: {msg}")
+
     def update_logs(self):
         """Atualiza a caixa de log com as últimas linhas do arquivo de log principal"""
         log_file = os.path.join("logs", "training_log.txt")
@@ -361,13 +366,25 @@ class TrainingGUI:
     def on_closing(self):
         self.logger.info("Gui fechada pelo usuário.")
 
+        self.ipc_queue.put(None)  # Sinaliza para a thread IPC terminar
+
         for v in self.exit_values:
             v.value = 1  # Sinaliza para os processos terminarem
 
+        self.logger.info("Aguardando thread IPC terminar...")
+        self.ipc_thread.join()
+
+        self.logger.info("Aguardando processos de treinamento terminarem...")
+
+        for p in self.processes:
+            p.join()
+
+        self.logger.info("Todos os processos finalizados. Fechando GUI.")
         self.root.quit()  # Terminates the mainloop
 
     def start(self):
         # self.root.after(500, self.update_plots) # TODO: Revisar
         # self.root.after(500, self.update_logs) # TODO: Revisar
+        self.ipc_thread.start()
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)  # Function called when the window is closed
         self.root.mainloop()

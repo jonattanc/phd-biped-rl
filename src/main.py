@@ -24,9 +24,4 @@ if __name__ == "__main__":
     logging.info("Iniciando GUI...")
     app = TrainingGUI()
     app.start()
-    logging.info("GUI finalizada.")
-
-    logging.info("Aguardando processos de treinamento terminarem...")
-
-    for p in app.processes:
-        p.join()
+    logging.info("Programa finalizado.")

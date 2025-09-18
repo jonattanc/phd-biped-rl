@@ -6,7 +6,7 @@ from agent import Agent
 import utils
 
 
-def process_runner(selected_environment, selected_robot, pause_value, exit_value, enable_real_time_value):
+def process_runner(selected_environment, selected_robot, ipc_queue, pause_value, exit_value, enable_real_time_value):
     logger = utils.setup_logger([selected_environment, selected_robot])
 
     environment = Environment(name=selected_environment)
@@ -15,3 +15,4 @@ def process_runner(selected_environment, selected_robot, pause_value, exit_value
     agent = Agent(sim)
 
     agent.train(total_timesteps=100_000)
+    ipc_queue.put("done")
