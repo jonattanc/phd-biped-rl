@@ -2,6 +2,17 @@
 import random
 import numpy as np
 from stable_baselines3 import PPO
+from stable_baselines3.common.callbacks import BaseCallback
+
+
+class AbortOnSignalCallback(BaseCallback):
+    def _on_step(self) -> bool:
+        infos = self.locals.get("infos")
+
+        if infos and any(info.get("exit", False) for info in infos):
+            return False  # returning False stops training
+
+        return True
 
 
 class Agent:
@@ -30,7 +41,8 @@ class Agent:
     def train(self, total_timesteps=100_000):
         """Treina o agente."""
         if self.model is not None:
-            self.model.learn(total_timesteps=total_timesteps, reset_num_timesteps=False)
+            self.model.learn(total_timesteps=total_timesteps, reset_num_timesteps=False, callback=AbortOnSignalCallback())
+
         else:
             raise ValueError("Modelo não foi inicializado.")
 

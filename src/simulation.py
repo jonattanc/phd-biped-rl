@@ -38,8 +38,6 @@ class Simulation(gym.Env):
         self.success_distance = 10.0
         self.fall_threshold = 0.0  # altura mínima para considerar queda
 
-        self.setup()
-
         # Definir espaço de ação e observação
         # Ação: velocidade alvo para cada junta revolute (4 juntas)
         self.action_space = gym.spaces.Box(low=-10.0, high=10.0, shape=(4,), dtype=np.float32)  # robot_stage1 tem 4 juntas revolute
@@ -55,7 +53,9 @@ class Simulation(gym.Env):
         self.fall_threshold = 0.3
         self.initial_x_pos = 0.0
 
-    def setup(self):
+        self.setup_sim_env()
+
+    def setup_sim_env(self):
         """Conecta ao PyBullet e carrega ambiente e robô"""
         if self.enable_gui:
             self.physics_client = p.connect(p.GUI)
@@ -192,15 +192,8 @@ class Simulation(gym.Env):
             np.random.seed(seed)
             random.seed(seed)
 
-        # Reiniciar simulação (o método run() já faz isso, mas vamos garantir)
-        if self.robot_id is not None:
-            p.removeBody(self.robot_id)
-        if self.plane_id is not None:
-            p.removeBody(self.plane_id)
-
-        self.plane_id = self.environment.load_in_simulation(use_fixed_base=True)
-        self.robot_id = self.robot.load_in_simulation()
-        p.resetBasePositionAndOrientation(self.robot_id, [0, 0, 0.45], p.getQuaternionFromEuler([0, 0, 0]))
+        # Reiniciar simulação
+        self.robot.reset_base_position_and_orientation()
 
         # Resetar contadores
         self.steps = 0
@@ -214,12 +207,22 @@ class Simulation(gym.Env):
         """
         Executa uma ação e retorna (observação, recompensa, done, info).
         """
+        while self.pause_value.value and not self.exit_value.value:
+            time.sleep(0.1)
+
+        if self.exit_value.value:
+            self.logger.info("Sinal de saída recebido. Finalizando simulação.")
+            return None, 0.0, True, False, {"exit": True}
+
         # Aplicar ação
         p.setJointMotorControlArray(bodyUniqueId=self.robot_id, jointIndices=self.robot.revolute_indices, controlMode=p.VELOCITY_CONTROL, targetVelocities=action, forces=[100] * len(action))
 
         # Avançar simulação
         p.stepSimulation()
         self.steps += 1
+
+        if self.enable_real_time_value.value:
+            time.sleep(self.time_step_s)
 
         # Obter observação
         obs = self._get_observation()
