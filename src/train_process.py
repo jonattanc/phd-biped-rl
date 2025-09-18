@@ -11,9 +11,7 @@ def process_runner(selected_environment, selected_robot, pause_value, exit_value
 
     environment = Environment(name=selected_environment)
     robot = Robot(name=selected_robot)
-    agent = Agent()
+    sim = Simulation(robot, environment, pause_value, exit_value, enable_real_time_value, num_episodes=200)
+    agent = Agent(sim)
 
-    sim = Simulation(robot, environment, agent, pause_value, exit_value, enable_real_time_value, num_episodes=200)
-
-    sim.setup()
-    sim.run()
+    agent.train(total_timesteps=100_000)

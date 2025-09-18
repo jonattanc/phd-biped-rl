@@ -2,22 +2,17 @@
 import random
 import numpy as np
 from stable_baselines3 import PPO
-from stable_baselines3.common.vec_env import DummyVecEnv
 
 
 class Agent:
-    def __init__(self, env=None, model_path=None):
-        self.revolute_indices = []
-        self.len_revolute_indices = 0
-        self.model = None
+    def __init__(self, sim_env, model_path=None):
+        if model_path is not None:
+            self.model = PPO.load(model_path)
 
-        if env is not None:
-            # Criar ambiente vetorizado
-            self.env = DummyVecEnv([lambda: env])
-            # Criar modelo PPO
+        else:
             self.model = PPO(
                 "MlpPolicy",
-                self.env,
+                sim_env,
                 verbose=1,
                 learning_rate=1e-4,
                 n_steps=4096,
@@ -31,13 +26,6 @@ class Agent:
                 max_grad_norm=0.8,
                 tensorboard_log="./logs/",
             )
-        elif model_path is not None:
-            # Carregar modelo treinado
-            self.model = PPO.load(model_path)
-
-    def set_revolute_indices(self, revolute_indices):
-        self.revolute_indices = revolute_indices
-        self.len_revolute_indices = len(revolute_indices)
 
     def train(self, total_timesteps=100_000):
         """Treina o agente."""
@@ -55,7 +43,7 @@ class Agent:
             # Fallback para ação aleatória (útil para testes iniciais)
             return [random.uniform(-10, 10) for _ in range(self.len_revolute_indices)]
 
-    def evaluate(self, env, num_episodes=20):  # TODO: Avaliação não deve fazer parte do agente
+    def evaluate(self, env, num_episodes=20):
         """
         Avalia o agente treinado em um ambiente.
         Retorna métricas completas incluindo contagem de sucessos.
