@@ -26,10 +26,12 @@ class TrainingGUI:
         self.root.geometry("1200x800")
 
         self.processes = []
+        self.pause_values = []
+        self.exit_values = []
+        self.enable_real_time_values = []
 
         # Dados de treinamento # TODO: Revisar
         self.training_queue = queue.Queue()
-        self.running = False
         self.current_env = ""
         self.current_robot = ""
         self.episode_data = {"episodes": [], "rewards": [], "times": [], "distances": []}
@@ -80,16 +82,16 @@ class TrainingGUI:
         self.start_btn = ttk.Button(control_frame, text="Iniciar Treinamento", command=self.start_training)
         self.start_btn.grid(row=0, column=4, padx=5)
 
-        self.pause_btn = ttk.Button(control_frame, text="Pausar", command=self.pause_training, state=tk.DISABLED)  # TODO: Revisar
+        self.pause_btn = ttk.Button(control_frame, text="Pausar", command=self.pause_training, state=tk.DISABLED)
         self.pause_btn.grid(row=0, column=5, padx=5)
 
-        self.stop_btn = ttk.Button(control_frame, text="Finalizar", command=self.stop_training, state=tk.DISABLED)  # TODO: Revisar
+        self.stop_btn = ttk.Button(control_frame, text="Finalizar", command=self.stop_training, state=tk.DISABLED)
         self.stop_btn.grid(row=0, column=6, padx=5)
 
         self.save_btn = ttk.Button(control_frame, text="Salvar Snapshot", command=self.save_snapshot, state=tk.DISABLED)  # TODO: Revisar
         self.save_btn.grid(row=0, column=7, padx=5)
 
-        self.visualize_btn = ttk.Button(control_frame, text="Visualizar Simulação", command=self.toggle_visualization)  # TODO: Revisar
+        self.visualize_btn = ttk.Button(control_frame, text="Ativar tempo real", command=self.toggle_visualization, state=tk.DISABLED)  # TODO: Revisar
         self.visualize_btn.grid(row=0, column=8, padx=5)
 
         # Gráficos # TODO: Revisar
@@ -122,20 +124,20 @@ class TrainingGUI:
         main_frame.rowconfigure(2, weight=1)
 
     def start_training(self):
-        if self.running:
-            return
-
-        self.running = True
         self.start_btn.config(state=tk.DISABLED)
         self.pause_btn.config(state=tk.NORMAL)
         self.stop_btn.config(state=tk.NORMAL)
         self.save_btn.config(state=tk.NORMAL)
+        self.visualize_btn.config(state=tk.NORMAL)
 
         self.current_env = self.env_var.get()
         self.current_robot = self.robot_var.get()
 
         # Iniciar treinamento em processo separado
-        p = multiprocessing.Process(target=train_process.process_runner, args=(self.env_var.get(), self.robot_var.get()))
+        self.pause_values.append(multiprocessing.Value("b", 0))
+        self.exit_values.append(multiprocessing.Value("b", 0))
+        self.enable_real_time_values.append(multiprocessing.Value("b", 0))
+        p = multiprocessing.Process(target=train_process.process_runner, args=(self.env_var.get(), self.robot_var.get(), self.pause_values[-1], self.exit_values[-1], self.enable_real_time_values[-1]))
         p.start()
         self.processes.append(p)
 
@@ -152,7 +154,6 @@ class TrainingGUI:
         except Exception as e:
             self.logger.error(f"Erro inesperado no treinamento: {e}", exc_info=True)
         finally:
-            self.running = False
             self.start_btn.config(state=tk.NORMAL)
             self.pause_btn.config(state=tk.DISABLED)
             self.stop_btn.config(state=tk.DISABLED)
@@ -200,17 +201,35 @@ class TrainingGUI:
         self.root.after(1000, self.update_plots)
 
     def pause_training(self):
-        self.running = False
-        self.pause_btn.config(state=tk.DISABLED)
-        self.start_btn.config(state=tk.NORMAL)
+        if self.pause_values[-1].value:
+            self.logger.info("Retomando treinamento.")
+            self.pause_values[-1].value = 0
+            self.pause_btn.config(text="Pausar")
+
+        else:
+            self.logger.info("Pausando treinamento.")
+            self.pause_values[-1].value = 1
+            self.pause_btn.config(text="Retomar")
 
     def stop_training(self):
-        self.running = False
+        self.exit_values[-1].value = 1
+
         self.start_btn.config(state=tk.NORMAL)
         self.pause_btn.config(state=tk.DISABLED)
         self.stop_btn.config(state=tk.DISABLED)
         self.save_btn.config(state=tk.DISABLED)
-        messagebox.showinfo("Treinamento Finalizado", "Treinamento encerrado.")
+        self.visualize_btn.config(state=tk.DISABLED)
+
+    def toggle_visualization(self):
+        if self.enable_real_time_values[-1].value:
+            self.logger.info("Desativando visualização em tempo real.")
+            self.enable_real_time_values[-1].value = 0
+            self.visualize_btn.config(text="Ativar tempo real")
+
+        else:
+            self.logger.info("Ativando visualização em tempo real.")
+            self.enable_real_time_values[-1].value = 1
+            self.visualize_btn.config(text="Desativar tempo real")
 
     def save_snapshot(self):
         """Salva o modelo treinado e executa avaliação para gerar métricas de complexidade."""
@@ -319,12 +338,6 @@ class TrainingGUI:
             except:
                 pass
 
-    def toggle_visualization(self):
-        """Abre uma nova janela com simulação em tempo real (GUI Bullet)"""
-        # Implementação futura: pode ser feita com outro processo
-        # Por enquanto, apenas alerta
-        messagebox.showinfo("Visualização", "Funcionalidade de visualização em tempo real ainda não implementada.\n\nUse `enable_gui=True` na simulação direta.")
-
     def update_logs(self):
         """Atualiza a caixa de log com as últimas linhas do arquivo de log principal"""
         log_file = os.path.join("logs", "training_log.txt")
@@ -347,6 +360,10 @@ class TrainingGUI:
 
     def on_closing(self):
         self.logger.info("Gui fechada pelo usuário.")
+
+        for v in self.exit_values:
+            v.value = 1  # Sinaliza para os processos terminarem
+
         self.root.quit()  # Terminates the mainloop
 
     def start(self):

@@ -8,21 +8,26 @@ from datetime import datetime
 
 
 class Simulation:
-    def __init__(self, robot, environment, agent, enable_gui=True, num_episodes=1):
+    def __init__(self, robot, environment, agent, pause_value, exit_value, enable_real_time_value, enable_gui=True, num_episodes=1):
         self.robot = robot
         self.environment = environment
         self.agent = agent
+        self.pause_value = pause_value
+        self.exit_value = exit_value
+        self.enable_real_time_value = enable_real_time_value
         self.enable_gui = enable_gui
+        self.num_episodes = num_episodes
+
         self.logger = logging.getLogger(__name__)
         self.physics_client = None
         self.plane_id = None
         self.robot_id = None
-        self.num_episodes = num_episodes
+
         # Configurações de simulação
-        self.time_step = 1 / 240.0
+        self.time_step_s = 1 / 240.0
         self.max_steps = 5000  # ~20.8 segundos (240 * 20.8)
         self.success_distance = 10.0
-        self.fall_threshold = 0.3  # altura mínima para considerar queda
+        self.fall_threshold = 0.0  # altura mínima para considerar queda
 
     def setup(self):
         """Conecta ao PyBullet e carrega ambiente e robô"""
@@ -30,12 +35,15 @@ class Simulation:
             self.physics_client = p.connect(p.GUI)
         else:
             self.physics_client = p.connect(p.DIRECT)
+
         p.setGravity(0, 0, -9.807)
-        p.setTimeStep(self.time_step)
+        p.setTimeStep(self.time_step_s)
+
         # Carregar ambiente
         self.plane_id = self.environment.load_in_simulation(use_fixed_base=True)
         # Carregar robô
         self.robot_id = self.robot.load_in_simulation()
+
         # Passar índices das juntas para o agente
         self.agent.set_revolute_indices(self.robot.revolute_indices)
         self.logger.info(f"Simulação configurada: {len(self.robot.revolute_indices)} DOFs")
@@ -47,6 +55,13 @@ class Simulation:
         all_metrics = []
 
         for episode in range(self.num_episodes):
+            if self.exit_value.value:
+                self.logger.info("Sinal de saída recebido. Finalizando simulação.")
+                break
+
+            while self.pause_value.value and not self.exit_value.value:
+                time.sleep(0.1)
+
             self.logger.info(f"=== INICIANDO EPISÓDIO {episode + 1}/{self.num_episodes} ===")
 
             episode_metrics = self.run_episode()
@@ -83,7 +98,6 @@ class Simulation:
         self.robot_id = self.robot.load_in_simulation()
 
         # --- PASSO 4 RESETAR A POSIÇÃO INICIAL DO ROBÔ ---
-        p.resetBasePositionAndOrientation(self.robot_id, [0, 0, 0.45], p.getQuaternionFromEuler([0, 0, 0]))
         # Forçar a referência de distância para 0.0
         initial_x_pos = 0.0
 
@@ -127,6 +141,9 @@ class Simulation:
             # Avançar simulação
             p.stepSimulation()
             steps += 1
+
+            if self.enable_real_time_value.value:
+                time.sleep(self.time_step_s)
 
             if steps % 100 == 0:
                 self.logger.debug(f"Passo {steps} | Distância: {distance_traveled:.2f}m")
