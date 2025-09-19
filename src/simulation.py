@@ -26,11 +26,6 @@ class Simulation(gym.Env):
 
         self.logger = logging.getLogger(__name__)
         self.physics_client = None
-        self.plane_id = None
-        self.robot_id = None
-
-        self.revolute_indices = []
-        self.len_revolute_indices = 0
 
         # Configurações de simulação
         self.time_step_s = 1 / 240.0
@@ -38,13 +33,14 @@ class Simulation(gym.Env):
         self.success_distance = 10.0
         self.fall_threshold = 0.0  # altura mínima para considerar queda
 
-        # Definir espaço de ação e observação
-        # Ação: velocidade alvo para cada junta revolute (4 juntas)
-        self.action_space = gym.spaces.Box(low=-10.0, high=10.0, shape=(4,), dtype=np.float32)  # robot_stage1 tem 4 juntas revolute
+        self.setup_sim_env()
 
-        # Observação: [posição X, velocidade X, orientação (roll, pitch, yaw), 4 ângulos de junta, 4 velocidades de junta]
-        # Total: 1 + 1 + 3 + 4 + 4 = 13 valores
-        self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(13,), dtype=np.float32)
+        # Definir espaço de ação e observação
+        self.action_dim = self.robot.get_num_revolute_joints()
+        self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(self.action_dim,), dtype=np.float32)
+
+        self.observation_dim = len(self.robot.get_observation())
+        self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(self.observation_dim,), dtype=np.float32)
 
         # Variáveis de estado
         self.steps = 0
@@ -53,32 +49,24 @@ class Simulation(gym.Env):
         self.fall_threshold = 0.3
         self.initial_x_pos = 0.0
 
-        self.setup_sim_env()
-
     def setup_sim_env(self):
         """Conecta ao PyBullet e carrega ambiente e robô"""
         if self.enable_gui:
             self.physics_client = p.connect(p.GUI)
+
         else:
             self.physics_client = p.connect(p.DIRECT)
 
         p.setGravity(0, 0, -9.807)
         p.setTimeStep(self.time_step_s)
 
-        # Carregar ambiente
-        self.plane_id = self.environment.load_in_simulation(use_fixed_base=True)
-        # Carregar robô
-        self.robot_id = self.robot.load_in_simulation()
+        self.environment.load_in_simulation(use_fixed_base=True)
+        self.robot.load_in_simulation()
 
-        # Passar índices das juntas para o agente
-        self.set_revolute_indices(self.robot.revolute_indices)
-        self.logger.info(f"Simulação configurada: {len(self.robot.revolute_indices)} DOFs")
+        self.logger.info("Simulação configurada")
         self.logger.info(f"Robô: {self.robot.name}")
+        self.logger.info(f"DOF: {self.robot.get_num_revolute_joints()}")
         self.logger.info(f"Ambiente: {self.environment.name}")
-
-    def set_revolute_indices(self, revolute_indices):
-        self.revolute_indices = revolute_indices
-        self.len_revolute_indices = len(revolute_indices)
 
     def run(self):
         """Executa múltiplos episódios e retorna métricas"""
@@ -116,16 +104,16 @@ class Simulation(gym.Env):
         reward = 0.0
 
         # --- PASSO 1: REMOVER O ROBÔ E O AMBIENTE ANTIGOS ---
-        if self.robot_id is not None:
-            p.removeBody(self.robot_id)
-        if self.plane_id is not None:
-            p.removeBody(self.plane_id)
+        if self.robot.id is not None:
+            p.removeBody(self.robot.id)
+        if self.plane.id is not None:
+            p.removeBody(self.plane.id)
 
         # --- PASSO 2: RECRIAR O AMBIENTE ---
-        self.plane_id = self.environment.load_in_simulation(use_fixed_base=True)
+        self.plane.id = self.environment.load_in_simulation(use_fixed_base=True)
 
         # --- PASSO 3: RECRIAR O ROBÔ ---
-        self.robot_id = self.robot.load_in_simulation()
+        self.robot.id = self.robot.load_in_simulation()
 
         # --- PASSO 4 RESETAR A POSIÇÃO INICIAL DO ROBÔ ---
         # Forçar a referência de distância para 0.0
@@ -136,7 +124,7 @@ class Simulation(gym.Env):
 
         while steps < self.max_steps:
             # Obter observação
-            pos, _ = p.getBasePositionAndOrientation(self.robot_id)
+            pos, _ = p.getBasePositionAndOrientation(self.robot.id)
             current_x_pos = pos[0]
             distance_traveled = current_x_pos - initial_x_pos
 
@@ -166,7 +154,7 @@ class Simulation(gym.Env):
             # action = self.agent.get_action() # TODO: Arrumar
 
             # Aplicar ação
-            p.setJointMotorControlArray(bodyUniqueId=self.robot_id, jointIndices=self.robot.revolute_indices, controlMode=p.VELOCITY_CONTROL, targetVelocities=action, forces=[100] * len(action))
+            p.setJointMotorControlArray(bodyUniqueId=self.robot.id, jointIndices=self.robot.revolute_indices, controlMode=p.VELOCITY_CONTROL, targetVelocities=action, forces=[100] * len(action))
 
             # Avançar simulação
             p.stepSimulation()
@@ -200,7 +188,7 @@ class Simulation(gym.Env):
         self.initial_x_pos = 0.0
 
         # Retornar observação inicial
-        obs = self._get_observation()
+        obs = self.robot.get_observation()
         return obs, {}
 
     def step(self, action):
@@ -215,7 +203,7 @@ class Simulation(gym.Env):
             return None, 0.0, True, False, {"exit": True}
 
         # Aplicar ação
-        p.setJointMotorControlArray(bodyUniqueId=self.robot_id, jointIndices=self.robot.revolute_indices, controlMode=p.VELOCITY_CONTROL, targetVelocities=action, forces=[100] * len(action))
+        p.setJointMotorControlArray(bodyUniqueId=self.robot.id, jointIndices=self.robot.revolute_indices, controlMode=p.VELOCITY_CONTROL, targetVelocities=action, forces=[100] * len(action))
 
         # Avançar simulação
         p.stepSimulation()
@@ -225,8 +213,8 @@ class Simulation(gym.Env):
             time.sleep(self.time_step_s)
 
         # Obter observação
-        obs = self._get_observation()
-        pos, _ = p.getBasePositionAndOrientation(self.robot_id)
+        obs = self.robot.get_observation()
+        pos, _ = p.getBasePositionAndOrientation(self.robot.id)
         current_x_pos = pos[0]
         distance_traveled = current_x_pos - self.initial_x_pos
 
@@ -245,7 +233,7 @@ class Simulation(gym.Env):
         # 3. Recompensa por estabilidade (menor penalidade por movimento)
         joint_velocities = []
         for i in self.robot.revolute_indices:
-            joint_state = p.getJointState(self.robot_id, i)
+            joint_state = p.getJointState(self.robot.id, i)
             joint_velocities.append(abs(joint_state[1]))
 
         # Penalidade muito menor por movimento
@@ -283,34 +271,6 @@ class Simulation(gym.Env):
         self.prev_distance = distance_traveled
 
         return obs, reward, done, False, info
-
-    def _get_observation(self):
-        """
-        Retorna o vetor de observação baseado em sensores IMU (simulados).
-        """
-        pos, orn = p.getBasePositionAndOrientation(self.robot_id)
-        vel, ang_vel = p.getBaseVelocity(self.robot_id)
-
-        # Posição e velocidade linear no eixo X
-        x_pos = pos[0]
-        x_vel = vel[0]
-
-        # Orientação (roll, pitch, yaw)
-        euler = p.getEulerFromQuaternion(orn)
-        roll, pitch, yaw = euler
-
-        # Ângulos e velocidades das juntas
-        joint_angles = []
-        joint_velocities = []
-        for i in self.robot.revolute_indices:
-            joint_state = p.getJointState(self.robot_id, i)
-            joint_angles.append(joint_state[0])
-            joint_velocities.append(joint_state[1])
-
-        # Montar vetor de observação
-        obs = np.array([x_pos, x_vel, roll, pitch, yaw, *joint_angles, *joint_velocities], dtype=np.float32)
-
-        return obs
 
     def render(self, mode="human"):
         pass  # O modo GUI é controlado por enable_gui no construtor

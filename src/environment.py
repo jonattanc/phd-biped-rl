@@ -9,6 +9,8 @@ class Environment:
     def __init__(self, name):
         self.name = name
 
+        self.id = None
+
         self.environment_dir = os.path.join(utils.PROJECT_ROOT, "environments")
         self.environment_tmp_dir = os.path.join(utils.TMP_PATH, "environments")
 
@@ -16,7 +18,6 @@ class Environment:
             os.makedirs(self.environment_tmp_dir, exist_ok=True)
 
         self.urdf_path = self._generate_urdf()
-        self.plane_id = None
 
     def _generate_urdf(self):
         xacro_path = os.path.join(self.environment_dir, f"{self.name}.xacro")
@@ -31,8 +32,5 @@ class Environment:
         return self.urdf_path
 
     def load_in_simulation(self, use_fixed_base=True):
-        self.plane_id = p.loadURDF(self.urdf_path, useFixedBase=use_fixed_base)
-        return self.plane_id
-
-    def get_plane_id(self):
-        return self.plane_id
+        self.id = p.loadURDF(self.urdf_path, useFixedBase=use_fixed_base)
+        return self.id
