@@ -383,8 +383,8 @@ class TrainingGUI:
         self.root.quit()  # Terminates the mainloop
 
     def start(self):
-        # self.root.after(500, self.update_plots) # TODO: Revisar
-        # self.root.after(500, self.update_logs) # TODO: Revisar
+        self.root.after(500, self.update_plots)  # TODO: Revisar
+        self.root.after(500, self.update_logs)  # TODO: Revisar
         self.ipc_thread.start()
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)  # Function called when the window is closed
         self.root.mainloop()
