@@ -4,15 +4,9 @@ from tkinter import ttk, filedialog, messagebox
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import threading
-import queue
 import logging
 import os
-import csv
 import time
-import pybullet as p
-from simulation import Simulation
-from robot import Robot
-from environment import Environment
 from agent import Agent
 import utils
 import train_process
@@ -30,10 +24,11 @@ class TrainingGUI:
         self.exit_values = []
         self.enable_real_time_values = []
         self.ipc_queue = multiprocessing.Queue()
+        self.training_data_queue = multiprocessing.Queue()
         self.ipc_thread = threading.Thread(target=self.ipc_runner, daemon=True)
 
-        # Dados de treinamento # TODO: Revisar
-        self.training_queue = queue.Queue()
+        # Dados de treinamento:
+        self.training_data_queue = multiprocessing.Queue()
         self.current_env = ""
         self.current_robot = ""
         self.episode_data = {"episodes": [], "rewards": [], "times": [], "distances": []}
@@ -42,6 +37,8 @@ class TrainingGUI:
         self.episode_logger = None
         self.hyperparams = {}
         self.logger = logging.getLogger(__name__)
+        if not logging.getLogger().handlers:
+            logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
         self.logger.info("Interface de treinamento inicializada.")
         self.setup_ui()
 
@@ -54,6 +51,12 @@ class TrainingGUI:
         control_frame = ttk.LabelFrame(main_frame, text="Controle de Treinamento", padding="10")
         control_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=10)
 
+        # Seleção de algoritmo
+        ttk.Label(control_frame, text="Algoritmo:").grid(row=0, column=0, sticky=tk.W)
+        self.algorithm_var = tk.StringVar(value="PPO")
+        algorithm_combo = ttk.Combobox(control_frame, textvariable=self.algorithm_var, values=["PPO", "TD3"])
+        algorithm_combo.grid(row=0, column=1, padx=5)
+        
         # Seleção de ambiente
         xacro_env_files = [file.replace(".xacro", "") for file in os.listdir(utils.ENVIRONMENT_PATH) if file.endswith(".xacro")]
 
@@ -96,7 +99,7 @@ class TrainingGUI:
         self.visualize_btn = ttk.Button(control_frame, text="Ativar tempo real", command=self.toggle_visualization, state=tk.DISABLED)  # TODO: Revisar
         self.visualize_btn.grid(row=0, column=8, padx=5)
 
-        # Gráficos # TODO: Revisar
+        # Gráficos: 
         graph_frame = ttk.LabelFrame(main_frame, text="Desempenho em Tempo Real", padding="10")
         graph_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=10)
 
@@ -109,7 +112,11 @@ class TrainingGUI:
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
         self.canvas.draw()
 
-        # Logs # TODO: Revisar
+        # Inicializar gráficos vazios
+        self._initialize_plots()
+        self.canvas.draw()
+        
+        # Logs:
         log_frame = ttk.LabelFrame(main_frame, text="Log de Treinamento", padding="10")
         log_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=10, rowspan=2)
         self.log_text = tk.Text(log_frame, height=10, state=tk.DISABLED)
@@ -140,66 +147,159 @@ class TrainingGUI:
         self.exit_values.append(multiprocessing.Value("b", 0))
         self.enable_real_time_values.append(multiprocessing.Value("b", 0))
         p = multiprocessing.Process(
-            target=train_process.process_runner, args=(self.env_var.get(), self.robot_var.get(), self.ipc_queue, self.pause_values[-1], self.exit_values[-1], self.enable_real_time_values[-1])
+            target=train_process.process_runner, 
+            args=(self.env_var.get(), 
+                  self.robot_var.get(),
+                  self.algorithm_var.get(),
+                  self.ipc_queue, 
+                  self.training_data_queue,
+                  self.pause_values[-1], 
+                  self.exit_values[-1], 
+                  self.enable_real_time_values[-1]
+                  )
         )
         p.start()
         self.processes.append(p)
 
+    def _initialize_plots(self):
+        """Inicializa os gráficos com títulos e configurações"""
+        titles = ["Recompensa por Episódio", "Duração do Episódio (s)", "Distância Percorrida (m)"]
+        ylabels = ["Recompensa", "Tempo (s)", "Distância (m)"]
+        colors = ["blue", "orange", "green"]
+        
+        for i, (title, ylabel, color) in enumerate(zip(titles, ylabels, colors)):
+            self.axs[i].clear()
+            self.axs[i].set_title(title)
+            self.axs[i].set_xlabel("Episódio")
+            self.axs[i].set_ylabel(ylabel)
+            self.axs[i].grid(True, alpha=0.3)
+            
+            # Plotar dados vazios inicialmente
+            self.axs[i].plot([], [], label=ylabel, color=color, marker="o", linestyle="-", markersize=3)
+            self.axs[i].legend()
+            
+    def start_training(self):
+        self.start_btn.config(state=tk.DISABLED)
+        self.pause_btn.config(state=tk.NORMAL)
+        self.stop_btn.config(state=tk.NORMAL)
+        self.save_btn.config(state=tk.NORMAL)
+        self.visualize_btn.config(state=tk.NORMAL)
+
+        self.current_env = self.env_var.get()
+        self.current_robot = self.robot_var.get()
+        self.current_algorithm = self.algorithm_var.get()
+
+        # Limpar dados anteriores
+        self.episode_data = {"episodes": [], "rewards": [], "times": [], "distances": []}
+        self._initialize_plots()
+        self.canvas.draw()
+
+        # Iniciar treinamento em processo separado
+        pause_val = multiprocessing.Value("b", 0)
+        exit_val = multiprocessing.Value("b", 0)
+        realtime_val = multiprocessing.Value("b", 0)
+        
+        self.pause_values.append(pause_val)
+        self.exit_values.append(exit_val)
+        self.enable_real_time_values.append(realtime_val)
+        
+        p = multiprocessing.Process(
+            target=train_process.process_runner, 
+            args=(
+                self.current_env, 
+                self.current_robot, 
+                self.current_algorithm,
+                self.ipc_queue, 
+                self.training_data_queue,
+                pause_val, 
+                exit_val, 
+                realtime_val
+            )
+        )
+        p.start()
+        self.processes.append(p)
+        
+        self._update_log_display(f"Iniciando treinamento: {self.current_algorithm} + {self.current_robot} + {self.current_env}")
+        self.logger.info(f"Processo de treinamento iniciado: {self.current_env} + {self.current_robot} + {self.current_algorithm}")
+
     def update_plots(self):
         """Atualiza os gráficos com novos dados da fila"""
-        while not self.training_queue.empty():
-            data = self.training_queue.get()
-            if data.get("type") == "log":
-                # Atualiza a caixa de texto de log
-                self.log_text.config(state=tk.NORMAL)
-                self.log_text.insert(tk.END, data["message"] + "\n")
-                self.log_text.see(tk.END)
-                self.log_text.config(state=tk.DISABLED)
-            else:
-                # É um dado de desempenho (recompensa, tempo, distância)
-                self.episode_data["episodes"].append(data["episode"])
-                self.episode_data["rewards"].append(data["reward"])
-                self.episode_data["times"].append(data["time"])
-                self.episode_data["distances"].append(data["distance"])
+        try:
+            updated = False
+            
+            # Processar todos os dados disponíveis na fila
+            while not self.training_data_queue.empty():
+                try:
+                    data = self.training_data_queue.get_nowait()
+                    
+                    if data.get("type") == "episode_data":
+                        # Adicionar dados do episódio
+                        episode_num = data["episode"]
+                        self.episode_data["episodes"].append(episode_num)
+                        self.episode_data["rewards"].append(data["reward"])
+                        self.episode_data["times"].append(data["time"])
+                        self.episode_data["distances"].append(data["distance"])
+                        updated = True
+                        
+                    elif data.get("type") == "log":
+                        # Atualizar logs
+                        self._update_log_display(data["message"])
+                        
+                except:
+                    break  # Fila vazia
 
-                # Atualizar gráficos
-                self.axs[0].clear()
-                self.axs[0].plot(self.episode_data["episodes"], self.episode_data["rewards"], label="Recompensa", marker="o", linestyle="-")
-                self.axs[0].legend()
-                self.axs[0].set_title("Recompensa por Episódio")
-                self.axs[0].grid(True)
+            if updated and self.episode_data["episodes"]:
+                self._refresh_plots()
 
-                self.axs[1].clear()
-                self.axs[1].plot(self.episode_data["episodes"], self.episode_data["times"], label="Duração (s)", color="orange", marker="s", linestyle="-")
-                self.axs[1].legend()
-                self.axs[1].set_title("Duração do Episódio (s)")
-                self.axs[1].grid(True)
+        except Exception as e:
+            self.logger.error(f"Erro ao atualizar gráficos: {e}")
 
-                self.axs[2].clear()
-                self.axs[2].plot(self.episode_data["episodes"], self.episode_data["distances"], label="Distância (m)", color="green", marker="^", linestyle="-")
-                self.axs[2].legend()
-                self.axs[2].set_title("Distância Percorrida (m)")
-                self.axs[2].grid(True)
+        # Agendar próxima atualização
+        self.root.after(2000, self.update_plots)
 
-                self.canvas.draw()
+    def _refresh_plots(self):
+        """Atualiza os gráficos com os dados atuais"""
+        if not self.episode_data["episodes"]:
+            return
 
-        # Atualizar periodicamente
-        self.root.after(1000, self.update_plots)
+        titles = ["Recompensa por Episódio", "Duração do Episódio (s)", "Distância Percorrida (m)"]
+        ylabels = ["Recompensa", "Tempo (s)", "Distância (m)"]
+        colors = ["blue", "orange", "green"]
+        data_keys = ["rewards", "times", "distances"]
+        
+        for i, (title, ylabel, color, data_key) in enumerate(zip(titles, ylabels, colors, data_keys)):
+            self.axs[i].clear()
+            self.axs[i].plot(self.episode_data["episodes"], self.episode_data[data_key], 
+                            label=ylabel, color=color, marker="o", linestyle="-", markersize=3)
+            self.axs[i].set_title(title)
+            self.axs[i].set_xlabel("Episódio")
+            self.axs[i].set_ylabel(ylabel)
+            self.axs[i].legend()
+            self.axs[i].grid(True, alpha=0.3)
+
+        self.canvas.draw()
+
+    def _update_log_display(self, message):
+        """Atualiza a exibição de logs"""
+        self.log_text.config(state=tk.NORMAL)
+        self.log_text.insert(tk.END, f"{time.strftime('%H:%M:%S')} - {message}\n")
+        self.log_text.see(tk.END)
+        self.log_text.config(state=tk.DISABLED)
 
     def pause_training(self):
-        if self.pause_values[-1].value:
+        if self.pause_values and self.pause_values[-1].value:
             self.logger.info("Retomando treinamento.")
             self.pause_values[-1].value = 0
             self.pause_btn.config(text="Pausar")
-
         else:
             self.logger.info("Pausando treinamento.")
-            self.pause_values[-1].value = 1
+            if self.pause_values:
+                self.pause_values[-1].value = 1
             self.pause_btn.config(text="Retomar")
 
     def stop_training(self):
-        self.exit_values[-1].value = 1
-
+        if self.exit_values:
+            self.exit_values[-1].value = 1
         self.start_btn.config(state=tk.NORMAL)
         self.pause_btn.config(state=tk.DISABLED)
         self.stop_btn.config(state=tk.DISABLED)
@@ -207,122 +307,35 @@ class TrainingGUI:
         self.visualize_btn.config(state=tk.DISABLED)
 
     def toggle_visualization(self):
-        if self.enable_real_time_values[-1].value:
+        if self.enable_real_time_values and self.enable_real_time_values[-1].value:
             self.logger.info("Desativando visualização em tempo real.")
             self.enable_real_time_values[-1].value = 0
             self.visualize_btn.config(text="Ativar tempo real")
-
         else:
             self.logger.info("Ativando visualização em tempo real.")
-            self.enable_real_time_values[-1].value = 1
+            if self.enable_real_time_values:
+                self.enable_real_time_values[-1].value = 1
             self.visualize_btn.config(text="Desativar tempo real")
 
     def save_snapshot(self):
         """Salva o modelo treinado e executa avaliação para gerar métricas de complexidade."""
-        if self.agent.model is None:
-            messagebox.showwarning("Aviso", "Nenhum modelo treinado para salvar ou avaliar.")
-            return
-
-        # --- Passo 1: Salvar o modelo PPO ---
-        # Alterado: Salvar em logs/data/models em vez de perguntar ao usuário
-        models_dir = "logs/data/models"
-        os.makedirs(models_dir, exist_ok=True)
-
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
-        model_filename = os.path.join(models_dir, f"model_{self.current_env}_{self.current_robot}_{timestamp}.zip")
-
-        self.agent.model.save(model_filename)
-        self.logger.info(f"Modelo salvo em: {model_filename}")
-
-        # --- Passo 2: Criar ambiente de avaliação ---
         try:
-            from gym_env import ExoskeletonPRst1
+            models_dir = "logs/data/models"
+            os.makedirs(models_dir, exist_ok=True)
 
-            eval_env = ExoskeletonPRst1(enable_gui=False, seed=42)
-        except ImportError:
-            messagebox.showerror("Erro", "Ambiente Gym 'ExoskeletonPRst1' não encontrado. Verifique se gym_env.py existe.")
-            return
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            model_filename = os.path.join(models_dir, f"model_{self.current_env}_{self.current_robot}_{timestamp}.zip")
+            
+            # TODO: Implementar lógica de salvamento do modelo
+            messagebox.showinfo("Salvar Snapshot", 
+                              f"Funcionalidade de salvamento será implementada\n"
+                              f"Modelo: {self.current_algorithm}\n"
+                              f"Robô: {self.current_robot}\n"
+                              f"Ambiente: {self.current_env}\n"
+                              f"Arquivo: {model_filename}")
+            
         except Exception as e:
-            messagebox.showerror("Erro", f"Erro ao criar ambiente de avaliação: {str(e)}")
-            return
-
-        # --- Passo 3: Executar Avaliação usando a função do evaluate_model ---
-        try:
-            self.logger.info("Iniciando avaliação do agente treinado (20 episódios, deterministic=True)...")
-
-            # Usar a função de avaliação do evaluate_model
-            metrics = self.evaluate_and_save(model_filename, self.current_env, self.current_robot)
-
-            if metrics:
-                self.logger.info(f"Avaliação concluída. " f"Sucesso: {metrics['success_rate']*100:.1f}% | " f"Tm: {metrics['avg_time']:.2f}s ± {metrics['std_time']:.2f}s")
-
-                # --- Passo 4: Compilar resultados e gerar relatório ---
-                from metrics_saver import compile_results, generate_report
-
-                # Compilar todos os resultados
-                compiled_df = compile_results()
-
-                if compiled_df is not None:
-                    # Gerar relatório completo
-                    generate_report()
-
-                    messagebox.showinfo(
-                        "Avaliação Concluída",
-                        f"Modelo salvo em: {model_filename}\n\n"
-                        f"Taxa de Sucesso: {metrics['success_rate']*100:.1f}%\n"
-                        f"Tempo Médio: {metrics['avg_time']:.2f}s ± {metrics['std_time']:.2f}s\n\n"
-                        f"Relatório completo gerado em logs/data/",
-                    )
-                else:
-                    messagebox.showinfo(
-                        "Avaliação Concluída",
-                        f"Modelo salvo em: {model_filename}\n\n" f"Taxa de Sucesso: {metrics['success_rate']*100:.1f}%\n" f"Tempo Médio: {metrics['avg_time']:.2f}s ± {metrics['std_time']:.2f}s",
-                    )
-
-            else:
-                messagebox.showerror("Erro", "Falha na avaliação do modelo.")
-
-        except Exception as e:
-            self.logger.error(f"Erro durante a avaliação: {e}", exc_info=True)
-            messagebox.showerror("Erro na Avaliação", f"Não foi possível avaliar o agente.\nErro: {str(e)}")
-        finally:
-            try:
-                eval_env.close()  # Fecha a conexão do ambiente de avaliação
-            except:
-                pass
-
-    def evaluate_and_save(self, model_path, circuit_name="PR", avatar_name="robot_stage1", role="AE", num_episodes=20, seed=42):
-        """Avalia um modelo e salva as métricas - integração com evaluate_model.py"""
-
-        self.logger.info(f"Avaliando {avatar_name} no circuito {circuit_name}...")
-
-        try:
-            from gym_env import ExoskeletonPRst1
-
-            env = ExoskeletonPRst1(enable_gui=False, seed=seed)
-
-            # Carregar o agente com o modelo salvo
-            agent = Agent(model_path=model_path)
-            metrics = agent.evaluate(env, num_episodes=num_episodes)
-
-            hyperparams = {"algorithm": "PPO", "learning_rate": 3e-4, "total_timesteps": 100000}  # Ajustado para o treinamento da GUI
-
-            # Salvar métricas usando metrics_saver
-            from metrics_saver import save_complexity_metrics
-
-            save_complexity_metrics(metrics=metrics, circuit_name=circuit_name, avatar_name=avatar_name, role=role, seed=seed, hyperparams=hyperparams)
-
-            self.logger.info(f"Sucesso: {metrics['success_rate']*100:.1f}% | Tempo: {metrics['avg_time']:.2f}s")
-            return metrics
-
-        except Exception as e:
-            self.logger.error(f"Erro na avaliação: {e}")
-            return None
-        finally:
-            try:
-                env.close()
-            except:
-                pass
+            messagebox.showerror("Erro", f"Erro ao salvar snapshot: {e}")
 
     def ipc_runner(self):
         """Thread para monitorar a fila IPC e atualizar logs"""
@@ -344,25 +357,9 @@ class TrainingGUI:
                 self.logger.info(f"Mensagem IPC: {msg}")
 
     def update_logs(self):
-        """Atualiza a caixa de log com as últimas linhas do arquivo de log principal"""
-        log_file = os.path.join("logs", "training_log.txt")
-        if os.path.exists(log_file):
-            try:
-                with open(log_file, "r", encoding="utf-8", errors="ignore") as f:  # <-- IGNORA CARACTERES INVÁLIDOS
-                    lines = f.readlines()
-                    # Mostrar as últimas 50 linhas (ou menos, se o arquivo for pequeno)
-                    last_lines = lines[-50:] if len(lines) > 50 else lines
-                    log_content = "".join(last_lines)
-                    self.log_text.config(state=tk.NORMAL)
-                    self.log_text.delete(1.0, tk.END)
-                    self.log_text.insert(tk.END, log_content)
-                    self.log_text.see(tk.END)  # Rolagem automática para o final
-                    self.log_text.config(state=tk.DISABLED)
-            except Exception as e:
-                self.logger.error(f"Erro ao ler o arquivo de log: {e}")
-        # Atualizar periodicamente
-        self.root.after(2000, self.update_logs)
-
+        """Atualiza a caixa de log com o arquivo de log principal"""
+        self.root.after(10000, self.update_logs)
+        
     def on_closing(self):
         self.logger.info("Gui fechada pelo usuário.")
 
@@ -377,14 +374,17 @@ class TrainingGUI:
         self.logger.info("Aguardando processos de treinamento terminarem...")
 
         for p in self.processes:
-            p.join()
+            if p.is_alive():
+                p.join(timeout=2.0)
+                if p.is_alive():
+                    p.terminate()
 
         self.logger.info("Todos os processos finalizados. Fechando GUI.")
         self.root.quit()  # Terminates the mainloop
 
     def start(self):
-        self.root.after(500, self.update_plots)  # TODO: Revisar
-        self.root.after(500, self.update_logs)  # TODO: Revisar
+        self.root.after(1000, self.update_plots)  
+        self.root.after(1000, self.update_logs) 
         self.ipc_thread.start()
-        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)  # Function called when the window is closed
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)  
         self.root.mainloop()

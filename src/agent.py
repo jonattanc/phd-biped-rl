@@ -1,29 +1,67 @@
 # agent.py
 import random
 import numpy as np
-from stable_baselines3 import PPO
+from stable_baselines3 import PPO, TD3
+from stable_baselines3.common.vec_env import DummyVecEnv, VecEnv
 from stable_baselines3.common.callbacks import BaseCallback
 
 
-class AbortOnSignalCallback(BaseCallback):
+class TrainingCallback(BaseCallback):
+    def __init__(self, data_callback=None, verbose=0):
+        super(TrainingCallback, self).__init__(verbose)
+        self.data_callback = data_callback
+        self.episode_count = 0
+        self.episode_rewards = []
+        self.episode_lengths = []
+        
     def _on_step(self) -> bool:
-        infos = self.locals.get("infos")
-
-        if infos and any(info.get("exit", False) for info in infos):
-            return False  # returning False stops training
-
+        if len(self.model.ep_info_buffer) > 0 and len(self.model.ep_info_buffer[0]) > 0:
+            episode_info = self.model.ep_info_buffer[0]
+            if 'r' in episode_info and 'l' in episode_info:
+                episode_reward = episode_info['r']
+                episode_length = episode_info['l']
+                
+                # Chamar callback quando o episódio terminar
+                if self.data_callback and episode_reward is not None:
+                    self.data_callback.on_episode_end({
+                        'reward': episode_reward,
+                        'time': episode_length * (1/240.0),
+                        'distance': episode_info.get('distance', 0),
+                        'success': episode_info.get('success', False)
+                    })
+                    self.episode_count += 1
+                    
+                    # Limpar buffer após processamento
+                    self.model.ep_info_buffer = []
+        
         return True
 
-
 class Agent:
-    def __init__(self, sim_env, model_path=None):
-        if model_path is not None:
+    def __init__(self, env=None, model_path=None, algorithm="PPO", data_callback=None):
+        self.revolute_indices = []
+        self.len_revolute_indices = 0
+        self.model = None
+        self.algorithm = algorithm
+        self.env = env
+        self.action_dim = 0
+        self.data_callback = data_callback
+
+        if env is not None:
+            # Criar ambiente vetorizado
+            self.env = DummyVecEnv([lambda: env])
+            self.action_dim = env.action_space.shape[0]
+            self._create_model(algorithm)
+        
+        elif model_path is not None:
             self.model = PPO.load(model_path)
 
-        else:
+    def _create_model(self, algorithm):
+        callback = TrainingCallback(data_callback=self.data_callback)
+        # Criar modelo baseado no algoritmo selecionado
+        if algorithm.upper() == "PPO":
             self.model = PPO(
                 "MlpPolicy",
-                sim_env,
+                self.env,
                 verbose=1,
                 learning_rate=1e-4,
                 n_steps=4096,
@@ -37,12 +75,66 @@ class Agent:
                 max_grad_norm=0.8,
                 tensorboard_log="./logs/",
             )
+        elif algorithm.upper() == "TD3":
+            self.model = TD3(
+                "MlpPolicy",
+                self.env,
+                verbose=1,
+                learning_rate=1e-4,
+                buffer_size=100000,
+                learning_starts=10000,
+                batch_size=128,
+                tau=0.005,
+                gamma=0.99,
+                train_freq=(1, "episode"),
+                gradient_steps=-1,
+                policy_delay=2,
+                target_policy_noise=0.2,
+                target_noise_clip=0.5,
+                tensorboard_log="./logs/",
+            )
+        else:
+            raise ValueError(f"Algoritmo {algorithm} não suportado. Use 'PPO' ou 'TD3'")
+
+    def _load_model(self, model_path):
+        # Carrega modelo treinado detectando automaticamente o tipo
+        try:
+            # Tentar carregar como PPO primeiro
+            self.model = PPO.load(model_path)
+            self.algorithm = "PPO"
+            if hasattr(self.model, 'action_space') and self.model.action_space is not None:
+                self.action_dim = self.model.action_space.shape[0]
+            print(f"Modelo PPO carregado: {model_path}")
+        except:
+            try:
+                self.model = TD3.load(model_path)
+                self.algorithm = "TD3"
+                if hasattr(self.model, 'action_space') and self.model.action_space is not None:
+                    self.action_dim = self.model.action_space.shape[0]
+                print(f"Modelo TD3 carregado: {model_path}")
+            except Exception as e:
+                raise ValueError(f"Erro ao carregar modelo {model_path}: {e}")
+
+    def set_algorithm(self, algorithm):
+        # Altera o algoritmo 
+        if self.model is None:
+            self.algorithm = algorithm
+        else:
+            print("Aviso: Não é possível alterar o algoritmo após a criação do modelo")
+
+    def set_revolute_indices(self, revolute_indices):
+        self.revolute_indices = revolute_indices
+        self.len_revolute_indices = len(revolute_indices)
 
     def train(self, total_timesteps=100_000):
         """Treina o agente."""
         if self.model is not None:
-            self.model.learn(total_timesteps=total_timesteps, reset_num_timesteps=False, callback=AbortOnSignalCallback())
-
+            callback = TrainingCallback(data_callback=self.data_callback)
+            self.model.learn(
+                total_timesteps=total_timesteps, 
+                reset_num_timesteps=False, 
+                callback=callback
+                )
         else:
             raise ValueError("Modelo não foi inicializado.")
 
@@ -52,7 +144,7 @@ class Agent:
             action, _ = self.model.predict(obs, deterministic=False)
             return action.flatten()  # Garante que é um array 1D
         else:
-            # Fallback para ação aleatória (útil para testes iniciais)
+            # Fallback para ação aleatória
             return [random.uniform(-10, 10) for _ in range(self.len_revolute_indices)]
 
     def evaluate(self, env, num_episodes=20):
