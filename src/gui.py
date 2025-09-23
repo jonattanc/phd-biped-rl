@@ -1,13 +1,11 @@
 # gui.py
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from tkinter import ttk, messagebox
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import threading
-import logging
 import os
 import time
-from agent import Agent
 import utils
 import train_process
 import multiprocessing

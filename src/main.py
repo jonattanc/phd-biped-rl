@@ -2,7 +2,6 @@
 import os
 import shutil
 import logging
-import multiprocessing
 from gui import TrainingGUI
 import utils
 

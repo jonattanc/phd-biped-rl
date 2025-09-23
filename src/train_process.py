@@ -1,5 +1,4 @@
 # train_process.py
-import logging
 from robot import Robot
 from simulation import Simulation
 from environment import Environment
