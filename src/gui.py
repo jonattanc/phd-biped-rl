@@ -9,6 +9,7 @@ import time
 import utils
 import train_process
 import multiprocessing
+import queue
 
 
 class TrainingGUI:
@@ -189,7 +190,7 @@ class TrainingGUI:
                 try:
                     data = self.training_data_queue.get_nowait()
 
-                except multiprocessing.queue.Empty:
+                except queue.Empty:
                     break  # Fila vazia
 
                 data_type = data.get("type")
