@@ -400,7 +400,7 @@ class TrainingGUI:
 
         for p in self.processes:
             if p.is_alive():
-                p.join(timeout=2.0)
+                p.join(timeout=20.0)
                 if p.is_alive():
                     p.terminate()
 
