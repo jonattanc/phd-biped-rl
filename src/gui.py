@@ -143,9 +143,6 @@ class TrainingGUI:
         self.episode_data = {"episodes": [], "rewards": [], "times": [], "distances": []}
         self._initialize_plots()
 
-        # Criar fila para dados de treinamento
-        self.training_data_queue = multiprocessing.Queue()
-
         # Iniciar treinamento em processo separado
         pause_val = multiprocessing.Value("b", 0)
         exit_val = multiprocessing.Value("b", 0)
@@ -159,7 +156,6 @@ class TrainingGUI:
         p.start()
         self.processes.append(p)
         self._update_log_display(f"Iniciando treinamento: {self.current_algorithm} + {self.current_robot} + {self.current_env}")
-        self.root.after(1000, self.update_plots)
 
     def _initialize_plots(self):
         """Inicializa os gráficos com títulos e configurações"""
