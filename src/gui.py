@@ -141,25 +141,40 @@ class TrainingGUI:
 
         self.current_env = self.env_var.get()
         self.current_robot = self.robot_var.get()
+        self.current_algorithm = self.algorithm_var.get()
 
+        # Limpar dados anteriores
+        self.episode_data = {"episodes": [], "rewards": [], "times": [], "distances": []}
+        self._initialize_plots()
+    
+        # Criar fila para dados de treinamento
+        self.training_data_queue = multiprocessing.Queue()
+    
         # Iniciar treinamento em processo separado
-        self.pause_values.append(multiprocessing.Value("b", 0))
-        self.exit_values.append(multiprocessing.Value("b", 0))
-        self.enable_real_time_values.append(multiprocessing.Value("b", 0))
+        pause_val = multiprocessing.Value("b", 0)
+        exit_val = multiprocessing.Value("b", 0)
+        realtime_val = multiprocessing.Value("b", 0)
+
+        self.pause_values.append(pause_val)
+        self.exit_values.append(exit_val)
+        self.enable_real_time_values.append(realtime_val)
+
         p = multiprocessing.Process(
-            target=train_process.process_runner, 
-            args=(self.env_var.get(), 
-                  self.robot_var.get(),
-                  self.algorithm_var.get(),
-                  self.ipc_queue, 
-                  self.training_data_queue,
-                  self.pause_values[-1], 
-                  self.exit_values[-1], 
-                  self.enable_real_time_values[-1]
-                  )
+            target=self._training_process,  
+            args=(
+                self.current_env, 
+                self.current_robot, 
+                self.current_algorithm,
+                self.training_data_queue,  
+                pause_val, 
+                exit_val, 
+                realtime_val
+                )
         )
         p.start()
         self.processes.append(p)
+        self._update_log_display(f"Iniciando treinamento: {self.current_algorithm} + {self.current_robot} + {self.current_env}")
+        self.root.after(1000, self.update_plots)
 
     def _initialize_plots(self):
         """Inicializa os gráficos com títulos e configurações"""
@@ -178,6 +193,36 @@ class TrainingGUI:
             self.axs[i].plot([], [], label=ylabel, color=color, marker="o", linestyle="-", markersize=3)
             self.axs[i].legend()
             
+    def _training_process(self, env_name, robot_name, algorithm, data_queue, pause_val, exit_val, realtime_val):
+        """Processo de treinamento que envia dados para a GUI"""
+        try:
+            from simulation import Simulation
+            from robot import Robot
+            from environment import Environment
+            from agent import Agent
+            
+            # Configurar ambiente
+            robot = Robot(robot_name)
+            env_obj = Environment(env_name)
+            
+            sim = Simulation(
+                robot=robot,
+                environment=env_obj,
+                pause_value=pause_val,
+                exit_value=exit_val,
+                enable_real_time_value=realtime_val,
+                enable_gui=False
+            )
+            
+            # Configurar agente com callback para dados
+            agent = Agent(env=sim, algorithm=algorithm)
+            
+            # Treinar
+            agent.train(total_timesteps=100000)
+            
+        except Exception as e:
+            data_queue.put({"type": "error", "message": f"Erro no treinamento: {e}"})
+        
     def start_training(self):
         self.start_btn.config(state=tk.DISABLED)
         self.pause_btn.config(state=tk.NORMAL)

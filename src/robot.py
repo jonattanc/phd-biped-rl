@@ -62,6 +62,10 @@ class Robot:
         return len(self.revolute_indices)
 
     def get_observation(self):
+        """Retorna observação melhorada"""
+        if self.id is None:
+            return np.zeros(10, dtype=np.float32)
+        
         position, orientation = p.getBasePositionAndOrientation(self.id)
         roll, pitch, yaw = p.getEulerFromQuaternion(orientation)
         linear_velocity, angular_velocity = p.getBaseVelocity(self.id)
@@ -70,5 +74,12 @@ class Robot:
         joint_positions = [s[0] for s in joint_states]
         joint_velocities = [s[1] for s in joint_states]
 
-        obs = np.array([roll, pitch, yaw] + list(angular_velocity) + joint_positions, dtype=np.float32)
+        obs = np.array([position[0], position[2], roll, pitch, yaw, linear_velocity[0],        # x velocity
+            angular_velocity[2]] + joint_positions, dtype=np.float32)
         return obs
+    
+    def get_base_position_and_orientation(self):
+        """Retorna a posição e orientação atual da base do robô"""
+        if self.id is not None:
+            return p.getBasePositionAndOrientation(self.id)
+        return [0, 0, 0], [0, 0, 0, 1]
