@@ -4,10 +4,7 @@ import logging
 from agent import Agent
 from metrics_saver import save_complexity_metrics, compile_results, generate_report
 import multiprocessing
-
-
-def setup_logger():
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", handlers=[logging.StreamHandler()])
+import utils
 
 
 def evaluate_and_save(model_path, circuit_name="PR", avatar_name="robot_stage1", role="AE", num_episodes=5, seed=42):
@@ -84,8 +81,6 @@ def evaluate_and_save(model_path, circuit_name="PR", avatar_name="robot_stage1",
 
 def evaluate_single_model_directly():
     """Função para testar a avaliação diretamente, sem interferência da GUI"""
-    setup_logger()
-
     logging.info("=== INICIANDO AVALIAÇÃO DIRETA ===")
 
     # Verificar se existe algum modelo
@@ -153,7 +148,7 @@ def evaluate_single_model_directly():
 
 def main():
     """Avalia todos os modelos e compila resultados automaticamente"""
-    setup_logger()
+    utils.get_logger()
 
     evaluate_single_model_directly()
 

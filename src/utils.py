@@ -11,20 +11,26 @@ ENVIRONMENT_PATH = os.path.join(PROJECT_ROOT, "environments")
 ROBOTS_PATH = os.path.join(PROJECT_ROOT, "robots")
 
 
-def setup_logger(description):
+def get_logger(description=["main"]):
     proc = multiprocessing.current_process()
     proc_num = proc._identity[0] if proc._identity else os.getpid()
-
     log_name = "__".join(description)
-    log_filename = os.path.join(PROJECT_ROOT, "logs", f"log__{log_name}__proc{proc_num}.txt")
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(message)s",
-        handlers=[
-            logging.StreamHandler(),
-            logging.FileHandler(log_filename, mode="w", encoding="utf-8"),
-        ],
-    )
+    logger = logging.getLogger(log_name)
 
-    return logging.getLogger(__name__)
+    if not logger.handlers:
+        log_filename = os.path.join(PROJECT_ROOT, "logs", f"log__{log_name}__proc{proc_num}.txt")
+
+        logger.setLevel(logging.INFO)
+
+        formatter = logging.Formatter("%(asctime)s %(message)s")
+
+        stream_handler = logging.StreamHandler()
+        stream_handler.setFormatter(formatter)
+        logger.addHandler(stream_handler)
+
+        file_handler = logging.FileHandler(log_filename, mode="w", encoding="utf-8")
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+
+    return logger

@@ -17,7 +17,7 @@ def setup_folders():
 
 if __name__ == "__main__":
     setup_folders()
-    utils.setup_logger(["main"])
+    utils.get_logger()
 
     logging.info(f"Executando em {utils.PROJECT_ROOT}")
 

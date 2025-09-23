@@ -10,7 +10,7 @@ import utils
 def process_runner(selected_environment, selected_robot, algorithm, ipc_queue, data_queue, pause_value, exit_value, enable_real_time_value):
     """Função executada no processo separado para treinamento real"""
 
-    logger = utils.setup_logger([selected_environment, selected_robot, algorithm])
+    logger = utils.get_logger([selected_environment, selected_robot, algorithm])
     logger.info(f"Iniciando treinamento real: {selected_environment} + {selected_robot} + {algorithm}")
 
     try:

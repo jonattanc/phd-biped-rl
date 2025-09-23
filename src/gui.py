@@ -28,7 +28,6 @@ class TrainingGUI:
         self.ipc_thread = threading.Thread(target=self.ipc_runner, daemon=True)
 
         # Dados de treinamento:
-        self.training_data_queue = multiprocessing.Queue()
         self.current_env = ""
         self.current_robot = ""
         self.episode_data = {"episodes": [], "rewards": [], "times": [], "distances": []}
@@ -36,9 +35,8 @@ class TrainingGUI:
         self.canvas = None
         self.episode_logger = None
         self.hyperparams = {}
-        self.logger = logging.getLogger(__name__)
-        if not logging.getLogger().handlers:
-            logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+        self.logger = utils.get_logger()
+
         self.logger.info("Interface de treinamento inicializada.")
         self.setup_ui()
 
