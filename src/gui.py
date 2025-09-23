@@ -308,10 +308,6 @@ class TrainingGUI:
             self.logger.exception("Erro em ipc_runner")
             self.on_closing()
 
-    def update_logs(self):
-        """Atualiza a caixa de log com o arquivo de log principal"""
-        self.root.after(10000, self.update_logs)
-
     def on_closing(self):
         self.logger.info("Gui fechando")
 
@@ -335,7 +331,6 @@ class TrainingGUI:
         self.root.quit()  # Terminates the mainloop
 
     def start(self):
-        self.root.after(1000, self.update_logs)
         self.ipc_thread.start()
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         self.root.mainloop()
