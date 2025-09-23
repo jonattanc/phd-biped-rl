@@ -128,35 +128,6 @@ class TrainingGUI:
         main_frame.rowconfigure(1, weight=1)
         main_frame.rowconfigure(2, weight=1)
 
-    def start_training(self):
-        self.start_btn.config(state=tk.DISABLED)
-        self.pause_btn.config(state=tk.NORMAL)
-        self.stop_btn.config(state=tk.NORMAL)
-        self.save_btn.config(state=tk.NORMAL)
-        self.visualize_btn.config(state=tk.NORMAL)
-
-        self.current_env = self.env_var.get()
-        self.current_robot = self.robot_var.get()
-        self.current_algorithm = self.algorithm_var.get()
-
-        # Limpar dados anteriores
-        self.episode_data = {"episodes": [], "rewards": [], "times": [], "distances": []}
-        self._initialize_plots()
-
-        # Iniciar treinamento em processo separado
-        pause_val = multiprocessing.Value("b", 0)
-        exit_val = multiprocessing.Value("b", 0)
-        realtime_val = multiprocessing.Value("b", 0)
-
-        self.pause_values.append(pause_val)
-        self.exit_values.append(exit_val)
-        self.enable_real_time_values.append(realtime_val)
-
-        p = multiprocessing.Process(target=self._training_process, args=(self.current_env, self.current_robot, self.current_algorithm, self.training_data_queue, pause_val, exit_val, realtime_val))
-        p.start()
-        self.processes.append(p)
-        self._update_log_display(f"Iniciando treinamento: {self.current_algorithm} + {self.current_robot} + {self.current_env}")
-
     def _initialize_plots(self):
         """Inicializa os gráficos com títulos e configurações"""
         titles = ["Recompensa por Episódio", "Duração do Episódio (s)", "Distância Percorrida (m)"]
