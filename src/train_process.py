@@ -9,7 +9,7 @@ import utils
 def process_runner(selected_environment, selected_robot, algorithm, ipc_queue, pause_value, exit_value, enable_real_time_value):
     """Função executada no processo separado para treinamento real"""
 
-    logger = utils.get_logger([selected_environment, selected_robot, algorithm])
+    logger = utils.get_logger([selected_environment, selected_robot, algorithm], ipc_queue)
     logger.info(f"Iniciando treinamento real: {selected_environment} + {selected_robot} + {algorithm}")
 
     try:
@@ -33,7 +33,7 @@ def process_runner(selected_environment, selected_robot, algorithm, ipc_queue, p
                 )
 
                 if self.episode_count % 10 == 0:
-                    self.ipc_queue.put({"type": "log", "message": f"Episódio {self.episode_count} concluído"})
+                    logger.info(f"Episódio {self.episode_count} concluído")
 
         data_callback = DataCallback(ipc_queue)
 
@@ -44,13 +44,12 @@ def process_runner(selected_environment, selected_robot, algorithm, ipc_queue, p
         agent = Agent(env=sim, algorithm=algorithm, data_callback=data_callback)
 
         # Iniciar treinamento
-        ipc_queue.put({"type": "log", "message": "Iniciando treinamento PPO..."})
+        logger.info("Iniciando treinamento PPO...")
 
         agent.train(total_timesteps=100_000)
-        ipc_queue.put({"type": "log", "message": "Treinamento concluído!"})
+        logger.info("Treinamento concluído!")
 
     except Exception as e:
         logger.exception("Erro em process_runner")
-        ipc_queue.put({"type": "log", "message": f"Error: {e}"})
 
     ipc_queue.put({"type": "done"})

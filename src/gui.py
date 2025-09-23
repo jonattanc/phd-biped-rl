@@ -9,6 +9,7 @@ import time
 import utils
 import train_process
 import multiprocessing
+import logging
 
 
 class TrainingGUI:
@@ -276,6 +277,10 @@ class TrainingGUI:
                     self.logger.info("ipc_runner finalizando")
                     break
 
+                if isinstance(msg, logging.LogRecord):
+                    self._update_log_display(msg.msg)
+                    continue
+
                 data_type = msg.get("type")
 
                 if data_type == "episode_data":
@@ -287,9 +292,6 @@ class TrainingGUI:
 
                     if self.episode_data["episodes"]:
                         self._refresh_plots()
-
-                elif data_type == "log":
-                    self._update_log_display(msg["message"])
 
                 elif data_type == "done":
                     self.logger.info("Processo de treinamento finalizado.")

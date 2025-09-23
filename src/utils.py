@@ -1,6 +1,7 @@
 # utils.py
 import os
 import logging
+import logging.handlers
 import multiprocessing
 
 
@@ -11,7 +12,7 @@ ENVIRONMENT_PATH = os.path.join(PROJECT_ROOT, "environments")
 ROBOTS_PATH = os.path.join(PROJECT_ROOT, "robots")
 
 
-def get_logger(description=["main"]):
+def get_logger(description=["main"], ipc_queue=None):
     proc = multiprocessing.current_process()
     proc_num = proc._identity[0] if proc._identity else os.getpid()
     log_name = "__".join(description)
@@ -32,5 +33,9 @@ def get_logger(description=["main"]):
         file_handler = logging.FileHandler(log_filename, mode="w", encoding="utf-8")
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
+
+        if ipc_queue is not None:
+            queue_handler = logging.handlers.QueueHandler(ipc_queue)
+            logger.addHandler(queue_handler)
 
     return logger
