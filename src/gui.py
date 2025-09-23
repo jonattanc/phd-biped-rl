@@ -145,29 +145,6 @@ class TrainingGUI:
             self.axs[i].plot([], [], label=ylabel, color=color, marker="o", linestyle="-", markersize=3)
             self.axs[i].legend()
 
-    def _training_process(self, env_name, robot_name, algorithm, data_queue, pause_val, exit_val, realtime_val):
-        """Processo de treinamento que envia dados para a GUI"""
-        try:
-            from simulation import Simulation
-            from robot import Robot
-            from environment import Environment
-            from agent import Agent
-
-            # Configurar ambiente
-            robot = Robot(robot_name)
-            env_obj = Environment(env_name)
-
-            sim = Simulation(robot=robot, environment=env_obj, pause_value=pause_val, exit_value=exit_val, enable_real_time_value=realtime_val, enable_gui=False)
-
-            # Configurar agente com callback para dados
-            agent = Agent(env=sim, algorithm=algorithm)
-
-            # Treinar
-            agent.train(total_timesteps=100000)
-
-        except Exception as e:
-            data_queue.put({"type": "error", "message": f"Erro no treinamento: {e}"})
-
     def start_training(self):
         self.start_btn.config(state=tk.DISABLED)
         self.pause_btn.config(state=tk.NORMAL)
