@@ -301,19 +301,24 @@ class TrainingGUI:
         self.log_text.config(state=tk.DISABLED)
 
     def pause_training(self):
-        if self.pause_values and self.pause_values[-1].value:
+        if not self.pause_values:
+            self.logger.warning("pause_training: Nenhum processo de treinamento ativo.")
+            return
+
+        if self.pause_values[-1].value:
             self.logger.info("Retomando treinamento.")
             self.pause_values[-1].value = 0
             self.pause_btn.config(text="Pausar")
+
         else:
             self.logger.info("Pausando treinamento.")
-            if self.pause_values:
-                self.pause_values[-1].value = 1
+            self.pause_values[-1].value = 1
             self.pause_btn.config(text="Retomar")
 
     def stop_training(self):
         if self.exit_values:
             self.exit_values[-1].value = 1
+
         self.start_btn.config(state=tk.NORMAL)
         self.pause_btn.config(state=tk.DISABLED)
         self.stop_btn.config(state=tk.DISABLED)
@@ -321,14 +326,18 @@ class TrainingGUI:
         self.visualize_btn.config(state=tk.DISABLED)
 
     def toggle_visualization(self):
-        if self.enable_real_time_values and self.enable_real_time_values[-1].value:
+        if not self.enable_real_time_values:
+            self.logger.warning("toggle_visualization: Nenhum processo de treinamento ativo.")
+            return
+
+        if self.enable_real_time_values[-1].value:
             self.logger.info("Desativando visualização em tempo real.")
             self.enable_real_time_values[-1].value = 0
             self.visualize_btn.config(text="Ativar tempo real")
+
         else:
             self.logger.info("Ativando visualização em tempo real.")
-            if self.enable_real_time_values:
-                self.enable_real_time_values[-1].value = 1
+            self.enable_real_time_values[-1].value = 1
             self.visualize_btn.config(text="Desativar tempo real")
 
     def save_snapshot(self):
