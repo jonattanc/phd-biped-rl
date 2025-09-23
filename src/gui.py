@@ -38,7 +38,7 @@ class TrainingGUI:
         self.hyperparams = {}
         self.logger = logging.getLogger(__name__)
         if not logging.getLogger().handlers:
-            logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+            logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
         self.logger.info("Interface de treinamento inicializada.")
         self.setup_ui()
 
@@ -56,7 +56,7 @@ class TrainingGUI:
         self.algorithm_var = tk.StringVar(value="PPO")
         algorithm_combo = ttk.Combobox(control_frame, textvariable=self.algorithm_var, values=["PPO", "TD3"])
         algorithm_combo.grid(row=0, column=1, padx=5)
-        
+
         # Seleção de ambiente
         xacro_env_files = [file.replace(".xacro", "") for file in os.listdir(utils.ENVIRONMENT_PATH) if file.endswith(".xacro")]
 
@@ -99,7 +99,7 @@ class TrainingGUI:
         self.visualize_btn = ttk.Button(control_frame, text="Ativar tempo real", command=self.toggle_visualization, state=tk.DISABLED)  # TODO: Revisar
         self.visualize_btn.grid(row=0, column=8, padx=5)
 
-        # Gráficos: 
+        # Gráficos:
         graph_frame = ttk.LabelFrame(main_frame, text="Desempenho em Tempo Real", padding="10")
         graph_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=10)
 
@@ -115,7 +115,7 @@ class TrainingGUI:
         # Inicializar gráficos vazios
         self._initialize_plots()
         self.canvas.draw()
-        
+
         # Logs:
         log_frame = ttk.LabelFrame(main_frame, text="Log de Treinamento", padding="10")
         log_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=10, rowspan=2)
@@ -146,10 +146,10 @@ class TrainingGUI:
         # Limpar dados anteriores
         self.episode_data = {"episodes": [], "rewards": [], "times": [], "distances": []}
         self._initialize_plots()
-    
+
         # Criar fila para dados de treinamento
         self.training_data_queue = multiprocessing.Queue()
-    
+
         # Iniciar treinamento em processo separado
         pause_val = multiprocessing.Value("b", 0)
         exit_val = multiprocessing.Value("b", 0)
@@ -159,18 +159,7 @@ class TrainingGUI:
         self.exit_values.append(exit_val)
         self.enable_real_time_values.append(realtime_val)
 
-        p = multiprocessing.Process(
-            target=self._training_process,  
-            args=(
-                self.current_env, 
-                self.current_robot, 
-                self.current_algorithm,
-                self.training_data_queue,  
-                pause_val, 
-                exit_val, 
-                realtime_val
-                )
-        )
+        p = multiprocessing.Process(target=self._training_process, args=(self.current_env, self.current_robot, self.current_algorithm, self.training_data_queue, pause_val, exit_val, realtime_val))
         p.start()
         self.processes.append(p)
         self._update_log_display(f"Iniciando treinamento: {self.current_algorithm} + {self.current_robot} + {self.current_env}")
@@ -181,18 +170,18 @@ class TrainingGUI:
         titles = ["Recompensa por Episódio", "Duração do Episódio (s)", "Distância Percorrida (m)"]
         ylabels = ["Recompensa", "Tempo (s)", "Distância (m)"]
         colors = ["blue", "orange", "green"]
-        
+
         for i, (title, ylabel, color) in enumerate(zip(titles, ylabels, colors)):
             self.axs[i].clear()
             self.axs[i].set_title(title)
             self.axs[i].set_xlabel("Episódio")
             self.axs[i].set_ylabel(ylabel)
             self.axs[i].grid(True, alpha=0.3)
-            
+
             # Plotar dados vazios inicialmente
             self.axs[i].plot([], [], label=ylabel, color=color, marker="o", linestyle="-", markersize=3)
             self.axs[i].legend()
-            
+
     def _training_process(self, env_name, robot_name, algorithm, data_queue, pause_val, exit_val, realtime_val):
         """Processo de treinamento que envia dados para a GUI"""
         try:
@@ -200,29 +189,22 @@ class TrainingGUI:
             from robot import Robot
             from environment import Environment
             from agent import Agent
-            
+
             # Configurar ambiente
             robot = Robot(robot_name)
             env_obj = Environment(env_name)
-            
-            sim = Simulation(
-                robot=robot,
-                environment=env_obj,
-                pause_value=pause_val,
-                exit_value=exit_val,
-                enable_real_time_value=realtime_val,
-                enable_gui=False
-            )
-            
+
+            sim = Simulation(robot=robot, environment=env_obj, pause_value=pause_val, exit_value=exit_val, enable_real_time_value=realtime_val, enable_gui=False)
+
             # Configurar agente com callback para dados
             agent = Agent(env=sim, algorithm=algorithm)
-            
+
             # Treinar
             agent.train(total_timesteps=100000)
-            
+
         except Exception as e:
             data_queue.put({"type": "error", "message": f"Erro no treinamento: {e}"})
-        
+
     def start_training(self):
         self.start_btn.config(state=tk.DISABLED)
         self.pause_btn.config(state=tk.NORMAL)
@@ -243,27 +225,17 @@ class TrainingGUI:
         pause_val = multiprocessing.Value("b", 0)
         exit_val = multiprocessing.Value("b", 0)
         realtime_val = multiprocessing.Value("b", 0)
-        
+
         self.pause_values.append(pause_val)
         self.exit_values.append(exit_val)
         self.enable_real_time_values.append(realtime_val)
-        
+
         p = multiprocessing.Process(
-            target=train_process.process_runner, 
-            args=(
-                self.current_env, 
-                self.current_robot, 
-                self.current_algorithm,
-                self.ipc_queue, 
-                self.training_data_queue,
-                pause_val, 
-                exit_val, 
-                realtime_val
-            )
+            target=train_process.process_runner, args=(self.current_env, self.current_robot, self.current_algorithm, self.ipc_queue, self.training_data_queue, pause_val, exit_val, realtime_val)
         )
         p.start()
         self.processes.append(p)
-        
+
         self._update_log_display(f"Iniciando treinamento: {self.current_algorithm} + {self.current_robot} + {self.current_env}")
         self.logger.info(f"Processo de treinamento iniciado: {self.current_env} + {self.current_robot} + {self.current_algorithm}")
 
@@ -271,12 +243,12 @@ class TrainingGUI:
         """Atualiza os gráficos com novos dados da fila"""
         try:
             updated = False
-            
+
             # Processar todos os dados disponíveis na fila
             while not self.training_data_queue.empty():
                 try:
                     data = self.training_data_queue.get_nowait()
-                    
+
                     if data.get("type") == "episode_data":
                         # Adicionar dados do episódio
                         episode_num = data["episode"]
@@ -285,11 +257,11 @@ class TrainingGUI:
                         self.episode_data["times"].append(data["time"])
                         self.episode_data["distances"].append(data["distance"])
                         updated = True
-                        
+
                     elif data.get("type") == "log":
                         # Atualizar logs
                         self._update_log_display(data["message"])
-                        
+
                 except:
                     break  # Fila vazia
 
@@ -311,11 +283,10 @@ class TrainingGUI:
         ylabels = ["Recompensa", "Tempo (s)", "Distância (m)"]
         colors = ["blue", "orange", "green"]
         data_keys = ["rewards", "times", "distances"]
-        
+
         for i, (title, ylabel, color, data_key) in enumerate(zip(titles, ylabels, colors, data_keys)):
             self.axs[i].clear()
-            self.axs[i].plot(self.episode_data["episodes"], self.episode_data[data_key], 
-                            label=ylabel, color=color, marker="o", linestyle="-", markersize=3)
+            self.axs[i].plot(self.episode_data["episodes"], self.episode_data[data_key], label=ylabel, color=color, marker="o", linestyle="-", markersize=3)
             self.axs[i].set_title(title)
             self.axs[i].set_xlabel("Episódio")
             self.axs[i].set_ylabel(ylabel)
@@ -370,15 +341,17 @@ class TrainingGUI:
 
             timestamp = time.strftime("%Y%m%d_%H%M%S")
             model_filename = os.path.join(models_dir, f"model_{self.current_env}_{self.current_robot}_{timestamp}.zip")
-            
+
             # TODO: Implementar lógica de salvamento do modelo
-            messagebox.showinfo("Salvar Snapshot", 
-                              f"Funcionalidade de salvamento será implementada\n"
-                              f"Modelo: {self.current_algorithm}\n"
-                              f"Robô: {self.current_robot}\n"
-                              f"Ambiente: {self.current_env}\n"
-                              f"Arquivo: {model_filename}")
-            
+            messagebox.showinfo(
+                "Salvar Snapshot",
+                f"Funcionalidade de salvamento será implementada\n"
+                f"Modelo: {self.current_algorithm}\n"
+                f"Robô: {self.current_robot}\n"
+                f"Ambiente: {self.current_env}\n"
+                f"Arquivo: {model_filename}",
+            )
+
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao salvar snapshot: {e}")
 
@@ -404,7 +377,7 @@ class TrainingGUI:
     def update_logs(self):
         """Atualiza a caixa de log com o arquivo de log principal"""
         self.root.after(10000, self.update_logs)
-        
+
     def on_closing(self):
         self.logger.info("Gui fechada pelo usuário.")
 
@@ -428,8 +401,8 @@ class TrainingGUI:
         self.root.quit()  # Terminates the mainloop
 
     def start(self):
-        self.root.after(1000, self.update_plots)  
-        self.root.after(1000, self.update_logs) 
+        self.root.after(1000, self.update_plots)
+        self.root.after(1000, self.update_logs)
         self.ipc_thread.start()
-        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)  
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         self.root.mainloop()

@@ -13,28 +13,26 @@ class TrainingCallback(BaseCallback):
         self.episode_count = 0
         self.episode_rewards = []
         self.episode_lengths = []
-        
+
     def _on_step(self) -> bool:
         if len(self.model.ep_info_buffer) > 0 and len(self.model.ep_info_buffer[0]) > 0:
             episode_info = self.model.ep_info_buffer[0]
-            if 'r' in episode_info and 'l' in episode_info:
-                episode_reward = episode_info['r']
-                episode_length = episode_info['l']
-                
+            if "r" in episode_info and "l" in episode_info:
+                episode_reward = episode_info["r"]
+                episode_length = episode_info["l"]
+
                 # Chamar callback quando o episódio terminar
                 if self.data_callback and episode_reward is not None:
-                    self.data_callback.on_episode_end({
-                        'reward': episode_reward,
-                        'time': episode_length * (1/240.0),
-                        'distance': episode_info.get('distance', 0),
-                        'success': episode_info.get('success', False)
-                    })
+                    self.data_callback.on_episode_end(
+                        {"reward": episode_reward, "time": episode_length * (1 / 240.0), "distance": episode_info.get("distance", 0), "success": episode_info.get("success", False)}
+                    )
                     self.episode_count += 1
-                    
+
                     # Limpar buffer após processamento
                     self.model.ep_info_buffer = []
-        
+
         return True
+
 
 class Agent:
     def __init__(self, env=None, model_path=None, algorithm="PPO", data_callback=None):
@@ -51,7 +49,7 @@ class Agent:
             self.env = DummyVecEnv([lambda: env])
             self.action_dim = env.action_space.shape[0]
             self._create_model(algorithm)
-        
+
         elif model_path is not None:
             self.model = PPO.load(model_path)
 
@@ -102,21 +100,21 @@ class Agent:
             # Tentar carregar como PPO primeiro
             self.model = PPO.load(model_path)
             self.algorithm = "PPO"
-            if hasattr(self.model, 'action_space') and self.model.action_space is not None:
+            if hasattr(self.model, "action_space") and self.model.action_space is not None:
                 self.action_dim = self.model.action_space.shape[0]
             print(f"Modelo PPO carregado: {model_path}")
         except:
             try:
                 self.model = TD3.load(model_path)
                 self.algorithm = "TD3"
-                if hasattr(self.model, 'action_space') and self.model.action_space is not None:
+                if hasattr(self.model, "action_space") and self.model.action_space is not None:
                     self.action_dim = self.model.action_space.shape[0]
                 print(f"Modelo TD3 carregado: {model_path}")
             except Exception as e:
                 raise ValueError(f"Erro ao carregar modelo {model_path}: {e}")
 
     def set_algorithm(self, algorithm):
-        # Altera o algoritmo 
+        # Altera o algoritmo
         if self.model is None:
             self.algorithm = algorithm
         else:
@@ -130,11 +128,7 @@ class Agent:
         """Treina o agente."""
         if self.model is not None:
             callback = TrainingCallback(data_callback=self.data_callback)
-            self.model.learn(
-                total_timesteps=total_timesteps, 
-                reset_num_timesteps=False, 
-                callback=callback
-                )
+            self.model.learn(total_timesteps=total_timesteps, reset_num_timesteps=False, callback=callback)
         else:
             raise ValueError("Modelo não foi inicializado.")
 

@@ -56,7 +56,7 @@ class Simulation(gym.Env):
 
         self.logger.info(f"Simulação configurada: {self.robot.name} no {self.environment.name}")
         self.logger.info(f"Action space: {self.action_dim}, Observation space: {self.observation_dim}")
-        
+
         # Variáveis de estado
         self.steps = 0
         self.max_steps = 5000
@@ -121,9 +121,9 @@ class Simulation(gym.Env):
         # --- PASSO 1: REMOVER O ROBÔ E O AMBIENTE ANTIGOS ---
         if self.robot.id is not None:
             p.removeBody(self.robot.id)
-        if hasattr(self.environment, 'id') and self.environment.id is not None:
+        if hasattr(self.environment, "id") and self.environment.id is not None:
             p.removeBody(self.environment.id)
-            
+
         # --- PASSO 2: RECRIAR O AMBIENTE ---
         self.plane.id = self.environment.load_in_simulation(use_fixed_base=True)
 
@@ -198,9 +198,9 @@ class Simulation(gym.Env):
         self.prev_distance = 0.0
 
         # Remover corpos antigos se existirem
-        if hasattr(self, 'robot') and self.robot.id is not None:
+        if hasattr(self, "robot") and self.robot.id is not None:
             p.removeBody(self.robot.id)
-        if hasattr(self.environment, 'id') and self.environment.id is not None:
+        if hasattr(self.environment, "id") and self.environment.id is not None:
             p.removeBody(self.environment.id)
 
         # Recarregar ambiente e robô
@@ -227,7 +227,7 @@ class Simulation(gym.Env):
 
         # Reduzir damping para menos oscilação
         p.changeDynamics(self.robot.id, -1, linearDamping=0.04, angularDamping=0.04)
-    
+
     def step(self, action):
         """
         Executa uma ação e retorna (observação, recompensa, done, info).
@@ -241,7 +241,7 @@ class Simulation(gym.Env):
 
         # Normalizar ação para evitar valores extremos
         action = np.clip(action, -1.0, 1.0)
-        
+
         # Aplicar ação com controle de posição em vez de velocidade para mais suavidade
         current_positions = []
         for i in self.robot.revolute_indices:
@@ -251,13 +251,7 @@ class Simulation(gym.Env):
         target_positions = current_positions + action * 0.1
 
         # Aplicar ação
-        p.setJointMotorControlArray(
-            bodyUniqueId=self.robot.id, 
-            jointIndices=self.robot.revolute_indices, 
-            controlMode=p.POSITION_CONTROL, 
-            targetPositions=target_positions, 
-            forces=[50] * len(action)
-            )
+        p.setJointMotorControlArray(bodyUniqueId=self.robot.id, jointIndices=self.robot.revolute_indices, controlMode=p.POSITION_CONTROL, targetPositions=target_positions, forces=[50] * len(action))
 
         # Avançar simulação
         p.stepSimulation()
@@ -278,10 +272,10 @@ class Simulation(gym.Env):
         # 1. Recompensa por estar em pé (mais importante no início)
         standing_reward = max(0, (pos[2] - self.fall_threshold)) * 10.0
         reward += standing_reward
-    
+
         # 2. Recompensa principal por progresso
         progress = distance_traveled - self.prev_distance
-        reward += progress * 5.0  
+        reward += progress * 5.0
 
         # 3. Recompensa por distância total (incentivo de longo prazo)
         reward += distance_traveled * 2.0
@@ -305,11 +299,7 @@ class Simulation(gym.Env):
         # Condições de Termino
         done = False
         truncated = False
-        info = {
-            "distance": distance_traveled,
-            "success": False,
-            "termination": "none"
-        }
+        info = {"distance": distance_traveled, "success": False, "termination": "none"}
 
         # Cond1: Queda
         if pos[2] < self.fall_threshold + 0.1:
@@ -340,19 +330,14 @@ class Simulation(gym.Env):
 
         # Coletar info final quando o episódio terminar
         if done or truncated:
-            info["episode"] = {
-                "r": self.episode_reward,
-                "l": self.steps,
-                "distance": distance_traveled,
-                "success": info["success"]
-            }
+            info["episode"] = {"r": self.episode_reward, "l": self.steps, "distance": distance_traveled, "success": info["success"]}
 
         return obs, reward, done, truncated, info
 
     def get_episode_info(self):
         """Retorna informações do episódio atual"""
         return self.episode_info.copy()
-    
+
     def evaluate(self, num_episodes=5):
         """Método específico para avaliação, ignorando sinais de pause/exit"""
         all_metrics = []
@@ -377,7 +362,7 @@ class Simulation(gym.Env):
         # Reset manual do ambiente
         if self.robot.id is not None:
             p.removeBody(self.robot.id)
-        if hasattr(self.environment, 'id') and self.environment.id is not None:
+        if hasattr(self.environment, "id") and self.environment.id is not None:
             p.removeBody(self.environment.id)
 
         self.environment.load_in_simulation(use_fixed_base=True)
@@ -396,13 +381,7 @@ class Simulation(gym.Env):
             action = np.random.uniform(-1, 1, size=self.action_dim)
 
             # Aplicar ação
-            p.setJointMotorControlArray(
-                bodyUniqueId=self.robot.id, 
-                jointIndices=self.robot.revolute_indices, 
-                controlMode=p.VELOCITY_CONTROL, 
-                targetVelocities=action, 
-                forces=[100] * len(action)
-            )
+            p.setJointMotorControlArray(bodyUniqueId=self.robot.id, jointIndices=self.robot.revolute_indices, controlMode=p.VELOCITY_CONTROL, targetVelocities=action, forces=[100] * len(action))
 
             # Avançar simulação
             p.stepSimulation()
@@ -423,13 +402,7 @@ class Simulation(gym.Env):
                 success = True
                 break
 
-        return {
-            "reward": reward, 
-            "time_total": steps * self.time_step_s, 
-            "distance": distance_traveled, 
-            "success": success, 
-            "steps": steps
-        }
+        return {"reward": reward, "time_total": steps * self.time_step_s, "distance": distance_traveled, "success": success, "steps": steps}
 
     def _compile_evaluation_metrics(self, all_metrics):
         """Compila métricas de todos os episódios"""
@@ -445,7 +418,7 @@ class Simulation(gym.Env):
             "total_rewards": [m["reward"] for m in all_metrics],
             "num_episodes": len(all_metrics),
         }
-    
+
     def render(self, mode="human"):
         pass  # O modo GUI é controlado por enable_gui no construtor
 

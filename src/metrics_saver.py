@@ -5,6 +5,7 @@ import json
 from datetime import datetime
 import pandas as pd
 
+
 def save_complexity_metrics(metrics, circuit_name, avatar_name, role="AE", seed=42, hyperparams=None, output_dir="logs/data"):
     """
     Salva as métricas de complexidade em um arquivo CSV.
@@ -26,7 +27,7 @@ def save_complexity_metrics(metrics, circuit_name, avatar_name, role="AE", seed=
     if "total_times" not in metrics or not metrics["total_times"]:
         print(f"[AVISO] Nenhum dado de episódio para salvar para {circuit_name}_{avatar_name}")
         return None, None
-    
+
     # Salvar dados de cada episódio
     with open(filepath, "w", newline="", encoding="utf-8") as csvfile:
         fieldnames = ["timestamp", "circuit", "avatar", "role", "seed", "repetition", "time_total", "success", "hyperparams"]
@@ -57,7 +58,7 @@ def save_complexity_metrics(metrics, circuit_name, avatar_name, role="AE", seed=
     total_times = metrics.get("total_times", [])
     min_time = min(total_times) if total_times else 0
     max_time = max(total_times) if total_times else 0
-    
+
     summary_data = {
         "timestamp": [datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
         "circuit": [circuit_name],
