@@ -5,7 +5,6 @@ import json
 from datetime import datetime
 import pandas as pd
 
-
 def save_complexity_metrics(metrics, circuit_name, avatar_name, role="AE", seed=42, hyperparams=None, output_dir="logs/data"):
     """
     Salva as métricas de complexidade em um arquivo CSV.
@@ -24,6 +23,10 @@ def save_complexity_metrics(metrics, circuit_name, avatar_name, role="AE", seed=
     else:
         hyperparams_str = str(hyperparams) if hyperparams else ""
 
+    if "total_times" not in metrics or not metrics["total_times"]:
+        print(f"[AVISO] Nenhum dado de episódio para salvar para {circuit_name}_{avatar_name}")
+        return None, None
+    
     # Salvar dados de cada episódio
     with open(filepath, "w", newline="", encoding="utf-8") as csvfile:
         fieldnames = ["timestamp", "circuit", "avatar", "role", "seed", "repetition", "time_total", "success", "hyperparams"]
@@ -32,7 +35,7 @@ def save_complexity_metrics(metrics, circuit_name, avatar_name, role="AE", seed=
         writer.writeheader()
 
         for i, episode_time in enumerate(metrics["total_times"]):
-            success = i < metrics.get("success_count", 0)
+            success = metrics.get("success_count", 0) > i if "success_count" in metrics else False
             writer.writerow(
                 {
                     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -51,6 +54,10 @@ def save_complexity_metrics(metrics, circuit_name, avatar_name, role="AE", seed=
     summary_filename = f"summary_{circuit_name}_{avatar_name}_{role}_{timestamp}.csv"
     summary_path = os.path.join(output_dir, summary_filename)
 
+    total_times = metrics.get("total_times", [])
+    min_time = min(total_times) if total_times else 0
+    max_time = max(total_times) if total_times else 0
+    
     summary_data = {
         "timestamp": [datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
         "circuit": [circuit_name],
@@ -61,8 +68,8 @@ def save_complexity_metrics(metrics, circuit_name, avatar_name, role="AE", seed=
         "std_time": [metrics["std_time"]],
         "success_rate": [metrics["success_rate"]],
         "num_episodes": [len(metrics["total_times"])],
-        "min_time": [min(metrics["total_times"]) if metrics["total_times"] else 0],
-        "max_time": [max(metrics["total_times"]) if metrics["total_times"] else 0],
+        "min_time": [min_time],
+        "max_time": [max_time],
         "hyperparams": [hyperparams_str],
     }
 

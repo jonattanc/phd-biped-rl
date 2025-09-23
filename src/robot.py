@@ -37,8 +37,6 @@ class Robot:
 
         num_joints = p.getNumJoints(self.id)
         self.revolute_indices = [i for i in range(num_joints) if p.getJointInfo(self.id, i)[2] == p.JOINT_REVOLUTE]
-        self.logger.info(f"Robot {self.name} loaded with {num_joints} joints, revolute joints at indices: {self.revolute_indices}")
-
         self.initial_position, self.initial_orientation = p.getBasePositionAndOrientation(self.id)
 
         self.initial_joint_states = []

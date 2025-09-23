@@ -353,6 +353,99 @@ class Simulation(gym.Env):
         """Retorna informações do episódio atual"""
         return self.episode_info.copy()
     
+    def evaluate(self, num_episodes=5):
+        """Método específico para avaliação, ignorando sinais de pause/exit"""
+        all_metrics = []
+
+        for episode in range(num_episodes):
+            # IGNORAR sinais de pause/exit durante avaliação
+            self.logger.info(f"=== INICIANDO EPISÓDIO DE AVALIAÇÃO {episode + 1}/{num_episodes} ===")
+
+            # Executar episódio sem verificar pause/exit
+            episode_metrics = self._run_evaluation_episode()
+            all_metrics.append(episode_metrics)
+
+            self.logger.info(f"=== EPISÓDIO {episode + 1} FINALIZADO ===")
+            self.logger.info(f"Recompensa: {episode_metrics['reward']:.2f}")
+            self.logger.info(f"Distância: {episode_metrics['distance']:.2f}m")
+            self.logger.info(f"Sucesso: {episode_metrics['success']}")
+
+        return self._compile_evaluation_metrics(all_metrics)
+
+    def _run_evaluation_episode(self):
+        """Executa um episódio de avaliação sem verificar sinais externos"""
+        # Reset manual do ambiente
+        if self.robot.id is not None:
+            p.removeBody(self.robot.id)
+        if hasattr(self.environment, 'id') and self.environment.id is not None:
+            p.removeBody(self.environment.id)
+
+        self.environment.load_in_simulation(use_fixed_base=True)
+        self.robot.load_in_simulation()
+
+        # Configuração inicial
+        pos, _ = p.getBasePositionAndOrientation(self.robot.id)
+        initial_x_pos = pos[0]
+        distance_traveled = 0.0
+        steps = 0
+        success = False
+        reward = 0.0
+
+        while steps < self.max_steps:
+            # Ação aleatória para teste
+            action = np.random.uniform(-1, 1, size=self.action_dim)
+
+            # Aplicar ação
+            p.setJointMotorControlArray(
+                bodyUniqueId=self.robot.id, 
+                jointIndices=self.robot.revolute_indices, 
+                controlMode=p.VELOCITY_CONTROL, 
+                targetVelocities=action, 
+                forces=[100] * len(action)
+            )
+
+            # Avançar simulação
+            p.stepSimulation()
+            steps += 1
+
+            # Calcular progresso
+            pos, _ = p.getBasePositionAndOrientation(self.robot.id)
+            current_x_pos = pos[0]
+            distance_traveled = current_x_pos - initial_x_pos
+
+            # Verificar condições de término
+            if pos[2] < self.fall_threshold:
+                reward -= 100
+                break
+
+            if distance_traveled >= self.success_distance:
+                reward += 50
+                success = True
+                break
+
+        return {
+            "reward": reward, 
+            "time_total": steps * self.time_step_s, 
+            "distance": distance_traveled, 
+            "success": success, 
+            "steps": steps
+        }
+
+    def _compile_evaluation_metrics(self, all_metrics):
+        """Compila métricas de todos os episódios"""
+        total_times = [m["time_total"] for m in all_metrics]
+        successes = [m["success"] for m in all_metrics]
+
+        return {
+            "avg_time": np.mean(total_times) if total_times else 0,
+            "std_time": np.std(total_times) if len(total_times) > 1 else 0,
+            "success_rate": np.mean(successes) if successes else 0,
+            "success_count": sum(successes),
+            "total_times": total_times,
+            "total_rewards": [m["reward"] for m in all_metrics],
+            "num_episodes": len(all_metrics),
+        }
+    
     def render(self, mode="human"):
         pass  # O modo GUI é controlado por enable_gui no construtor
 
