@@ -6,7 +6,7 @@ from agent import Agent
 import utils
 
 
-def process_runner(selected_environment, selected_robot, algorithm, ipc_queue, data_queue, pause_value, exit_value, enable_real_time_value):
+def process_runner(selected_environment, selected_robot, algorithm, ipc_queue, pause_value, exit_value, enable_real_time_value):
     """Função executada no processo separado para treinamento real"""
 
     logger = utils.get_logger([selected_environment, selected_robot, algorithm])
@@ -15,13 +15,13 @@ def process_runner(selected_environment, selected_robot, algorithm, ipc_queue, d
     try:
         # Callback para enviar dados para a GUI
         class DataCallback:
-            def __init__(self, data_queue):
-                self.data_queue = data_queue
+            def __init__(self, ipc_queue):
+                self.ipc_queue = ipc_queue
                 self.episode_count = 0
 
             def on_episode_end(self, episode_info):
                 self.episode_count += 1
-                self.data_queue.put(
+                self.ipc_queue.put(
                     {
                         "type": "episode_data",
                         "episode": self.episode_count,
@@ -33,9 +33,9 @@ def process_runner(selected_environment, selected_robot, algorithm, ipc_queue, d
                 )
 
                 if self.episode_count % 10 == 0:
-                    self.data_queue.put({"type": "log", "message": f"Episódio {self.episode_count} concluído"})
+                    self.ipc_queue.put({"type": "log", "message": f"Episódio {self.episode_count} concluído"})
 
-        data_callback = DataCallback(data_queue)
+        data_callback = DataCallback(ipc_queue)
 
         # Criar componentes
         environment = Environment(name=selected_environment)
@@ -44,15 +44,13 @@ def process_runner(selected_environment, selected_robot, algorithm, ipc_queue, d
         agent = Agent(env=sim, algorithm=algorithm, data_callback=data_callback)
 
         # Iniciar treinamento
-        ipc_queue.put("training_started")
-        data_queue.put({"type": "log", "message": "Iniciando treinamento PPO..."})
+        ipc_queue.put({"type": "log", "message": "Iniciando treinamento PPO..."})
 
-        agent.train(total_timesteps=100000)
-
-        ipc_queue.put("done")
-        data_queue.put({"type": "log", "message": "Treinamento concluído!"})
+        agent.train(total_timesteps=100_000)
+        ipc_queue.put({"type": "log", "message": "Treinamento concluído!"})
 
     except Exception as e:
-        error_msg = f"Erro: {str(e)}"
-        logger.error(error_msg)
-        ipc_queue.put(f"error: {error_msg}")
+        logger.exception("Erro em process_runner")
+        ipc_queue.put({"type": "log", "message": f"Error: {e}"})
+
+    ipc_queue.put({"type": "done"})

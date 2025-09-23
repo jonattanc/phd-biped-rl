@@ -9,7 +9,6 @@ import time
 import utils
 import train_process
 import multiprocessing
-import queue
 
 
 class TrainingGUI:
@@ -23,7 +22,6 @@ class TrainingGUI:
         self.exit_values = []
         self.enable_real_time_values = []
         self.ipc_queue = multiprocessing.Queue()
-        self.training_data_queue = multiprocessing.Queue()
         self.ipc_thread = threading.Thread(target=self.ipc_runner, daemon=True)
 
         # Dados de treinamento:
@@ -171,52 +169,12 @@ class TrainingGUI:
         self.exit_values.append(exit_val)
         self.enable_real_time_values.append(realtime_val)
 
-        p = multiprocessing.Process(
-            target=train_process.process_runner, args=(self.current_env, self.current_robot, self.current_algorithm, self.ipc_queue, self.training_data_queue, pause_val, exit_val, realtime_val)
-        )
+        p = multiprocessing.Process(target=train_process.process_runner, args=(self.current_env, self.current_robot, self.current_algorithm, self.ipc_queue, pause_val, exit_val, realtime_val))
         p.start()
         self.processes.append(p)
 
         self._update_log_display(f"Iniciando treinamento: {self.current_algorithm} + {self.current_robot} + {self.current_env}")
         self.logger.info(f"Processo de treinamento iniciado: {self.current_env} + {self.current_robot} + {self.current_algorithm}")
-
-    def update_plots(self):
-        """Atualiza os gráficos com novos dados da fila"""
-        try:
-            got_episode_data = False
-
-            # Processar todos os dados disponíveis na fila
-            while True:
-                try:
-                    data = self.training_data_queue.get_nowait()
-
-                except queue.Empty:
-                    break  # Fila vazia
-
-                data_type = data.get("type")
-
-                if data_type == "episode_data":
-                    episode_num = data["episode"]
-                    self.episode_data["episodes"].append(episode_num)
-                    self.episode_data["rewards"].append(data["reward"])
-                    self.episode_data["times"].append(data["time"])
-                    self.episode_data["distances"].append(data["distance"])
-                    got_episode_data = True
-
-                elif data_type == "log":
-                    self._update_log_display(data["message"])
-
-                else:
-                    self.logger.error(f"Tipo de dados desconhecido: {data_type}")
-
-            if got_episode_data and self.episode_data["episodes"]:
-                self._refresh_plots()
-
-        except Exception as e:
-            self.logger.error(f"Erro ao atualizar gráficos: {e}")
-
-        # Agendar próxima atualização
-        self.root.after(2000, self.update_plots)
 
     def _refresh_plots(self):
         """Atualiza os gráficos com os dados atuais"""
@@ -310,29 +268,50 @@ class TrainingGUI:
 
     def ipc_runner(self):
         """Thread para monitorar a fila IPC e atualizar logs"""
-        while True:
-            msg = self.ipc_queue.get()
+        try:
+            while True:
+                msg = self.ipc_queue.get()
 
-            if msg is None:
-                break
+                if msg is None:
+                    self.logger.info("ipc_runner finalizando")
+                    break
 
-            elif msg == "done":
-                self.logger.info("Processo de treinamento finalizado.")
-                self.start_btn.config(state=tk.NORMAL)
-                self.pause_btn.config(state=tk.DISABLED)
-                self.stop_btn.config(state=tk.DISABLED)
-                self.save_btn.config(state=tk.NORMAL)
-                self.visualize_btn.config(state=tk.DISABLED)
+                data_type = msg.get("type")
 
-            else:
-                self.logger.info(f"Mensagem IPC: {msg}")
+                if data_type == "episode_data":
+                    episode_num = msg["episode"]
+                    self.episode_data["episodes"].append(episode_num)
+                    self.episode_data["rewards"].append(msg["reward"])
+                    self.episode_data["times"].append(msg["time"])
+                    self.episode_data["distances"].append(msg["distance"])
+
+                    if self.episode_data["episodes"]:
+                        self._refresh_plots()
+
+                elif data_type == "log":
+                    self._update_log_display(msg["message"])
+
+                elif data_type == "done":
+                    self.logger.info("Processo de treinamento finalizado.")
+                    self.start_btn.config(state=tk.NORMAL)
+                    self.pause_btn.config(state=tk.DISABLED)
+                    self.stop_btn.config(state=tk.DISABLED)
+                    self.save_btn.config(state=tk.NORMAL)
+                    self.visualize_btn.config(state=tk.DISABLED)
+
+                else:
+                    self.logger.error(f"Tipo de dados desconhecido: {data_type}")
+
+        except Exception as e:
+            self.logger.exception("Erro em ipc_runner")
+            self.on_closing()
 
     def update_logs(self):
         """Atualiza a caixa de log com o arquivo de log principal"""
         self.root.after(10000, self.update_logs)
 
     def on_closing(self):
-        self.logger.info("Gui fechada pelo usuário.")
+        self.logger.info("Gui fechando")
 
         self.ipc_queue.put(None)  # Sinaliza para a thread IPC terminar
 
@@ -354,7 +333,6 @@ class TrainingGUI:
         self.root.quit()  # Terminates the mainloop
 
     def start(self):
-        self.root.after(1000, self.update_plots)
         self.root.after(1000, self.update_logs)
         self.ipc_thread.start()
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
