@@ -234,30 +234,33 @@ class TrainingGUI:
     def update_plots(self):
         """Atualiza os gráficos com novos dados da fila"""
         try:
-            updated = False
+            got_episode_data = False
 
             # Processar todos os dados disponíveis na fila
-            while not self.training_data_queue.empty():
+            while True:
                 try:
                     data = self.training_data_queue.get_nowait()
 
-                    if data.get("type") == "episode_data":
-                        # Adicionar dados do episódio
-                        episode_num = data["episode"]
-                        self.episode_data["episodes"].append(episode_num)
-                        self.episode_data["rewards"].append(data["reward"])
-                        self.episode_data["times"].append(data["time"])
-                        self.episode_data["distances"].append(data["distance"])
-                        updated = True
-
-                    elif data.get("type") == "log":
-                        # Atualizar logs
-                        self._update_log_display(data["message"])
-
-                except:
+                except multiprocessing.queue.Empty:
                     break  # Fila vazia
 
-            if updated and self.episode_data["episodes"]:
+                data_type = data.get("type")
+
+                if data_type == "episode_data":
+                    episode_num = data["episode"]
+                    self.episode_data["episodes"].append(episode_num)
+                    self.episode_data["rewards"].append(data["reward"])
+                    self.episode_data["times"].append(data["time"])
+                    self.episode_data["distances"].append(data["distance"])
+                    got_episode_data = True
+
+                elif data_type == "log":
+                    self._update_log_display(data["message"])
+
+                else:
+                    self.logger.error(f"Tipo de dados desconhecido: {data_type}")
+
+            if got_episode_data and self.episode_data["episodes"]:
                 self._refresh_plots()
 
         except Exception as e:
