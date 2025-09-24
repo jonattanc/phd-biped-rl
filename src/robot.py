@@ -1,7 +1,6 @@
 # robot.py
 import utils
 import os
-import logging
 import pybullet as p
 from xacrodoc import XacroDoc
 import numpy as np

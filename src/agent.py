@@ -2,7 +2,7 @@
 import random
 import numpy as np
 from stable_baselines3 import PPO, TD3
-from stable_baselines3.common.vec_env import DummyVecEnv, VecEnv
+from stable_baselines3.common.vec_env import DummyVecEnv
 from stable_baselines3.common.callbacks import BaseCallback
 
 

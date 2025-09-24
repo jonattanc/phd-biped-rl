@@ -1,11 +1,8 @@
 # simulation.py
 
 import pybullet as p
-import pybullet_data
 import gymnasium as gym
 import time
-import logging
-from datetime import datetime
 import numpy as np
 import random
 
