@@ -13,7 +13,7 @@ def setup_folders():
                 shutil.rmtree(folder)
             except PermissionError:
                 logging.warning(f"Não foi possível deletar {folder} (arquivo em uso). Continuando...")
-                
+
         os.makedirs(folder, exist_ok=True)
 
 
