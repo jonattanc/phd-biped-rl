@@ -6,7 +6,8 @@ from xacrodoc import XacroDoc
 
 
 class Environment:
-    def __init__(self, name):
+    def __init__(self, logger, name):
+        self.logger = logger
         self.name = name
 
         self.id = None

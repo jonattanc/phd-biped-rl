@@ -11,7 +11,7 @@ import random
 
 
 class Simulation(gym.Env):
-    def __init__(self, robot, environment, pause_value, exit_value, enable_real_time_value, enable_gui=True, num_episodes=1, seed=42):
+    def __init__(self, logger, robot, environment, pause_value, exit_value, enable_real_time_value, enable_gui=True, num_episodes=1, seed=42):
         super(Simulation, self).__init__()
         np.random.seed(seed)
         random.seed(seed)
@@ -24,7 +24,7 @@ class Simulation(gym.Env):
         self.enable_gui = enable_gui
         self.num_episodes = num_episodes
 
-        self.logger = logging.getLogger(__name__)
+        self.logger = logger
         self.physics_client = None
 
         # Configurações de simulação
@@ -44,7 +44,6 @@ class Simulation(gym.Env):
         self.episode_success = False
         self.episode_info = {}
 
-        self.logger = logging.getLogger(__name__)
         self.setup_sim_env()
 
         # Definir espaço de ação e observação
@@ -85,11 +84,12 @@ class Simulation(gym.Env):
 
     def run(self):
         """Executa múltiplos episódios e retorna métricas"""
+        self.logger.info("Executando simulation.run")
         all_metrics = []
 
         for episode in range(self.num_episodes):
             if self.exit_value.value:
-                self.logger.info("Sinal de saída recebido. Finalizando simulação.")
+                self.logger.info("Sinal de saída recebido em run. Finalizando simulação.")
                 break
 
             while self.pause_value.value and not self.exit_value.value:
@@ -236,7 +236,7 @@ class Simulation(gym.Env):
             time.sleep(0.1)
 
         if self.exit_value.value:
-            self.logger.info("Sinal de saída recebido. Finalizando simulação.")
+            self.logger.info("Sinal de saída recebido em step. Finalizando simulação.")
             return None, 0.0, True, False, {"exit": True}
 
         # Normalizar ação para evitar valores extremos
@@ -340,6 +340,7 @@ class Simulation(gym.Env):
 
     def evaluate(self, num_episodes=5):
         """Método específico para avaliação, ignorando sinais de pause/exit"""
+        self.logger.info("Executando simulation.evaluate")
         all_metrics = []
 
         for episode in range(num_episodes):
@@ -406,6 +407,7 @@ class Simulation(gym.Env):
 
     def _compile_evaluation_metrics(self, all_metrics):
         """Compila métricas de todos os episódios"""
+        self.logger.info("Executando simulation._compile_evaluation_metrics")
         total_times = [m["time_total"] for m in all_metrics]
         successes = [m["success"] for m in all_metrics]
 

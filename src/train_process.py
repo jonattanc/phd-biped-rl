@@ -38,10 +38,10 @@ def process_runner(selected_environment, selected_robot, algorithm, ipc_queue, p
         data_callback = DataCallback(ipc_queue)
 
         # Criar componentes
-        environment = Environment(name=selected_environment)
-        robot = Robot(name=selected_robot)
-        sim = Simulation(robot, environment, pause_value, exit_value, enable_real_time_value, enable_gui=False)
-        agent = Agent(env=sim, algorithm=algorithm, data_callback=data_callback)
+        environment = Environment(logger, name=selected_environment)
+        robot = Robot(logger, name=selected_robot)
+        sim = Simulation(logger, robot, environment, pause_value, exit_value, enable_real_time_value, enable_gui=False)
+        agent = Agent(logger, env=sim, algorithm=algorithm, data_callback=data_callback)
 
         # Iniciar treinamento
         logger.info("Iniciando treinamento PPO...")

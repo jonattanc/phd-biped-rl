@@ -35,7 +35,8 @@ class TrainingCallback(BaseCallback):
 
 
 class Agent:
-    def __init__(self, env=None, model_path=None, algorithm="PPO", data_callback=None):
+    def __init__(self, logger, env=None, model_path=None, algorithm="PPO", data_callback=None):
+        self.logger = logger
         self.revolute_indices = []
         self.len_revolute_indices = 0
         self.model = None
@@ -126,6 +127,8 @@ class Agent:
 
     def train(self, total_timesteps=100_000):
         """Treina o agente."""
+        self.logger.info("Executando agent.train")
+
         if self.model is not None:
             callback = TrainingCallback(data_callback=self.data_callback)
             self.model.learn(total_timesteps=total_timesteps, reset_num_timesteps=False, callback=callback)
@@ -146,6 +149,8 @@ class Agent:
         Avalia o agente treinado em um ambiente.
         Retorna métricas completas incluindo contagem de sucessos.
         """
+        self.logger.info("Executando agent.evaluate")
+
         if self.model is None:
             raise ValueError("Nenhum modelo treinado carregado para avaliação.")
 

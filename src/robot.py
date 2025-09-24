@@ -8,7 +8,8 @@ import numpy as np
 
 
 class Robot:
-    def __init__(self, name):
+    def __init__(self, logger, name):
+        self.logger = logger
         self.name = name
 
         self.id = None
@@ -21,7 +22,6 @@ class Robot:
             os.makedirs(self.robots_tmp_dir, exist_ok=True)
 
         self.urdf_path = self._generate_urdf()
-        self.logger = logging.getLogger(__name__)
 
     def _generate_urdf(self):
         xacro_path = os.path.join(self.robots_dir, f"{self.name}.xacro")
