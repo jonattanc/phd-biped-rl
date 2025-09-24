@@ -31,6 +31,11 @@ class TrainingCallback(BaseCallback):
                     # Limpar buffer após processamento
                     self.model.ep_info_buffer = []
 
+        infos = self.locals.get("infos")
+
+        if infos and any(info.get("exit", False) for info in infos):
+            return False  # returning False stops training
+
         return True
 
 
