@@ -24,6 +24,7 @@ class TrainingGUI:
         self.enable_real_time_values = []
         self.ipc_queue = multiprocessing.Queue()
         self.ipc_thread = threading.Thread(target=self.ipc_runner, daemon=True)
+        self.gui_closed = False
 
         # Dados de treinamento:
         self.current_env = ""
@@ -59,7 +60,7 @@ class TrainingGUI:
         if "PR" in xacro_env_files:
             xacro_env_files.remove("PR")
             xacro_env_files.insert(0, "PR")
-            
+
         if len(xacro_env_files) == 0:
             messagebox.showerror("Erro", f"Nenhum arquivo .xacro encontrado em {utils.ENVIRONMENT_PATH}.")
             self.root.destroy()
@@ -310,18 +311,24 @@ class TrainingGUI:
 
         except Exception as e:
             self.logger.exception("Erro em ipc_runner")
-            self.on_closing()
+
+            if not self.gui_closed:
+                self.on_closing()
 
     def on_closing(self):
         self.logger.info("Gui fechando")
 
+        self.gui_closed = True
         self.ipc_queue.put(None)  # Sinaliza para a thread IPC terminar
 
         for v in self.exit_values:
             v.value = 1  # Sinaliza para os processos terminarem
 
         self.logger.info("Aguardando thread IPC terminar...")
-        self.ipc_thread.join()
+        self.ipc_thread.join(timeout=10.0)
+
+        if self.ipc_thread.is_alive():
+            self.logger.warning("Thread ipc_thread did not terminate in time")
 
         self.logger.info("Aguardando processos de treinamento terminarem...")
 
@@ -329,6 +336,7 @@ class TrainingGUI:
             if p.is_alive():
                 p.join(timeout=20.0)
                 if p.is_alive():
+                    self.logger.warning(f"Forcing termination of process {p.pid}")
                     p.terminate()
 
         self.logger.info("Todos os processos finalizados. Fechando GUI.")
