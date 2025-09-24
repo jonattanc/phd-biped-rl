@@ -44,7 +44,7 @@ def process_runner(selected_environment, selected_robot, algorithm, ipc_queue, p
         agent = Agent(logger, env=sim, algorithm=algorithm, data_callback=data_callback)
 
         # Iniciar treinamento
-        logger.info("Iniciando treinamento PPO...")
+        logger.info("Iniciando treinamento {algorithm}...")
 
         agent.train(total_timesteps=100_000)
         logger.info("Treinamento concluído!")

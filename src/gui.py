@@ -56,15 +56,19 @@ class TrainingGUI:
         # Seleção de ambiente
         xacro_env_files = [file.replace(".xacro", "") for file in os.listdir(utils.ENVIRONMENT_PATH) if file.endswith(".xacro")]
 
+        if "PR" in xacro_env_files:
+            xacro_env_files.remove("PR")
+            xacro_env_files.insert(0, "PR")
+            
         if len(xacro_env_files) == 0:
             messagebox.showerror("Erro", f"Nenhum arquivo .xacro encontrado em {utils.ENVIRONMENT_PATH}.")
             self.root.destroy()
             return
 
-        ttk.Label(control_frame, text="Ambiente:").grid(row=0, column=0, sticky=tk.W)
+        ttk.Label(control_frame, text="Ambiente:").grid(row=0, column=2, sticky=tk.W)
         self.env_var = tk.StringVar(value=xacro_env_files[0])
         env_combo = ttk.Combobox(control_frame, textvariable=self.env_var, values=xacro_env_files)
-        env_combo.grid(row=0, column=1, padx=5)
+        env_combo.grid(row=0, column=3, padx=5)
 
         # Seleção de robô
         xacro_robot_files = [file.replace(".xacro", "") for file in os.listdir(utils.ROBOTS_PATH) if file.endswith(".xacro")]
@@ -74,26 +78,26 @@ class TrainingGUI:
             self.root.destroy()
             return
 
-        ttk.Label(control_frame, text="Robô:").grid(row=0, column=2, sticky=tk.W)
+        ttk.Label(control_frame, text="Robô:").grid(row=0, column=4, sticky=tk.W)
         self.robot_var = tk.StringVar(value=xacro_robot_files[0])
         robot_combo = ttk.Combobox(control_frame, textvariable=self.robot_var, values=xacro_robot_files)
-        robot_combo.grid(row=0, column=3, padx=5)
+        robot_combo.grid(row=0, column=5, padx=5)
 
         # Botões de controle
         self.start_btn = ttk.Button(control_frame, text="Iniciar Treinamento", command=self.start_training)
-        self.start_btn.grid(row=0, column=4, padx=5)
+        self.start_btn.grid(row=0, column=6, padx=5)
 
         self.pause_btn = ttk.Button(control_frame, text="Pausar", command=self.pause_training, state=tk.DISABLED)
-        self.pause_btn.grid(row=0, column=5, padx=5)
+        self.pause_btn.grid(row=0, column=7, padx=5)
 
         self.stop_btn = ttk.Button(control_frame, text="Finalizar", command=self.stop_training, state=tk.DISABLED)
-        self.stop_btn.grid(row=0, column=6, padx=5)
+        self.stop_btn.grid(row=0, column=8, padx=5)
 
         self.save_btn = ttk.Button(control_frame, text="Salvar Snapshot", command=self.save_snapshot, state=tk.DISABLED)  # TODO: Revisar
-        self.save_btn.grid(row=0, column=7, padx=5)
+        self.save_btn.grid(row=0, column=9, padx=5)
 
         self.visualize_btn = ttk.Button(control_frame, text="Ativar tempo real", command=self.toggle_visualization, state=tk.DISABLED)  # TODO: Revisar
-        self.visualize_btn.grid(row=0, column=8, padx=5)
+        self.visualize_btn.grid(row=0, column=10, padx=5)
 
         # Gráficos:
         graph_frame = ttk.LabelFrame(main_frame, text="Desempenho em Tempo Real", padding="10")

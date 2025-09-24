@@ -9,8 +9,11 @@ import utils
 def setup_folders():
     for folder in [utils.TMP_PATH, utils.LOGS_PATH]:
         if os.path.exists(folder):
-            shutil.rmtree(folder)
-
+            try:
+                shutil.rmtree(folder)
+            except PermissionError:
+                logging.warning(f"Não foi possível deletar {folder} (arquivo em uso). Continuando...")
+                
         os.makedirs(folder, exist_ok=True)
 
 
