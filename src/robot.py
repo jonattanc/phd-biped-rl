@@ -31,8 +31,19 @@ class Robot:
 
         return urdf_path
 
+    def get_link_index(self, link_name):
+        for i in range(p.getNumJoints(self.id)):
+            info = p.getJointInfo(self.id, i)
+
+            if info[12].decode("utf-8") == link_name:  # Looks the name of the child link connected to the joint
+                return i
+
+        raise (f"Link index not found for {link_name}")
+
     def load_in_simulation(self):
         self.id = p.loadURDF(self.urdf_path)
+
+        self.imu_link_index = self.get_link_index("imu_link")
 
         num_joints = p.getNumJoints(self.id)
         self.revolute_indices = [i for i in range(num_joints) if p.getJointInfo(self.id, i)[2] == p.JOINT_REVOLUTE]
@@ -64,9 +75,10 @@ class Robot:
         if self.id is None:
             return np.zeros(10, dtype=np.float32)
 
-        position, orientation = p.getBasePositionAndOrientation(self.id)
+        link_state = p.getLinkState(self.id, self.imu_link_index, computeLinkVelocity=1)
+        position, orientation = link_state[0], link_state[1]
+        linear_velocity, angular_velocity = link_state[6], link_state[7]
         roll, pitch, yaw = p.getEulerFromQuaternion(orientation)
-        linear_velocity, angular_velocity = p.getBaseVelocity(self.id)
 
         joint_states = p.getJointStates(self.id, self.revolute_indices)
         joint_positions = [s[0] for s in joint_states]
