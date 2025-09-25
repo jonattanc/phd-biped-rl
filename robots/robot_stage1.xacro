@@ -65,8 +65,6 @@
   </material>
 
   <!-- altura total -->
-  <xacro:property name="total_height" value="${foot_height + shin_length + thigh_length + body_length + head_radius*2}" />
-  <xacro:property name="base_z" value="${total_height/2}" />
   <xacro:property name="leg_total_length" value="${thigh_length + shin_length + foot_height}" />
   <!-- body_offset: body_length/2 desloca o posicao Z do centro do cilindro (corpo do robo) para a sua base inferior, assim nao fica metade do corpo enterrado no chao -->
   <!-- body_offset: leg_total_length da espaco para as pernas, para elas nao ficarem enterradas no chao -->
