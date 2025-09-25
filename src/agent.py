@@ -54,7 +54,7 @@ class Agent:
             # Criar ambiente vetorizado
             self.env = DummyVecEnv([lambda: env])
             self.action_dim = env.action_space.shape[0]
-            self._create_model(algorithm)
+            self.model = self._create_model(algorithm)
 
         elif model_path is not None:
             self.model = PPO.load(model_path)
@@ -62,7 +62,7 @@ class Agent:
     def _create_model(self, algorithm):
         # Criar modelo baseado no algoritmo selecionado
         if algorithm.upper() == "PPO":
-            self.model = PPO(
+            return PPO(
                 "MlpPolicy",
                 self.env,
                 verbose=1,
@@ -79,7 +79,7 @@ class Agent:
                 tensorboard_log="./logs/",
             )
         elif algorithm.upper() == "TD3":
-            self.model = TD3(
+            return TD3(
                 "MlpPolicy",
                 self.env,
                 verbose=1,
