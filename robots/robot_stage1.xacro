@@ -67,18 +67,23 @@
   <!-- altura total -->
   <xacro:property name="total_height" value="${foot_height + shin_length + thigh_length + body_length + head_radius*2}" />
   <xacro:property name="base_z" value="${total_height/2}" />
+  <xacro:property name="leg_total_length" value="${thigh_length + shin_length + foot_height}" />
+  <!-- body_offset: body_length/2 desloca o posicao Z do centro do cilindro (corpo do robo) para a sua base inferior, assim nao fica metade do corpo enterrado no chao -->
+  <!-- body_offset: leg_total_length da espaco para as pernas, para elas nao ficarem enterradas no chao -->
+  <xacro:property name="body_offset" value="${body_length/2 + leg_total_length}" />
    
   <!-- Body (main cylinder) -->
   <link name="base_link">
+    <origin xyz="0 0 0"/>
     <visual>
-      <origin xyz="0 0 ${base_z - foot_height - shin_length - thigh_length - body_length/2}"/>
+      <origin xyz="0 0 ${body_offset}"/>
       <geometry>
         <cylinder length="${body_length}" radius="${body_radius}"/>
       </geometry>
       <material name="robot_material_1"/>
     </visual>
     <collision>
-      <origin xyz="0 0 ${base_z - foot_height - shin_length - thigh_length - body_length/2}"/>
+      <origin xyz="0 0 ${body_offset}"/>
       <geometry>
         <cylinder length="${body_length}" radius="${body_radius}"/>
       </geometry>
@@ -113,12 +118,15 @@
   <joint name="base_to_imu" type="fixed">
     <parent link="base_link"/>
     <child link="imu_link"/>
-    <origin xyz="${body_radius} 0 ${body_length/2 }" rpy="0 0 0"/>
+    <!-- Z: Como o corpo principal e posicionado em 0 0 0, body_offset move a IMU para o centro do corpo -->
+    <!-- Z: body_length/4 move a IMU um pouco para baixo, como se estivesse posicionado ela na cintura -->
+    <origin xyz="${body_radius} 0 ${body_offset - body_length/4}" rpy="0 0 0"/>
   </joint>
   
   <!-- Head (sphere) -->
   <link name="head_link">
     <visual>
+      <!-- Z: head_radius shifts the Z plane from the heads's center to its base -->
       <origin rpy="0 0 0" xyz="0 0 ${head_radius}"/>
       <geometry>
         <sphere radius="${head_radius}"/>
@@ -141,7 +149,9 @@
   <joint name="base_to_head" type="fixed">
     <parent link="base_link"/>
     <child link="head_link"/>
-	  <origin xyz="0 0 ${body_length/2 + head_radius}"/>
+    <!-- Z: Como o corpo principal e posicionado em 0 0 0, body_offset move a joint para o centro do corpo -->
+    <!-- Z: body_length/2 move a joint para o topo do corpo -->
+	  <origin xyz="0 0 ${body_offset + body_length/2}"/>
   </joint>
 
   <!-- Leg macro (creates left/right leg: thigh, shin, foot) -->
@@ -149,14 +159,16 @@
     <!-- Thigh -->
     <link name="${prefix}_thigh_link">
       <visual>
-        <origin rpy="0 0 0" xyz="0 0 ${-thigh_length/2}"/>
+        <!-- Z: thigh_length/2 desloca a posicao Z do centro do cilindro para a sua base inferior -->
+        <!-- Z: hip_radius desloca a coxa para fora do quadril -->
+        <origin rpy="0 0 0" xyz="0 0 ${-thigh_length/2 - hip_radius}"/>
         <geometry>
           <cylinder length="${thigh_length}" radius="${thigh_radius}"/>
         </geometry>
         <material name="robot_material_2"/>
       </visual>
       <collision>
-        <origin rpy="0 0 0" xyz="0 0 ${thigh_length/2}"/>
+        <origin rpy="0 0 0" xyz="0 0 ${-thigh_length/2 - hip_radius}"/>
         <geometry>
           <cylinder length="${thigh_length}" radius="${thigh_radius}"/>
         </geometry>
@@ -171,22 +183,29 @@
     <joint name="base_to_${prefix}_thigh" type="revolute">
       <parent link="base_link"/>
       <child link="${prefix}_thigh_link"/>
-      <origin xyz="0 ${body_radius * reflect} ${-body_length/2}"/>
+      <!-- Z: Como o corpo principal e posicionado em 0 0 0, body_offset move a joint para o centro do corpo -->
+      <!-- Z: body_length/2 move a joint para a base inferior do corpo -->
+      <!-- Z: hip_radius faz a base inferior do quadrilcoincidir com a base inferior do corpo -->
+      <!-- Y: body_radius posiciona a joint na borda do corpo -->
+      <!-- Y: hip_radius tira o quadrilde dentro do corpo, caso contrario metade do quadrilficaria dentro do corpo -->
+      <origin xyz="0 ${(body_radius + hip_radius) * reflect} ${body_offset - body_length/2 + hip_radius}"/>
       <axis xyz="0 1 0"/>
-      <limit lower="-1.0" upper="1.0" effort="100" velocity="8"/>
+      <limit lower="-1.57" upper="1.57" effort="50" velocity="5"/>
     </joint>
 
     <!-- Shin -->
     <link name="${prefix}_shin_link">
       <visual>
-        <origin rpy="0 0 0" xyz="0 0 ${-shin_length/2}"/>
+        <!-- Z: shin_length/2 desloca a posicao Z do centro da coxa para a sua base inferior -->
+        <!-- Z: knee_radius tira a coxa de dentro do quadril-->
+        <origin rpy="0 0 0" xyz="0 0 ${-shin_length/2 - knee_radius}"/>
         <geometry>
           <cylinder length="${shin_length}" radius="${shin_radius}"/>
         </geometry>
         <material name="robot_material_1"/>
       </visual>
       <collision>
-        <origin rpy="0 0 0" xyz="0 0 ${shin_length/2}"/>
+        <origin rpy="0 0 0" xyz="0 0 ${-shin_length/2 - knee_radius}"/>
         <geometry>
           <cylinder length="${shin_length}" radius="${shin_radius}"/>
         </geometry>
@@ -201,14 +220,20 @@
     <joint name="${prefix}_knee" type="revolute">
       <parent link="${prefix}_thigh_link"/>
       <child link="${prefix}_shin_link"/>
-      <origin xyz="0 0 ${-thigh_length/2}"/>
+      <!-- Z: hip_radius + thigh_length faz o centro da cenela coincidir com a base inferior da coxa -->
+      <!-- Z: knee_radius faz a base inferior da cenela coincidir com a base inferior da coxa -->
+      <!-- Y: thigh_radius posiciona o centro da cenela na borda da coxa -->
+      <!-- Y: knee_radius coloca a cenela para fora da coxa -->
+      <origin xyz="0 ${(-thigh_radius + -knee_radius) * reflect} ${-hip_radius - thigh_length + knee_radius}"/>
       <axis xyz="0 1 0"/>
-      <limit lower="-0.5" upper="2.0" effort="60" velocity="8"/>
+      <limit lower="0" upper="2.36" effort="40" velocity="5"/>
     </joint>
 
     <!-- Foot -->
     <link name="${prefix}_foot_link">
       <visual>
+        <!-- Z: foot_height/2 desloca a posicao Z do centro do pe para o seu topo -->
+        <!-- X: foot_offset_front desloca o pe um pouco para frente, para parecer um pe normal em que ele fica mais para frente do que para tras -->
         <origin rpy="0 0 0" xyz="${foot_offset_front} 0 ${-foot_height/2}"/>
         <geometry>
           <box size="${foot_length} ${foot_width} ${foot_height}"/>
@@ -231,6 +256,7 @@
     <joint name="${prefix}_foot_joint" type="fixed">
       <parent link="${prefix}_shin_link"/>
       <child link="${prefix}_foot_link"/>
+      <!-- Z: knee_radius + shin_length faz o centro do pe coincidir com o centro da cenela -->
       <origin xyz="0 0 ${-knee_radius - shin_length}"/>
     </joint>
 
