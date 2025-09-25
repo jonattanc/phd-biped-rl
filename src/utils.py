@@ -1,8 +1,22 @@
 # utils.py
 import os
 import logging
-import logging.handlers
 import multiprocessing
+import queue
+
+
+class FormattedQueueHandler(logging.Handler):
+    def __init__(self, log_queue: queue.Queue):
+        super().__init__()
+        self.log_queue = log_queue
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            msg = self.format(record)
+            self.log_queue.put_nowait(msg)
+
+        except Exception:
+            self.handleError(record)
 
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -35,7 +49,8 @@ def get_logger(description=["main"], ipc_queue=None):
         logger.addHandler(file_handler)
 
         if ipc_queue is not None:
-            queue_handler = logging.handlers.QueueHandler(ipc_queue)
+            queue_handler = FormattedQueueHandler(ipc_queue)
+            queue_handler.setFormatter(formatter)
             logger.addHandler(queue_handler)
 
     return logger

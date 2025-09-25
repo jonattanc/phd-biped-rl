@@ -9,7 +9,7 @@ import time
 import utils
 import train_process
 import multiprocessing
-import logging
+import queue
 
 
 class TrainingGUI:
@@ -22,6 +22,7 @@ class TrainingGUI:
         self.pause_values = []
         self.exit_values = []
         self.enable_real_time_values = []
+        self.gui_log_queue = queue.Queue()
         self.ipc_queue = multiprocessing.Queue()
         self.ipc_thread = threading.Thread(target=self.ipc_runner, daemon=True)
         self.gui_closed = False
@@ -179,7 +180,6 @@ class TrainingGUI:
         p.start()
         self.processes.append(p)
 
-        self._update_log_display(f"Iniciando treinamento: {self.current_algorithm} + {self.current_robot} + {self.current_env}")
         self.logger.info(f"Processo de treinamento iniciado: {self.current_env} + {self.current_robot} + {self.current_algorithm}")
 
     def _refresh_plots(self):
@@ -203,12 +203,25 @@ class TrainingGUI:
 
         self.canvas.draw()
 
-    def _update_log_display(self, message):
+    def _update_log_display(self):
         """Atualiza a exibição de logs"""
+        if self.gui_log_queue.empty():
+            self.root.after(500, self._update_log_display)
+            return
+
         self.log_text.config(state=tk.NORMAL)
-        self.log_text.insert(tk.END, f"{time.strftime('%H:%M:%S')} - {message}\n")
+
+        try:
+            while True:
+                message = self.gui_log_queue.get_nowait()
+                self.log_text.insert(tk.END, message + "\n")
+
+        except queue.Empty:
+            pass
+
         self.log_text.see(tk.END)
         self.log_text.config(state=tk.DISABLED)
+        self.root.after(500, self._update_log_display)
 
     def pause_training(self):
         if not self.pause_values:
@@ -282,8 +295,8 @@ class TrainingGUI:
                     self.logger.info("ipc_runner finalizando")
                     break
 
-                if isinstance(msg, logging.LogRecord):
-                    self._update_log_display(msg.msg)
+                if isinstance(msg, str):
+                    self.gui_log_queue.put(msg)
                     continue
 
                 data_type = msg.get("type")
@@ -344,5 +357,6 @@ class TrainingGUI:
 
     def start(self):
         self.ipc_thread.start()
+        self.root.after(500, self._update_log_display)
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         self.root.mainloop()
