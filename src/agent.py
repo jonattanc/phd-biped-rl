@@ -60,7 +60,6 @@ class Agent:
             self.model = PPO.load(model_path)
 
     def _create_model(self, algorithm):
-        callback = TrainingCallback(data_callback=self.data_callback)
         # Criar modelo baseado no algoritmo selecionado
         if algorithm.upper() == "PPO":
             self.model = PPO(
@@ -118,13 +117,6 @@ class Agent:
                 print(f"Modelo TD3 carregado: {model_path}")
             except Exception as e:
                 raise ValueError(f"Erro ao carregar modelo {model_path}: {e}")
-
-    def set_algorithm(self, algorithm):
-        # Altera o algoritmo
-        if self.model is None:
-            self.algorithm = algorithm
-        else:
-            print("Aviso: Não é possível alterar o algoritmo após a criação do modelo")
 
     def set_revolute_indices(self, revolute_indices):
         self.revolute_indices = revolute_indices
