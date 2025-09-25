@@ -212,7 +212,7 @@ class TrainingGUI:
         self.log_text.config(state=tk.NORMAL)
 
         try:
-            while True:
+            for _ in range(500):
                 message = self.gui_log_queue.get_nowait()
                 self.log_text.insert(tk.END, message + "\n")
 
