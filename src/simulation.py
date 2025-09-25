@@ -205,8 +205,8 @@ class Simulation(gym.Env):
         self.robot.load_in_simulation()
 
         # Obter posição inicial
-        pos, orient = p.getBasePositionAndOrientation(self.robot.id)
-        self.initial_x_pos = pos[0]
+        robot_position = self.robot.get_imu_position()
+        self.initial_x_pos = robot_position[0]
         self.prev_distance = 0.0
 
         # Configurar parâmetros físicos para estabilidade
