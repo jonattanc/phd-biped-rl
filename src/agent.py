@@ -42,8 +42,6 @@ class TrainingCallback(BaseCallback):
 class Agent:
     def __init__(self, logger, env=None, model_path=None, algorithm="PPO", data_callback=None):
         self.logger = logger
-        self.revolute_indices = []
-        self.len_revolute_indices = 0
         self.model = None
         self.algorithm = algorithm
         self.env = env
@@ -53,7 +51,7 @@ class Agent:
         if env is not None:
             # Criar ambiente vetorizado
             self.env = DummyVecEnv([lambda: env])
-            self.action_dim = env.action_space.shape[0]
+            self.action_dim = env.action_dim
             self.model = self._create_model(algorithm)
 
         elif model_path is not None:
@@ -118,10 +116,6 @@ class Agent:
             except Exception as e:
                 raise ValueError(f"Erro ao carregar modelo {model_path}: {e}")
 
-    def set_revolute_indices(self, revolute_indices):
-        self.revolute_indices = revolute_indices
-        self.len_revolute_indices = len(revolute_indices)
-
     def train(self, total_timesteps=100_000):
         """Treina o agente."""
         self.logger.info("Executando agent.train")
@@ -136,7 +130,7 @@ class Agent:
         """Obtém uma ação do modelo ou, se não houver modelo, retorna uma ação aleatória. Não é usada automaticamente por stable_baselines3"""
         if self.model is None or obs is None:
             # Fallback para ação aleatória
-            return [random.uniform(-10, 10) for _ in range(self.len_revolute_indices)]
+            return [random.uniform(-10, 10) for _ in range(self.action_dim)]
 
         action, _ = self.model.predict(obs, deterministic=False)
         return action.flatten()  # Garante que é um array 1D

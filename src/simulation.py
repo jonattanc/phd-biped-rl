@@ -131,9 +131,6 @@ class Simulation(gym.Env):
         # Forçar a referência de distância para 0.0
         initial_x_pos = 0.0
 
-        # Atualizar os índices das juntas
-        self.set_revolute_indices(self.robot.revolute_indices)
-
         while steps < self.max_steps:
             action = np.random.uniform(-1, 1, size=self.action_dim)
             # Obter observação
