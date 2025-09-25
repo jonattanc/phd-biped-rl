@@ -25,7 +25,9 @@ class TrainingGUI:
         self.gui_log_queue = queue.Queue()
         self.ipc_queue = multiprocessing.Queue()
         self.ipc_thread = threading.Thread(target=self.ipc_runner, daemon=True)
+        self.plot_data_lock = threading.Lock()
         self.gui_closed = False
+        self.new_plot_data = False
 
         # Dados de treinamento:
         self.current_env = ""
@@ -36,6 +38,11 @@ class TrainingGUI:
         self.episode_logger = None
         self.hyperparams = {}
         self.logger = utils.get_logger()
+
+        self.plot_titles = ["Recompensa por Episódio", "Duração do Episódio (s)", "Distância Percorrida (m)"]
+        self.plot_ylabels = ["Recompensa", "Tempo (s)", "Distância (m)"]
+        self.plot_colors = ["blue", "orange", "green"]
+        self.plot_data_keys = ["rewards", "times", "distances"]
 
         self.logger.info("Interface de treinamento inicializada.")
         self.setup_ui()
@@ -184,24 +191,29 @@ class TrainingGUI:
 
     def _refresh_plots(self):
         """Atualiza os gráficos com os dados atuais"""
-        if not self.episode_data["episodes"]:
-            return
+        try:
+            if not self.episode_data["episodes"] or not self.new_plot_data:
+                self.root.after(500, self._refresh_plots)
+                return
 
-        titles = ["Recompensa por Episódio", "Duração do Episódio (s)", "Distância Percorrida (m)"]
-        ylabels = ["Recompensa", "Tempo (s)", "Distância (m)"]
-        colors = ["blue", "orange", "green"]
-        data_keys = ["rewards", "times", "distances"]
+            self.new_plot_data = False
 
-        for i, (title, ylabel, color, data_key) in enumerate(zip(titles, ylabels, colors, data_keys)):
-            self.axs[i].clear()
-            self.axs[i].plot(self.episode_data["episodes"], self.episode_data[data_key], label=ylabel, color=color, marker="o", linestyle="-", markersize=3)
-            self.axs[i].set_title(title)
-            self.axs[i].set_xlabel("Episódio")
-            self.axs[i].set_ylabel(ylabel)
-            self.axs[i].legend()
-            self.axs[i].grid(True, alpha=0.3)
+            with self.plot_data_lock:
+                for i, (title, ylabel, color, data_key) in enumerate(zip(self.plot_titles, self.plot_ylabels, self.plot_colors, self.plot_data_keys)):
+                    self.axs[i].clear()
+                    self.axs[i].plot(self.episode_data["episodes"], self.episode_data[data_key], label=ylabel, color=color, linestyle="-", markersize=3)
+                    self.axs[i].set_title(title)
+                    self.axs[i].set_xlabel("Episódio")
+                    self.axs[i].set_ylabel(ylabel)
+                    self.axs[i].legend()
+                    self.axs[i].grid(True, alpha=0.3)
 
-        self.canvas.draw()
+            self.canvas.draw()
+
+        except Exception as e:
+            self.logger.exception(f"Plot error")
+
+        self.root.after(500, self._refresh_plots)
 
     def _update_log_display(self):
         """Atualiza a exibição de logs"""
@@ -302,14 +314,14 @@ class TrainingGUI:
                 data_type = msg.get("type")
 
                 if data_type == "episode_data":
-                    episode_num = msg["episode"]
-                    self.episode_data["episodes"].append(episode_num)
-                    self.episode_data["rewards"].append(msg["reward"])
-                    self.episode_data["times"].append(msg["time"])
-                    self.episode_data["distances"].append(msg["distance"])
+                    with self.plot_data_lock:
+                        episode_num = msg["episode"]
+                        self.episode_data["episodes"].append(episode_num)
+                        self.episode_data["rewards"].append(msg["reward"])
+                        self.episode_data["times"].append(msg["time"])
+                        self.episode_data["distances"].append(msg["distance"])
 
-                    if self.episode_data["episodes"]:
-                        self._refresh_plots()
+                    self.new_plot_data = True
 
                 elif data_type == "done":
                     self.logger.info("Processo de treinamento finalizado.")
@@ -358,5 +370,6 @@ class TrainingGUI:
     def start(self):
         self.ipc_thread.start()
         self.root.after(500, self._update_log_display)
+        self.root.after(500, self._refresh_plots)
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         self.root.mainloop()
