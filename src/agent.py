@@ -133,13 +133,13 @@ class Agent:
             raise ValueError("Modelo não foi inicializado.")
 
     def get_action(self, obs=None):
-        """Obtém uma ação do modelo ou, se não houver modelo, retorna uma ação aleatória."""
-        if self.model is not None and obs is not None:
-            action, _ = self.model.predict(obs, deterministic=False)
-            return action.flatten()  # Garante que é um array 1D
-        else:
+        """Obtém uma ação do modelo ou, se não houver modelo, retorna uma ação aleatória. Não é usada automaticamente por stable_baselines3"""
+        if self.model is None or obs is None:
             # Fallback para ação aleatória
             return [random.uniform(-10, 10) for _ in range(self.len_revolute_indices)]
+
+        action, _ = self.model.predict(obs, deterministic=False)
+        return action.flatten()  # Garante que é um array 1D
 
     def evaluate(self, env, num_episodes=20):
         """
