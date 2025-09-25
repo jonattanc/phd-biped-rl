@@ -259,15 +259,16 @@ class Simulation(gym.Env):
 
         # Obter observação
         obs = self.robot.get_observation()
-        pos, _ = p.getBasePositionAndOrientation(self.robot.id)
-        current_x_pos = pos[0]
+
+        robot_position = self.robot.get_imu_position()
+        current_x_pos = robot_position[0]
         distance_traveled = current_x_pos - self.initial_x_pos
 
         # --- Estratégia de Recompensa Melhorada ---
         reward = 0.0
 
         # 1. Recompensa por estar em pé (mais importante no início)
-        standing_reward = max(0, (pos[2] - self.fall_threshold)) * 10.0
+        standing_reward = max(0, (robot_position[2] - self.fall_threshold)) * 10.0
         reward += standing_reward
 
         # 2. Recompensa principal por progresso
@@ -299,11 +300,11 @@ class Simulation(gym.Env):
         info = {"distance": distance_traveled, "success": False, "termination": "none"}
 
         # Cond1: Queda
-        if pos[2] < self.fall_threshold + 0.1:
+        if robot_position[2] < self.fall_threshold + 0.1:
             reward -= 5  # Penalidade maior por queda
             done = True
             info["termination"] = "fell"
-            self.logger.debug(f"Robô caiu! Altura: {pos[2]:.3f}")
+            self.logger.debug(f"Robô caiu! Altura: {robot_position[2]:.3f}")
 
         # Cond2: Sucesso
         elif distance_traveled >= self.success_distance:
