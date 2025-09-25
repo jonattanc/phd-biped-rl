@@ -39,7 +39,7 @@ class TrainingGUI:
         self.hyperparams = {}
         self.logger = utils.get_logger()
 
-        self.plot_titles = ["Recompensa por Episódio", "Duração do Episódio (s)", "Distância Percorrida (m)"]
+        self.plot_titles = ["Recompensa por Episódio", "Duração do Episódio", "Distância Percorrida"]
         self.plot_ylabels = ["Recompensa", "Tempo (s)", "Distância (m)"]
         self.plot_colors = ["blue", "orange", "green"]
         self.plot_data_keys = ["rewards", "times", "distances"]
@@ -112,18 +112,13 @@ class TrainingGUI:
         graph_frame = ttk.LabelFrame(main_frame, text="Desempenho em Tempo Real", padding="10")
         graph_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=10)
 
-        self.fig, self.axs = plt.subplots(3, figsize=(10, 6))
-        self.axs[0].set_title("Recompensa por Episódio")
-        self.axs[1].set_title("Duração do Episódio (s)")
-        self.axs[2].set_title("Distância Percorrida (m)")
+        self.fig, self.axs = plt.subplots(3, 1, figsize=(10, 6), constrained_layout=True, sharex=True)
 
         self.canvas = FigureCanvasTkAgg(self.fig, master=graph_frame)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-        self.canvas.draw()
 
-        # Inicializar gráficos vazios
         self._initialize_plots()
-        self.canvas.draw()
+        self.canvas.draw_idle()
 
         # Logs:
         log_frame = ttk.LabelFrame(main_frame, text="Log de Treinamento", padding="10")
@@ -143,20 +138,15 @@ class TrainingGUI:
 
     def _initialize_plots(self):
         """Inicializa os gráficos com títulos e configurações"""
-        titles = ["Recompensa por Episódio", "Duração do Episódio (s)", "Distância Percorrida (m)"]
-        ylabels = ["Recompensa", "Tempo (s)", "Distância (m)"]
-        colors = ["blue", "orange", "green"]
-
-        for i, (title, ylabel, color) in enumerate(zip(titles, ylabels, colors)):
+        for i, (title, ylabel, color) in enumerate(zip(self.plot_titles, self.plot_ylabels, self.plot_colors)):
             self.axs[i].clear()
+            self.axs[i].plot([], [], label=ylabel, color=color, linestyle="-", markersize=3)
             self.axs[i].set_title(title)
-            self.axs[i].set_xlabel("Episódio")
             self.axs[i].set_ylabel(ylabel)
             self.axs[i].grid(True, alpha=0.3)
-
-            # Plotar dados vazios inicialmente
-            self.axs[i].plot([], [], label=ylabel, color=color, marker="o", linestyle="-", markersize=3)
             self.axs[i].legend()
+
+        self.axs[-1].set_xlabel("Episódio")
 
     def start_training(self):
         self.start_btn.config(state=tk.DISABLED)
@@ -203,10 +193,11 @@ class TrainingGUI:
                     self.axs[i].clear()
                     self.axs[i].plot(self.episode_data["episodes"], self.episode_data[data_key], label=ylabel, color=color, linestyle="-", markersize=3)
                     self.axs[i].set_title(title)
-                    self.axs[i].set_xlabel("Episódio")
                     self.axs[i].set_ylabel(ylabel)
                     self.axs[i].legend()
                     self.axs[i].grid(True, alpha=0.3)
+
+                self.axs[-1].set_xlabel("Episódio")
 
             self.canvas.draw()
 
