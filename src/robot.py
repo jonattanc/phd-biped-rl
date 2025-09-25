@@ -64,6 +64,9 @@ class Robot:
         for j, angle in enumerate(self.initial_joint_states):
             p.resetJointState(self.id, j, angle)
 
+    def get_num_joints(self):
+        return p.getNumJoints(self.id)
+
     def get_num_revolute_joints(self):
         if self.revolute_indices is None:
             raise ValueError("O robô ainda não foi carregado na simulação. Chame load_in_simulation() primeiro.")

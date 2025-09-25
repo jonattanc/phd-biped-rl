@@ -219,7 +219,7 @@ class Simulation(gym.Env):
     def _configure_robot_stability(self):
         """Configura parâmetros para melhorar a estabilidade inicial do robô"""
         # Aumentar o atrito dos pés
-        for link_index in range(-1, self.robot.get_num_revolute_joints()):
+        for link_index in range(-1, self.robot.get_num_joints()):
             p.changeDynamics(self.robot.id, link_index, lateralFriction=1.0)
 
         # Reduzir damping para menos oscilação
