@@ -167,7 +167,12 @@ class TrainingGUI:
         # Iniciar treinamento em processo separado
         pause_val = multiprocessing.Value("b", 0)
         exit_val = multiprocessing.Value("b", 0)
-        realtime_val = multiprocessing.Value("b", 0)
+
+        if len(self.enable_real_time_values) > 0:
+            realtime_val = multiprocessing.Value("b", self.enable_real_time_values[-1].value)
+
+        else:
+            realtime_val = multiprocessing.Value("b", 0)
 
         self.pause_values.append(pause_val)
         self.exit_values.append(exit_val)
