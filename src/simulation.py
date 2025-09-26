@@ -8,13 +8,14 @@ import random
 
 
 class Simulation(gym.Env):
-    def __init__(self, logger, robot, environment, pause_value, exit_value, enable_real_time_value, enable_gui=True, num_episodes=1, seed=42):
+    def __init__(self, logger, robot, environment, ipc_queue, pause_value, exit_value, enable_real_time_value, enable_gui=True, num_episodes=1, seed=42):
         super(Simulation, self).__init__()
         np.random.seed(seed)
         random.seed(seed)
 
         self.robot = robot
         self.environment = environment
+        self.ipc_queue = ipc_queue
         self.pause_value = pause_value
         self.exit_value = exit_value
         self.enable_real_time_value = enable_real_time_value
@@ -23,6 +24,7 @@ class Simulation(gym.Env):
 
         self.logger = logger
         self.physics_client = None
+        self.agent = None
 
         # Configurações de simulação
         self.physics_client = None
@@ -40,6 +42,7 @@ class Simulation(gym.Env):
         self.episode_distance = 0.0
         self.episode_success = False
         self.episode_info = {}
+        self.episode_count = 0
 
         self.setup_sim_env()
 
@@ -78,6 +81,9 @@ class Simulation(gym.Env):
         self.logger.info(f"Robô: {self.robot.name}")
         self.logger.info(f"DOF: {self.robot.get_num_revolute_joints()}")
         self.logger.info(f"Ambiente: {self.environment.name}")
+
+    def set_agent(self, agent):
+        self.agent = agent
 
     def run(self):
         """Executa múltiplos episódios e retorna métricas"""
@@ -222,6 +228,37 @@ class Simulation(gym.Env):
         # Reduzir damping para menos oscilação
         p.changeDynamics(self.robot.id, -1, linearDamping=0.04, angularDamping=0.04)
 
+    def transmit_episode_info(self):
+        if len(self.agent.model.ep_info_buffer) > 0 and len(self.agent.model.ep_info_buffer[0]) > 0:
+            episode_info = self.agent.model.ep_info_buffer[0]
+
+            if "r" in episode_info and "l" in episode_info:
+                episode_reward = episode_info["r"]
+                episode_length = episode_info["l"]
+
+                # Chamar callback quando o episódio terminar
+                if episode_reward is not None:
+                    self.on_episode_end({"reward": episode_reward, "time": episode_length * (1 / 240.0), "distance": episode_info.get("distance", 0), "success": episode_info.get("success", False)})
+
+                    # Limpar buffer após processamento
+                    self.agent.model.ep_info_buffer = []
+
+    def on_episode_end(self, episode_info):
+        self.episode_count += 1
+        self.ipc_queue.put(
+            {
+                "type": "episode_data",
+                "episode": self.episode_count,
+                "reward": float(episode_info.get("reward", 0)),
+                "time": float(episode_info.get("time", 0)),
+                "distance": float(episode_info.get("distance", 0)),
+                "success": bool(episode_info.get("success", False)),
+            }
+        )
+
+        if self.episode_count % 10 == 0:
+            self.logger.info(f"Episódio {self.episode_count} concluído")
+
     def step(self, action):
         """
         Executa uma ação e retorna (observação, recompensa, done, info).
@@ -326,6 +363,8 @@ class Simulation(gym.Env):
         # Coletar info final quando o episódio terminar
         if done or truncated:
             info["episode"] = {"r": self.episode_reward, "l": self.steps, "distance": distance_traveled, "success": info["success"]}
+
+        self.transmit_episode_info()
 
         return obs, reward, done, truncated, info
 

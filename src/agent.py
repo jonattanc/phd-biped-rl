@@ -7,30 +7,7 @@ from stable_baselines3.common.callbacks import BaseCallback
 
 
 class TrainingCallback(BaseCallback):
-    def __init__(self, data_callback=None, verbose=0):
-        super(TrainingCallback, self).__init__(verbose)
-        self.data_callback = data_callback
-        self.episode_count = 0
-        self.episode_rewards = []
-        self.episode_lengths = []
-
     def _on_step(self) -> bool:
-        if len(self.model.ep_info_buffer) > 0 and len(self.model.ep_info_buffer[0]) > 0:
-            episode_info = self.model.ep_info_buffer[0]
-            if "r" in episode_info and "l" in episode_info:
-                episode_reward = episode_info["r"]
-                episode_length = episode_info["l"]
-
-                # Chamar callback quando o episódio terminar
-                if self.data_callback and episode_reward is not None:
-                    self.data_callback.on_episode_end(
-                        {"reward": episode_reward, "time": episode_length * (1 / 240.0), "distance": episode_info.get("distance", 0), "success": episode_info.get("success", False)}
-                    )
-                    self.episode_count += 1
-
-                    # Limpar buffer após processamento
-                    self.model.ep_info_buffer = []
-
         infos = self.locals.get("infos")
 
         if infos and any(info.get("exit", False) for info in infos):
@@ -40,13 +17,12 @@ class TrainingCallback(BaseCallback):
 
 
 class Agent:
-    def __init__(self, logger, env=None, model_path=None, algorithm="PPO", data_callback=None):
+    def __init__(self, logger, env=None, model_path=None, algorithm="PPO"):
         self.logger = logger
         self.model = None
         self.algorithm = algorithm
         self.env = env
         self.action_dim = 0
-        self.data_callback = data_callback
 
         if env is not None:
             # Criar ambiente vetorizado
@@ -121,7 +97,7 @@ class Agent:
         self.logger.info("Executando agent.train")
 
         if self.model is not None:
-            callback = TrainingCallback(data_callback=self.data_callback)
+            callback = TrainingCallback()
             self.model.learn(total_timesteps=total_timesteps, reset_num_timesteps=False, callback=callback)
         else:
             raise ValueError("Modelo não foi inicializado.")
