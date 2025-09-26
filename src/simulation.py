@@ -8,7 +8,7 @@ import random
 
 
 class Simulation(gym.Env):
-    def __init__(self, logger, robot, environment, ipc_queue, pause_value, exit_value, enable_real_time_value, enable_gui=True, num_episodes=1, seed=42):
+    def __init__(self, logger, robot, environment, ipc_queue, pause_value, exit_value, enable_real_time_value, num_episodes=1, seed=42):
         super(Simulation, self).__init__()
         np.random.seed(seed)
         random.seed(seed)
@@ -19,11 +19,10 @@ class Simulation(gym.Env):
         self.pause_value = pause_value
         self.exit_value = exit_value
         self.enable_real_time_value = enable_real_time_value
-        self.enable_gui = enable_gui
+        self.is_real_time_enabled = enable_real_time_value.value
         self.num_episodes = num_episodes
 
         self.logger = logger
-        self.physics_client = None
         self.agent = None
 
         # Configurações de simulação
@@ -44,7 +43,13 @@ class Simulation(gym.Env):
         self.episode_info = {}
         self.episode_count = 0
 
+        # Configurar ambiente de simulação
         self.setup_sim_env()
+
+        self.logger.info("Simulação configurada")
+        self.logger.info(f"Robô: {self.robot.name}")
+        self.logger.info(f"DOF: {self.robot.get_num_revolute_joints()}")
+        self.logger.info(f"Ambiente: {self.environment.name}")
 
         # Definir espaço de ação e observação
         self.action_dim = self.robot.get_num_revolute_joints()
@@ -65,22 +70,22 @@ class Simulation(gym.Env):
 
     def setup_sim_env(self):
         """Conecta ao PyBullet e carrega ambiente e robô"""
-        if self.enable_gui:
+        if self.physics_client is not None:
+            p.disconnect()
+
+        if self.is_real_time_enabled:
             self.physics_client = p.connect(p.GUI)
 
         else:
             self.physics_client = p.connect(p.DIRECT)
+
+        p.resetDebugVisualizerCamera(cameraDistance=3, cameraYaw=45, cameraPitch=-30, cameraTargetPosition=[0, 0, 0])
 
         p.setGravity(0, 0, -9.807)
         p.setTimeStep(self.time_step_s)
 
         self.environment.load_in_simulation(use_fixed_base=True)
         self.robot.load_in_simulation()
-
-        self.logger.info("Simulação configurada")
-        self.logger.info(f"Robô: {self.robot.name}")
-        self.logger.info(f"DOF: {self.robot.get_num_revolute_joints()}")
-        self.logger.info(f"Ambiente: {self.environment.name}")
 
     def set_agent(self, agent):
         self.agent = agent
@@ -173,7 +178,7 @@ class Simulation(gym.Env):
             p.stepSimulation()
             steps += 1
 
-            if self.enable_real_time_value.value:
+            if self.is_real_time_enabled:
                 time.sleep(self.time_step_s)
 
             if steps % 100 == 0:
@@ -183,6 +188,18 @@ class Simulation(gym.Env):
         self.logger.info(f"Episódio finalizado. Distância: {distance_traveled:.2f}m | Tempo: {total_time:.2f}s | Sucesso: {success}")
 
         return {"reward": reward, "time_total": total_time, "distance": distance_traveled, "success": success, "steps": steps}
+
+    def soft_env_reset(self):
+        # Remover corpos antigos se existirem
+        if hasattr(self, "robot") and self.robot.id is not None:
+            p.removeBody(self.robot.id)
+
+        if hasattr(self.environment, "id") and self.environment.id is not None:
+            p.removeBody(self.environment.id)
+
+        # Recarregar ambiente e robô
+        self.environment.load_in_simulation(use_fixed_base=True)
+        self.robot.load_in_simulation()
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -197,15 +214,13 @@ class Simulation(gym.Env):
         self.steps = 0
         self.prev_distance = 0.0
 
-        # Remover corpos antigos se existirem
-        if hasattr(self, "robot") and self.robot.id is not None:
-            p.removeBody(self.robot.id)
-        if hasattr(self.environment, "id") and self.environment.id is not None:
-            p.removeBody(self.environment.id)
+        # Resetar ambiente de simulação
+        if self.is_real_time_enabled != self.enable_real_time_value.value:
+            self.is_real_time_enabled = self.enable_real_time_value.value
+            self.setup_sim_env()
 
-        # Recarregar ambiente e robô
-        self.environment.load_in_simulation(use_fixed_base=True)
-        self.robot.load_in_simulation()
+        else:
+            self.soft_env_reset()
 
         # Obter posição inicial
         robot_position = self.robot.get_imu_position()
@@ -288,7 +303,7 @@ class Simulation(gym.Env):
         p.stepSimulation()
         self.steps += 1
 
-        if self.enable_real_time_value.value:
+        if self.is_real_time_enabled:
             time.sleep(self.time_step_s)
 
         # Obter observação
@@ -456,7 +471,7 @@ class Simulation(gym.Env):
         }
 
     def render(self, mode="human"):
-        pass  # O modo GUI é controlado por enable_gui no construtor
+        pass
 
     def close(self):
         p.disconnect()

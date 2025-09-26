@@ -105,7 +105,7 @@ class TrainingGUI:
         self.save_btn = ttk.Button(control_frame, text="Salvar Snapshot", command=self.save_snapshot, state=tk.DISABLED)  # TODO: Revisar
         self.save_btn.grid(row=0, column=9, padx=5)
 
-        self.visualize_btn = ttk.Button(control_frame, text="Ativar tempo real", command=self.toggle_visualization, state=tk.DISABLED)  # TODO: Revisar
+        self.visualize_btn = ttk.Button(control_frame, text="Ativar visualização", command=self.toggle_visualization, state=tk.DISABLED)  # TODO: Revisar
         self.visualize_btn.grid(row=0, column=10, padx=5)
 
         # Gráficos:
@@ -259,12 +259,12 @@ class TrainingGUI:
         if self.enable_real_time_values[-1].value:
             self.logger.info("Desativando visualização em tempo real.")
             self.enable_real_time_values[-1].value = 0
-            self.visualize_btn.config(text="Ativar tempo real")
+            self.visualize_btn.config(text="Ativar visualização")
 
         else:
             self.logger.info("Ativando visualização em tempo real.")
             self.enable_real_time_values[-1].value = 1
-            self.visualize_btn.config(text="Desativar tempo real")
+            self.visualize_btn.config(text="Desativar visualização")
 
     def save_snapshot(self):
         """Salva o modelo treinado e executa avaliação para gerar métricas de complexidade."""

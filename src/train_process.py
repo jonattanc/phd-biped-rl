@@ -16,7 +16,7 @@ def process_runner(selected_environment, selected_robot, algorithm, ipc_queue, p
         # Criar componentes
         environment = Environment(logger, name=selected_environment)
         robot = Robot(logger, name=selected_robot)
-        sim = Simulation(logger, robot, environment, ipc_queue, pause_value, exit_value, enable_real_time_value, enable_gui=False)
+        sim = Simulation(logger, robot, environment, ipc_queue, pause_value, exit_value, enable_real_time_value)
         agent = Agent(logger, env=sim, algorithm=algorithm)
         sim.set_agent(agent)
 

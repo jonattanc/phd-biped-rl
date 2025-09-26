@@ -26,7 +26,7 @@ def evaluate_and_save(model_path, circuit_name="PR", avatar_name="robot_stage1",
         # Criar ambiente de avaliação
         robot = Robot(avatar_name)
         env_obj = Environment(circuit_name)
-        env = Simulation(robot, env_obj, pause_val, exit_val, realtime_val, enable_gui=False, num_episodes=num_episodes, seed=seed)
+        env = Simulation(robot, env_obj, pause_val, exit_val, realtime_val, num_episodes=num_episodes, seed=seed)
         agent = Agent(model_path=model_path)
         metrics = agent.evaluate(env, num_episodes=num_episodes)
 
@@ -111,7 +111,7 @@ def evaluate_single_model_directly():
             exit_val = multiprocessing.Value("b", 0)
             realtime_val = multiprocessing.Value("b", 0)
 
-            env = Simulation(robot, env_obj, pause_val, exit_val, realtime_val, enable_gui=False)
+            env = Simulation(robot, env_obj, pause_val, exit_val, realtime_val)
             agent = Agent(env=env, algorithm="PPO")
 
             # Salvar modelo de teste
