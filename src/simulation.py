@@ -294,7 +294,7 @@ class Simulation(gym.Env):
         reward = 0.0
 
         # Recompensa principal por progresso
-        progress = self.episode_last_distance - self.episode_distance
+        progress = self.episode_distance - self.episode_last_distance
         reward += progress * 5.0
 
         # Recompensa por distância total (incentivo de longo prazo)
