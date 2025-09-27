@@ -302,7 +302,7 @@ class Simulation(gym.Env):
 
         # Recompensa por estabilidade (menor penalidade por movimento)
         joint_positions, joint_velocities = self.robot.get_joint_states()
-        energy_penalty = -0.001 * sum(joint_velocities)
+        energy_penalty = -0.001 * sum(v**2 for v in joint_velocities)
         reward += energy_penalty
 
         # Penalidade por mudança de direção de movimento em juntas
