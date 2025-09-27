@@ -290,7 +290,7 @@ class Simulation(gym.Env):
             forces=forces,
         )
 
-    def get_reward(self, action):
+    def get_reward(self, action, robot_orientation):
         reward = 0.0
 
         # Recompensa principal por progresso
@@ -308,16 +308,21 @@ class Simulation(gym.Env):
         # Penalidade por mudança de direção de movimento em juntas
         action_products = action * self.episode_last_action  # Números positivos indicam que a direção é a mesma
         direction_changes = np.sum(action_products < 0)  # Conta mudanças de direção
-        movement_penalty = -2.0 * direction_changes
+        movement_penalty = -0.2 * direction_changes
         reward += movement_penalty
+
+        # Penalidade por inclinação do robô, para manter postura correta
+        roll, pitch, yaw = robot_orientation
+        posture_penalty = -0.01 * roll**2 - 0.03 * pitch**2
+        reward += posture_penalty
 
         # Recompensa por sucesso ou falha
         if self.episode_terminated:
             if self.episode_success:
-                reward += 50
+                reward += 100
 
             else:
-                reward -= 5
+                reward -= 150
 
         return reward
 
@@ -378,7 +383,7 @@ class Simulation(gym.Env):
         info["success"] = self.episode_success
         self.episode_done = self.episode_truncated or self.episode_terminated
 
-        reward = self.get_reward(action)
+        reward = self.get_reward(action, robot_orientation)
         self.episode_reward += reward
 
         # Coletar info final quando o episódio terminar

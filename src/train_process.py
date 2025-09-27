@@ -23,7 +23,7 @@ def process_runner(selected_environment, selected_robot, algorithm, ipc_queue, p
         # Iniciar treinamento
         logger.info(f"Iniciando treinamento {algorithm}...")
 
-        agent.train(total_timesteps=100_000)
+        agent.train(total_timesteps=10_000_000)
         logger.info("Treinamento concluído!")
 
     except Exception as e:
