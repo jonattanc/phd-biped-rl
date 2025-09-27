@@ -24,15 +24,16 @@ class Simulation(gym.Env):
 
         self.logger = logger
         self.agent = None
+        self.physics_client = None
 
         # Configurações de simulação
-        self.physics_client = None
-        self.fall_threshold = 0.3
-        self.episode_timeout_s = 20
-        self.time_step_s = 1 / 240.0
-        self.success_distance = 10.0
+        self.fall_threshold = 0.3  # m
+        self.yaw_threshold = 0.5  # rad
+        self.episode_timeout_s = 20  # s
+        self.time_step_s = 1 / 240.0  # s
+        self.success_distance = 10.0  # m
         self.max_motor_velocity = 2.0  # rad/s
-        self.max_motor_torque = 130.0  #
+        self.max_motor_torque = 130.0  # Nm
         self.apply_action = self.apply_position_action  # Selecionar a função de controle, por velocidade ou posição
 
         # Variáveis para coleta de dados
@@ -219,7 +220,7 @@ class Simulation(gym.Env):
             self.soft_env_reset()
 
         # Obter posição inicial
-        robot_position = self.robot.get_imu_position()
+        robot_position, robot_orientation = self.robot.get_imu_position_and_orientation()
         self.episode_robot_x_initial_position = robot_position[0]
 
         # Configurar parâmetros físicos para estabilidade
@@ -336,9 +337,10 @@ class Simulation(gym.Env):
         # Obter observação
         obs = self.robot.get_observation()
 
-        robot_position = self.robot.get_imu_position()
+        robot_position, robot_orientation = self.robot.get_imu_position_and_orientation()
         robot_x_position = robot_position[0]
         robot_z_position = robot_position[2]
+        robot_yaw = robot_orientation[2]
         self.episode_last_distance = self.episode_distance
         self.episode_distance = robot_x_position - self.episode_robot_x_initial_position
 
@@ -349,6 +351,11 @@ class Simulation(gym.Env):
         if robot_z_position < self.fall_threshold:
             self.episode_terminated = True
             info["termination"] = "fell"
+
+        # Desvio do caminho
+        if abs(robot_yaw) >= self.yaw_threshold:
+            self.episode_terminated = True
+            info["termination"] = "yaw_deviated"
 
         # Sucesso
         elif self.episode_distance >= self.success_distance:

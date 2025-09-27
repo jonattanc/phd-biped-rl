@@ -94,10 +94,11 @@ class Robot:
         obs = np.array([roll, pitch, yaw] + list(angular_velocity) + joint_positions, dtype=np.float32)
         return obs
 
-    def get_imu_position(self):
+    def get_imu_position_and_orientation(self):
         link_state = p.getLinkState(self.id, self.imu_link_index, computeLinkVelocity=1)
         position = link_state[0]
-        return position
+        orientation = p.getEulerFromQuaternion(link_state[1])
+        return position, orientation
 
     def get_base_position_and_orientation(self):
         """Retorna a posição e orientação atual da base do robô"""
