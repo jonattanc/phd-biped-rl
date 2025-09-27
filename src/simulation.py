@@ -36,10 +36,6 @@ class Simulation(gym.Env):
         self.max_motor_torque = 130.0  # Nm
         self.apply_action = self.apply_position_action  # Selecionar a função de controle, por velocidade ou posição
 
-        # Variáveis para coleta de dados
-        self.reset_episode_vars()
-        self.episode_count = 0
-
         # Configurar ambiente de simulação
         self.setup_sim_env()
 
@@ -57,6 +53,10 @@ class Simulation(gym.Env):
 
         self.logger.info(f"Simulação configurada: {self.robot.name} no {self.environment.name}")
         self.logger.info(f"Action space: {self.action_dim}, Observation space: {self.observation_dim}")
+
+        # Variáveis para coleta de dados
+        self.reset_episode_vars()
+        self.episode_count = 0
 
     def setup_sim_env(self):
         """Conecta ao PyBullet e carrega ambiente e robô"""
@@ -200,6 +200,7 @@ class Simulation(gym.Env):
         self.episode_terminated = False
         self.episode_truncated = False
         self.episode_episode_done = False
+        self.episode_last_action = np.zeros(self.action_dim, dtype=float)
         self.episode_steps = 0
         self.episode_info = {}
 
@@ -289,7 +290,7 @@ class Simulation(gym.Env):
             forces=forces,
         )
 
-    def get_reward(self):
+    def get_reward(self, action):
         reward = 0.0
 
         # Recompensa principal por progresso
@@ -303,6 +304,12 @@ class Simulation(gym.Env):
         joint_positions, joint_velocities = self.robot.get_joint_states()
         energy_penalty = -0.001 * sum(joint_velocities)
         reward += energy_penalty
+
+        # Penalidade por mudança de direção de movimento em juntas
+        action_products = action * self.episode_last_action  # Números positivos indicam que a direção é a mesma
+        direction_changes = np.sum(action_products < 0)  # Conta mudanças de direção
+        movement_penalty = -2.0 * direction_changes
+        reward += movement_penalty
 
         # Recompensa por sucesso ou falha
         if self.episode_terminated:
@@ -371,7 +378,7 @@ class Simulation(gym.Env):
         info["success"] = self.episode_success
         self.episode_done = self.episode_truncated or self.episode_terminated
 
-        reward = self.get_reward()
+        reward = self.get_reward(action)
         self.episode_reward += reward
 
         # Coletar info final quando o episódio terminar
@@ -379,6 +386,8 @@ class Simulation(gym.Env):
             info["episode"] = {"r": self.episode_reward, "l": self.episode_steps, "distance": self.episode_distance, "success": self.episode_success}
 
         self.transmit_episode_info()
+
+        self.episode_last_action = action
 
         return obs, reward, self.episode_terminated, self.episode_truncated, info
 
