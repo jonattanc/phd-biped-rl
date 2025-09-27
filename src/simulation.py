@@ -34,6 +34,9 @@ class Simulation(gym.Env):
         self.success_distance = 10.0
         self.initial_x_pos = 0.0
         self.prev_distance = 0.0
+        self.max_motor_velocity = 2.0  # rad/s
+        self.max_motor_torque = 130.0  #
+        self.apply_action = self.apply_position_action  # Selecionar a função de controle, por velocidade ou posição
 
         # Variáveis para coleta de dados
         self.episode_reward = 0.0
@@ -274,6 +277,33 @@ class Simulation(gym.Env):
         if self.episode_count % 10 == 0:
             self.logger.info(f"Episódio {self.episode_count} concluído")
 
+    def apply_velocity_action(self, action):
+        action = np.clip(action, -1.0, 1.0)  # Normalizar ação para evitar valores extremos
+
+        target_velocities = action * self.max_motor_velocity
+        forces = [self.max_motor_torque] * self.action_dim
+
+        p.setJointMotorControlArray(bodyUniqueId=self.robot.id, jointIndices=self.robot.revolute_indices, controlMode=p.VELOCITY_CONTROL, targetVelocities=target_velocities, forces=forces)
+
+    def apply_position_action(self, action):
+        action = np.clip(action, -1.0, 1.0)  # Normalizar ação para evitar valores extremos
+
+        joint_states = self.robot.get_joint_states()
+        joint_positions = [s[0] for s in joint_states]
+
+        max_step_size = self.max_motor_velocity * self.time_step_s
+        target_positions = [current_angle + action_value * max_step_size for current_angle, action_value in zip(joint_positions, action)]
+
+        forces = [self.max_motor_torque] * self.action_dim
+
+        p.setJointMotorControlArray(
+            bodyIndex=self.robot.id,
+            jointIndices=self.robot.revolute_indices,
+            controlMode=p.POSITION_CONTROL,
+            targetPositions=target_positions,
+            forces=forces,
+        )
+
     def step(self, action):
         """
         Executa uma ação e retorna (observação, recompensa, done, info).
@@ -285,19 +315,7 @@ class Simulation(gym.Env):
             self.logger.info("Sinal de saída recebido em step. Finalizando simulação.")
             return None, 0.0, True, False, {"exit": True}
 
-        # Normalizar ação para evitar valores extremos
-        action = np.clip(action, -1.0, 1.0)
-
-        # Aplicar ação com controle de posição em vez de velocidade para mais suavidade
-        current_positions = []
-        for i in self.robot.revolute_indices:
-            joint_state = p.getJointState(self.robot.id, i)
-            current_positions.append(joint_state[0])
-
-        target_positions = current_positions + action * 0.1
-
-        # Aplicar ação
-        p.setJointMotorControlArray(bodyUniqueId=self.robot.id, jointIndices=self.robot.revolute_indices, controlMode=p.POSITION_CONTROL, targetPositions=target_positions, forces=[50] * len(action))
+        self.apply_action(action)
 
         # Avançar simulação
         p.stepSimulation()
