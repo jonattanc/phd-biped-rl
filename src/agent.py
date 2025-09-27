@@ -17,7 +17,7 @@ class TrainingCallback(BaseCallback):
 
 
 class Agent:
-    def __init__(self, logger, env=None, model_path=None, algorithm="PPO"):
+    def __init__(self, logger, env=None, model_path=None, algorithm="PPO", device="cpu"):
         self.logger = logger
         self.model = None
         self.algorithm = algorithm
@@ -28,12 +28,12 @@ class Agent:
             # Criar ambiente vetorizado
             self.env = DummyVecEnv([lambda: env])
             self.action_dim = env.action_dim
-            self.model = self._create_model(algorithm)
+            self.model = self._create_model(algorithm, device)
 
         elif model_path is not None:
             self.model = PPO.load(model_path)
 
-    def _create_model(self, algorithm):
+    def _create_model(self, algorithm, device="cpu"):
         # Criar modelo baseado no algoritmo selecionado
         if algorithm.upper() == "PPO":
             return PPO(
@@ -51,6 +51,7 @@ class Agent:
                 vf_coef=0.7,
                 max_grad_norm=0.8,
                 tensorboard_log="./logs/",
+                device="cpu",
             )
         elif algorithm.upper() == "TD3":
             return TD3(
@@ -69,6 +70,7 @@ class Agent:
                 target_policy_noise=0.2,
                 target_noise_clip=0.5,
                 tensorboard_log="./logs/",
+                device=device,
             )
         else:
             raise ValueError(f"Algoritmo {algorithm} não suportado. Use 'PPO' ou 'TD3'")

@@ -3,3 +3,4 @@ xacrodoc==1.2.*
 numpy==2.3.*
 black==25.1.*
 stable-baselines3[extra]
+torch

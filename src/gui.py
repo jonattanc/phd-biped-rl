@@ -13,10 +13,12 @@ import queue
 
 
 class TrainingGUI:
-    def __init__(self):
+    def __init__(self, device="cpu"):
         self.root = tk.Tk()
         self.root.title("Cruzada Generalization - Training Dashboard")
         self.root.geometry("1200x800")
+
+        self.device = device
 
         self.processes = []
         self.pause_values = []
@@ -178,7 +180,9 @@ class TrainingGUI:
         self.exit_values.append(exit_val)
         self.enable_real_time_values.append(realtime_val)
 
-        p = multiprocessing.Process(target=train_process.process_runner, args=(self.current_env, self.current_robot, self.current_algorithm, self.ipc_queue, pause_val, exit_val, realtime_val))
+        p = multiprocessing.Process(
+            target=train_process.process_runner, args=(self.current_env, self.current_robot, self.current_algorithm, self.ipc_queue, pause_val, exit_val, realtime_val, self.device)
+        )
         p.start()
         self.processes.append(p)
 

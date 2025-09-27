@@ -6,7 +6,7 @@ from agent import Agent
 import utils
 
 
-def process_runner(selected_environment, selected_robot, algorithm, ipc_queue, pause_value, exit_value, enable_real_time_value):
+def process_runner(selected_environment, selected_robot, algorithm, ipc_queue, pause_value, exit_value, enable_real_time_value, device="cpu"):
     """Função executada no processo separado para treinamento real"""
 
     logger = utils.get_logger([selected_environment, selected_robot, algorithm], ipc_queue)
@@ -17,7 +17,7 @@ def process_runner(selected_environment, selected_robot, algorithm, ipc_queue, p
         environment = Environment(logger, name=selected_environment)
         robot = Robot(logger, name=selected_robot)
         sim = Simulation(logger, robot, environment, ipc_queue, pause_value, exit_value, enable_real_time_value)
-        agent = Agent(logger, env=sim, algorithm=algorithm)
+        agent = Agent(logger, env=sim, algorithm=algorithm, device=device)
         sim.set_agent(agent)
 
         # Iniciar treinamento
