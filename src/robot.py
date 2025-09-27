@@ -74,7 +74,10 @@ class Robot:
         return len(self.revolute_indices)
 
     def get_joint_states(self):
-        return p.getJointStates(self.id, self.revolute_indices)
+        joint_states = p.getJointStates(self.id, self.revolute_indices)
+        joint_positions = [s[0] for s in joint_states]
+        joint_velocities = [s[1] for s in joint_states]
+        return joint_positions, joint_velocities
 
     def get_observation(self):
         """Retorna observação"""
@@ -86,9 +89,7 @@ class Robot:
         linear_velocity, angular_velocity = link_state[6], link_state[7]
         roll, pitch, yaw = p.getEulerFromQuaternion(orientation)
 
-        joint_states = self.get_joint_states()
-        joint_positions = [s[0] for s in joint_states]
-        joint_velocities = [s[1] for s in joint_states]
+        joint_positions, joint_velocities = self.get_joint_states()
 
         obs = np.array([roll, pitch, yaw] + list(angular_velocity) + joint_positions, dtype=np.float32)
         return obs

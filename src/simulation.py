@@ -27,23 +27,16 @@ class Simulation(gym.Env):
 
         # Configurações de simulação
         self.physics_client = None
-        self.steps = 0
         self.fall_threshold = 0.3
-        self.max_steps = 5000  # ~20.8 segundos (240 * 20.8)
+        self.episode_timeout_s = 20
         self.time_step_s = 1 / 240.0
         self.success_distance = 10.0
-        self.initial_x_pos = 0.0
-        self.prev_distance = 0.0
         self.max_motor_velocity = 2.0  # rad/s
         self.max_motor_torque = 130.0  #
         self.apply_action = self.apply_position_action  # Selecionar a função de controle, por velocidade ou posição
 
         # Variáveis para coleta de dados
-        self.episode_reward = 0.0
-        self.episode_start_time = 0.0
-        self.episode_distance = 0.0
-        self.episode_success = False
-        self.episode_info = {}
+        self.reset_episode_vars()
         self.episode_count = 0
 
         # Configurar ambiente de simulação
@@ -63,13 +56,6 @@ class Simulation(gym.Env):
 
         self.logger.info(f"Simulação configurada: {self.robot.name} no {self.environment.name}")
         self.logger.info(f"Action space: {self.action_dim}, Observation space: {self.observation_dim}")
-
-        # Variáveis de estado
-        self.steps = 0
-        self.max_steps = 5000
-        self.success_distance = 10.0
-        self.fall_threshold = 0.3
-        self.initial_x_pos = 0.0
 
     def setup_sim_env(self):
         """Conecta ao PyBullet e carrega ambiente e robô"""
@@ -143,14 +129,14 @@ class Simulation(gym.Env):
 
         # --- PASSO 4 RESETAR A POSIÇÃO INICIAL DO ROBÔ ---
         # Forçar a referência de distância para 0.0
-        initial_x_pos = 0.0
+        episode_robot_x_initial_position = 0.0
 
         while steps < self.max_steps:
             action = np.random.uniform(-1, 1, size=self.action_dim)
             # Obter observação
             pos, _ = p.getBasePositionAndOrientation(self.robot.id)
             current_x_pos = pos[0]
-            distance_traveled = current_x_pos - initial_x_pos
+            distance_traveled = current_x_pos - episode_robot_x_initial_position
 
             # Calcular recompensa
             progress = distance_traveled - prev_x_pos
@@ -204,18 +190,25 @@ class Simulation(gym.Env):
         self.environment.load_in_simulation(use_fixed_base=True)
         self.robot.load_in_simulation()
 
+    def reset_episode_vars(self):
+        self.episode_reward = 0.0
+        self.episode_start_time = time.time()
+        self.episode_robot_x_initial_position = 0.0
+        self.episode_distance = 0.0
+        self.episode_success = False
+        self.episode_terminated = False
+        self.episode_truncated = False
+        self.episode_episode_done = False
+        self.episode_steps = 0
+        self.episode_info = {}
+
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         """
         Reinicia o ambiente e retorna o estado inicial.
         """
         # Reiniciar variáveis do episódio
-        self.episode_reward = 0.0
-        self.episode_start_time = time.time()
-        self.episode_distance = 0.0
-        self.episode_success = False
-        self.steps = 0
-        self.prev_distance = 0.0
+        self.reset_episode_vars()
 
         # Resetar ambiente de simulação
         if self.is_real_time_enabled != self.enable_real_time_value.value:
@@ -227,8 +220,7 @@ class Simulation(gym.Env):
 
         # Obter posição inicial
         robot_position = self.robot.get_imu_position()
-        self.initial_x_pos = robot_position[0]
-        self.prev_distance = 0.0
+        self.episode_robot_x_initial_position = robot_position[0]
 
         # Configurar parâmetros físicos para estabilidade
         self._configure_robot_stability()
@@ -248,29 +240,22 @@ class Simulation(gym.Env):
 
     def transmit_episode_info(self):
         if len(self.agent.model.ep_info_buffer) > 0 and len(self.agent.model.ep_info_buffer[0]) > 0:
-            episode_info = self.agent.model.ep_info_buffer[0]
+            if self.episode_done:
+                self.on_episode_end()
 
-            if "r" in episode_info and "l" in episode_info:
-                episode_reward = episode_info["r"]
-                episode_length = episode_info["l"]
+                # Limpar buffer após processamento
+                self.agent.model.ep_info_buffer = []
 
-                # Chamar callback quando o episódio terminar
-                if episode_reward is not None:
-                    self.on_episode_end({"reward": episode_reward, "time": episode_length * (1 / 240.0), "distance": episode_info.get("distance", 0), "success": episode_info.get("success", False)})
-
-                    # Limpar buffer após processamento
-                    self.agent.model.ep_info_buffer = []
-
-    def on_episode_end(self, episode_info):
+    def on_episode_end(self):
         self.episode_count += 1
         self.ipc_queue.put(
             {
                 "type": "episode_data",
                 "episode": self.episode_count,
-                "reward": float(episode_info.get("reward", 0)),
-                "time": float(episode_info.get("time", 0)),
-                "distance": float(episode_info.get("distance", 0)),
-                "success": bool(episode_info.get("success", False)),
+                "reward": self.episode_reward,
+                "time": self.episode_steps * self.time_step_s,
+                "distance": self.episode_distance,
+                "success": self.episode_success,
             }
         )
 
@@ -288,8 +273,7 @@ class Simulation(gym.Env):
     def apply_position_action(self, action):
         action = np.clip(action, -1.0, 1.0)  # Normalizar ação para evitar valores extremos
 
-        joint_states = self.robot.get_joint_states()
-        joint_positions = [s[0] for s in joint_states]
+        joint_positions, joint_velocities = self.robot.get_joint_states()
 
         max_step_size = self.max_motor_velocity * self.time_step_s
         target_positions = [current_angle + action_value * max_step_size for current_angle, action_value in zip(joint_positions, action)]
@@ -303,6 +287,31 @@ class Simulation(gym.Env):
             targetPositions=target_positions,
             forces=forces,
         )
+
+    def get_reward(self):
+        reward = 0.0
+
+        # Recompensa principal por progresso
+        progress = self.episode_last_distance - self.episode_distance
+        reward += progress * 5.0
+
+        # Recompensa por distância total (incentivo de longo prazo)
+        reward += self.episode_distance * 2.0
+
+        # Recompensa por estabilidade (menor penalidade por movimento)
+        joint_positions, joint_velocities = self.robot.get_joint_states()
+        energy_penalty = -0.001 * sum(joint_velocities)
+        reward += energy_penalty
+
+        # Recompensa por sucesso ou falha
+        if self.episode_terminated:
+            if self.episode_success:
+                reward += 50
+
+            else:
+                reward -= 5
+
+        return reward
 
     def step(self, action):
         """
@@ -319,7 +328,7 @@ class Simulation(gym.Env):
 
         # Avançar simulação
         p.stepSimulation()
-        self.steps += 1
+        self.episode_steps += 1
 
         if self.is_real_time_enabled:
             time.sleep(self.time_step_s)
@@ -328,78 +337,43 @@ class Simulation(gym.Env):
         obs = self.robot.get_observation()
 
         robot_position = self.robot.get_imu_position()
-        current_x_pos = robot_position[0]
-        distance_traveled = current_x_pos - self.initial_x_pos
-
-        # --- Estratégia de Recompensa Melhorada ---
-        reward = 0.0
-
-        # 1. Recompensa por estar em pé (mais importante no início)
-        standing_reward = max(0, (robot_position[2] - self.fall_threshold)) * 10.0
-        reward += standing_reward
-
-        # 2. Recompensa principal por progresso
-        progress = distance_traveled - self.prev_distance
-        reward += progress * 5.0
-
-        # 3. Recompensa por distância total (incentivo de longo prazo)
-        reward += distance_traveled * 2.0
-
-        # 4. Recompensa incremental por movimento para frente
-        if hasattr(self, "prev_distance"):
-            step_progress = distance_traveled - self.prev_distance
-            if step_progress > 0:
-                reward += step_progress * 2.0  # Grande recompensa por progresso positivo
-            else:
-                reward += step_progress * 1.0  # Penalidade por movimento para trás
-
-        # 5. Recompensa por estabilidade (menor penalidade por movimento)
-        joint_velocities = []
-        for i in self.robot.revolute_indices:
-            joint_state = p.getJointState(self.robot.id, i)
-            joint_velocities.append(abs(joint_state[1]))
-        energy_penalty = -0.001 * sum(joint_velocities)
-        reward += energy_penalty
+        robot_x_position = robot_position[0]
+        robot_z_position = robot_position[2]
+        self.episode_last_distance = self.episode_distance
+        self.episode_distance = robot_x_position - self.episode_robot_x_initial_position
 
         # Condições de Termino
-        done = False
-        truncated = False
-        info = {"distance": distance_traveled, "success": False, "termination": "none"}
+        info = {"distance": self.episode_distance, "termination": "none"}
 
-        # Cond1: Queda
-        if robot_position[2] < self.fall_threshold + 0.1:
-            reward -= 5  # Penalidade maior por queda
-            done = True
+        # Queda
+        if robot_z_position < self.fall_threshold:
+            self.episode_terminated = True
             info["termination"] = "fell"
-            self.logger.debug(f"Robô caiu! Altura: {robot_position[2]:.3f}")
 
-        # Cond2: Sucesso
-        elif distance_traveled >= self.success_distance:
-            reward += 50  # Bônus maior por sucesso
-            done = True
-            info["success"] = True
+        # Sucesso
+        elif self.episode_distance >= self.success_distance:
+            self.episode_terminated = True
+            self.episode_success = True
             info["termination"] = "success"
-            self.logger.debug("Sucesso! Percurso concluído")
 
-        # Cond3: Timeout
-        elif self.steps >= self.max_steps:
-            truncated = True
+        # Timeout
+        elif self.episode_steps * self.time_step_s >= self.episode_timeout_s:
+            self.episode_truncated = True
             info["termination"] = "timeout"
-            reward += distance_traveled * 2.0
-            self.logger.debug("Timeout do episódio")
 
-        # Atualizar distância anterior
-        self.prev_distance = distance_traveled
+        info["success"] = self.episode_success
+        self.episode_done = self.episode_truncated or self.episode_terminated
+
+        reward = self.get_reward()
         self.episode_reward += reward
-        self.episode_distance = distance_traveled
 
         # Coletar info final quando o episódio terminar
-        if done or truncated:
-            info["episode"] = {"r": self.episode_reward, "l": self.steps, "distance": distance_traveled, "success": info["success"]}
+        if self.episode_done:
+            info["episode"] = {"r": self.episode_reward, "l": self.episode_steps, "distance": self.episode_distance, "success": self.episode_success}
 
         self.transmit_episode_info()
 
-        return obs, reward, done, truncated, info
+        return obs, reward, self.episode_terminated, self.episode_truncated, info
 
     def get_episode_info(self):
         """Retorna informações do episódio atual"""
@@ -438,7 +412,7 @@ class Simulation(gym.Env):
 
         # Configuração inicial
         pos, _ = p.getBasePositionAndOrientation(self.robot.id)
-        initial_x_pos = pos[0]
+        episode_robot_x_initial_position = pos[0]
         distance_traveled = 0.0
         steps = 0
         success = False
@@ -458,7 +432,7 @@ class Simulation(gym.Env):
             # Calcular progresso
             pos, _ = p.getBasePositionAndOrientation(self.robot.id)
             current_x_pos = pos[0]
-            distance_traveled = current_x_pos - initial_x_pos
+            distance_traveled = current_x_pos - episode_robot_x_initial_position
 
             # Verificar condições de término
             if pos[2] < self.fall_threshold:
