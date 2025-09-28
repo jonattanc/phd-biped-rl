@@ -60,8 +60,9 @@ class TrainingGUI:
 
         # Seleção de algoritmo
         ttk.Label(control_frame, text="Algoritmo:").grid(row=0, column=0, sticky=tk.W)
-        self.algorithm_var = tk.StringVar(value="PPO")
-        algorithm_combo = ttk.Combobox(control_frame, textvariable=self.algorithm_var, values=["PPO", "TD3"])
+        algorithms = ["TD3", "PPO"]
+        self.algorithm_var = tk.StringVar(value=algorithms[0])
+        algorithm_combo = ttk.Combobox(control_frame, textvariable=self.algorithm_var, values=algorithms)
         algorithm_combo.grid(row=0, column=1, padx=5)
 
         # Seleção de ambiente
@@ -107,7 +108,7 @@ class TrainingGUI:
         self.save_btn = ttk.Button(control_frame, text="Salvar Snapshot", command=self.save_snapshot, state=tk.DISABLED)  # TODO: Revisar
         self.save_btn.grid(row=0, column=9, padx=5)
 
-        self.visualize_btn = ttk.Button(control_frame, text="Ativar visualização", command=self.toggle_visualization, state=tk.DISABLED)  # TODO: Revisar
+        self.visualize_btn = ttk.Button(control_frame, text="Ativar visualização", command=self.toggle_visualization, state=tk.DISABLED)
         self.visualize_btn.grid(row=0, column=10, padx=5)
 
         # Gráficos:

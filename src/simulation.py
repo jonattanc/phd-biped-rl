@@ -27,10 +27,12 @@ class Simulation(gym.Env):
         self.physics_client = None
 
         # Configurações de simulação
-        self.fall_threshold = 0.3  # m
+        self.fall_threshold = 0.5  # m
         self.yaw_threshold = 0.5  # rad
         self.episode_timeout_s = 20  # s
-        self.time_step_s = 1 / 240.0  # s
+        self.physics_step_s = 1 / 240.0  # 240 Hz, ~4.16 ms
+        self.physics_step_multiplier = 5
+        self.time_step_s = self.physics_step_s * self.physics_step_multiplier  # 240/5 = 48 Hz, ~20.83 ms
         self.success_distance = 10.0  # m
         self.max_motor_velocity = 2.0  # rad/s
         self.max_motor_torque = 130.0  # Nm
@@ -72,7 +74,7 @@ class Simulation(gym.Env):
         p.resetDebugVisualizerCamera(cameraDistance=3, cameraYaw=45, cameraPitch=-30, cameraTargetPosition=[0, 0, 0])
 
         p.setGravity(0, 0, -9.807)
-        p.setTimeStep(self.time_step_s)
+        p.setTimeStep(self.physics_step_s)
 
         self.environment.load_in_simulation(use_fixed_base=True)
         self.robot.load_in_simulation()
@@ -313,7 +315,7 @@ class Simulation(gym.Env):
 
         # Penalidade por inclinação do robô, para manter postura correta
         roll, pitch, yaw = robot_orientation
-        posture_penalty = -0.01 * roll**2 - 0.03 * pitch**2
+        posture_penalty = -0.01 * roll**2 - 0.04 * pitch**2
         reward += posture_penalty
 
         # Recompensa por sucesso ou falha
@@ -322,7 +324,7 @@ class Simulation(gym.Env):
                 reward += 100
 
             else:
-                reward -= 150
+                reward -= 250
 
         return reward
 
@@ -340,11 +342,13 @@ class Simulation(gym.Env):
         self.apply_action(action)
 
         # Avançar simulação
-        p.stepSimulation()
-        self.episode_steps += 1
+        for _ in range(self.physics_step_multiplier):
+            p.stepSimulation()
 
-        if self.is_real_time_enabled:
-            time.sleep(self.time_step_s)
+            # if self.is_real_time_enabled:
+            #     time.sleep(self.physics_step_s)
+
+        self.episode_steps += 1
 
         # Obter observação
         obs = self.robot.get_observation()
