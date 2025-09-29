@@ -486,6 +486,8 @@ class TrainingGUI:
             dimension_window = tk.Toplevel(self.root)
             dimension_window.title("Configurações de Exportação")
             dimension_window.geometry("300x200")
+            dimension_window.transient(self.root)
+            dimension_window.grab_set()
             
             ttk.Label(dimension_window, text="Largura (polegadas):").pack(pady=5)
             width_var = tk.StringVar(value="10")
@@ -501,12 +503,18 @@ class TrainingGUI:
             ttk.Label(dimension_window, text="DPI:").pack(pady=5)
             dpi_entry = ttk.Entry(dimension_window, textvariable=dpi_var)
             dpi_entry.pack(pady=5)
+
+            button_frame = ttk.Frame(dimension_window)
+            button_frame.pack(pady=10)
             
             def do_export():
                 try:
                     width = float(width_var.get())
                     height = float(height_var.get())
                     dpi = int(dpi_var.get())
+                    if width <= 0 or height <= 0 or dpi <= 0:
+                        messagebox.showerror("Erro", "Valores devem ser maiores que zero.")
+                        return
                     
                     self.save_plots_to_directory(export_dir, width, height, dpi)
                     dimension_window.destroy()
@@ -515,7 +523,15 @@ class TrainingGUI:
                 except ValueError:
                     messagebox.showerror("Erro", "Valores inválidos para dimensões ou DPI.")
             
-            ttk.Button(dimension_window, text="Exportar", command=do_export).pack(pady=10)
+            def cancel_export():
+                dimension_window.destroy()
+
+            ttk.Button(button_frame, text="Exportar", command=do_export).pack(side=tk.LEFT, padx=5)
+            ttk.Button(button_frame, text="Cancelar", command=cancel_export).pack(side=tk.LEFT, padx=5)
+
+            width_entry.focus()
+            dimension_window.bind('<Return>', lambda e: do_export())
+            dimension_window.bind('<Escape>', lambda e: cancel_export())
             
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao exportar gráficos: {e}")
