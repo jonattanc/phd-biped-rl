@@ -28,6 +28,7 @@ class TrainingGUI:
         self.pause_values = []
         self.exit_values = []
         self.enable_real_time_values = []
+        self.enable_visualization_values = []
         self.gui_log_queue = queue.Queue()
         self.ipc_queue = multiprocessing.Queue()
         self.ipc_thread = threading.Thread(target=self.ipc_runner, daemon=True)
@@ -71,13 +72,17 @@ class TrainingGUI:
 
         # Controles
         control_frame = ttk.LabelFrame(main_frame, text="Controle de Treinamento", padding="10")
-        control_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=10)
+        control_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=5)
+
+        # Linha1: Seleções Principais
+        row1_frame = ttk.LabelFrame(control_frame)
+        row1_frame.grid(row=0, column=0, columnspan=12, sticky=(tk.W, tk.E), pady=0)
 
         # Seleção de algoritmo
-        ttk.Label(control_frame, text="Algoritmo:").grid(row=0, column=0, sticky=tk.W, pady=10)
+        ttk.Label(row1_frame, text="Algoritmo:").grid(row=0, column=0, sticky=tk.W, padx=5)
         algorithms = ["FastTD3", "TD3", "PPO"]
         self.algorithm_var = tk.StringVar(value=algorithms[0])
-        algorithm_combo = ttk.Combobox(control_frame, textvariable=self.algorithm_var, values=algorithms)
+        algorithm_combo = ttk.Combobox(row1_frame, textvariable=self.algorithm_var, values=algorithms)
         algorithm_combo.grid(row=0, column=1, padx=5)
 
         # Seleção de ambiente
@@ -92,9 +97,9 @@ class TrainingGUI:
             self.root.destroy()
             return
 
-        ttk.Label(control_frame, text="Ambiente:").grid(row=0, column=2, sticky=tk.W)
+        ttk.Label(row1_frame, text="Ambiente:").grid(row=0, column=2, sticky=tk.W, padx=5)
         self.env_var = tk.StringVar(value=xacro_env_files[0])
-        env_combo = ttk.Combobox(control_frame, textvariable=self.env_var, values=xacro_env_files)
+        env_combo = ttk.Combobox(row1_frame, textvariable=self.env_var, values=xacro_env_files)
         env_combo.grid(row=0, column=3, padx=5)
 
         # Seleção de robô
@@ -105,43 +110,63 @@ class TrainingGUI:
             self.root.destroy()
             return
 
-        ttk.Label(control_frame, text="Robô:").grid(row=0, column=4, sticky=tk.W)
+        ttk.Label(row1_frame, text="Robô:").grid(row=0, column=4, sticky=tk.W, padx=5)
         self.robot_var = tk.StringVar(value=xacro_robot_files[0])
-        robot_combo = ttk.Combobox(control_frame, textvariable=self.robot_var, values=xacro_robot_files)
+        robot_combo = ttk.Combobox(row1_frame, textvariable=self.robot_var, values=xacro_robot_files, width=12)
         robot_combo.grid(row=0, column=5, padx=5)
 
         # Botões de controle
-        self.start_btn = ttk.Button(control_frame, text="Iniciar Treinamento", command=self.start_training)
+        self.start_btn = ttk.Button(row1_frame, text="Iniciar Treinamento", command=self.start_training)
         self.start_btn.grid(row=0, column=6, padx=5)
 
-        self.pause_btn = ttk.Button(control_frame, text="Pausar", command=self.pause_training, state=tk.DISABLED)
+        self.pause_btn = ttk.Button(row1_frame, text="Pausar", command=self.pause_training, state=tk.DISABLED)
         self.pause_btn.grid(row=0, column=7, padx=5)
 
-        self.stop_btn = ttk.Button(control_frame, text="Finalizar", command=self.stop_training, state=tk.DISABLED)
+        self.stop_btn = ttk.Button(row1_frame, text="Finalizar", command=self.stop_training, state=tk.DISABLED)
         self.stop_btn.grid(row=0, column=8, padx=5)
 
-        self.save_btn = ttk.Button(control_frame, text="Salvar Snapshot", command=self.save_snapshot, state=tk.DISABLED)  # TODO: Revisar
-        self.save_btn.grid(row=0, column=9, padx=5)
+        # Linha 2: Botões secundários e checkboxes
+        row2_frame = ttk.Frame(control_frame)
+        row2_frame.grid(row=1, column=0, columnspan=12, sticky=(tk.W, tk.E), pady=5)
+        
+        self.save_training_btn = ttk.Button(row2_frame, text="Salvar Treinamento", command=self.save_training_data, state=tk.DISABLED)
+        self.save_training_btn.grid(row=0, column=0, padx=5)
+        
+        self.load_training_btn = ttk.Button(row2_frame, text="Carregar Treinamento", command=self.load_training_data)
+        self.load_training_btn.grid(row=0, column=1, padx=5)
+        
+        self.export_plots_btn = ttk.Button(row2_frame, text="Exportar Gráficos", command=self.export_plots, state=tk.DISABLED)
+        self.export_plots_btn.grid(row=0, column=2, padx=5)
 
-        self.visualize_btn = ttk.Button(control_frame, text="Ativar visualização", command=self.toggle_visualization, state=tk.DISABLED)
-        self.visualize_btn.grid(row=0, column=10, padx=5)
+        self.save_btn = ttk.Button(row2_frame, text="Salvar Snapshot", command=self.save_snapshot, state=tk.DISABLED)
+        self.save_btn.grid(row=0, column=3, padx=5)
+        
+        self.visualization_var = tk.BooleanVar(value=False)
+        self.visualization_check = ttk.Checkbutton(
+            row2_frame, 
+            text="Ativar Visualização", 
+            variable=self.visualization_var,
+            command=self.toggle_visualization,
+            state=tk.DISABLED
+        )
+        self.visualization_check.grid(row=0, column=4, padx=5)
+        
+        self.real_time_var = tk.BooleanVar(value=False)
+        self.real_time_check = ttk.Checkbutton(
+            row2_frame, 
+            text="Ativar Tempo Real", 
+            variable=self.real_time_var,
+            command=self.toggle_real_time,
+            state=tk.DISABLED
+        )
+        self.real_time_check.grid(row=0, column=5, padx=5)
 
-        # Salvamento na interface
-        save_frame = ttk.Frame(control_frame)
-        save_frame.grid(row=2, column=0, columnspan=6, sticky=(tk.W, tk.E), pady=5)
-        
-        self.save_training_btn = ttk.Button(save_frame, text="Salvar Treinamento", command=self.save_training_data, state=tk.DISABLED)
-        self.save_training_btn.pack(side=tk.LEFT, padx=5)
-        
-        self.load_training_btn = ttk.Button(save_frame, text="Carregar Treinamento", command=self.load_training_data)
-        self.load_training_btn.pack(side=tk.LEFT, padx=5)
-        
-        self.export_plots_btn = ttk.Button(save_frame, text="Exportar Gráficos", command=self.export_plots, state=tk.DISABLED)
-        self.export_plots_btn.pack(side=tk.LEFT, padx=5)
-        
+        self.steps_label = ttk.Label(row2_frame, text="Total Steps: 0 | Steps/s: 0.0")
+        self.steps_label.grid(row=0, column=6, padx=5)
+
         # Gráficos:
         graph_frame = ttk.LabelFrame(main_frame, text="Desempenho em Tempo Real", padding="10")
-        graph_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=10)
+        graph_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
 
         self.fig, self.axs = plt.subplots(5, 1, figsize=(10, 10), constrained_layout=True, sharex=True)
 
@@ -151,48 +176,56 @@ class TrainingGUI:
         self._initialize_plots()
         self.canvas.draw_idle()
 
-        stats_frame = ttk.Frame(control_frame)
-        stats_frame.grid(row=1, column=0, columnspan=6, sticky=(tk.W, tk.E), pady=5)
-        self.steps_label = ttk.Label(stats_frame, text="Total Steps: 0 | Steps/s: 0.0")
-        self.steps_label.pack(side=tk.LEFT)
-
         # Logs:
         log_frame = ttk.LabelFrame(main_frame, text="Log de Treinamento", padding="10")
-        log_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=10, rowspan=2)
+        log_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
+        
+        # Configurar o grid dentro do log_frame para que o texto expanda
+        log_frame.columnconfigure(0, weight=1)
+        log_frame.rowconfigure(0, weight=1)
+
         self.log_text = tk.Text(log_frame, height=10, state=tk.DISABLED)
         scrollbar = ttk.Scrollbar(log_frame, orient="vertical", command=self.log_text.yview)
         self.log_text.configure(yscrollcommand=scrollbar.set)
-        self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.log_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
 
         # Configurar grid
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
         main_frame.columnconfigure(0, weight=1)
-        main_frame.rowconfigure(1, weight=1)
-        main_frame.rowconfigure(2, weight=1)
+        main_frame.rowconfigure(1, weight=3) # Gráficos expandem
+        main_frame.rowconfigure(2, weight=1) # Logs expandem
+
+        control_frame.columnconfigure(0, weight=1)
+        
 
     def _initialize_plots(self):
         """Inicializa os gráficos com títulos e configurações"""
-        for i, (title, ylabel, color) in enumerate(zip(self.plot_titles, self.plot_ylabels, self.plot_colors)):
-            self.axs[i].clear()
-            if i == 3:  # Gráfico de posição IMU (X, Y, Z)
-                self.axs[i].plot([], [], label="X", color="red", linestyle="-", markersize=3)
-                self.axs[i].plot([], [], label="Y", color="green", linestyle="-", markersize=3)
-                self.axs[i].plot([], [], label="Z", color="blue", linestyle="-", markersize=3)
-            elif i == 4:  # Gráfico de orientação (Roll, Pitch, Yaw)
-                self.axs[i].plot([], [], label="Roll", color="red", linestyle="-", markersize=3)
-                self.axs[i].plot([], [], label="Pitch", color="green", linestyle="-", markersize=3)
-                self.axs[i].plot([], [], label="Yaw", color="blue", linestyle="-", markersize=3)
-            else:  # Gráficos normais
-                self.axs[i].plot([], [], label=ylabel, color=color, linestyle="-", markersize=3)
-            
-            self.axs[i].set_title(title)
-            self.axs[i].set_ylabel(ylabel)
-            self.axs[i].grid(True, alpha=0.3)
-            self.axs[i].legend()
+        try:
+            for i, (title, ylabel, color) in enumerate(zip(self.plot_titles, self.plot_ylabels, self.plot_colors)):
+                self.axs[i].clear()
+                if i == 3:  # Gráfico de posição IMU (X, Y, Z)
+                    self.axs[i].plot([], [], label="X", color="red", linestyle="-", markersize=3)
+                    self.axs[i].plot([], [], label="Y", color="green", linestyle="-", markersize=3)
+                    self.axs[i].plot([], [], label="Z", color="blue", linestyle="-", markersize=3)
+                elif i == 4:  # Gráfico de orientação (Roll, Pitch, Yaw)
+                    self.axs[i].plot([], [], label="Roll", color="red", linestyle="-", markersize=3)
+                    self.axs[i].plot([], [], label="Pitch", color="green", linestyle="-", markersize=3)
+                    self.axs[i].plot([], [], label="Yaw", color="blue", linestyle="-", markersize=3)
+                else:  # Gráficos normais
+                    self.axs[i].plot([], [], label=ylabel, color=color, linestyle="-", markersize=3)
 
-        self.axs[-1].set_xlabel("Episódio")
+                self.axs[i].set_title(title)
+                self.axs[i].set_ylabel(ylabel)
+                self.axs[i].grid(True, alpha=0.3)
+                self.axs[i].legend()
+
+            self.axs[-1].set_xlabel("Episódio")
+        except Exception as e:
+            self.logger.exception(f"Plot error")
+
+        self.root.after(500, self._refresh_plots)
 
     def _refresh_plots(self):
         """Atualiza os gráficos com os dados atuais"""
@@ -271,7 +304,8 @@ class TrainingGUI:
         self.pause_btn.config(state=tk.NORMAL)
         self.stop_btn.config(state=tk.NORMAL)
         self.save_btn.config(state=tk.NORMAL)
-        self.visualize_btn.config(state=tk.NORMAL)
+        self.visualization_check.config(state=tk.NORMAL)
+        self.real_time_check.config(state=tk.NORMAL)
 
         self.current_env = self.env_var.get()
         self.current_robot = self.robot_var.get()
@@ -291,18 +325,17 @@ class TrainingGUI:
         pause_val = multiprocessing.Value("b", 0)
         exit_val = multiprocessing.Value("b", 0)
 
-        if len(self.enable_real_time_values) > 0:
-            realtime_val = multiprocessing.Value("b", self.enable_real_time_values[-1].value)
-
-        else:
-            realtime_val = multiprocessing.Value("b", 0)
+        # Usar valores dos checkboxes
+        visualization_val = multiprocessing.Value("b", self.visualization_var.get())
+        realtime_val = multiprocessing.Value("b", self.real_time_var.get())
 
         self.pause_values.append(pause_val)
         self.exit_values.append(exit_val)
+        self.enable_visualization_values.append(visualization_val)
         self.enable_real_time_values.append(realtime_val)
 
         p = multiprocessing.Process(
-            target=train_process.process_runner, args=(self.current_env, self.current_robot, self.current_algorithm, self.ipc_queue, pause_val, exit_val, realtime_val, self.device)
+            target=train_process.process_runner, args=(self.current_env, self.current_robot, self.current_algorithm, self.ipc_queue, pause_val, exit_val, visualization_val, realtime_val, self.device)
         )
         p.start()
         self.processes.append(p)
@@ -324,6 +357,34 @@ class TrainingGUI:
         self.export_plots_btn.config(state=tk.NORMAL)
 
 
+    def toggle_visualization(self):
+        if not self.enable_visualization_values:
+            self.logger.warning("toggle_visualization: Nenhum processo de treinamento ativo.")
+            return
+
+        new_value = self.visualization_var.get()
+        self.enable_visualization_values[-1].value = new_value
+        
+        if new_value:
+            self.logger.info("Visualização ativada")
+        else:
+            self.logger.info("Visualização desativada")
+
+    def toggle_real_time(self):
+        """Alterna o modo tempo real da simulação"""
+        if not self.enable_real_time_values:
+            self.logger.warning("toggle_real_time: Nenhum processo de treinamento ativo.")
+            return
+
+        new_value = self.real_time_var.get()
+        self.enable_real_time_values[-1].value = new_value
+        
+        if new_value:
+            self.logger.info("Modo tempo real ativado")
+        else:
+            self.logger.info("Modo tempo real desativado")
+
+    
     def pause_training(self):
         if not self.pause_values:
             self.logger.warning("pause_training: Nenhum processo de treinamento ativo.")
@@ -347,22 +408,10 @@ class TrainingGUI:
         self.pause_btn.config(state=tk.DISABLED)
         self.stop_btn.config(state=tk.DISABLED)
         self.save_btn.config(state=tk.DISABLED)
-        self.visualize_btn.config(state=tk.DISABLED)
-
-    def toggle_visualization(self):
-        if not self.enable_real_time_values:
-            self.logger.warning("toggle_visualization: Nenhum processo de treinamento ativo.")
-            return
-
-        if self.enable_real_time_values[-1].value:
-            self.logger.info("Desativando visualização em tempo real.")
-            self.enable_real_time_values[-1].value = 0
-            self.visualize_btn.config(text="Ativar visualização")
-
-        else:
-            self.logger.info("Ativando visualização em tempo real.")
-            self.enable_real_time_values[-1].value = 1
-            self.visualize_btn.config(text="Desativar visualização")
+        self.visualization_check.config(state=tk.DISABLED)
+        self.real_time_check.config(state=tk.DISABLED)
+        self.save_training_btn.config(state=tk.DISABLED)
+        self.export_plots_btn.config(state=tk.DISABLED)
 
     def save_training_data(self):
         """Salva todos os dados do treinamento atual"""
@@ -663,7 +712,10 @@ class TrainingGUI:
                     self.pause_btn.config(state=tk.DISABLED)
                     self.stop_btn.config(state=tk.DISABLED)
                     self.save_btn.config(state=tk.NORMAL)
-                    self.visualize_btn.config(state=tk.DISABLED)
+                    self.visualization_check.config(state=tk.DISABLED)
+                    self.real_time_check.config(state=tk.DISABLED)
+                    self.save_training_btn.config(state=tk.DISABLED)
+                    self.export_plots_btn.config(state=tk.DISABLED)
 
                 else:
                     self.logger.error(f"Tipo de dados desconhecido: {data_type}")

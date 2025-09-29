@@ -8,7 +8,7 @@ import random
 
 
 class Simulation(gym.Env):
-    def __init__(self, logger, robot, environment, ipc_queue, pause_value, exit_value, enable_real_time_value, num_episodes=1, seed=42):
+    def __init__(self, logger, robot, environment, ipc_queue, pause_value, exit_value, enable_visualization_value, enable_real_time_value, num_episodes=1, seed=42):
         super(Simulation, self).__init__()
         np.random.seed(seed)
         random.seed(seed)
@@ -18,7 +18,9 @@ class Simulation(gym.Env):
         self.ipc_queue = ipc_queue
         self.pause_value = pause_value
         self.exit_value = exit_value
+        self.enable_visualization_value = enable_visualization_value
         self.enable_real_time_value = enable_real_time_value
+        self.is_visualization_enabled = enable_visualization_value.value
         self.is_real_time_enabled = enable_real_time_value.value
         self.num_episodes = num_episodes
 
@@ -45,6 +47,7 @@ class Simulation(gym.Env):
         self.logger.info(f"Robô: {self.robot.name}")
         self.logger.info(f"DOF: {self.robot.get_num_revolute_joints()}")
         self.logger.info(f"Ambiente: {self.environment.name}")
+        self.logger.info(f"Visualização: {self.is_visualization_enabled}, Tempo Real: {self.is_real_time_enabled}")
 
         # Definir espaço de ação e observação
         self.action_dim = self.robot.get_num_revolute_joints()
@@ -65,9 +68,9 @@ class Simulation(gym.Env):
         if self.physics_client is not None:
             p.disconnect()
 
+        # Usar visualização apenas se estiver habilitada
         if self.is_real_time_enabled:
             self.physics_client = p.connect(p.GUI)
-
         else:
             self.physics_client = p.connect(p.DIRECT)
 
@@ -349,6 +352,13 @@ class Simulation(gym.Env):
             self.logger.info("Sinal de saída recebido em step. Finalizando simulação.")
             return None, 0.0, True, False, {"exit": True}
 
+        # Atualizar configurações de visualização e tempo real se necessário
+        if (self.is_visualization_enabled != self.enable_visualization_value.value or 
+            self.is_real_time_enabled != self.enable_real_time_value.value):
+            self.is_visualization_enabled = self.enable_visualization_value.value
+            self.is_real_time_enabled = self.enable_real_time_value.value
+            self.setup_sim_env()
+            
         self.apply_action(action)
 
         # Avançar simulação
