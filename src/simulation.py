@@ -252,6 +252,10 @@ class Simulation(gym.Env):
 
     def on_episode_end(self):
         self.episode_count += 1
+
+        # Obter posição e orientação final da IMU
+        imu_position, imu_orientation = self.robot.get_imu_position_and_orientation()
+
         self.ipc_queue.put(
             {
                 "type": "episode_data",
@@ -260,6 +264,12 @@ class Simulation(gym.Env):
                 "time": self.episode_steps * self.time_step_s,
                 "distance": self.episode_distance,
                 "success": self.episode_success,
+                "imu_x": imu_position[0],
+                "imu_y": imu_position[1], 
+                "imu_z": imu_position[2],
+                "roll": imu_orientation[0],
+                "pitch": imu_orientation[1],
+                "yaw": imu_orientation[2],
             }
         )
 
@@ -349,6 +359,15 @@ class Simulation(gym.Env):
             #     time.sleep(self.physics_step_s)
 
         self.episode_steps += 1
+
+        # Enviar contagem de steps para a GUI
+        try:
+            self.ipc_queue.put_nowait({
+                "type": "step_count", 
+                "steps": self.physics_step_multiplier
+            })
+        except:
+            pass
 
         # Obter observação
         obs = self.robot.get_observation()

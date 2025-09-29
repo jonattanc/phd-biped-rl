@@ -34,17 +34,25 @@ class TrainingGUI:
         # Dados de treinamento:
         self.current_env = ""
         self.current_robot = ""
-        self.episode_data = {"episodes": [], "rewards": [], "times": [], "distances": []}
+        self.episode_data = {"episodes": [], "rewards": [], "times": [], "distances": [],
+            "imu_x": [], "imu_y": [], "imu_z": [],
+            "roll": [], "pitch": [], "yaw": []}
         self.fig, self.axs = plt.subplots(3, figsize=(10, 8))
         self.canvas = None
         self.episode_logger = None
         self.hyperparams = {}
         self.logger = utils.get_logger()
 
-        self.plot_titles = ["Recompensa por Episódio", "Duração do Episódio", "Distância Percorrida"]
-        self.plot_ylabels = ["Recompensa", "Tempo (s)", "Distância (m)"]
-        self.plot_colors = ["blue", "orange", "green"]
-        self.plot_data_keys = ["rewards", "times", "distances"]
+        self.total_steps = 0
+        self.steps_per_second = 0
+        self.last_step_time = time.time()
+
+        self.plot_titles = ["Recompensa por Episódio", "Duração do Episódio", "Distância Percorrida",
+            "Posição IMU (X, Y, Z)", "Orientação (Roll, Pitch, Yaw)"]
+        self.plot_ylabels = ["Recompensa", "Tempo (s)", "Distância (m)",
+            "Posição (m)", "Ângulo (rad)"]
+        self.plot_colors = ["blue", "orange", "green", "red", "purple", "brown"]
+        self.plot_data_keys = ["rewards", "times", "distances", "imu_xyz", "rpy"]
 
         self.logger.info("Interface de treinamento inicializada.")
         self.setup_ui()
@@ -115,13 +123,18 @@ class TrainingGUI:
         graph_frame = ttk.LabelFrame(main_frame, text="Desempenho em Tempo Real", padding="10")
         graph_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=10)
 
-        self.fig, self.axs = plt.subplots(3, 1, figsize=(10, 6), constrained_layout=True, sharex=True)
+        self.fig, self.axs = plt.subplots(5, 1, figsize=(10, 10), constrained_layout=True, sharex=True)
 
         self.canvas = FigureCanvasTkAgg(self.fig, master=graph_frame)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
         self._initialize_plots()
         self.canvas.draw_idle()
+
+        stats_frame = ttk.Frame(control_frame)
+        stats_frame.grid(row=1, column=0, columnspan=6, sticky=(tk.W, tk.E), pady=5)
+        self.steps_label = ttk.Label(stats_frame, text="Total Steps: 0 | Steps/s: 0.0")
+        self.steps_label.pack(side=tk.LEFT)
 
         # Logs:
         log_frame = ttk.LabelFrame(main_frame, text="Log de Treinamento", padding="10")
@@ -143,13 +156,95 @@ class TrainingGUI:
         """Inicializa os gráficos com títulos e configurações"""
         for i, (title, ylabel, color) in enumerate(zip(self.plot_titles, self.plot_ylabels, self.plot_colors)):
             self.axs[i].clear()
-            self.axs[i].plot([], [], label=ylabel, color=color, linestyle="-", markersize=3)
+            if i == 3:  # Gráfico de posição IMU (X, Y, Z)
+                self.axs[i].plot([], [], label="X", color="red", linestyle="-", markersize=3)
+                self.axs[i].plot([], [], label="Y", color="green", linestyle="-", markersize=3)
+                self.axs[i].plot([], [], label="Z", color="blue", linestyle="-", markersize=3)
+            elif i == 4:  # Gráfico de orientação (Roll, Pitch, Yaw)
+                self.axs[i].plot([], [], label="Roll", color="red", linestyle="-", markersize=3)
+                self.axs[i].plot([], [], label="Pitch", color="green", linestyle="-", markersize=3)
+                self.axs[i].plot([], [], label="Yaw", color="blue", linestyle="-", markersize=3)
+            else:  # Gráficos normais
+                self.axs[i].plot([], [], label=ylabel, color=color, linestyle="-", markersize=3)
+            
             self.axs[i].set_title(title)
             self.axs[i].set_ylabel(ylabel)
             self.axs[i].grid(True, alpha=0.3)
             self.axs[i].legend()
 
         self.axs[-1].set_xlabel("Episódio")
+
+    def _refresh_plots(self):
+        """Atualiza os gráficos com os dados atuais"""
+        try:
+            if not self.episode_data["episodes"] or not self.new_plot_data:
+                self.root.after(500, self._refresh_plots)
+                return
+
+            self.new_plot_data = False
+
+            with self.plot_data_lock:
+                for i, (title, ylabel, color, data_key) in enumerate(zip(self.plot_titles, self.plot_ylabels, self.plot_colors, self.plot_data_keys)):
+                    self.axs[i].clear()
+                    if i == 3:  # Gráfico de posição IMU
+                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_x"], label="X", color="red", linestyle="-", markersize=3)
+                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_y"], label="Y", color="green", linestyle="-", markersize=3)
+                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_z"], label="Z", color="blue", linestyle="-", markersize=3)
+                    elif i == 4:  # Gráfico de orientação
+                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["roll"], label="Roll", color="red", linestyle="-", markersize=3)
+                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["pitch"], label="Pitch", color="green", linestyle="-", markersize=3)
+                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["yaw"], label="Yaw", color="blue", linestyle="-", markersize=3)
+                    else:  # Gráficos normais
+                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data[data_key], label=ylabel, color=color, linestyle="-", markersize=3)
+                    
+                    self.axs[i].set_title(title)
+                    self.axs[i].set_ylabel(ylabel)
+                    self.axs[i].legend()
+                    self.axs[i].grid(True, alpha=0.3)
+
+                self.axs[-1].set_xlabel("Episódio")
+
+            self.canvas.draw()
+
+        except Exception as e:
+            self.logger.exception(f"Plot error")
+
+        self.root.after(500, self._refresh_plots)
+
+    def _update_step_counter(self):
+        """Atualiza o contador de steps a cada segundo"""
+        current_time = time.time()
+        time_diff = current_time - self.last_step_time
+        
+        if time_diff >= 1.0:  # Atualizar a cada segundo
+            if time_diff > 0:
+                self.steps_per_second = self.total_steps / time_diff
+            self.steps_label.config(text=f"Total Steps: {self.total_steps} | Steps/s: {self.steps_per_second:.1f}")
+            self.total_steps = 0
+            self.last_step_time = current_time
+        
+        self.root.after(100, self._update_step_counter)
+    
+    def _update_log_display(self):
+        """Atualiza a exibição de logs"""
+        if self.gui_log_queue.empty():
+            self.root.after(500, self._update_log_display)
+            return
+
+        self.log_text.config(state=tk.NORMAL)
+
+        try:
+            for _ in range(500):
+                message = self.gui_log_queue.get_nowait()
+                self.log_text.insert(tk.END, message + "\n")
+
+        except queue.Empty:
+            pass
+
+        self.log_text.see(tk.END)
+        self.log_text.config(state=tk.DISABLED)
+        self.root.after(500, self._update_log_display)
+
 
     def start_training(self):
         self.start_btn.config(state=tk.DISABLED)
@@ -163,7 +258,12 @@ class TrainingGUI:
         self.current_algorithm = self.algorithm_var.get()
 
         # Limpar dados anteriores
-        self.episode_data = {"episodes": [], "rewards": [], "times": [], "distances": []}
+        self.episode_data = {"episodes": [], "rewards": [], "times": [], "distances": [],
+            "imu_x": [], "imu_y": [], "imu_z": [],
+            "roll": [], "pitch": [], "yaw": []}
+        self.total_steps = 0
+        self.steps_per_second = 0
+        self.last_step_time = time.time()
         self._initialize_plots()
         self.canvas.draw()
 
@@ -188,53 +288,6 @@ class TrainingGUI:
         self.processes.append(p)
 
         self.logger.info(f"Processo de treinamento iniciado: {self.current_env} + {self.current_robot} + {self.current_algorithm}")
-
-    def _refresh_plots(self):
-        """Atualiza os gráficos com os dados atuais"""
-        try:
-            if not self.episode_data["episodes"] or not self.new_plot_data:
-                self.root.after(500, self._refresh_plots)
-                return
-
-            self.new_plot_data = False
-
-            with self.plot_data_lock:
-                for i, (title, ylabel, color, data_key) in enumerate(zip(self.plot_titles, self.plot_ylabels, self.plot_colors, self.plot_data_keys)):
-                    self.axs[i].clear()
-                    self.axs[i].plot(self.episode_data["episodes"], self.episode_data[data_key], label=ylabel, color=color, linestyle="-", markersize=3)
-                    self.axs[i].set_title(title)
-                    self.axs[i].set_ylabel(ylabel)
-                    self.axs[i].legend()
-                    self.axs[i].grid(True, alpha=0.3)
-
-                self.axs[-1].set_xlabel("Episódio")
-
-            self.canvas.draw()
-
-        except Exception as e:
-            self.logger.exception(f"Plot error")
-
-        self.root.after(500, self._refresh_plots)
-
-    def _update_log_display(self):
-        """Atualiza a exibição de logs"""
-        if self.gui_log_queue.empty():
-            self.root.after(500, self._update_log_display)
-            return
-
-        self.log_text.config(state=tk.NORMAL)
-
-        try:
-            for _ in range(500):
-                message = self.gui_log_queue.get_nowait()
-                self.log_text.insert(tk.END, message + "\n")
-
-        except queue.Empty:
-            pass
-
-        self.log_text.see(tk.END)
-        self.log_text.config(state=tk.DISABLED)
-        self.root.after(500, self._update_log_display)
 
     def pause_training(self):
         if not self.pause_values:
@@ -321,9 +374,19 @@ class TrainingGUI:
                         self.episode_data["rewards"].append(msg["reward"])
                         self.episode_data["times"].append(msg["time"])
                         self.episode_data["distances"].append(msg["distance"])
+                        self.episode_data["imu_x"].append(msg.get("imu_x", 0))
+                        self.episode_data["imu_y"].append(msg.get("imu_y", 0))
+                        self.episode_data["imu_z"].append(msg.get("imu_z", 0))
+                        self.episode_data["roll"].append(msg.get("roll", 0))
+                        self.episode_data["pitch"].append(msg.get("pitch", 0))
+                        self.episode_data["yaw"].append(msg.get("yaw", 0))
 
                     self.new_plot_data = True
 
+                elif data_type == "step_count":
+                    # Atualizar contador de steps
+                    self.total_steps += msg.get("steps", 0)
+                
                 elif data_type == "done":
                     self.logger.info("Processo de treinamento finalizado.")
                     self.start_btn.config(state=tk.NORMAL)
@@ -372,5 +435,6 @@ class TrainingGUI:
         self.ipc_thread.start()
         self.root.after(500, self._update_log_display)
         self.root.after(500, self._refresh_plots)
+        self.root.after(100, self._update_step_counter)
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         self.root.mainloop()
