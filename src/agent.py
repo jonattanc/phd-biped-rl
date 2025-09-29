@@ -111,6 +111,14 @@ class Agent:
         else:
             raise ValueError(f"Algoritmo {algorithm} não suportado. Use 'PPO', 'TD3' ou 'FastTD3'")
 
+    def save_model(self, model_path):
+        """Salva o modelo treinado"""
+        if self.model is not None:
+            self.model.save(model_path)
+            self.logger.info(f"Modelo salvo em: {model_path}")
+        else:
+            raise ValueError("Nenhum modelo para salvar")
+        
     def _load_model(self, model_path):
         # Carrega modelo treinado detectando automaticamente o tipo
         try:

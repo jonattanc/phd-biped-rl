@@ -1,6 +1,7 @@
 # gui.py
 import tkinter as tk
 from tkinter import ttk, messagebox
+from tkinter import filedialog
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import threading
@@ -10,13 +11,16 @@ import utils
 import train_process
 import multiprocessing
 import queue
+import json
+import shutil
+from datetime import datetime
 
 
 class TrainingGUI:
     def __init__(self, device="cpu"):
         self.root = tk.Tk()
         self.root.title("Cruzada Generalization - Training Dashboard")
-        self.root.geometry("1200x800")
+        self.root.geometry("1400x1000") #tamanho da gui
 
         self.device = device
 
@@ -47,6 +51,9 @@ class TrainingGUI:
         self.steps_per_second = 0
         self.last_step_time = time.time()
 
+        self.training_data_dir = "training_data"
+        self.current_training_session = None
+
         self.plot_titles = ["Recompensa por Episódio", "Duração do Episódio", "Distância Percorrida",
             "Posição IMU (X, Y, Z)", "Orientação (Roll, Pitch, Yaw)"]
         self.plot_ylabels = ["Recompensa", "Tempo (s)", "Distância (m)",
@@ -67,7 +74,7 @@ class TrainingGUI:
         control_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=10)
 
         # Seleção de algoritmo
-        ttk.Label(control_frame, text="Algoritmo:").grid(row=0, column=0, sticky=tk.W)
+        ttk.Label(control_frame, text="Algoritmo:").grid(row=0, column=0, sticky=tk.W, pady=10)
         algorithms = ["FastTD3", "TD3", "PPO"]
         self.algorithm_var = tk.StringVar(value=algorithms[0])
         algorithm_combo = ttk.Combobox(control_frame, textvariable=self.algorithm_var, values=algorithms)
@@ -119,6 +126,19 @@ class TrainingGUI:
         self.visualize_btn = ttk.Button(control_frame, text="Ativar visualização", command=self.toggle_visualization, state=tk.DISABLED)
         self.visualize_btn.grid(row=0, column=10, padx=5)
 
+        # Salvamento na interface
+        save_frame = ttk.Frame(control_frame)
+        save_frame.grid(row=2, column=0, columnspan=6, sticky=(tk.W, tk.E), pady=5)
+        
+        self.save_training_btn = ttk.Button(save_frame, text="Salvar Treinamento", command=self.save_training_data, state=tk.DISABLED)
+        self.save_training_btn.pack(side=tk.LEFT, padx=5)
+        
+        self.load_training_btn = ttk.Button(save_frame, text="Carregar Treinamento", command=self.load_training_data)
+        self.load_training_btn.pack(side=tk.LEFT, padx=5)
+        
+        self.export_plots_btn = ttk.Button(save_frame, text="Exportar Gráficos", command=self.export_plots, state=tk.DISABLED)
+        self.export_plots_btn.pack(side=tk.LEFT, padx=5)
+        
         # Gráficos:
         graph_frame = ttk.LabelFrame(main_frame, text="Desempenho em Tempo Real", padding="10")
         graph_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=10)
@@ -289,6 +309,21 @@ class TrainingGUI:
 
         self.logger.info(f"Processo de treinamento iniciado: {self.current_env} + {self.current_robot} + {self.current_algorithm}")
 
+        # Criar sessão de treinamento atual
+        self.current_training_session = {
+            'start_time': datetime.now(),
+            'environment': self.current_env,
+            'robot': self.current_robot,
+            'algorithm': self.current_algorithm,
+            'episode_data': self.episode_data.copy(),
+            'hyperparams': self.hyperparams
+        }
+        
+        # Habilitar botão de salvamento
+        self.save_training_btn.config(state=tk.NORMAL)
+        self.export_plots_btn.config(state=tk.NORMAL)
+
+
     def pause_training(self):
         if not self.pause_values:
             self.logger.warning("pause_training: Nenhum processo de treinamento ativo.")
@@ -329,6 +364,225 @@ class TrainingGUI:
             self.enable_real_time_values[-1].value = 1
             self.visualize_btn.config(text="Desativar visualização")
 
+    def save_training_data(self):
+        """Salva todos os dados do treinamento atual"""
+        if not self.current_training_session:
+            messagebox.showwarning("Aviso", "Nenhum treinamento em andamento para salvar.")
+            return
+        
+        try:
+            # Criar diretório principal se não existir
+            os.makedirs(self.training_data_dir, exist_ok=True)
+            
+            # Criar pasta específica para esta sessão
+            timestamp = self.current_training_session['start_time'].strftime("%Y%m%d_%H%M%S")
+            session_name = f"{self.current_env}_{self.current_robot}_{self.current_algorithm}_{timestamp}"
+            session_dir = os.path.join(self.training_data_dir, session_name)
+            os.makedirs(session_dir, exist_ok=True)
+            
+            # Salvar dados do treinamento
+            training_data = {
+                'session_info': {
+                    'environment': self.current_env,
+                    'robot': self.current_robot,
+                    'algorithm': self.current_algorithm,
+                    'start_time': self.current_training_session['start_time'].isoformat(),
+                    'total_steps': self.total_steps,
+                    'device': self.device
+                },
+                'episode_data': self.episode_data,
+                'hyperparams': self.hyperparams
+            }
+            
+            with open(os.path.join(session_dir, 'training_data.json'), 'w') as f:
+                json.dump(training_data, f, indent=2)
+            
+            # Salvar modelo se existir
+            if hasattr(self, 'processes') and self.processes:
+                try:
+                    models_dir = os.path.join(session_dir, 'models')
+                    os.makedirs(models_dir, exist_ok=True)
+                    # Aqui você precisaria acessar o modelo do processo de treinamento
+                    # Esta parte depende da sua implementação específica
+                    model_path = os.path.join(models_dir, 'model.zip')
+                    # agent.model.save(model_path) - precisa ser implementado
+                except Exception as e:
+                    self.logger.warning(f"Erro ao salvar modelo: {e}")
+            
+            # Salvar logs
+            logs_dir = os.path.join(session_dir, 'logs')
+            os.makedirs(logs_dir, exist_ok=True)
+            
+            # Copiar arquivos de log relevantes
+            log_files = [f for f in os.listdir('logs') if f.endswith('.txt')]
+            for log_file in log_files:
+                shutil.copy2(os.path.join('logs', log_file), logs_dir)
+            
+            # Salvar gráficos
+            plots_dir = os.path.join(session_dir, 'plots')
+            os.makedirs(plots_dir, exist_ok=True)
+            self.save_plots_to_directory(plots_dir)
+            
+            messagebox.showinfo("Sucesso", f"Treinamento salvo em: {session_dir}")
+            
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro ao salvar treinamento: {e}")
+
+    def load_training_data(self):
+        """Carrega dados de treinamento salvos"""
+        try:
+            session_dir = filedialog.askdirectory(
+                title="Selecione a pasta do treinamento",
+                initialdir=self.training_data_dir
+            )
+            
+            if not session_dir:
+                return
+            
+            # Carregar dados do treinamento
+            data_file = os.path.join(session_dir, 'training_data.json')
+            if not os.path.exists(data_file):
+                messagebox.showerror("Erro", "Arquivo de dados não encontrado.")
+                return
+            
+            with open(data_file, 'r') as f:
+                training_data = json.load(f)
+            
+            # Restaurar dados do treinamento
+            session_info = training_data['session_info']
+            self.episode_data = training_data['episode_data']
+            self.hyperparams = training_data.get('hyperparams', {})
+            
+            # Atualizar interface
+            self.current_env = session_info['environment']
+            self.current_robot = session_info['robot'] 
+            self.current_algorithm = session_info['algorithm']
+            
+            # Atualizar gráficos
+            self.new_plot_data = True
+            self._refresh_plots()
+            
+            # Habilitar botões
+            self.save_training_btn.config(state=tk.NORMAL)
+            self.export_plots_btn.config(state=tk.NORMAL)
+            
+            messagebox.showinfo("Sucesso", "Treinamento carregado com sucesso!")
+            
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro ao carregar treinamento: {e}")
+
+    def export_plots(self):
+        """Exporta gráficos como imagens para uso na tese"""
+        try:
+            export_dir = filedialog.askdirectory(
+                title="Selecione onde salvar os gráficos",
+                initialdir=os.path.expanduser("~")
+            )
+            
+            if not export_dir:
+                return
+            
+            # Opções de dimensões
+            dimension_window = tk.Toplevel(self.root)
+            dimension_window.title("Configurações de Exportação")
+            dimension_window.geometry("300x200")
+            
+            ttk.Label(dimension_window, text="Largura (polegadas):").pack(pady=5)
+            width_var = tk.StringVar(value="10")
+            width_entry = ttk.Entry(dimension_window, textvariable=width_var)
+            width_entry.pack(pady=5)
+            
+            ttk.Label(dimension_window, text="Altura (polegadas):").pack(pady=5)
+            height_var = tk.StringVar(value="8")
+            height_entry = ttk.Entry(dimension_window, textvariable=height_var)
+            height_entry.pack(pady=5)
+            
+            dpi_var = tk.StringVar(value="300")
+            ttk.Label(dimension_window, text="DPI:").pack(pady=5)
+            dpi_entry = ttk.Entry(dimension_window, textvariable=dpi_var)
+            dpi_entry.pack(pady=5)
+            
+            def do_export():
+                try:
+                    width = float(width_var.get())
+                    height = float(height_var.get())
+                    dpi = int(dpi_var.get())
+                    
+                    self.save_plots_to_directory(export_dir, width, height, dpi)
+                    dimension_window.destroy()
+                    messagebox.showinfo("Sucesso", f"Gráficos exportados para: {export_dir}")
+                    
+                except ValueError:
+                    messagebox.showerror("Erro", "Valores inválidos para dimensões ou DPI.")
+            
+            ttk.Button(dimension_window, text="Exportar", command=do_export).pack(pady=10)
+            
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro ao exportar gráficos: {e}")
+
+    def save_plots_to_directory(self, directory, width=10, height=8, dpi=300):
+        """Salva todos os gráficos em um diretório"""
+        try:
+            # Salvar gráfico combinado
+            combined_fig, combined_axs = plt.subplots(5, 1, figsize=(width, height*2.5), constrained_layout=True)
+            self._plot_to_figure(combined_axs)
+            combined_fig.savefig(os.path.join(directory, 'all_plots.png'), dpi=dpi, bbox_inches='tight')
+            plt.close(combined_fig)
+            
+            # Salvar gráficos individuais
+            for i, (title, ylabel, color, data_key) in enumerate(zip(
+                self.plot_titles, self.plot_ylabels, self.plot_colors, self.plot_data_keys
+            )):
+                fig, ax = plt.subplots(figsize=(width, height))
+                
+                if i == 3:  # Gráfico de posição IMU
+                    ax.plot(self.episode_data["episodes"], self.episode_data["imu_x"], label="X", color="red")
+                    ax.plot(self.episode_data["episodes"], self.episode_data["imu_y"], label="Y", color="green") 
+                    ax.plot(self.episode_data["episodes"], self.episode_data["imu_z"], label="Z", color="blue")
+                elif i == 4:  # Gráfico de orientação
+                    ax.plot(self.episode_data["episodes"], self.episode_data["roll"], label="Roll", color="red")
+                    ax.plot(self.episode_data["episodes"], self.episode_data["pitch"], label="Pitch", color="green")
+                    ax.plot(self.episode_data["episodes"], self.episode_data["yaw"], label="Yaw", color="blue")
+                else:
+                    ax.plot(self.episode_data["episodes"], self.episode_data[data_key], label=ylabel, color=color)
+                
+                ax.set_title(title)
+                ax.set_ylabel(ylabel)
+                ax.set_xlabel("Episódio")
+                ax.legend()
+                ax.grid(True, alpha=0.3)
+                
+                filename = f"plot_{data_key}.png"
+                fig.savefig(os.path.join(directory, filename), dpi=dpi, bbox_inches='tight')
+                plt.close(fig)
+                
+        except Exception as e:
+            self.logger.error(f"Erro ao salvar gráficos: {e}")
+
+    def _plot_to_figure(self, axs):
+        """Plota dados nos eixos fornecidos"""
+        for i, (title, ylabel, color, data_key) in enumerate(zip(
+            self.plot_titles, self.plot_ylabels, self.plot_colors, self.plot_data_keys
+        )):
+            axs[i].clear()
+            if i == 3:  # Gráfico de posição IMU
+                axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_x"], label="X", color="red")
+                axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_y"], label="Y", color="green")
+                axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_z"], label="Z", color="blue")
+            elif i == 4:  # Gráfico de orientação
+                axs[i].plot(self.episode_data["episodes"], self.episode_data["roll"], label="Roll", color="red")
+                axs[i].plot(self.episode_data["episodes"], self.episode_data["pitch"], label="Pitch", color="green")
+                axs[i].plot(self.episode_data["episodes"], self.episode_data["yaw"], label="Yaw", color="blue")
+            else:
+                axs[i].plot(self.episode_data["episodes"], self.episode_data[data_key], label=ylabel, color=color)
+            
+            axs[i].set_title(title)
+            axs[i].set_ylabel(ylabel)
+            axs[i].legend()
+            axs[i].grid(True, alpha=0.3)
+
+        axs[-1].set_xlabel("Episódio")
+        
     def save_snapshot(self):
         """Salva o modelo treinado e executa avaliação para gerar métricas de complexidade."""
         try:
