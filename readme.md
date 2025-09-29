@@ -13,12 +13,13 @@ Treinar 6 agentes especialistas (AE), cada um em um circuito distinto (PR, P<μ,
 
 ### Install Python
 
-This project is being developped with python 3.12.
+This project is being developped with python 3.12.7
 
 ### Clone the repository
 
 ```
 git clone https://github.com/jonattanc/phd-biped-rl.git
+git pull --no-edit  # Pegar alterações 
 cd phd-biped-rl
 ```
 

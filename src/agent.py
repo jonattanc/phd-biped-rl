@@ -4,7 +4,34 @@ import numpy as np
 from stable_baselines3 import PPO, TD3
 from stable_baselines3.common.vec_env import DummyVecEnv
 from stable_baselines3.common.callbacks import BaseCallback
+from stable_baselines3.common.noise import NormalActionNoise
 
+
+class FastTD3(TD3):
+    """
+    Implementação do Fast TD3 com atualizações mais frequentes
+    """
+    def __init__(self, *args, **kwargs):
+        action_dim = kwargs.pop('action_dim', 1)
+        
+        # Configurações otimizadas para Fast TD3
+        kwargs.update({
+            'learning_rate': 3e-4,  
+            'buffer_size': 200000,  
+            'learning_starts': 5000,  
+            'batch_size': 256,  
+            'tau': 0.005,  
+            'gamma': 0.99,
+            'train_freq': (1, "step"),  
+            'gradient_steps': 1,  
+            'policy_delay': 2,
+            'target_policy_noise': 0.2,
+            'target_noise_clip': 0.5,
+            'action_noise': NormalActionNoise(mean=np.zeros(action_dim), 
+                                            sigma=0.1 * np.ones(action_dim))
+        })
+        super().__init__(*args, **kwargs)
+    
 
 class TrainingCallback(BaseCallback):
     def _on_step(self) -> bool:
@@ -72,8 +99,17 @@ class Agent:
                 tensorboard_log="./logs/",
                 device=device,
             )
+        elif algorithm.upper() == "FASTTD3":  
+            return FastTD3(
+                "MlpPolicy",
+                self.env,
+                verbose=1,
+                action_dim=self.action_dim,  
+                tensorboard_log="./logs/",
+                device=device,
+            )
         else:
-            raise ValueError(f"Algoritmo {algorithm} não suportado. Use 'PPO' ou 'TD3'")
+            raise ValueError(f"Algoritmo {algorithm} não suportado. Use 'PPO', 'TD3' ou 'FastTD3'")
 
     def _load_model(self, model_path):
         # Carrega modelo treinado detectando automaticamente o tipo
@@ -91,8 +127,16 @@ class Agent:
                 if hasattr(self.model, "action_space") and self.model.action_space is not None:
                     self.action_dim = self.model.action_space.shape[0]
                 print(f"Modelo TD3 carregado: {model_path}")
-            except Exception as e:
-                raise ValueError(f"Erro ao carregar modelo {model_path}: {e}")
+            except:
+                try:
+                    # Tentar carregar como FastTD3
+                    self.model = FastTD3.load(model_path)
+                    self.algorithm = "FastTD3"
+                    if hasattr(self.model, 'action_space') and self.model.action_space is not None:
+                        self.action_dim = self.model.action_space.shape[0]
+                    print(f"Modelo FastTD3 carregado: {model_path}")
+                except Exception as e:
+                    raise ValueError(f"Erro ao carregar modelo {model_path}: {e}")
 
     def train(self, total_timesteps=100_000):
         """Treina o agente."""
