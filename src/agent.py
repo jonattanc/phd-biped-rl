@@ -36,12 +36,22 @@ class FastTD3(TD3):
 
 
 class TrainingCallback(BaseCallback):
+    def __init__(self, verbose=0):
+        super(TrainingCallback, self).__init__(verbose)
+        
     def _on_step(self) -> bool:
-        infos = self.locals.get("infos")
-
-        if infos and any(info.get("exit", False) for info in infos):
-            return False  # returning False stops training
-
+        try:
+            # Verificar se há informações de ambiente
+            infos = self.locals.get("infos", [])
+            
+            # Se houver infos e alguma indicar saída, parar
+            if infos and any(isinstance(info, dict) and info.get("exit", False) for info in infos):
+                return False
+                
+        except Exception as e:
+            # Em caso de erro, continuar o treinamento
+            pass
+            
         return True
 
 
@@ -60,7 +70,7 @@ class Agent:
             self.model = self._create_model(algorithm, device)
 
         elif model_path is not None:
-            self.model = PPO.load(model_path)
+            self._load_model(model_path)
 
     def _create_model(self, algorithm, device="cpu"):
         # Criar modelo baseado no algoritmo selecionado
@@ -129,14 +139,14 @@ class Agent:
             self.algorithm = "PPO"
             if hasattr(self.model, "action_space") and self.model.action_space is not None:
                 self.action_dim = self.model.action_space.shape[0]
-            print(f"Modelo PPO carregado: {model_path}")
+            self.logger.info(f"Modelo PPO carregado: {model_path}")
         except:
             try:
                 self.model = TD3.load(model_path)
                 self.algorithm = "TD3"
                 if hasattr(self.model, "action_space") and self.model.action_space is not None:
                     self.action_dim = self.model.action_space.shape[0]
-                print(f"Modelo TD3 carregado: {model_path}")
+                self.logger.info(f"Modelo TD3 carregado: {model_path}")
             except:
                 try:
                     # Tentar carregar como FastTD3
@@ -144,17 +154,40 @@ class Agent:
                     self.algorithm = "FastTD3"
                     if hasattr(self.model, "action_space") and self.model.action_space is not None:
                         self.action_dim = self.model.action_space.shape[0]
-                    print(f"Modelo FastTD3 carregado: {model_path}")
+                    self.logger.info(f"Modelo FastTD3 carregado: {model_path}")
                 except Exception as e:
                     raise ValueError(f"Erro ao carregar modelo {model_path}: {e}")
 
+    def set_env(self, env):
+        """Configura o ambiente para um modelo carregado"""
+        if self.model is not None and env is not None:
+            # Criar ambiente vetorizado
+            vec_env = DummyVecEnv([lambda: env])
+            
+            # Configurar o ambiente no modelo
+            self.model.set_env(vec_env)
+            self.env = vec_env
+            self.action_dim = env.action_dim
+            self.logger.info(f"Ambiente configurado para modelo {self.algorithm}")
+        else:
+            self.logger.warning("Não foi possível configurar ambiente: modelo ou ambiente não disponível")
+
     def train(self, total_timesteps=100_000):
         """Treina o agente."""
-        self.logger.info("Executando agent.train")
+        self.logger.info(f"Executando agent.train por {total_timesteps} timesteps")
 
         if self.model is not None:
+            # Verificar se o ambiente está configurado
+            if self.model.get_env() is None:
+                self.logger.error("Ambiente não configurado para o modelo!")
+                raise ValueError("O ambiente deve ser configurado antes do treinamento. Chame set_env() primeiro.")
+            
             callback = TrainingCallback()
-            self.model.learn(total_timesteps=total_timesteps, reset_num_timesteps=False, callback=callback)
+            self.model.learn(
+                total_timesteps=total_timesteps, 
+                reset_num_timesteps=False,
+                callback=callback
+            )
         else:
             raise ValueError("Modelo não foi inicializado.")
 

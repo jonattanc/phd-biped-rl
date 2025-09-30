@@ -53,6 +53,8 @@ class TrainingGUI:
 
         self.training_data_dir = "training_data"
         self.current_training_session = None
+        self.is_resuming = False
+        self.resumed_session_dir = None
 
         self.plot_titles = ["Recompensa por Episódio", "Duração do Episódio", "Distância Percorrida",
             "Posição IMU (X, Y, Z)", "Orientação (Roll, Pitch, Yaw)"]
@@ -63,6 +65,7 @@ class TrainingGUI:
 
         self.logger.info("Interface de treinamento inicializada.")
         self.setup_ui()
+
 
     def setup_ui(self):
         # Frame principal
@@ -216,80 +219,17 @@ class TrainingGUI:
 
         self.root.after(500, self._refresh_plots)
 
-    def _refresh_plots(self):
-        """Atualiza os gráficos com os dados atuais"""
-        try:
-            if not self.episode_data["episodes"] or not self.new_plot_data:
-                self.root.after(500, self._refresh_plots)
-                return
-
-            self.new_plot_data = False
-
-            with self.plot_data_lock:
-                for i, (title, ylabel, color, data_key) in enumerate(zip(self.plot_titles, self.plot_ylabels, self.plot_colors, self.plot_data_keys)):
-                    self.axs[i].clear()
-                    if i == 3:  # Gráfico de posição IMU
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_x"], label="X", color="red", linestyle="-", markersize=3)
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_y"], label="Y", color="green", linestyle="-", markersize=3)
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_z"], label="Z", color="blue", linestyle="-", markersize=3)
-                    elif i == 4:  # Gráfico de orientação
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["roll"], label="Roll", color="red", linestyle="-", markersize=3)
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["pitch"], label="Pitch", color="green", linestyle="-", markersize=3)
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["yaw"], label="Yaw", color="blue", linestyle="-", markersize=3)
-                    else:  # Gráficos normais
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data[data_key], label=ylabel, color=color, linestyle="-", markersize=3)
-                    
-                    self.axs[i].set_title(title)
-                    self.axs[i].set_ylabel(ylabel)
-                    self.axs[i].legend()
-                    self.axs[i].grid(True, alpha=0.3)
-
-                self.axs[-1].set_xlabel("Episódio")
-
-            self.canvas.draw()
-
-        except Exception as e:
-            self.logger.exception(f"Plot error")
-
-        self.root.after(500, self._refresh_plots)
-
-    def _update_step_counter(self):
-        """Atualiza o contador de steps a cada segundo"""
-        current_time = time.time()
-        time_diff = current_time - self.last_step_time
-        
-        if time_diff >= 1.0:  # Atualizar a cada segundo
-            if time_diff > 0:
-                self.steps_per_second = self.total_steps / time_diff
-            self.steps_label.config(text=f"Total Steps: {self.total_steps} | Steps/s: {self.steps_per_second:.1f}")
-            self.total_steps = 0
-            self.last_step_time = current_time
-        
-        self.root.after(100, self._update_step_counter)
-    
-    def _update_log_display(self):
-        """Atualiza a exibição de logs"""
-        if self.gui_log_queue.empty():
-            self.root.after(500, self._update_log_display)
-            return
-
-        self.log_text.config(state=tk.NORMAL)
-
-        try:
-            for _ in range(500):
-                message = self.gui_log_queue.get_nowait()
-                self.log_text.insert(tk.END, message + "\n")
-
-        except queue.Empty:
-            pass
-
-        self.log_text.see(tk.END)
-        self.log_text.config(state=tk.DISABLED)
-        self.root.after(500, self._update_log_display)
-
 
     def start_training(self):
-        self.start_btn.config(state=tk.DISABLED)
+        if self.is_resuming:
+            self._resume_training()
+        else:
+            self._start_new_training()
+
+
+    def _start_new_training(self):
+        """Inicia um novo treinamento do zero"""
+        self.start_btn.config(state=tk.DISABLED, text="Iniciando...")
         self.pause_btn.config(state=tk.NORMAL)
         self.stop_btn.config(state=tk.NORMAL)
         self.save_btn.config(state=tk.NORMAL)
@@ -341,22 +281,64 @@ class TrainingGUI:
         # Habilitar botão de salvamento
         self.save_training_btn.config(state=tk.NORMAL)
         self.export_plots_btn.config(state=tk.NORMAL)
+        self.start_btn.config(text="Iniciar Treinamento", state=tk.DISABLED)
 
 
-    def toggle_real_time(self):
-        """Alterna o modo tempo real da simulação"""
-        if not self.enable_real_time_values:
-            self.logger.warning("toggle_real_time: Nenhum processo de treinamento ativo.")
+    def _resume_training(self):
+        """Retoma um treinamento existente"""
+        self.start_btn.config(state=tk.DISABLED, text="Retomando...")
+        self.pause_btn.config(state=tk.NORMAL)
+        self.stop_btn.config(state=tk.NORMAL)
+        self.save_btn.config(state=tk.NORMAL)
+        self.real_time_check.config(state=tk.NORMAL)
+
+        # Encontrar o modelo para retomada
+        model_path = None
+        models_dir = os.path.join(self.resumed_session_dir, 'models')
+        
+        # Busca flexível por modelos
+        if os.path.exists(models_dir):
+            zip_files = [f for f in os.listdir(models_dir) if f.endswith('.zip')]
+            if zip_files:
+                model_path = os.path.join(models_dir, zip_files[0])
+                self.logger.info(f"Modelo encontrado para retomada: {zip_files[0]}")
+        
+        # Se não encontrou nos modelos, procurar no diretório principal
+        if not model_path:
+            zip_files = [f for f in os.listdir(self.resumed_session_dir) if f.endswith('.zip')]
+            if zip_files:
+                model_path = os.path.join(self.resumed_session_dir, zip_files[0])
+                self.logger.info(f"Modelo encontrado no diretório principal: {zip_files[0]}")
+        
+        if not model_path or not os.path.exists(model_path):
+            messagebox.showerror("Erro", 
+                f"Modelo não encontrado para retomada.\n"
+                f"Diretório: {self.resumed_session_dir}\n"
+                f"Certifique-se de que o treinamento foi salvo com sucesso.")
+            self.start_btn.config(state=tk.NORMAL, text="Iniciar Treinamento")
+            self.is_resuming = False
             return
 
-        new_value = self.real_time_var.get()
-        self.enable_real_time_values[-1].value = new_value
-        
-        if new_value:
-            self.logger.info("Modo tempo real ativado")
-        else:
-            self.logger.info("Modo tempo real desativado")
+        # Iniciar processo de retomada
+        pause_val = multiprocessing.Value("b", 0)
+        exit_val = multiprocessing.Value("b", 0)
+        realtime_val = multiprocessing.Value("b", self.real_time_var.get())
 
+        self.pause_values.append(pause_val)
+        self.exit_values.append(exit_val)
+        self.enable_real_time_values.append(realtime_val)
+
+        p = multiprocessing.Process(
+            target=train_process.process_runner_resume,
+            args=(self.current_env, self.current_robot, self.current_algorithm, self.ipc_queue, pause_val, exit_val, realtime_val, self.device, model_path)
+        )
+        p.start()
+        self.processes.append(p)
+
+        self.logger.info(f"Processo de treinamento retomado: {self.current_env} + {self.current_robot} + {self.current_algorithm}")
+        self.start_btn.config(text="Iniciar Treinamento", state=tk.DISABLED)
+        self.is_resuming = False
+        
     
     def pause_training(self):
         if not self.pause_values:
@@ -367,11 +349,37 @@ class TrainingGUI:
             self.logger.info("Retomando treinamento.")
             self.pause_values[-1].value = 0
             self.pause_btn.config(text="Pausar")
+            
+            # Salvar modelo ao retomar da pausa
+            self._save_model_during_training()
 
         else:
             self.logger.info("Pausando treinamento.")
             self.pause_values[-1].value = 1
             self.pause_btn.config(text="Retomar")
+            
+            # Salvar modelo ao pausar
+            self._save_model_during_training()
+            
+
+    def _save_model_during_training(self):
+        """Salva o modelo durante o treinamento para permitir retomada"""
+        if hasattr(self, 'current_training_session') and self.current_training_session:
+            try:
+                # Criar diretório de modelos se não existir
+                models_dir = os.path.join(self.training_data_dir, "current_session", "models")
+                os.makedirs(models_dir, exist_ok=True)
+                
+                # Salvar modelo atual
+                model_path = os.path.join(models_dir, "model.zip")
+                
+                # Enviar comando para salvar o modelo via IPC
+                self.ipc_queue.put({"type": "save_model", "model_path": model_path})
+                
+                self.logger.info(f"Modelo salvo durante pausa/retomada: {model_path}")
+            except Exception as e:
+                self.logger.error(f"Erro ao salvar modelo durante treinamento: {e}")
+
 
     def stop_training(self):
         if self.exit_values:
@@ -385,8 +393,9 @@ class TrainingGUI:
         self.save_training_btn.config(state=tk.DISABLED)
         self.export_plots_btn.config(state=tk.DISABLED)
 
+            
     def save_training_data(self):
-        """Salva todos os dados do treinamento atual"""
+        """Salva todos os dados do treinamento atual incluindo o modelo"""
         if not self.current_training_session:
             messagebox.showwarning("Aviso", "Nenhum treinamento em andamento para salvar.")
             return
@@ -418,17 +427,57 @@ class TrainingGUI:
             with open(os.path.join(session_dir, 'training_data.json'), 'w') as f:
                 json.dump(training_data, f, indent=2)
             
-            # Salvar modelo se existir
-            if hasattr(self, 'processes') and self.processes:
-                try:
-                    models_dir = os.path.join(session_dir, 'models')
-                    os.makedirs(models_dir, exist_ok=True)
-                    # Aqui você precisaria acessar o modelo do processo de treinamento
-                    # Esta parte depende da sua implementação específica
-                    model_path = os.path.join(models_dir, 'model.zip')
-                    # agent.model.save(model_path) - precisa ser implementado
-                except Exception as e:
-                    self.logger.warning(f"Erro ao salvar modelo: {e}")
+            # SALVAR MODELO - Usando sistema de arquivo de controle
+            models_dir = os.path.join(session_dir, 'models')
+            os.makedirs(models_dir, exist_ok=True)
+            
+            model_path = os.path.join(models_dir, 'model.zip')
+            
+            self.logger.info(f"INICIANDO SALVAMENTO DO MODELO: {model_path}")
+            
+            # Estratégia: Criar arquivo de controle
+            control_dir = "training_control"
+            os.makedirs(control_dir, exist_ok=True)
+            
+            control_file = f"save_model_{int(time.time() * 1000)}.json"
+            control_path = os.path.join(control_dir, control_file)
+            
+            control_data = {
+                "model_path": model_path,
+                "timestamp": time.time(),
+                "session": session_name
+            }
+            
+            # Criar arquivo de controle
+            with open(control_path, 'w') as f:
+                json.dump(control_data, f, indent=2)
+            
+            self.logger.info(f"Arquivo de controle criado: {control_path}")
+            
+            # Aguardar salvamento
+            max_wait = 15  # segundos
+            check_interval = 1  # segundo
+            model_saved = False
+            
+            self.logger.info(f"Aguardando salvamento (máximo {max_wait}s)...")
+            
+            for wait_time in range(max_wait):
+                if os.path.exists(model_path):
+                    file_size = os.path.getsize(model_path)
+                    self.logger.info(f"MODELO SALVO: {model_path} ({file_size} bytes)")
+                    model_saved = True
+                    break
+                
+                self.logger.info(f"Aguardando... {wait_time + 1}/{max_wait}s")
+                time.sleep(check_interval)
+            
+            # Limpar arquivo de controle (se ainda existir)
+            try:
+                if os.path.exists(control_path):
+                    os.remove(control_path)
+                    self.logger.info("Arquivo de controle removido")
+            except:
+                pass
             
             # Salvar logs
             logs_dir = os.path.join(session_dir, 'logs')
@@ -444,13 +493,38 @@ class TrainingGUI:
             os.makedirs(plots_dir, exist_ok=True)
             self.save_plots_to_directory(plots_dir)
             
-            messagebox.showinfo("Sucesso", f"Treinamento salvo em: {session_dir}")
+            # Mensagem final
+            if model_saved:
+                messagebox.showinfo("Sucesso", 
+                    f"Treinamento salvo com sucesso!\n"
+                    f"Diretório: {session_dir}\n"
+                    f"Modelo: {os.path.basename(model_path)}\n"
+                    f"Tamanho: {os.path.getsize(model_path)} bytes\n"
+                    f"Pronto para retomada!")
+            else:
+                # Verificar se o processo está ativo
+                process_alive = False
+                if self.processes:
+                    process_alive = any(p.is_alive() for p in self.processes)
+                
+                if process_alive:
+                    messagebox.showwarning("Aviso", 
+                        f"Dados salvos, mas modelo não foi gerado.\n"
+                        f"O processo está ativo mas não respondeu.\n"
+                        f"Tente pausar o treinamento antes de salvar.\n"
+                        f"Diretório: {session_dir}")
+                else:
+                    messagebox.showerror("Erro", 
+                        f"Processo de treinamento não está ativo!\n"
+                        f"O treinamento pode ter terminado ou travado.\n"
+                        f"Diretório: {session_dir}")
             
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao salvar treinamento: {e}")
 
+    
     def load_training_data(self):
-        """Carrega dados de treinamento salvos"""
+        """Carrega dados de treinamento salvos e prepara para retomada"""
         try:
             session_dir = filedialog.askdirectory(
                 title="Selecione a pasta do treinamento",
@@ -469,6 +543,52 @@ class TrainingGUI:
             with open(data_file, 'r') as f:
                 training_data = json.load(f)
             
+            # BUSCA FLEXÍVEL POR MODELOS
+            models_dir = os.path.join(session_dir, 'models')
+            model_path = None
+            
+            # Primeiro: procurar por model.zip no diretório models
+            if os.path.exists(models_dir):
+                potential_path = os.path.join(models_dir, 'model.zip')
+                if os.path.exists(potential_path):
+                    model_path = potential_path
+                    self.logger.info(f"Modelo encontrado: {model_path}")
+            
+            # Segundo: procurar por qualquer arquivo .zip no diretório models
+            if not model_path and os.path.exists(models_dir):
+                zip_files = [f for f in os.listdir(models_dir) if f.endswith('.zip')]
+                if zip_files:
+                    model_path = os.path.join(models_dir, zip_files[0])
+                    self.logger.info(f"Modelo alternativo encontrado: {zip_files[0]}")
+            
+            # Terceiro: procurar no diretório raiz da sessão
+            if not model_path:
+                zip_files = [f for f in os.listdir(session_dir) if f.endswith('.zip')]
+                if zip_files:
+                    model_path = os.path.join(session_dir, zip_files[0])
+                    self.logger.info(f"Modelo encontrado no diretório principal: {zip_files[0]}")
+            
+            # Quarto: procurar em subdiretórios
+            if not model_path:
+                for root, dirs, files in os.walk(session_dir):
+                    for file in files:
+                        if file.endswith('.zip'):
+                            model_path = os.path.join(root, file)
+                            self.logger.info(f"Modelo encontrado em subdiretório: {model_path}")
+                            break
+                    if model_path:
+                        break
+            
+            if not model_path:
+                messagebox.showerror("Erro", 
+                    f"Nenhum modelo (.zip) encontrado para retomada.\n"
+                    f"Diretório: {session_dir}\n"
+                    f"Certifique-se de que:\n"
+                    f"1. O treinamento foi salvo com sucesso\n"
+                    f"2. O processo de treinamento estava ativo ao salvar\n"
+                    f"3. O arquivo do modelo existe no diretório 'models/'")
+                return
+            
             # Restaurar dados do treinamento
             session_info = training_data['session_info']
             self.episode_data = training_data['episode_data']
@@ -479,6 +599,23 @@ class TrainingGUI:
             self.current_robot = session_info['robot'] 
             self.current_algorithm = session_info['algorithm']
             
+            # Configurar para retomada
+            self.is_resuming = True
+            self.resumed_session_dir = session_dir
+            self.current_training_session = {
+                'start_time': datetime.fromisoformat(session_info['start_time']),
+                'environment': self.current_env,
+                'robot': self.current_robot,
+                'algorithm': self.current_algorithm,
+                'episode_data': self.episode_data.copy(),
+                'hyperparams': self.hyperparams
+            }
+            
+            # Atualizar botão para "Retomar Treinamento"
+            self.start_btn.config(text="Retomar Treinamento", state=tk.NORMAL)
+            self.pause_btn.config(state=tk.DISABLED)
+            self.stop_btn.config(state=tk.DISABLED)
+            
             # Atualizar gráficos
             self.new_plot_data = True
             self._refresh_plots()
@@ -487,10 +624,15 @@ class TrainingGUI:
             self.save_training_btn.config(state=tk.NORMAL)
             self.export_plots_btn.config(state=tk.NORMAL)
             
-            messagebox.showinfo("Sucesso", "Treinamento carregado com sucesso!")
+            messagebox.showinfo("Sucesso", 
+                f"Treinamento carregado!\n"
+                f"Modelo: {os.path.basename(model_path)}\n"
+                f"Local: {model_path}\n"
+                f"Clique em 'Retomar Treinamento' para continuar.")
             
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao carregar treinamento: {e}")
+
 
     def export_plots(self):
         """Exporta gráficos como imagens para uso na tese"""
@@ -557,6 +699,7 @@ class TrainingGUI:
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao exportar gráficos: {e}")
 
+
     def save_plots_to_directory(self, directory, width=10, height=8, dpi=300):
         """Salva todos os gráficos em um diretório"""
         try:
@@ -596,6 +739,7 @@ class TrainingGUI:
         except Exception as e:
             self.logger.error(f"Erro ao salvar gráficos: {e}")
 
+
     def _plot_to_figure(self, axs):
         """Plota dados nos eixos fornecidos"""
         for i, (title, ylabel, color, data_key) in enumerate(zip(
@@ -620,6 +764,7 @@ class TrainingGUI:
 
         axs[-1].set_xlabel("Episódio")
         
+
     def save_snapshot(self):
         """Salva o modelo treinado e executa avaliação para gerar métricas de complexidade."""
         try:
@@ -641,6 +786,96 @@ class TrainingGUI:
 
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao salvar snapshot: {e}")
+
+
+    def toggle_real_time(self):
+        """Alterna o modo tempo real da simulação"""
+        if not self.enable_real_time_values:
+            self.logger.warning("toggle_real_time: Nenhum processo de treinamento ativo.")
+            return
+
+        new_value = self.real_time_var.get()
+        self.enable_real_time_values[-1].value = new_value
+        
+        if new_value:
+            self.logger.info("Modo tempo real ativado")
+        else:
+            self.logger.info("Modo tempo real desativado")
+    
+
+    def _update_step_counter(self):
+        """Atualiza o contador de steps a cada segundo"""
+        current_time = time.time()
+        time_diff = current_time - self.last_step_time
+        
+        if time_diff >= 1.0:  # Atualizar a cada segundo
+            if time_diff > 0:
+                self.steps_per_second = self.total_steps / time_diff
+            self.steps_label.config(text=f"Total Steps: {self.total_steps} | Steps/s: {self.steps_per_second:.1f}")
+            self.total_steps = 0
+            self.last_step_time = current_time
+        
+        self.root.after(100, self._update_step_counter)
+        
+        
+    def _refresh_plots(self):
+        """Atualiza os gráficos com os dados atuais"""
+        try:
+            if not self.episode_data["episodes"] or not self.new_plot_data:
+                self.root.after(500, self._refresh_plots)
+                return
+
+            self.new_plot_data = False
+
+            with self.plot_data_lock:
+                for i, (title, ylabel, color, data_key) in enumerate(zip(self.plot_titles, self.plot_ylabels, self.plot_colors, self.plot_data_keys)):
+                    self.axs[i].clear()
+                    if i == 3:  # Gráfico de posição IMU
+                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_x"], label="X", color="red", linestyle="-", markersize=3)
+                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_y"], label="Y", color="green", linestyle="-", markersize=3)
+                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_z"], label="Z", color="blue", linestyle="-", markersize=3)
+                    elif i == 4:  # Gráfico de orientação
+                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["roll"], label="Roll", color="red", linestyle="-", markersize=3)
+                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["pitch"], label="Pitch", color="green", linestyle="-", markersize=3)
+                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["yaw"], label="Yaw", color="blue", linestyle="-", markersize=3)
+                    else:  # Gráficos normais
+                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data[data_key], label=ylabel, color=color, linestyle="-", markersize=3)
+                    
+                    self.axs[i].set_title(title)
+                    self.axs[i].set_ylabel(ylabel)
+                    self.axs[i].legend()
+                    self.axs[i].grid(True, alpha=0.3)
+
+                self.axs[-1].set_xlabel("Episódio")
+
+            self.canvas.draw()
+
+        except Exception as e:
+            self.logger.exception(f"Plot error")
+
+        self.root.after(500, self._refresh_plots)
+    
+
+    def _update_log_display(self):
+        """Atualiza a exibição de logs"""
+        if self.gui_log_queue.empty():
+            self.root.after(500, self._update_log_display)
+            return
+
+        self.log_text.config(state=tk.NORMAL)
+
+        try:
+            for _ in range(500):
+                message = self.gui_log_queue.get_nowait()
+                self.log_text.insert(tk.END, message + "\n")
+
+        except queue.Empty:
+            pass
+
+        self.log_text.see(tk.END)
+        self.log_text.config(state=tk.DISABLED)
+        self.root.after(500, self._update_log_display)
+
 
     def ipc_runner(self):
         """Thread para monitorar a fila IPC e atualizar logs"""
@@ -678,6 +913,18 @@ class TrainingGUI:
                     # Atualizar contador de steps
                     self.total_steps += msg.get("steps", 0)
                 
+                elif data_type == "save_model":
+                    # Comando de salvamento - apenas registrar, não processar aqui
+                    model_path = msg.get("model_path", "desconhecido")
+                    self.logger.info(f"Comando de salvamento recebido na GUI: {model_path}")
+                    # Esta mensagem é para o processo de treinamento, não para a GUI
+                    # Reenviar para o processo? Não, isso criaria loop
+                
+                elif data_type == "model_saved":
+                    # Confirmação de que o modelo foi salvo
+                    model_path = msg.get("model_path", "desconhecido")
+                    self.logger.info(f"Confirmação: Modelo salvo pelo processo: {model_path}")
+                
                 elif data_type == "done":
                     self.logger.info("Processo de treinamento finalizado.")
                     self.start_btn.config(state=tk.NORMAL)
@@ -687,9 +934,10 @@ class TrainingGUI:
                     self.real_time_check.config(state=tk.DISABLED)
                     self.save_training_btn.config(state=tk.DISABLED)
                     self.export_plots_btn.config(state=tk.DISABLED)
+                    self.is_resuming = False
 
                 else:
-                    self.logger.error(f"Tipo de dados desconhecido: {data_type}")
+                    self.logger.error(f"Tipo de dados desconhecido: {data_type} - Conteúdo: {msg}")
 
         except Exception as e:
             self.logger.exception("Erro em ipc_runner")
