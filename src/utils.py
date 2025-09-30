@@ -1,4 +1,5 @@
 # utils.py
+import json
 import os
 import logging
 import multiprocessing
@@ -54,3 +55,43 @@ def get_logger(description=["main"], ipc_queue=None):
             logger.addHandler(queue_handler)
 
     return logger
+
+# Funções de Logging e IPC
+def setup_ipc_logging(logger, ipc_queue):
+    """Configura logging para IPC entre processos"""
+    if ipc_queue is not None:
+        # Verificar se o logger já tem um handler de queue para evitar duplicação
+        has_queue_handler = any(isinstance(handler, FormattedQueueHandler) for handler in logger.handlers)
+        if not has_queue_handler:
+            queue_handler = FormattedQueueHandler(ipc_queue)
+            formatter = logging.Formatter("%(asctime)s %(message)s")
+            queue_handler.setFormatter(formatter)
+            logger.addHandler(queue_handler)
+
+
+# Funções de Arquivo/IO:
+def ensure_directory(path):
+    """Garante que um diretório existe"""
+    os.makedirs(path, exist_ok=True)
+    return path
+
+def find_model_files(directory):
+    """Encontra arquivos de modelo em um diretório (busca flexível)"""
+    model_files = []
+    for root, dirs, files in os.walk(directory):
+        for file in files:
+            if file.endswith('.zip'):
+                model_files.append(os.path.join(root, file))
+    return model_files
+
+
+# Funções de Validação:
+def validate_episodes_count(episodes_str):
+    """Valida e converte número de episódios"""
+    try:
+        episodes = int(episodes_str)
+        if episodes <= 0:
+            raise ValueError("Número de episódios deve ser positivo")
+        return episodes
+    except ValueError:
+        raise ValueError("Número de episódios deve ser um inteiro positivo")

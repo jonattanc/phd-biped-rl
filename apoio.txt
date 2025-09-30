@@ -41,8 +41,21 @@ class TrainingGUI:
         self.episode_data = {"episodes": [], "rewards": [], "times": [], "distances": [],
             "imu_x": [], "imu_y": [], "imu_z": [],
             "roll": [], "pitch": [], "yaw": []}
-        self.fig, self.axs = plt.subplots(3, figsize=(10, 8))
-        self.canvas = None
+        
+        # Dados de avaliação:
+        self.evaluation_data = {
+            "current_evaluation": None,
+            "evaluation_history": [],
+            "comparison_data": []
+        }
+
+        self.fig_training, self.axs_training = plt.subplots(5, figsize=(10, 8))
+        self.fig_evaluation, self.axs_evaluation = plt.subplots(2, 2, figsize=(10, 8))
+        self.fig_comparison = None
+        self.canvas_training = None
+        self.canvas_evaluation = None
+        self.canvas_comparison = None
+        
         self.episode_logger = None
         self.hyperparams = {}
         self.logger = utils.get_logger()
@@ -70,8 +83,30 @@ class TrainingGUI:
 
 
     def setup_ui(self):
-        # Frame principal
-        main_frame = ttk.Frame(self.root, padding="10")
+        # Frame principal com abas
+        notebook = ttk.Notebook(self.root)
+        notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        # Aba de Treinamento
+        self.training_frame = ttk.Frame(notebook, padding="10")
+        notebook.add(self.training_frame, text="Treinamento")
+
+        # Aba de Avaliação
+        self.evaluation_frame = ttk.Frame(notebook, padding="10")
+        notebook.add(self.evaluation_frame, text="Avaliação")
+
+        # Aba de Comparação
+        self.comparison_frame = ttk.Frame(notebook, padding="10")
+        notebook.add(self.comparison_frame, text="Comparação")
+
+        # Configurar cada aba
+        self.setup_training_tab()
+        self.setup_evaluation_tab()
+        self.setup_comparison_tab()
+
+    def setup_training_tab(self):
+        # Frame principal da aba de treinamento
+        main_frame = ttk.Frame(self.training_frame, padding="10")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
         # Controles
@@ -148,7 +183,7 @@ class TrainingGUI:
         self.real_time_var = tk.BooleanVar(value=False)
         self.real_time_check = ttk.Checkbutton(
             row2_frame, 
-            text="Ativar Tempo Real", 
+            text="Visualizar Robo", 
             variable=self.real_time_var,
             command=self.toggle_real_time,
             state=tk.DISABLED
@@ -167,7 +202,7 @@ class TrainingGUI:
         self.canvas = FigureCanvasTkAgg(self.fig, master=graph_frame)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
-        self._initialize_plots()
+        self._initialize_training_plots()
         self.canvas.draw_idle()
 
         # Logs:
@@ -194,28 +229,152 @@ class TrainingGUI:
         control_frame.columnconfigure(0, weight=1)
         
 
-    def _initialize_plots(self):
+    def setup_evaluation_tab(self):
+        """Configura a aba de avaliação"""
+        main_frame = ttk.Frame(self.evaluation_frame)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        # Controles de avaliação
+        control_frame = ttk.LabelFrame(main_frame, text="Configuração de Avaliação", padding="10")
+        control_frame.pack(fill=tk.X, pady=5)
+
+        # Linha 1: Seleção de modelo e configurações
+        row1_frame = ttk.Frame(control_frame)
+        row1_frame.pack(fill=tk.X, pady=5)
+
+        ttk.Label(row1_frame, text="Modelo para Avaliar:").grid(row=0, column=0, sticky=tk.W, padx=5)
+        self.eval_model_path = tk.StringVar()
+        ttk.Entry(row1_frame, textvariable=self.eval_model_path, width=50).grid(row=0, column=1, padx=5)
+        ttk.Button(row1_frame, text="Procurar", command=self.browse_evaluation_model).grid(row=0, column=2, padx=5)
+
+        # Linha 2: Configurações de avaliação
+        row2_frame = ttk.Frame(control_frame)
+        row2_frame.pack(fill=tk.X, pady=5)
+
+        ttk.Label(row2_frame, text="Ambiente:").grid(row=0, column=0, sticky=tk.W, padx=5)
+        self.eval_env_var = tk.StringVar(value="PR")
+        env_combo = ttk.Combobox(row2_frame, textvariable=self.eval_env_var, 
+                                values=["PR", "Pmu", "RamA", "RamD", "PG", "PRB"])
+        env_combo.grid(row=0, column=1, padx=5)
+
+        ttk.Label(row2_frame, text="Robô:").grid(row=0, column=2, sticky=tk.W, padx=5)
+        self.eval_robot_var = tk.StringVar(value="robot_stage1")
+        robot_combo = ttk.Combobox(row2_frame, textvariable=self.eval_robot_var, 
+                                  values=["robot_stage1"])
+        robot_combo.grid(row=0, column=3, padx=5)
+
+        ttk.Label(row2_frame, text="Episódios:").grid(row=0, column=4, sticky=tk.W, padx=5)
+        self.eval_episodes_var = tk.StringVar(value="20")
+        ttk.Entry(row2_frame, textvariable=self.eval_episodes_var, width=8).grid(row=0, column=5, padx=5)
+
+        # Linha 3: Botões de controle
+        row3_frame = ttk.Frame(control_frame)
+        row3_frame.pack(fill=tk.X, pady=5)
+
+        self.eval_start_btn = ttk.Button(row3_frame, text="Executar Avaliação", 
+                                       command=self.start_evaluation)
+        self.eval_start_btn.grid(row=0, column=0, padx=5)
+
+        self.eval_deterministic_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(row3_frame, text="Modo Determinístico", 
+                       variable=self.eval_deterministic_var).grid(row=0, column=1, padx=5)
+
+        # Resultados da avaliação
+        results_frame = ttk.LabelFrame(main_frame, text="Resultados da Avaliação", padding="10")
+        results_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+
+        # Métricas numéricas
+        metrics_frame = ttk.Frame(results_frame)
+        metrics_frame.pack(fill=tk.X, pady=5)
+
+        self.metrics_text = tk.Text(metrics_frame, height=8, state=tk.DISABLED)
+        metrics_scrollbar = ttk.Scrollbar(metrics_frame, orient="vertical", command=self.metrics_text.yview)
+        self.metrics_text.configure(yscrollcommand=metrics_scrollbar.set)
+        self.metrics_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        metrics_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Gráficos de avaliação
+        graph_frame = ttk.Frame(results_frame)
+        graph_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+
+        self.fig_evaluation, self.axs_evaluation = plt.subplots(2, 2, figsize=(10, 8))
+        self.canvas_evaluation = FigureCanvasTkAgg(self.fig_evaluation, master=graph_frame)
+        self.canvas_evaluation.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+        self._initialize_evaluation_plots()
+
+    def setup_comparison_tab(self):
+        """Configura a aba de comparação"""
+        main_frame = ttk.Frame(self.comparison_frame)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        # Controles de comparação
+        control_frame = ttk.LabelFrame(main_frame, text="Comparação de Modelos", padding="10")
+        control_frame.pack(fill=tk.X, pady=5)
+
+        # Frame para lista de modelos
+        models_frame = ttk.Frame(control_frame)
+        models_frame.pack(fill=tk.X, pady=5)
+
+        ttk.Label(models_frame, text="Modelos para Comparar:").pack(side=tk.TOP, anchor=tk.W)
+
+        # Listbox para modelos selecionados
+        self.models_listbox = tk.Listbox(models_frame, height=4)
+        models_scrollbar = ttk.Scrollbar(models_frame, orient="vertical", command=self.models_listbox.yview)
+        self.models_listbox.configure(yscrollcommand=models_scrollbar.set)
+        self.models_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        models_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Botões para gerenciar lista
+        buttons_frame = ttk.Frame(models_frame)
+        buttons_frame.pack(side=tk.RIGHT, padx=5)
+
+        ttk.Button(buttons_frame, text="Adicionar Modelo", 
+                  command=self.add_comparison_model).pack(pady=2)
+        ttk.Button(buttons_frame, text="Remover Selecionado", 
+                  command=self.remove_comparison_model).pack(pady=2)
+        ttk.Button(buttons_frame, text="Limpar Lista", 
+                  command=self.clear_comparison_models).pack(pady=2)
+
+        # Botão de execução
+        ttk.Button(control_frame, text="Executar Comparação", 
+                  command=self.run_comparison).pack(pady=5)
+
+        # Resultados da comparação
+        results_frame = ttk.LabelFrame(main_frame, text="Resultados da Comparação", padding="10")
+        results_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+
+        # Texto com resultados
+        self.comparison_text = tk.Text(results_frame, height=15, state=tk.DISABLED)
+        comparison_scrollbar = ttk.Scrollbar(results_frame, orient="vertical", command=self.comparison_text.yview)
+        self.comparison_text.configure(yscrollcommand=comparison_scrollbar.set)
+        self.comparison_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        comparison_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+    # ========== MÉTODOS DE TREINAMENTO ==========
+    
+    def _initialize_training_plots(self):
         """Inicializa os gráficos com títulos e configurações"""
         try:
             for i, (title, ylabel, color) in enumerate(zip(self.plot_titles, self.plot_ylabels, self.plot_colors)):
-                self.axs[i].clear()
+                self.axs_training[i].clear()
                 if i == 3:  # Gráfico de posição IMU (X, Y, Z)
-                    self.axs[i].plot([], [], label="X", color="red", linestyle="-", markersize=3)
-                    self.axs[i].plot([], [], label="Y", color="green", linestyle="-", markersize=3)
-                    self.axs[i].plot([], [], label="Z", color="blue", linestyle="-", markersize=3)
+                    self.axs_training[i].plot([], [], label="X", color="red", linestyle="-", markersize=3)
+                    self.axs_training[i].plot([], [], label="Y", color="green", linestyle="-", markersize=3)
+                    self.axs_training[i].plot([], [], label="Z", color="blue", linestyle="-", markersize=3)
                 elif i == 4:  # Gráfico de orientação (Roll, Pitch, Yaw)
-                    self.axs[i].plot([], [], label="Roll", color="red", linestyle="-", markersize=3)
-                    self.axs[i].plot([], [], label="Pitch", color="green", linestyle="-", markersize=3)
-                    self.axs[i].plot([], [], label="Yaw", color="blue", linestyle="-", markersize=3)
+                    self.axs_training[i].plot([], [], label="Roll", color="red", linestyle="-", markersize=3)
+                    self.axs_training[i].plot([], [], label="Pitch", color="green", linestyle="-", markersize=3)
+                    self.axs_training[i].plot([], [], label="Yaw", color="blue", linestyle="-", markersize=3)
                 else:  # Gráficos normais
-                    self.axs[i].plot([], [], label=ylabel, color=color, linestyle="-", markersize=3)
+                    self.axs_training[i].plot([], [], label=ylabel, color=color, linestyle="-", markersize=3)
 
-                self.axs[i].set_title(title)
-                self.axs[i].set_ylabel(ylabel)
-                self.axs[i].grid(True, alpha=0.3)
-                self.axs[i].legend()
+                self.axs_training[i].set_title(title)
+                self.axs_training[i].set_ylabel(ylabel)
+                self.axs_training[i].grid(True, alpha=0.3)
+                self.axs_training[i].legend()
 
-            self.axs[-1].set_xlabel("Episódio")
+            self.axs_training[-1].set_xlabel("Episódio")
         except Exception as e:
             self.logger.exception(f"Plot error")
 
@@ -255,7 +414,7 @@ class TrainingGUI:
         self.total_steps = 0
         self.steps_per_second = 0
         self.last_step_time = time.time()
-        self._initialize_plots()
+        self._initialize_traini_plots()
         self.canvas.draw()
 
         # Iniciar treinamento em processo separado
@@ -861,24 +1020,24 @@ class TrainingGUI:
 
             with self.plot_data_lock:
                 for i, (title, ylabel, color, data_key) in enumerate(zip(self.plot_titles, self.plot_ylabels, self.plot_colors, self.plot_data_keys)):
-                    self.axs[i].clear()
+                    self.axs_training[i].clear()
                     if i == 3:  # Gráfico de posição IMU
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_x"], label="X", color="red", linestyle="-", markersize=3)
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_y"], label="Y", color="green", linestyle="-", markersize=3)
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_z"], label="Z", color="blue", linestyle="-", markersize=3)
+                        self.axs_training[i].plot(self.episode_data["episodes"], self.episode_data["imu_x"], label="X", color="red", linestyle="-", markersize=3)
+                        self.axs_training[i].plot(self.episode_data["episodes"], self.episode_data["imu_y"], label="Y", color="green", linestyle="-", markersize=3)
+                        self.axs_training[i].plot(self.episode_data["episodes"], self.episode_data["imu_z"], label="Z", color="blue", linestyle="-", markersize=3)
                     elif i == 4:  # Gráfico de orientação
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["roll"], label="Roll", color="red", linestyle="-", markersize=3)
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["pitch"], label="Pitch", color="green", linestyle="-", markersize=3)
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["yaw"], label="Yaw", color="blue", linestyle="-", markersize=3)
+                        self.axs_training[i].plot(self.episode_data["episodes"], self.episode_data["roll"], label="Roll", color="red", linestyle="-", markersize=3)
+                        self.axs_training[i].plot(self.episode_data["episodes"], self.episode_data["pitch"], label="Pitch", color="green", linestyle="-", markersize=3)
+                        self.axs_training[i].plot(self.episode_data["episodes"], self.episode_data["yaw"], label="Yaw", color="blue", linestyle="-", markersize=3)
                     else:  # Gráficos normais
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data[data_key], label=ylabel, color=color, linestyle="-", markersize=3)
+                        self.axs_training[i].plot(self.episode_data["episodes"], self.episode_data[data_key], label=ylabel, color=color, linestyle="-", markersize=3)
                     
-                    self.axs[i].set_title(title)
-                    self.axs[i].set_ylabel(ylabel)
-                    self.axs[i].legend()
-                    self.axs[i].grid(True, alpha=0.3)
+                    self.axs_training[i].set_title(title)
+                    self.axs_training[i].set_ylabel(ylabel)
+                    self.axs_training[i].legend()
+                    self.axs_training[i].grid(True, alpha=0.3)
 
-                self.axs[-1].set_xlabel("Episódio")
+                self.axs_training[-1].set_xlabel("Episódio")
 
             self.canvas.draw()
 
@@ -1009,3 +1168,326 @@ class TrainingGUI:
         self.root.after(100, self._update_step_counter)
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         self.root.mainloop()
+
+    
+    # ========== MÉTODOS DE AVALIAÇÃO ==========
+
+    def browse_evaluation_model(self):
+        """Abre diálogo para selecionar modelo para avaliação"""
+        filename = filedialog.askopenfilename(
+            title="Selecionar Modelo para Avaliação",
+            filetypes=[("Zip files", "*.zip"), ("All files", "*.*")],
+            initialdir="training_data"
+        )
+        if filename:
+            self.eval_model_path.set(filename)
+
+    def start_evaluation(self):
+        """Inicia a avaliação do modelo selecionado"""
+        model_path = self.eval_model_path.get()
+        if not model_path or not os.path.exists(model_path):
+            messagebox.showerror("Erro", "Selecione um modelo válido para avaliação.")
+            return
+
+        try:
+            episodes = int(self.eval_episodes_var.get())
+            if episodes <= 0:
+                raise ValueError("Número de episódios deve ser positivo")
+        except ValueError:
+            messagebox.showerror("Erro", "Número de episódios deve ser um número inteiro positivo.")
+            return
+
+        # Desabilitar botão durante avaliação
+        self.eval_start_btn.config(state=tk.DISABLED, text="Avaliando...")
+
+        # Executar avaliação em thread separada
+        eval_thread = threading.Thread(target=self._run_evaluation, daemon=True)
+        eval_thread.start()
+
+    def _run_evaluation(self):
+        """Executa a avaliação em thread separada"""
+        try:
+            from evaluate_model import evaluate_and_save
+            
+            model_path = self.eval_model_path.get()
+            environment = self.eval_env_var.get()
+            robot = self.eval_robot_var.get()
+            episodes = int(self.eval_episodes_var.get())
+            
+            self.logger.info(f"Iniciando avaliação: {model_path} no ambiente {environment}")
+            
+            # Executar avaliação
+            metrics = evaluate_and_save(
+                model_path=model_path,
+                circuit_name=environment,
+                avatar_name=robot,
+                num_episodes=episodes,
+                seed=42
+            )
+            
+            if metrics:
+                # Atualizar interface com resultados
+                self.root.after(0, lambda: self._display_evaluation_results(metrics))
+            else:
+                self.root.after(0, lambda: messagebox.showerror("Erro", "Falha na avaliação"))
+                
+        except Exception as e:
+            self.logger.error(f"Erro na avaliação: {e}")
+            self.root.after(0, lambda: messagebox.showerror("Erro", f"Erro na avaliação: {e}"))
+        finally:
+            self.root.after(0, lambda: self.eval_start_btn.config(state=tk.NORMAL, text="Executar Avaliação"))
+
+    def _display_evaluation_results(self, metrics):
+        """Exibe os resultados da avaliação na interface"""
+        try:
+            # Atualizar métricas textuais
+            self.metrics_text.config(state=tk.NORMAL)
+            self.metrics_text.delete(1.0, tk.END)
+            
+            success_rate = metrics.get('success_rate', 0) * 100
+            avg_time = metrics.get('avg_time', 0)
+            std_time = metrics.get('std_time', 0)
+            success_count = metrics.get('success_count', 0)
+            num_episodes = metrics.get('num_episodes', 0)
+            
+            results_text = f"""
+                === RESULTADOS DA AVALIAÇÃO ===
+
+                Estatísticas Gerais:
+                • Episódios executados: {num_episodes}
+                • Taxa de sucesso: {success_rate:.1f}% ({success_count}/{num_episodes})
+                • Tempo médio: {avg_time:.2f} ± {std_time:.2f} segundos
+                • Melhor tempo: {min(metrics.get('total_times', [0])):.2f}s
+                • Pior tempo: {max(metrics.get('total_times', [0])):.2f}s
+
+                Distribuição de Tempos:
+                """
+            
+            times = metrics.get('total_times', [])
+            if times:
+                for i, time_val in enumerate(times, 1):
+                    results_text += f"• Episódio {i}: {time_val:.2f}s\n"
+            
+            self.metrics_text.insert(1.0, results_text)
+            self.metrics_text.config(state=tk.DISABLED)
+            
+            # Atualizar gráficos
+            self._update_evaluation_plots(metrics)
+            
+            # Salvar nos dados de avaliação
+            self.evaluation_data['current_evaluation'] = {
+                'metrics': metrics,
+                'timestamp': datetime.now(),
+                'model_path': self.eval_model_path.get(),
+                'environment': self.eval_env_var.get()
+            }
+            
+            self.evaluation_data['evaluation_history'].append(self.evaluation_data['current_evaluation'])
+            
+            messagebox.showinfo("Sucesso", "Avaliação concluída com sucesso!")
+            
+        except Exception as e:
+            self.logger.error(f"Erro ao exibir resultados: {e}")
+            messagebox.showerror("Erro", f"Erro ao exibir resultados: {e}")
+
+    def _initialize_evaluation_plots(self):
+        """Inicializa os gráficos de avaliação"""
+        try:
+            # Gráfico de distribuição de tempos
+            self.axs_evaluation[0, 0].set_title("Distribuição de Tempos")
+            self.axs_evaluation[0, 0].set_ylabel("Tempo (s)")
+            self.axs_evaluation[0, 0].grid(True, alpha=0.3)
+            
+            # Gráfico de sucesso por episódio
+            self.axs_evaluation[0, 1].set_title("Sucesso por Episódio")
+            self.axs_evaluation[0, 1].set_ylabel("Sucesso")
+            self.axs_evaluation[0, 1].grid(True, alpha=0.3)
+            
+            # Gráfico de progressão temporal
+            self.axs_evaluation[1, 0].set_title("Progressão de Tempos")
+            self.axs_evaluation[1, 0].set_ylabel("Tempo (s)")
+            self.axs_evaluation[1, 0].set_xlabel("Episódio")
+            self.axs_evaluation[1, 0].grid(True, alpha=0.3)
+            
+            # Gráfico de métricas consolidadas
+            self.axs_evaluation[1, 1].set_title("Métricas Consolidadas")
+            self.axs_evaluation[1, 1].grid(True, alpha=0.3)
+            
+            self.canvas_evaluation.draw_idle()
+            
+        except Exception as e:
+            self.logger.error(f"Erro ao inicializar gráficos de avaliação: {e}")
+
+    def _update_evaluation_plots(self, metrics):
+        """Atualiza os gráficos de avaliação com novos dados"""
+        try:
+            times = metrics.get('total_times', [])
+            successes = [1] * metrics.get('success_count', 0) + [0] * (len(times) - metrics.get('success_count', 0))
+            
+            # Limpar gráficos
+            for ax in self.axs_evaluation.flat:
+                ax.clear()
+            
+            # Gráfico de distribuição de tempos
+            self.axs_evaluation[0, 0].hist(times, bins=10, alpha=0.7, color='blue')
+            self.axs_evaluation[0, 0].set_title("Distribuição de Tempos")
+            self.axs_evaluation[0, 0].set_ylabel("Frequência")
+            self.axs_evaluation[0, 0].set_xlabel("Tempo (s)")
+            self.axs_evaluation[0, 0].grid(True, alpha=0.3)
+            
+            # Gráfico de sucesso por episódio
+            self.axs_evaluation[0, 1].bar(range(len(successes)), successes, color=['red' if s == 0 else 'green' for s in successes])
+            self.axs_evaluation[0, 1].set_title("Sucesso por Episódio")
+            self.axs_evaluation[0, 1].set_ylabel("Sucesso (0=Falha, 1=Sucesso)")
+            self.axs_evaluation[0, 1].set_xlabel("Episódio")
+            self.axs_evaluation[0, 1].grid(True, alpha=0.3)
+            
+            # Gráfico de progressão temporal
+            self.axs_evaluation[1, 0].plot(range(len(times)), times, 'o-', color='orange')
+            self.axs_evaluation[1, 0].axhline(y=metrics.get('avg_time', 0), color='red', linestyle='--', label=f'Média: {metrics["avg_time"]:.2f}s')
+            self.axs_evaluation[1, 0].set_title("Progressão de Tempos")
+            self.axs_evaluation[1, 0].set_ylabel("Tempo (s)")
+            self.axs_evaluation[1, 0].set_xlabel("Episódio")
+            self.axs_evaluation[1, 0].legend()
+            self.axs_evaluation[1, 0].grid(True, alpha=0.3)
+            
+            # Gráfico de métricas consolidadas
+            metrics_names = ['Taxa Sucesso', 'Tempo Médio', 'Desvio Padrão']
+            metrics_values = [
+                metrics.get('success_rate', 0) * 100,
+                metrics.get('avg_time', 0),
+                metrics.get('std_time', 0)
+            ]
+            colors = ['green', 'blue', 'orange']
+            bars = self.axs_evaluation[1, 1].bar(metrics_names, metrics_values, color=colors, alpha=0.7)
+            self.axs_evaluation[1, 1].set_title("Métricas Consolidadas")
+            self.axs_evaluation[1, 1].set_ylabel("Valor")
+            self.axs_evaluation[1, 1].grid(True, alpha=0.3)
+            
+            # Adicionar valores nas barras
+            for bar, value in zip(bars, metrics_values):
+                height = bar.get_height()
+                self.axs_evaluation[1, 1].text(bar.get_x() + bar.get_width()/2., height,
+                                              f'{value:.2f}', ha='center', va='bottom')
+            
+            self.canvas_evaluation.draw_idle()
+            
+        except Exception as e:
+            self.logger.error(f"Erro ao atualizar gráficos de avaliação: {e}")
+
+    # ========== MÉTODOS DE COMPARAÇÃO ==========
+
+    def add_comparison_model(self):
+        """Adiciona modelo à lista de comparação"""
+        filename = filedialog.askopenfilename(
+            title="Selecionar Modelo para Comparação",
+            filetypes=[("Zip files", "*.zip"), ("All files", "*.*")],
+            initialdir="training_data"
+        )
+        if filename:
+            model_name = os.path.basename(filename)
+            self.models_listbox.insert(tk.END, f"{model_name}||{filename}")
+
+    def remove_comparison_model(self):
+        """Remove modelo selecionado da lista de comparação"""
+        selection = self.models_listbox.curselection()
+        if selection:
+            self.models_listbox.delete(selection[0])
+
+    def clear_comparison_models(self):
+        """Limpa toda a lista de modelos para comparação"""
+        self.models_listbox.delete(0, tk.END)
+
+    def run_comparison(self):
+        """Executa comparação entre modelos selecionados"""
+        if self.models_listbox.size() < 2:
+            messagebox.showwarning("Aviso", "Selecione pelo menos 2 modelos para comparação.")
+            return
+
+        # Coletar modelos selecionados
+        models = []
+        for i in range(self.models_listbox.size()):
+            item = self.models_listbox.get(i)
+            name, path = item.split("||")
+            models.append({"name": name, "path": path})
+
+        # Executar comparação em thread separada
+        comparison_thread = threading.Thread(target=self._run_comparison, args=(models,), daemon=True)
+        comparison_thread.start()
+
+    def _run_comparison(self, models):
+        """Executa a comparação entre modelos"""
+        try:
+            from evaluate_model import evaluate_and_save
+            
+            comparison_results = []
+            environment = self.eval_env_var.get()
+            robot = self.eval_robot_var.get()
+            episodes = 10  # Número reduzido para comparação rápida
+            
+            for model in models:
+                self.logger.info(f"Avaliando modelo para comparação: {model['name']}")
+                
+                metrics = evaluate_and_save(
+                    model_path=model['path'],
+                    circuit_name=environment,
+                    avatar_name=robot,
+                    num_episodes=episodes,
+                    seed=42
+                )
+                
+                if metrics:
+                    comparison_results.append({
+                        'name': model['name'],
+                        'metrics': metrics,
+                        'path': model['path']
+                    })
+            
+            # Atualizar interface com resultados
+            self.root.after(0, lambda: self._display_comparison_results(comparison_results))
+            
+        except Exception as e:
+            self.logger.error(f"Erro na comparação: {e}")
+            self.root.after(0, lambda: messagebox.showerror("Erro", f"Erro na comparação: {e}"))
+
+    def _display_comparison_results(self, results):
+        """Exibe os resultados da comparação"""
+        try:
+            self.comparison_text.config(state=tk.NORMAL)
+            self.comparison_text.delete(1.0, tk.END)
+            
+            comparison_text = "=== COMPARAÇÃO DE MODELOS ===\n\n"
+            
+            # Criar tabela comparativa
+            headers = ["Modelo", "Taxa Sucesso", "Tempo Médio", "Desvio Padrão", "Melhor Tempo"]
+            comparison_text += f"{headers[0]:<30} {headers[1]:<15} {headers[2]:<12} {headers[3]:<15} {headers[4]:<12}\n"
+            comparison_text += "-" * 90 + "\n"
+            
+            for result in results:
+                metrics = result['metrics']
+                name = result['name']
+                success_rate = metrics.get('success_rate', 0) * 100
+                avg_time = metrics.get('avg_time', 0)
+                std_time = metrics.get('std_time', 0)
+                best_time = min(metrics.get('total_times', [0]))
+                
+                comparison_text += f"{name:<30} {success_rate:<15.1f} {avg_time:<12.2f} {std_time:<15.2f} {best_time:<12.2f}\n"
+            
+            # Análise do melhor modelo
+            if results:
+                best_model = min(results, key=lambda x: x['metrics'].get('avg_time', float('inf')))
+                best_success = max(results, key=lambda x: x['metrics'].get('success_rate', 0))
+                
+                comparison_text += f"\nANÁLISE:\n"
+                comparison_text += f"• Melhor tempo médio: {best_model['name']} ({best_model['metrics']['avg_time']:.2f}s)\n"
+                comparison_text += f"• Melhor taxa de sucesso: {best_success['name']} ({best_success['metrics']['success_rate']*100:.1f}%)\n"
+            
+            self.comparison_text.insert(1.0, comparison_text)
+            self.comparison_text.config(state=tk.DISABLED)
+            
+            # Salvar dados para possível exportação
+            self.evaluation_data['comparison_data'] = results
+            
+        except Exception as e:
+            self.logger.error(f"Erro ao exibir comparação: {e}")
+

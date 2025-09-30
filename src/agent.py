@@ -201,48 +201,49 @@ class Agent:
         action, _ = self.model.predict(obs, deterministic=False)
         return action.flatten()  # Garante que é um array 1D
 
-    def evaluate(self, env, num_episodes=20):
+    def evaluate(self, env, num_episodes=20, deterministic=True):
         """
         Avalia o agente treinado em um ambiente.
         Retorna métricas completas incluindo contagem de sucessos.
         """
         self.logger.info("Executando agent.evaluate")
-
+        self.logger.info(f"Modo determinístico: {deterministic}")
+    
         if self.model is None:
             raise ValueError("Nenhum modelo treinado carregado para avaliação.")
-
+    
         total_times = []
         success_count = 0
         total_rewards = []
-
+    
         for episode in range(num_episodes):
             obs, _ = env.reset()
             done = False
             steps = 0
             episode_reward = 0
             episode_success = False
-
+    
             while not done:
-                action, _ = self.model.predict(obs, deterministic=True)
+                action, _ = self.model.predict(obs, deterministic=deterministic)
                 obs, reward, done, _, info = env.step(action)
                 steps += 1
                 episode_reward += reward
-
+    
                 # Verificar sucesso
                 if info.get("success", False) or info.get("termination") == "success":
                     episode_success = True
                     success_count += 1
                     break
-
+                
             episode_time = steps * (1 / 240.0)
             total_times.append(episode_time)
             total_rewards.append(episode_reward)
-
+    
         # Calcular métricas
         avg_time = np.mean(total_times) if total_times else 0
         std_time = np.std(total_times) if len(total_times) > 1 else 0
         success_rate = success_count / num_episodes
-
+    
         metrics = {
             "avg_time": avg_time,
             "std_time": std_time,
@@ -252,5 +253,5 @@ class Agent:
             "total_rewards": total_rewards,
             "num_episodes": num_episodes,
         }
-
+    
         return metrics

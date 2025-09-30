@@ -1,4 +1,4 @@
-# evaluate_model.py
+# evaluate_model.py (modificações)
 import os
 import logging
 from agent import Agent
@@ -7,10 +7,11 @@ import multiprocessing
 import utils
 
 
-def evaluate_and_save(model_path, circuit_name="PR", avatar_name="robot_stage1", role="AE", num_episodes=5, seed=42):
+def evaluate_and_save(model_path, circuit_name="PR", avatar_name="robot_stage1", role="AE", num_episodes=5, seed=42, deterministic=True):
     """Avalia um modelo e salva as métricas"""
 
     logging.info(f"Avaliando {avatar_name} no circuito {circuit_name}...")
+    logging.info(f"Modo determinístico: {deterministic}")
 
     # Importar aqui para evitar conflitos
     from simulation import Simulation
@@ -24,10 +25,15 @@ def evaluate_and_save(model_path, circuit_name="PR", avatar_name="robot_stage1",
 
     try:
         # Criar ambiente de avaliação
-        robot = Robot(avatar_name)
-        env_obj = Environment(circuit_name)
-        env = Simulation(robot, env_obj, pause_val, exit_val, realtime_val, num_episodes=num_episodes, seed=seed)
-        agent = Agent(model_path=model_path)
+        logger = utils.get_logger(["evaluation", circuit_name, avatar_name])
+        robot = Robot(logger, name=avatar_name)
+        env_obj = Environment(logger, name=circuit_name)
+        env = Simulation(logger, robot, env_obj, None, pause_val, exit_val, realtime_val, num_episodes=num_episodes, seed=seed)
+        agent = Agent(logger, model_path=model_path)
+        
+        # Configurar ambiente no agente
+        agent.set_env(env)
+        
         metrics = agent.evaluate(env, num_episodes=num_episodes)
 
         if metrics is None:
@@ -42,7 +48,13 @@ def evaluate_and_save(model_path, circuit_name="PR", avatar_name="robot_stage1",
         logging.info(f"Tempo médio: {metrics.get('avg_time', 0):.2f}s")
         logging.info(f"Taxa de sucesso: {metrics.get('success_rate', 0)*100:.1f}%")
 
-        hyperparams = {"algorithm": "PPO", "num_episodes": num_episodes, "seed": seed}
+        hyperparams = {
+            "algorithm": agent.algorithm, 
+            "num_episodes": num_episodes, 
+            "seed": seed,
+            "deterministic": deterministic,
+            "model_path": model_path
+        }
 
         # SALVAR MÉTRICAS - garantir que o diretório existe
         os.makedirs("logs/data", exist_ok=True)
@@ -50,11 +62,17 @@ def evaluate_and_save(model_path, circuit_name="PR", avatar_name="robot_stage1",
             logging.error("Não foi possível criar o diretório logs/data")
             return None
 
-        saved_files = save_complexity_metrics(metrics=metrics, circuit_name=circuit_name, avatar_name=avatar_name, role=role, seed=seed, hyperparams=hyperparams)
+        saved_files = save_complexity_metrics(
+            metrics=metrics, 
+            circuit_name=circuit_name, 
+            avatar_name=avatar_name, 
+            role=role, 
+            seed=seed, 
+            hyperparams=hyperparams
+        )
 
         if saved_files and saved_files[0] is not None:
             logging.info(f"CSV salvo com sucesso: {saved_files[0]}")
-            # Verificar se o arquivo realmente existe
             if os.path.exists(saved_files[0]):
                 logging.info(f"Arquivo confirmado: {saved_files[0]} (tamanho: {os.path.getsize(saved_files[0])} bytes)")
             else:
@@ -68,7 +86,6 @@ def evaluate_and_save(model_path, circuit_name="PR", avatar_name="robot_stage1",
     except Exception as e:
         logging.error(f"Erro na avaliação: {e}")
         import traceback
-
         logging.error(traceback.format_exc())
         return None
     finally:
@@ -84,7 +101,7 @@ def evaluate_single_model_directly():
     logging.info("=== INICIANDO AVALIAÇÃO DIRETA ===")
 
     # Verificar se existe algum modelo
-    models_dir = "logs/data/models"
+    models_dir = "training_data"
     if not os.path.exists(models_dir):
         logging.error(f"Diretório de modelos não encontrado: {models_dir}")
         logging.info("Criando diretório...")
@@ -92,43 +109,23 @@ def evaluate_single_model_directly():
         logging.info("Por favor, coloque um modelo .zip no diretório e execute novamente")
         return
 
-    model_files = [f for f in os.listdir(models_dir) if f.endswith(".zip")]
+    # Buscar modelos recursivamente
+    model_files = []
+    for root, dirs, files in os.walk(models_dir):
+        for file in files:
+            if file.endswith(".zip"):
+                model_files.append(os.path.join(root, file))
+
     if not model_files:
         logging.error(f"Nenhum modelo .zip encontrado em {models_dir}")
-        logging.info("Criando um modelo de teste...")
-
-        # Criar um modelo simples de teste se não existir
-        try:
-            from simulation import Simulation
-            from robot import Robot
-            from environment import Environment
-            from agent import Agent
-
-            robot = Robot("robot_stage1")
-            env_obj = Environment("PR")
-
-            pause_val = multiprocessing.Value("b", 0)
-            exit_val = multiprocessing.Value("b", 0)
-            realtime_val = multiprocessing.Value("b", 0)
-
-            env = Simulation(robot, env_obj, pause_val, exit_val, realtime_val)
-            agent = Agent(env=env, algorithm="PPO")
-
-            # Salvar modelo de teste
-            test_model_path = os.path.join(models_dir, "test_model.zip")
-            agent.model.save(test_model_path)
-            logging.info(f"Modelo de teste criado: {test_model_path}")
-            model_files = ["test_model.zip"]
-
-        except Exception as e:
-            logging.error(f"Erro ao criar modelo de teste: {e}")
-            return
+        logging.info("Execute um treinamento primeiro para gerar um modelo.")
+        return
 
     # Avaliar o primeiro modelo encontrado
-    model_path = os.path.join(models_dir, model_files[0])
-    logging.info(f"Avaliando modelo: {model_files[0]}")
+    model_path = model_files[0]
+    logging.info(f"Avaliando modelo: {os.path.basename(model_path)}")
 
-    metrics = evaluate_and_save(model_path, num_episodes=3)  # Reduzir para teste rápido
+    metrics = evaluate_and_save(model_path, num_episodes=3)
 
     if metrics:
         logging.info("=== AVALIAÇÃO CONCLUÍDA COM SUCESSO ===")
