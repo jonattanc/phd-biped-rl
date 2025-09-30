@@ -28,7 +28,6 @@ class TrainingGUI:
         self.pause_values = []
         self.exit_values = []
         self.enable_real_time_values = []
-        self.enable_visualization_values = []
         self.gui_log_queue = queue.Queue()
         self.ipc_queue = multiprocessing.Queue()
         self.ipc_thread = threading.Thread(target=self.ipc_runner, daemon=True)
@@ -141,16 +140,6 @@ class TrainingGUI:
         self.save_btn = ttk.Button(row2_frame, text="Salvar Snapshot", command=self.save_snapshot, state=tk.DISABLED)
         self.save_btn.grid(row=0, column=3, padx=5)
         
-        self.visualization_var = tk.BooleanVar(value=False)
-        self.visualization_check = ttk.Checkbutton(
-            row2_frame, 
-            text="Ativar Visualização", 
-            variable=self.visualization_var,
-            command=self.toggle_visualization,
-            state=tk.DISABLED
-        )
-        self.visualization_check.grid(row=0, column=4, padx=5)
-        
         self.real_time_var = tk.BooleanVar(value=False)
         self.real_time_check = ttk.Checkbutton(
             row2_frame, 
@@ -159,7 +148,7 @@ class TrainingGUI:
             command=self.toggle_real_time,
             state=tk.DISABLED
         )
-        self.real_time_check.grid(row=0, column=5, padx=5)
+        self.real_time_check.grid(row=0, column=4, padx=5)
 
         self.steps_label = ttk.Label(row2_frame, text="Total Steps: 0 | Steps/s: 0.0")
         self.steps_label.grid(row=0, column=6, padx=5)
@@ -304,7 +293,6 @@ class TrainingGUI:
         self.pause_btn.config(state=tk.NORMAL)
         self.stop_btn.config(state=tk.NORMAL)
         self.save_btn.config(state=tk.NORMAL)
-        self.visualization_check.config(state=tk.NORMAL)
         self.real_time_check.config(state=tk.NORMAL)
 
         self.current_env = self.env_var.get()
@@ -326,16 +314,14 @@ class TrainingGUI:
         exit_val = multiprocessing.Value("b", 0)
 
         # Usar valores dos checkboxes
-        visualization_val = multiprocessing.Value("b", self.visualization_var.get())
         realtime_val = multiprocessing.Value("b", self.real_time_var.get())
 
         self.pause_values.append(pause_val)
         self.exit_values.append(exit_val)
-        self.enable_visualization_values.append(visualization_val)
         self.enable_real_time_values.append(realtime_val)
 
         p = multiprocessing.Process(
-            target=train_process.process_runner, args=(self.current_env, self.current_robot, self.current_algorithm, self.ipc_queue, pause_val, exit_val, visualization_val, realtime_val, self.device)
+            target=train_process.process_runner, args=(self.current_env, self.current_robot, self.current_algorithm, self.ipc_queue, pause_val, exit_val, realtime_val, self.device)
         )
         p.start()
         self.processes.append(p)
@@ -356,19 +342,6 @@ class TrainingGUI:
         self.save_training_btn.config(state=tk.NORMAL)
         self.export_plots_btn.config(state=tk.NORMAL)
 
-
-    def toggle_visualization(self):
-        if not self.enable_visualization_values:
-            self.logger.warning("toggle_visualization: Nenhum processo de treinamento ativo.")
-            return
-
-        new_value = self.visualization_var.get()
-        self.enable_visualization_values[-1].value = new_value
-        
-        if new_value:
-            self.logger.info("Visualização ativada")
-        else:
-            self.logger.info("Visualização desativada")
 
     def toggle_real_time(self):
         """Alterna o modo tempo real da simulação"""
@@ -408,7 +381,6 @@ class TrainingGUI:
         self.pause_btn.config(state=tk.DISABLED)
         self.stop_btn.config(state=tk.DISABLED)
         self.save_btn.config(state=tk.DISABLED)
-        self.visualization_check.config(state=tk.DISABLED)
         self.real_time_check.config(state=tk.DISABLED)
         self.save_training_btn.config(state=tk.DISABLED)
         self.export_plots_btn.config(state=tk.DISABLED)
@@ -712,7 +684,6 @@ class TrainingGUI:
                     self.pause_btn.config(state=tk.DISABLED)
                     self.stop_btn.config(state=tk.DISABLED)
                     self.save_btn.config(state=tk.NORMAL)
-                    self.visualization_check.config(state=tk.DISABLED)
                     self.real_time_check.config(state=tk.DISABLED)
                     self.save_training_btn.config(state=tk.DISABLED)
                     self.export_plots_btn.config(state=tk.DISABLED)
