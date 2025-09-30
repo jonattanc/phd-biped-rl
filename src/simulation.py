@@ -21,6 +21,7 @@ class Simulation(gym.Env):
         self.enable_real_time_value = enable_real_time_value
         self.is_real_time_enabled = enable_real_time_value.value
         self.num_episodes = num_episodes
+        self.current_episode = 0
 
         self.logger = logger
         self.agent = None
@@ -83,6 +84,12 @@ class Simulation(gym.Env):
     def set_agent(self, agent):
         self.agent = agent
 
+    def set_initial_episode(self, initial_episode):
+        """Configura o episódio inicial para continuar de onde parou"""
+        self.current_episode = initial_episode
+        self.episode_count = initial_episode
+        self.logger.info(f"Episódio inicial configurado: {self.current_episode}")
+
     def run(self):
         """Executa múltiplos episódios e retorna métricas"""
         self.logger.info("Executando simulation.run")
@@ -96,12 +103,13 @@ class Simulation(gym.Env):
             while self.pause_value.value and not self.exit_value.value:
                 time.sleep(0.1)
 
-            self.logger.info(f"=== INICIANDO EPISÓDIO {episode + 1}/{self.num_episodes} ===")
+            episode_number = self.current_episode + episode + 1
+            self.logger.info(f"=== INICIANDO EPISÓDIO {episode_number}/{self.current_episode + self.num_episodes} ===")
 
             episode_metrics = self.run_episode()
             all_metrics.append(episode_metrics)
 
-            self.logger.info(f"=== EPISÓDIO {episode + 1} FINALIZADO ===")
+            self.logger.info(f"=== EPISÓDIO {episode_number} FINALIZADO ===")
             self.logger.info(f"Recompensa: {episode_metrics['reward']:.2f}")
             self.logger.info(f"Distância: {episode_metrics['distance']:.2f}m")
             self.logger.info(f"Sucesso: {episode_metrics['success']}")
@@ -182,6 +190,35 @@ class Simulation(gym.Env):
 
         return {"reward": reward, "time_total": total_time, "distance": distance_traveled, "success": success, "steps": steps}
 
+    def on_episode_end(self):
+        self.episode_count += 1
+    
+        # Obter posição e orientação final da IMU
+        imu_position, imu_orientation = self.robot.get_imu_position_and_orientation()
+    
+        # USAR O EPISÓDIO CORRETO (current_episode + episode_count)
+        actual_episode_number = self.current_episode + self.episode_count
+        
+        self.ipc_queue.put(
+            {
+                "type": "episode_data",
+                "episode": actual_episode_number,  # EPISÓDIO ABSOLUTO
+                "reward": self.episode_reward,
+                "time": self.episode_steps * self.time_step_s,
+                "distance": self.episode_distance,
+                "success": self.episode_success,
+                "imu_x": imu_position[0],
+                "imu_y": imu_position[1],
+                "imu_z": imu_position[2],
+                "roll": imu_orientation[0],
+                "pitch": imu_orientation[1],
+                "yaw": imu_orientation[2],
+            }
+        )
+    
+        if actual_episode_number % 10 == 0:
+            self.logger.info(f"Episódio {actual_episode_number} concluído")
+        
     def soft_env_reset(self):
         # Remover corpos antigos se existirem
         if hasattr(self, "robot") and self.robot.id is not None:
@@ -257,10 +294,12 @@ class Simulation(gym.Env):
         # Obter posição e orientação final da IMU
         imu_position, imu_orientation = self.robot.get_imu_position_and_orientation()
 
+        actual_episode_number = self.current_episode + self.episode_count
+
         self.ipc_queue.put(
             {
                 "type": "episode_data",
-                "episode": self.episode_count,
+                "episode": actual_episode_number,
                 "reward": self.episode_reward,
                 "time": self.episode_steps * self.time_step_s,
                 "distance": self.episode_distance,
@@ -274,8 +313,8 @@ class Simulation(gym.Env):
             }
         )
 
-        if self.episode_count % 10 == 0:
-            self.logger.info(f"Episódio {self.episode_count} concluído")
+        if actual_episode_number % 10 == 0:
+            self.logger.info(f"Episódio {actual_episode_number} concluído")
 
     def apply_velocity_action(self, action):
         action = np.clip(action, -1.0, 1.0)  # Normalizar ação para evitar valores extremos

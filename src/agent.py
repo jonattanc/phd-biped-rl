@@ -56,12 +56,13 @@ class TrainingCallback(BaseCallback):
 
 
 class Agent:
-    def __init__(self, logger, env=None, model_path=None, algorithm="PPO", device="cpu"):
+    def __init__(self, logger, env=None, model_path=None, algorithm="PPO", device="cpu", initial_episode=0):
         self.logger = logger
         self.model = None
         self.algorithm = algorithm
         self.env = env
         self.action_dim = 0
+        self.initial_episode = initial_episode
 
         if env is not None:
             # Criar ambiente vetorizado
