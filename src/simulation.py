@@ -268,7 +268,7 @@ class Simulation(gym.Env):
                 "distance": self.episode_distance,
                 "success": self.episode_success,
                 "imu_x": imu_position[0],
-                "imu_y": imu_position[1], 
+                "imu_y": imu_position[1],
                 "imu_z": imu_position[2],
                 "roll": imu_orientation[0],
                 "pitch": imu_orientation[1],
@@ -353,12 +353,11 @@ class Simulation(gym.Env):
             return None, 0.0, True, False, {"exit": True}
 
         # Atualizar configurações de visualização e tempo real se necessário
-        if (self.is_visualization_enabled != self.enable_visualization_value.value or 
-            self.is_real_time_enabled != self.enable_real_time_value.value):
+        if self.is_visualization_enabled != self.enable_visualization_value.value or self.is_real_time_enabled != self.enable_real_time_value.value:
             self.is_visualization_enabled = self.enable_visualization_value.value
             self.is_real_time_enabled = self.enable_real_time_value.value
             self.setup_sim_env()
-            
+
         self.apply_action(action)
 
         # Avançar simulação
@@ -372,10 +371,7 @@ class Simulation(gym.Env):
 
         # Enviar contagem de steps para a GUI
         try:
-            self.ipc_queue.put_nowait({
-                "type": "step_count", 
-                "steps": self.physics_step_multiplier
-            })
+            self.ipc_queue.put_nowait({"type": "step_count", "steps": self.physics_step_multiplier})
         except:
             pass
 

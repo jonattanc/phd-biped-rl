@@ -11,27 +11,29 @@ class FastTD3(TD3):
     """
     Implementação do Fast TD3 com atualizações mais frequentes
     """
+
     def __init__(self, *args, **kwargs):
-        action_dim = kwargs.pop('action_dim', 1)
-        
+        action_dim = kwargs.pop("action_dim", 1)
+
         # Configurações otimizadas para Fast TD3
-        kwargs.update({
-            'learning_rate': 3e-4,  
-            'buffer_size': 200000,  
-            'learning_starts': 5000,  
-            'batch_size': 256,  
-            'tau': 0.005,  
-            'gamma': 0.99,
-            'train_freq': (1, "step"),  
-            'gradient_steps': 1,  
-            'policy_delay': 2,
-            'target_policy_noise': 0.2,
-            'target_noise_clip': 0.5,
-            'action_noise': NormalActionNoise(mean=np.zeros(action_dim), 
-                                            sigma=0.1 * np.ones(action_dim))
-        })
+        kwargs.update(
+            {
+                "learning_rate": 3e-4,
+                "buffer_size": 200000,
+                "learning_starts": 5000,
+                "batch_size": 256,
+                "tau": 0.005,
+                "gamma": 0.99,
+                "train_freq": (1, "step"),
+                "gradient_steps": 1,
+                "policy_delay": 2,
+                "target_policy_noise": 0.2,
+                "target_noise_clip": 0.5,
+                "action_noise": NormalActionNoise(mean=np.zeros(action_dim), sigma=0.1 * np.ones(action_dim)),
+            }
+        )
         super().__init__(*args, **kwargs)
-    
+
 
 class TrainingCallback(BaseCallback):
     def _on_step(self) -> bool:
@@ -99,12 +101,12 @@ class Agent:
                 tensorboard_log="./logs/",
                 device=device,
             )
-        elif algorithm.upper() == "FASTTD3":  
+        elif algorithm.upper() == "FASTTD3":
             return FastTD3(
                 "MlpPolicy",
                 self.env,
                 verbose=1,
-                action_dim=self.action_dim,  
+                action_dim=self.action_dim,
                 tensorboard_log="./logs/",
                 device=device,
             )
@@ -118,7 +120,7 @@ class Agent:
             self.logger.info(f"Modelo salvo em: {model_path}")
         else:
             raise ValueError("Nenhum modelo para salvar")
-        
+
     def _load_model(self, model_path):
         # Carrega modelo treinado detectando automaticamente o tipo
         try:
@@ -140,7 +142,7 @@ class Agent:
                     # Tentar carregar como FastTD3
                     self.model = FastTD3.load(model_path)
                     self.algorithm = "FastTD3"
-                    if hasattr(self.model, 'action_space') and self.model.action_space is not None:
+                    if hasattr(self.model, "action_space") and self.model.action_space is not None:
                         self.action_dim = self.model.action_space.shape[0]
                     print(f"Modelo FastTD3 carregado: {model_path}")
                 except Exception as e:
