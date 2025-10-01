@@ -56,6 +56,7 @@ def get_logger(description=["main"], ipc_queue=None):
 
     return logger
 
+
 # Funções de Logging e IPC
 def setup_ipc_logging(logger, ipc_queue):
     """Configura logging para IPC entre processos"""
@@ -75,12 +76,13 @@ def ensure_directory(path):
     os.makedirs(path, exist_ok=True)
     return path
 
+
 def find_model_files(directory):
     """Encontra arquivos de modelo em um diretório (busca flexível)"""
     model_files = []
     for root, dirs, files in os.walk(directory):
         for file in files:
-            if file.endswith('.zip'):
+            if file.endswith(".zip"):
                 model_files.append(os.path.join(root, file))
     return model_files
 

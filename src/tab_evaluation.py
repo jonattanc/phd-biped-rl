@@ -9,6 +9,7 @@ import os
 import json
 from datetime import datetime
 import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils import setup_ipc_logging, validate_episodes_count, ensure_directory
 
@@ -18,16 +19,12 @@ class EvaluationTab:
         self.frame = ttk.Frame(parent)
         self.device = device
         self.logger = logger
-        
+
         # IPC Queue para comunicação
         self.ipc_queue = queue.Queue()
-        
+
         # Dados de avaliação
-        self.evaluation_data = {
-            "current_evaluation": None,
-            "evaluation_history": [],
-            "comparison_data": []
-        }
+        self.evaluation_data = {"current_evaluation": None, "evaluation_history": [], "comparison_data": []}
 
         # Componentes da UI
         self.eval_model_path = None
@@ -47,7 +44,7 @@ class EvaluationTab:
         # Controle de callbacks
         self.after_ids = []
         self.gui_active = True
-        
+
         self.setup_ui()
 
     def setup_ui(self):
@@ -75,14 +72,12 @@ class EvaluationTab:
 
         ttk.Label(row2_frame, text="Ambiente:").grid(row=0, column=0, sticky=tk.W, padx=5)
         self.eval_env_var = tk.StringVar(value="PR")
-        env_combo = ttk.Combobox(row2_frame, textvariable=self.eval_env_var, 
-                                values=["PR", "Pmu", "RamA", "RamD", "PG", "PRB"], width=10)
+        env_combo = ttk.Combobox(row2_frame, textvariable=self.eval_env_var, values=["PR", "Pmu", "RamA", "RamD", "PG", "PRB"], width=10)
         env_combo.grid(row=0, column=1, padx=5)
 
         ttk.Label(row2_frame, text="Robô:").grid(row=0, column=2, sticky=tk.W, padx=5)
         self.eval_robot_var = tk.StringVar(value="robot_stage1")
-        robot_combo = ttk.Combobox(row2_frame, textvariable=self.eval_robot_var, 
-                                  values=["robot_stage1", "robot_stage2", "robot_stage3"], width=12)
+        robot_combo = ttk.Combobox(row2_frame, textvariable=self.eval_robot_var, values=["robot_stage1", "robot_stage2", "robot_stage3"], width=12)
         robot_combo.grid(row=0, column=3, padx=5)
 
         ttk.Label(row2_frame, text="Episódios:").grid(row=0, column=4, sticky=tk.W, padx=5)
@@ -93,19 +88,15 @@ class EvaluationTab:
         row3_frame = ttk.Frame(control_frame)
         row3_frame.pack(fill=tk.X, pady=5)
 
-        self.eval_start_btn = ttk.Button(row3_frame, text="Executar Avaliação", 
-                                       command=self.start_evaluation, width=20)
+        self.eval_start_btn = ttk.Button(row3_frame, text="Executar Avaliação", command=self.start_evaluation, width=20)
         self.eval_start_btn.grid(row=0, column=0, padx=5)
 
         self.eval_deterministic_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(row3_frame, text="Modo Determinístico", 
-                       variable=self.eval_deterministic_var).grid(row=0, column=1, padx=5)
+        ttk.Checkbutton(row3_frame, text="Modo Determinístico", variable=self.eval_deterministic_var).grid(row=0, column=1, padx=5)
 
         # Botões de exportação
-        ttk.Button(row3_frame, text="Exportar Resultados", 
-                  command=self.export_evaluation_results).grid(row=0, column=2, padx=5)
-        ttk.Button(row3_frame, text="Salvar Gráficos", 
-                  command=self.export_evaluation_plots).grid(row=0, column=3, padx=5)
+        ttk.Button(row3_frame, text="Exportar Resultados", command=self.export_evaluation_results).grid(row=0, column=2, padx=5)
+        ttk.Button(row3_frame, text="Salvar Gráficos", command=self.export_evaluation_plots).grid(row=0, column=3, padx=5)
 
         # Resultados da avaliação
         results_frame = ttk.LabelFrame(main_frame, text="Resultados da Avaliação", padding="10")
@@ -151,10 +142,8 @@ class EvaluationTab:
         history_buttons = ttk.Frame(history_frame)
         history_buttons.pack(side=tk.RIGHT, padx=5)
 
-        ttk.Button(history_buttons, text="Carregar", 
-                  command=self.load_historical_evaluation, width=12).pack(pady=2)
-        ttk.Button(history_buttons, text="Limpar", 
-                  command=self.clear_history, width=12).pack(pady=2)
+        ttk.Button(history_buttons, text="Carregar", command=self.load_historical_evaluation, width=12).pack(pady=2)
+        ttk.Button(history_buttons, text="Limpar", command=self.clear_history, width=12).pack(pady=2)
 
     def _initialize_evaluation_plots(self):
         """Inicializa os gráficos de avaliação usando utils"""
@@ -164,36 +153,32 @@ class EvaluationTab:
             self.axs_evaluation[0, 0].set_ylabel("Frequência")
             self.axs_evaluation[0, 0].set_xlabel("Tempo (s)")
             self.axs_evaluation[0, 0].grid(True, alpha=0.3)
-            
+
             # Gráfico de sucesso por episódio
             self.axs_evaluation[0, 1].set_title("Sucesso por Episódio")
             self.axs_evaluation[0, 1].set_ylabel("Sucesso")
             self.axs_evaluation[0, 1].set_xlabel("Episódio")
             self.axs_evaluation[0, 1].grid(True, alpha=0.3)
-            
+
             # Gráfico de progressão temporal
             self.axs_evaluation[1, 0].set_title("Progressão de Tempos")
             self.axs_evaluation[1, 0].set_ylabel("Tempo (s)")
             self.axs_evaluation[1, 0].set_xlabel("Episódio")
             self.axs_evaluation[1, 0].grid(True, alpha=0.3)
-            
+
             # Gráfico de métricas consolidadas
             self.axs_evaluation[1, 1].set_title("Métricas Consolidadas")
             self.axs_evaluation[1, 1].set_ylabel("Valor")
             self.axs_evaluation[1, 1].grid(True, alpha=0.3)
-            
+
             self.canvas_evaluation.draw_idle()
-            
+
         except Exception as e:
             self.logger.error(f"Erro ao inicializar gráficos de avaliação: {e}")
 
     def browse_evaluation_model(self):
         """Abre diálogo para selecionar modelo para avaliação"""
-        filename = filedialog.askopenfilename(
-            title="Selecionar Modelo para Avaliação",
-            filetypes=[("Zip files", "*.zip"), ("All files", "*.*")],
-            initialdir="training_data"
-        )
+        filename = filedialog.askopenfilename(title="Selecionar Modelo para Avaliação", filetypes=[("Zip files", "*.zip"), ("All files", "*.*")], initialdir="training_data")
         if filename:
             self.eval_model_path.set(filename)
             self.logger.info(f"Modelo selecionado para avaliação: {os.path.basename(filename)}")
@@ -201,14 +186,14 @@ class EvaluationTab:
     def start_evaluation(self):
         """Inicia a avaliação do modelo selecionado usando validação do utils"""
         model_path = self.eval_model_path.get()
-        
+
         # Validações usando funções do utils
         try:
             if not model_path or not os.path.exists(model_path):
                 raise ValueError("Selecione um modelo válido para avaliação.")
-            
+
             episodes = validate_episodes_count(self.eval_episodes_var.get())
-            
+
         except ValueError as e:
             messagebox.showerror("Erro", str(e))
             return
@@ -225,32 +210,25 @@ class EvaluationTab:
         try:
             # Importação dinâmica para evitar dependência circular
             from evaluate_model import evaluate_and_save
-            
+
             model_path = self.eval_model_path.get()
             environment = self.eval_env_var.get()
             robot = self.eval_robot_var.get()
             episodes = int(self.eval_episodes_var.get())
             deterministic = self.eval_deterministic_var.get()
-            
+
             self.logger.info(f"Iniciando avaliação: {model_path} no ambiente {environment}")
             self.logger.info(f"Configuração: {episodes} episódios, modo {'determinístico' if deterministic else 'estocástico'}")
-            
+
             # Executar avaliação
-            metrics = evaluate_and_save(
-                model_path=model_path,
-                circuit_name=environment,
-                avatar_name=robot,
-                num_episodes=episodes,
-                deterministic=deterministic,
-                seed=42
-            )
-            
+            metrics = evaluate_and_save(model_path=model_path, circuit_name=environment, avatar_name=robot, num_episodes=episodes, deterministic=deterministic, seed=42)
+
             if metrics:
                 # Atualizar interface com resultados
                 self.root.after(0, lambda: self._display_evaluation_results(metrics))
             else:
                 self.root.after(0, lambda: messagebox.showerror("Erro", "Falha na avaliação - nenhuma métrica retornada"))
-                
+
         except ImportError:
             error_msg = "Módulo evaluate_model não encontrado. Verifique a instalação."
             self.logger.error(error_msg)
@@ -267,14 +245,14 @@ class EvaluationTab:
             # Atualizar métricas textuais
             self.metrics_text.config(state=tk.NORMAL)
             self.metrics_text.delete(1.0, tk.END)
-            
-            success_rate = metrics.get('success_rate', 0) * 100
-            avg_time = metrics.get('avg_time', 0)
-            std_time = metrics.get('std_time', 0)
-            success_count = metrics.get('success_count', 0)
-            num_episodes = metrics.get('num_episodes', 0)
-            total_rewards = metrics.get('total_rewards', [])
-            
+
+            success_rate = metrics.get("success_rate", 0) * 100
+            avg_time = metrics.get("avg_time", 0)
+            std_time = metrics.get("std_time", 0)
+            success_count = metrics.get("success_count", 0)
+            num_episodes = metrics.get("num_episodes", 0)
+            total_rewards = metrics.get("total_rewards", [])
+
             results_text = f"""=== RESULTADOS DA AVALIAÇÃO ===
 
 Estatísticas Gerais:
@@ -293,45 +271,45 @@ Métricas de Performance:
 
 Distribuição de Tempos:
 """
-            
-            times = metrics.get('total_times', [])
+
+            times = metrics.get("total_times", [])
             if times:
                 for i, time_val in enumerate(times, 1):
                     status = "✓" if i <= success_count else "✗"
                     results_text += f"• Episódio {i}: {time_val:.2f}s {status}\n"
-            
+
             # Análise de performance
             results_text += f"""
 Análise:
 • Performance: {'EXCELENTE' if success_rate >= 90 else 'BOA' if success_rate >= 70 else 'REGULAR' if success_rate >= 50 else 'RUIM'}
 • Consistência: {'ALTA' if std_time < avg_time * 0.1 else 'MÉDIA' if std_time < avg_time * 0.2 else 'BAXA'}
 """
-            
+
             self.metrics_text.insert(1.0, results_text)
             self.metrics_text.config(state=tk.DISABLED)
-            
+
             # Atualizar gráficos
             self._update_evaluation_plots(metrics)
-            
+
             # Salvar nos dados de avaliação
             evaluation_record = {
-                'metrics': metrics,
-                'timestamp': datetime.now(),
-                'model_path': self.eval_model_path.get(),
-                'environment': self.eval_env_var.get(),
-                'robot': self.eval_robot_var.get(),
-                'episodes': int(self.eval_episodes_var.get()),
-                'deterministic': self.eval_deterministic_var.get()
+                "metrics": metrics,
+                "timestamp": datetime.now(),
+                "model_path": self.eval_model_path.get(),
+                "environment": self.eval_env_var.get(),
+                "robot": self.eval_robot_var.get(),
+                "episodes": int(self.eval_episodes_var.get()),
+                "deterministic": self.eval_deterministic_var.get(),
             }
-            
-            self.evaluation_data['current_evaluation'] = evaluation_record
-            self.evaluation_data['evaluation_history'].append(evaluation_record)
-            
+
+            self.evaluation_data["current_evaluation"] = evaluation_record
+            self.evaluation_data["evaluation_history"].append(evaluation_record)
+
             # Atualizar histórico
             self._update_history_listbox()
-            
+
             messagebox.showinfo("Sucesso", "Avaliação concluída com sucesso!")
-            
+
         except Exception as e:
             self.logger.error(f"Erro ao exibir resultados: {e}")
             messagebox.showerror("Erro", f"Erro ao exibir resultados: {e}")
@@ -339,78 +317,71 @@ Análise:
     def _update_evaluation_plots(self, metrics):
         """Atualiza os gráficos de avaliação com novos dados"""
         try:
-            times = metrics.get('total_times', [])
-            successes = [1] * metrics.get('success_count', 0) + [0] * (len(times) - metrics.get('success_count', 0))
-            
+            times = metrics.get("total_times", [])
+            successes = [1] * metrics.get("success_count", 0) + [0] * (len(times) - metrics.get("success_count", 0))
+
             # Limpar gráficos
             for ax in self.axs_evaluation.flat:
                 ax.clear()
-            
+
             # Gráfico de distribuição de tempos
             if times:
-                self.axs_evaluation[0, 0].hist(times, bins=min(10, len(times)), alpha=0.7, color='blue', edgecolor='black')
-                self.axs_evaluation[0, 0].axvline(metrics.get('avg_time', 0), color='red', linestyle='--', 
-                                                 label=f'Média: {metrics["avg_time"]:.2f}s')
+                self.axs_evaluation[0, 0].hist(times, bins=min(10, len(times)), alpha=0.7, color="blue", edgecolor="black")
+                self.axs_evaluation[0, 0].axvline(metrics.get("avg_time", 0), color="red", linestyle="--", label=f'Média: {metrics["avg_time"]:.2f}s')
             self.axs_evaluation[0, 0].set_title("Distribuição de Tempos")
             self.axs_evaluation[0, 0].set_ylabel("Frequência")
             self.axs_evaluation[0, 0].set_xlabel("Tempo (s)")
             self.axs_evaluation[0, 0].legend()
             self.axs_evaluation[0, 0].grid(True, alpha=0.3)
-            
+
             # Gráfico de sucesso por episódio
             if successes:
-                colors = ['green' if s == 1 else 'red' for s in successes]
+                colors = ["green" if s == 1 else "red" for s in successes]
                 bars = self.axs_evaluation[0, 1].bar(range(len(successes)), successes, color=colors, alpha=0.7)
                 self.axs_evaluation[0, 1].set_title("Sucesso por Episódio")
                 self.axs_evaluation[0, 1].set_ylabel("Sucesso (1=Sim, 0=Não)")
                 self.axs_evaluation[0, 1].set_xlabel("Episódio")
                 self.axs_evaluation[0, 1].set_yticks([0, 1])
-                self.axs_evaluation[0, 1].set_yticklabels(['Falha', 'Sucesso'])
+                self.axs_evaluation[0, 1].set_yticklabels(["Falha", "Sucesso"])
                 self.axs_evaluation[0, 1].grid(True, alpha=0.3)
-            
+
             # Gráfico de progressão temporal
             if times:
-                self.axs_evaluation[1, 0].plot(range(len(times)), times, 'o-', color='orange', markersize=4)
-                self.axs_evaluation[1, 0].axhline(y=metrics.get('avg_time', 0), color='red', linestyle='--', 
-                                                 label=f'Média: {metrics["avg_time"]:.2f}s')
+                self.axs_evaluation[1, 0].plot(range(len(times)), times, "o-", color="orange", markersize=4)
+                self.axs_evaluation[1, 0].axhline(y=metrics.get("avg_time", 0), color="red", linestyle="--", label=f'Média: {metrics["avg_time"]:.2f}s')
                 self.axs_evaluation[1, 0].set_title("Progressão de Tempos")
                 self.axs_evaluation[1, 0].set_ylabel("Tempo (s)")
                 self.axs_evaluation[1, 0].set_xlabel("Episódio")
                 self.axs_evaluation[1, 0].legend()
                 self.axs_evaluation[1, 0].grid(True, alpha=0.3)
-            
+
             # Gráfico de métricas consolidadas
-            metrics_names = ['Taxa Sucesso', 'Tempo Médio', 'Desvio Padrão']
-            metrics_values = [
-                metrics.get('success_rate', 0) * 100,
-                metrics.get('avg_time', 0),
-                metrics.get('std_time', 0)
-            ]
-            colors = ['green', 'blue', 'orange']
+            metrics_names = ["Taxa Sucesso", "Tempo Médio", "Desvio Padrão"]
+            metrics_values = [metrics.get("success_rate", 0) * 100, metrics.get("avg_time", 0), metrics.get("std_time", 0)]
+            colors = ["green", "blue", "orange"]
             bars = self.axs_evaluation[1, 1].bar(metrics_names, metrics_values, color=colors, alpha=0.7)
             self.axs_evaluation[1, 1].set_title("Métricas Consolidadas")
             self.axs_evaluation[1, 1].set_ylabel("Valor")
             self.axs_evaluation[1, 1].grid(True, alpha=0.3)
-            
+
             # Adicionar valores nas barras
             for bar, value in zip(bars, metrics_values):
                 height = bar.get_height()
-                self.axs_evaluation[1, 1].text(bar.get_x() + bar.get_width()/2., height,
-                                              f'{value:.2f}', ha='center', va='bottom')
-            
+                self.axs_evaluation[1, 1].text(bar.get_x() + bar.get_width() / 2.0, height, f"{value:.2f}", ha="center", va="bottom")
+
             self.fig_evaluation.tight_layout()
             self.canvas_evaluation.draw_idle()
-            
+
         except Exception as e:
             self.logger.error(f"Erro ao atualizar gráficos de avaliação: {e}")
 
     def _update_history_listbox(self):
         """Atualiza a lista de histórico de avaliações"""
         self.history_listbox.delete(0, tk.END)
-        for i, evaluation in enumerate(self.evaluation_data['evaluation_history']):
-            timestamp = evaluation['timestamp'].strftime("%H:%M:%S")
-            model_name = os.path.basename(evaluation['model_path'])
-            success_rate = evaluation['metrics'].get('success_rate', 0) * 100
+        for i, evaluation in enumerate(self.evaluation_data["evaluation_history"]):
+            timestamp = evaluation["timestamp"].strftime("%H:%M:%S")
+            model_name = os.path.basename(evaluation["model_path"])
+            success_rate = evaluation["metrics"].get("success_rate", 0) * 100
             display_text = f"{timestamp} - {model_name} - {success_rate:.1f}% sucesso"
             self.history_listbox.insert(tk.END, display_text)
 
@@ -420,75 +391,72 @@ Análise:
         if not selection:
             messagebox.showwarning("Aviso", "Selecione uma avaliação do histórico.")
             return
-        
+
         try:
-            evaluation = self.evaluation_data['evaluation_history'][selection[0]]
-            self._display_evaluation_results(evaluation['metrics'])
+            evaluation = self.evaluation_data["evaluation_history"][selection[0]]
+            self._display_evaluation_results(evaluation["metrics"])
             messagebox.showinfo("Sucesso", "Avaliação histórica carregada!")
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao carregar avaliação: {e}")
 
     def clear_history(self):
         """Limpa o histórico de avaliações"""
-        if self.evaluation_data['evaluation_history']:
-            self.evaluation_data['evaluation_history'].clear()
+        if self.evaluation_data["evaluation_history"]:
+            self.evaluation_data["evaluation_history"].clear()
             self.history_listbox.delete(0, tk.END)
             self.logger.info("Histórico de avaliações limpo")
 
     def export_evaluation_results(self):
         """Exporta os resultados da avaliação para arquivo JSON"""
-        if not self.evaluation_data['current_evaluation']:
+        if not self.evaluation_data["current_evaluation"]:
             messagebox.showwarning("Aviso", "Nenhum resultado de avaliação para exportar.")
             return
-        
+
         try:
             filename = filedialog.asksaveasfilename(
                 title="Salvar Resultados da Avaliação",
                 defaultextension=".json",
                 filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
-                initialfile=f"evaluation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                initialfile=f"evaluation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
             )
-            
+
             if filename:
                 # Garantir que o diretório existe
                 ensure_directory(os.path.dirname(filename))
-                
-                with open(filename, 'w', encoding='utf-8') as f:
-                    json.dump(self.evaluation_data['current_evaluation'], f, indent=2, ensure_ascii=False, default=str)
-                
+
+                with open(filename, "w", encoding="utf-8") as f:
+                    json.dump(self.evaluation_data["current_evaluation"], f, indent=2, ensure_ascii=False, default=str)
+
                 messagebox.showinfo("Sucesso", f"Resultados exportados para:\n{filename}")
                 self.logger.info(f"Resultados de avaliação exportados: {filename}")
-                
+
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao exportar resultados: {e}")
             self.logger.error(f"Erro ao exportar resultados: {e}")
 
     def export_evaluation_plots(self):
         """Exporta os gráficos de avaliação como imagens"""
-        if not self.evaluation_data['current_evaluation']:
+        if not self.evaluation_data["current_evaluation"]:
             messagebox.showwarning("Aviso", "Nenhum gráfico para exportar.")
             return
-        
+
         try:
-            directory = filedialog.askdirectory(
-                title="Selecione onde salvar os gráficos"
-            )
-            
+            directory = filedialog.askdirectory(title="Selecione onde salvar os gráficos")
+
             if directory:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                model_name = os.path.basename(self.evaluation_data['current_evaluation']['model_path'])
-                
+                model_name = os.path.basename(self.evaluation_data["current_evaluation"]["model_path"])
+
                 # Salvar gráfico combinado
                 fig_combined, axs_combined = plt.subplots(2, 2, figsize=(12, 10))
-                self._plot_to_export_figure(axs_combined, self.evaluation_data['current_evaluation']['metrics'])
+                self._plot_to_export_figure(axs_combined, self.evaluation_data["current_evaluation"]["metrics"])
                 fig_combined.suptitle(f"Avaliação - {model_name} - {self.eval_env_var.get()}", fontsize=16)
-                fig_combined.savefig(os.path.join(directory, f'evaluation_combined_{timestamp}.png'), 
-                                   dpi=300, bbox_inches='tight')
+                fig_combined.savefig(os.path.join(directory, f"evaluation_combined_{timestamp}.png"), dpi=300, bbox_inches="tight")
                 plt.close(fig_combined)
-                
+
                 messagebox.showinfo("Sucesso", f"Gráficos exportados para:\n{directory}")
                 self.logger.info(f"Gráficos de avaliação exportados: {directory}")
-                
+
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao exportar gráficos: {e}")
             self.logger.error(f"Erro ao exportar gráficos: {e}")
@@ -496,20 +464,18 @@ Análise:
     def _plot_to_export_figure(self, axs, metrics):
         """Plota dados nos eixos fornecidos para exportação"""
         # Replicar a lógica de plotagem do _update_evaluation_plots
-        times = metrics.get('total_times', [])
-        successes = [1] * metrics.get('success_count', 0) + [0] * (len(times) - metrics.get('success_count', 0))
-        
+        times = metrics.get("total_times", [])
+        successes = [1] * metrics.get("success_count", 0) + [0] * (len(times) - metrics.get("success_count", 0))
+
         # Gráfico de distribuição de tempos
         if times:
-            axs[0, 0].hist(times, bins=min(10, len(times)), alpha=0.7, color='blue', edgecolor='black')
-            axs[0, 0].axvline(metrics.get('avg_time', 0), color='red', linestyle='--', 
-                             label=f'Média: {metrics["avg_time"]:.2f}s')
+            axs[0, 0].hist(times, bins=min(10, len(times)), alpha=0.7, color="blue", edgecolor="black")
+            axs[0, 0].axvline(metrics.get("avg_time", 0), color="red", linestyle="--", label=f'Média: {metrics["avg_time"]:.2f}s')
         axs[0, 0].set_title("Distribuição de Tempos")
         axs[0, 0].set_ylabel("Frequência")
         axs[0, 0].set_xlabel("Tempo (s)")
         axs[0, 0].legend()
         axs[0, 0].grid(True, alpha=0.3)
-        
 
     def start(self):
         """Inicializa a aba de avaliação"""

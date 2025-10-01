@@ -38,20 +38,20 @@ class FastTD3(TD3):
 class TrainingCallback(BaseCallback):
     def __init__(self, verbose=0):
         super(TrainingCallback, self).__init__(verbose)
-        
+
     def _on_step(self) -> bool:
         try:
             # Verificar se há informações de ambiente
             infos = self.locals.get("infos", [])
-            
+
             # Se houver infos e alguma indicar saída, parar
             if infos and any(isinstance(info, dict) and info.get("exit", False) for info in infos):
                 return False
-                
+
         except Exception as e:
             # Em caso de erro, continuar o treinamento
             pass
-            
+
         return True
 
 
@@ -164,7 +164,7 @@ class Agent:
         if self.model is not None and env is not None:
             # Criar ambiente vetorizado
             vec_env = DummyVecEnv([lambda: env])
-            
+
             # Configurar o ambiente no modelo
             self.model.set_env(vec_env)
             self.env = vec_env
@@ -182,13 +182,9 @@ class Agent:
             if self.model.get_env() is None:
                 self.logger.error("Ambiente não configurado para o modelo!")
                 raise ValueError("O ambiente deve ser configurado antes do treinamento. Chame set_env() primeiro.")
-            
+
             callback = TrainingCallback()
-            self.model.learn(
-                total_timesteps=total_timesteps, 
-                reset_num_timesteps=False,
-                callback=callback
-            )
+            self.model.learn(total_timesteps=total_timesteps, reset_num_timesteps=False, callback=callback)
         else:
             raise ValueError("Modelo não foi inicializado.")
 
@@ -208,42 +204,42 @@ class Agent:
         """
         self.logger.info("Executando agent.evaluate")
         self.logger.info(f"Modo determinístico: {deterministic}")
-    
+
         if self.model is None:
             raise ValueError("Nenhum modelo treinado carregado para avaliação.")
-    
+
         total_times = []
         success_count = 0
         total_rewards = []
-    
+
         for episode in range(num_episodes):
             obs, _ = env.reset()
             done = False
             steps = 0
             episode_reward = 0
             episode_success = False
-    
+
             while not done:
                 action, _ = self.model.predict(obs, deterministic=deterministic)
                 obs, reward, done, _, info = env.step(action)
                 steps += 1
                 episode_reward += reward
-    
+
                 # Verificar sucesso
                 if info.get("success", False) or info.get("termination") == "success":
                     episode_success = True
                     success_count += 1
                     break
-                
+
             episode_time = steps * (1 / 240.0)
             total_times.append(episode_time)
             total_rewards.append(episode_reward)
-    
+
         # Calcular métricas
         avg_time = np.mean(total_times) if total_times else 0
         std_time = np.std(total_times) if len(total_times) > 1 else 0
         success_rate = success_count / num_episodes
-    
+
         metrics = {
             "avg_time": avg_time,
             "std_time": std_time,
@@ -253,5 +249,5 @@ class Agent:
             "total_rewards": total_rewards,
             "num_episodes": num_episodes,
         }
-    
+
         return metrics

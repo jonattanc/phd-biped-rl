@@ -192,13 +192,13 @@ class Simulation(gym.Env):
 
     def on_episode_end(self):
         self.episode_count += 1
-    
+
         # Obter posição e orientação final da IMU
         imu_position, imu_orientation = self.robot.get_imu_position_and_orientation()
-    
+
         # USAR O EPISÓDIO CORRETO (current_episode + episode_count)
         actual_episode_number = self.current_episode + self.episode_count
-        
+
         self.ipc_queue.put(
             {
                 "type": "episode_data",
@@ -215,10 +215,10 @@ class Simulation(gym.Env):
                 "yaw": imu_orientation[2],
             }
         )
-    
+
         if actual_episode_number % 10 == 0:
             self.logger.info(f"Episódio {actual_episode_number} concluído")
-        
+
     def soft_env_reset(self):
         # Remover corpos antigos se existirem
         if hasattr(self, "robot") and self.robot.id is not None:
