@@ -38,10 +38,6 @@ class ComparisonTab:
         # Configurar IPC logging
         setup_ipc_logging(self.logger, self.ipc_queue)
 
-        # Controle de callbacks
-        self.after_ids = []
-        self.gui_active = True
-
         self.setup_ui()
 
     def setup_ui(self):

@@ -42,6 +42,7 @@ class TrainingTab:
         self.ipc_thread = None
         self.plot_data_lock = threading.Lock()
         self.gui_closed = False
+        self.after_ids = {}
         self.new_plot_data = False
 
         # Componentes da UI
@@ -66,9 +67,9 @@ class TrainingTab:
         self.canvas = None
 
         # Configurações de treinamento
-        self.total_steps = 0
+        self.total_steps = None
         self.steps_per_second = 0
-        self.last_step_time = time.time()
+        self.training_start_time = time.time()
         self.current_episode = 0
         self.loaded_episode_count = 0
         self.training_data_dir = "training_data"
@@ -85,10 +86,6 @@ class TrainingTab:
 
         # Configurar IPC logging
         setup_ipc_logging(self.logger, self.ipc_queue)
-
-        # Controle de callbacks
-        self.after_ids = []
-        self.gui_active = True
 
         self.setup_ui()
         self.setup_ipc()
@@ -166,7 +163,7 @@ class TrainingTab:
         self.real_time_check = ttk.Checkbutton(row2_frame, text="Visualizar Robô", variable=self.real_time_var, command=self.toggle_real_time, state=tk.DISABLED, width=15)
         self.real_time_check.grid(row=0, column=4, padx=5)
 
-        self.steps_label = ttk.Label(row2_frame, text="Total Steps: 0 | Steps/s: 0.0")
+        self.steps_label = ttk.Label(row2_frame, text=self.build_steps_label_text(0, 0))
         self.steps_label.grid(row=0, column=6, padx=5)
 
         # Gráficos
@@ -282,9 +279,9 @@ class TrainingTab:
 
             # Limpar dados anteriores
             self.episode_data = {key: [] for key in self.episode_data.keys()}
-            self.total_steps = 0
+            self.total_steps = None
             self.steps_per_second = 0
-            self.last_step_time = time.time()
+            self.training_start_time = time.time()
             self._initialize_plots()
 
             # Configurar botões
@@ -818,35 +815,37 @@ class TrainingTab:
         else:
             self.logger.info("Modo tempo real desativado")
 
+    def build_steps_label_text(self, total_steps, steps_per_second):
+        return f"Total Steps: {total_steps} | Steps/s: {steps_per_second:.1f}"
+
     def _update_step_counter(self):
-        """Atualiza o contador de steps a cada segundo"""
-        if not self.gui_active:
+        """Atualiza o contador de steps periodicamente"""
+        if self.gui_closed:
             return
 
         current_time = time.time()
-        time_diff = current_time - self.last_step_time
+        time_diff = current_time - self.training_start_time
 
-        if time_diff >= 1.0:
-            if time_diff > 0:
-                self.steps_per_second = self.total_steps / time_diff
-            self.steps_label.config(text=f"Total Steps: {self.total_steps} | Steps/s: {self.steps_per_second:.1f}")
-            self.total_steps = 0
-            self.last_step_time = current_time
+        if self.total_steps is None:
+            self.steps_per_second = 0
 
-        if self.gui_active:
-            after_id = self.root.after(100, self._update_step_counter)
-            self.after_ids.append(after_id)
+        else:
+            self.steps_per_second = self.total_steps / time_diff
+
+        self.steps_label.config(text=self.build_steps_label_text(self.total_steps, self.steps_per_second))
+
+        after_id = self.root.after(500, self._update_step_counter)
+        self.after_ids["_update_step_counter"] = after_id
 
     def _refresh_plots(self):
         """Atualiza os gráficos com os dados atuais"""
-        if not self.gui_active:
+        if self.gui_closed:
             return
 
         try:
             if not self.episode_data["episodes"] or not self.new_plot_data:
-                if self.gui_active:
-                    after_id = self.root.after(500, self._refresh_plots)
-                    self.after_ids.append(after_id)
+                after_id = self.root.after(500, self._refresh_plots)
+                self.after_ids["_refresh_plots"] = after_id
                 return
 
             self.new_plot_data = False
@@ -877,19 +876,17 @@ class TrainingTab:
         except Exception as e:
             self.logger.exception(f"Plot error")
 
-        if self.gui_active:
-            after_id = self.root.after(500, self._refresh_plots)
-            self.after_ids.append(after_id)
+        after_id = self.root.after(500, self._refresh_plots)
+        self.after_ids["_refresh_plots"] = after_id
 
     def _update_log_display(self):
         """Atualiza a exibição de logs"""
-        if not self.gui_active:
+        if self.gui_closed:
             return
 
         if self.gui_log_queue.empty():
-            if self.gui_active:
-                after_id = self.root.after(500, self._update_log_display)
-                self.after_ids.append(after_id)
+            after_id = self.root.after(500, self._update_log_display)
+            self.after_ids["_update_log_display"] = after_id
             return
 
         self.log_text.config(state=tk.NORMAL)
@@ -905,9 +902,8 @@ class TrainingTab:
         self.log_text.see(tk.END)
         self.log_text.config(state=tk.DISABLED)
 
-        if self.gui_active:
-            after_id = self.root.after(500, self._update_log_display)
-            self.after_ids.append(after_id)
+        after_id = self.root.after(500, self._update_log_display)
+        self.after_ids["_update_log_display"] = after_id
 
     def ipc_runner(self):
         """Thread para monitorar a fila IPC e atualizar logs"""
@@ -944,7 +940,11 @@ class TrainingTab:
 
                     elif data_type == "step_count":
                         # Atualizar contador de steps
-                        self.total_steps += msg.get("steps", 0)
+                        if self.total_steps is None:
+                            self.total_steps = msg.get("steps", 0)
+
+                        else:
+                            self.total_steps += msg.get("steps", 0)
 
                     elif data_type == "save_model":
                         # Comando de salvamento - apenas registrar, não processar aqui
@@ -988,18 +988,15 @@ class TrainingTab:
         """Limpeza adequada ao fechar"""
         self.logger.info("Gui fechando")
 
-        # Marcar GUI como inativa
-        self.gui_active = False
-
         # Cancelar todas as callbacks agendadas
-        for after_id in self.after_ids:
+        for after_id in self.after_ids.values():
             try:
                 self.root.after_cancel(after_id)
             except:
                 pass
-        self.after_ids.clear()
 
         self.gui_closed = True
+
         if hasattr(self, "ipc_queue"):
             self.ipc_queue.put(None)  # Sinaliza para a thread IPC terminar
 
@@ -1027,15 +1024,14 @@ class TrainingTab:
         self.logger.info("Aba de treinamento inicializada")
 
         # Iniciar threads de atualização
-        if self.gui_active:
-            after_id = self.root.after(500, self._update_log_display)
-            self.after_ids.append(after_id)
+        after_id = self.root.after(500, self._update_log_display)
+        self.after_ids["_update_log_display"] = after_id
 
-            after_id = self.root.after(500, self._refresh_plots)
-            self.after_ids.append(after_id)
+        after_id = self.root.after(500, self._refresh_plots)
+        self.after_ids["_refresh_plots"] = after_id
 
-            after_id = self.root.after(100, self._update_step_counter)
-            self.after_ids.append(after_id)
+        after_id = self.root.after(500, self._update_step_counter)
+        self.after_ids["_update_step_counter"] = after_id
 
     @property
     def root(self):
