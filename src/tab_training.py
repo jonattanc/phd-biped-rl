@@ -106,7 +106,7 @@ class TrainingTab:
 
         # Seleção de algoritmo
         ttk.Label(row1_frame, text="Algoritmo:").grid(row=0, column=0, sticky=tk.W, padx=5)
-        algorithms = ["FastTD3", "TD3", "PPO"]
+        algorithms = ["TD3", "FastTD3", "PPO"]
         self.algorithm_var = tk.StringVar(value=algorithms[0])
         algorithm_combo = ttk.Combobox(row1_frame, textvariable=self.algorithm_var, values=algorithms, width=10)
         algorithm_combo.grid(row=0, column=1, padx=5)
