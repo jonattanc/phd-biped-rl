@@ -37,18 +37,12 @@ class Simulation(gym.Env):
         self.success_distance = 10.0  # m
         self.max_motor_velocity = 2.0  # rad/s
         self.max_motor_torque = 130.0  # Nm
-        self.apply_action = self.apply_position_action  # Selecionar a função de controle, por velocidade ou posição
+        self.apply_action = self.apply_position_action
 
-        # Configurar ambiente de simulação
+        # Configurar ambiente de simulação PRIMEIRO
         self.setup_sim_env()
 
-        self.logger.info("Simulação configurada")
-        self.logger.info(f"Robô: {self.robot.name}")
-        self.logger.info(f"DOF: {self.robot.get_num_revolute_joints()}")
-        self.logger.info(f"Ambiente: {self.environment.name}")
-        self.logger.info(f"Tempo Real: {self.is_real_time_enabled}")
-
-        # Definir espaço de ação e observação
+        # AGORA podemos obter as informações do robô carregado
         self.action_dim = self.robot.get_num_revolute_joints()
         self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(self.action_dim,), dtype=np.float32)
 
@@ -56,6 +50,10 @@ class Simulation(gym.Env):
         self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(self.observation_dim,), dtype=np.float32)
 
         self.logger.info(f"Simulação configurada: {self.robot.name} no {self.environment.name}")
+        self.logger.info(f"Robô: {self.robot.name}")
+        self.logger.info(f"DOF: {self.action_dim}")
+        self.logger.info(f"Ambiente: {self.environment.name}")
+        self.logger.info(f"Tempo Real: {self.is_real_time_enabled}")
         self.logger.info(f"Action space: {self.action_dim}, Observation space: {self.observation_dim}")
 
         # Variáveis para coleta de dados
@@ -73,13 +71,31 @@ class Simulation(gym.Env):
         else:
             self.physics_client = p.connect(p.DIRECT)
 
-        p.resetDebugVisualizerCamera(cameraDistance=3, cameraYaw=45, cameraPitch=-30, cameraTargetPosition=[0, 0, 0])
+        p.resetDebugVisualizerCamera(cameraDistance=3, cameraYaw=45, cameraPitch=-30, cameraTargetPosition=[0.5, 0, 0.5])
 
         p.setGravity(0, 0, -9.807)
         p.setTimeStep(self.physics_step_s)
 
+        # Carregar ambiente primeiro
         self.environment.load_in_simulation(use_fixed_base=True)
-        self.robot.load_in_simulation()
+
+        # Carregar robô diretamente na posição correta usando o método original
+        start_position = [0.2, 0, 0.06]  # x=0.2m (centro da primeira seção), y=0, z=0.06m
+        start_orientation = p.getQuaternionFromEuler([0, 0, 0])
+
+        # Carregar URDF diretamente com posição/orientação
+        self.robot.id = p.loadURDF(self.robot.urdf_path, start_position, start_orientation)
+
+        # Configurar o robô após carregamento
+        self.robot.imu_link_index = self.robot.get_link_index("imu_link")
+        num_joints = p.getNumJoints(self.robot.id)
+        self.robot.revolute_indices = [i for i in range(num_joints) if p.getJointInfo(self.robot.id, i)[2] == p.JOINT_REVOLUTE]
+        self.robot.initial_position, self.robot.initial_orientation = p.getBasePositionAndOrientation(self.robot.id)
+
+        self.robot.initial_joint_states = []
+        for j in range(p.getNumJoints(self.robot.id)):
+            joint_info = p.getJointState(self.robot.id, j)
+            self.robot.initial_joint_states.append(joint_info[0])
 
     def set_agent(self, agent):
         self.agent = agent
@@ -202,7 +218,7 @@ class Simulation(gym.Env):
         self.ipc_queue.put(
             {
                 "type": "episode_data",
-                "episode": actual_episode_number,  # EPISÓDIO ABSOLUTO
+                "episode": actual_episode_number,
                 "reward": self.episode_reward,
                 "time": self.episode_steps * self.time_step_s,
                 "distance": self.episode_distance,
@@ -227,9 +243,26 @@ class Simulation(gym.Env):
         if hasattr(self.environment, "id") and self.environment.id is not None:
             p.removeBody(self.environment.id)
 
-        # Recarregar ambiente e robô
+        # Recarregar ambiente
         self.environment.load_in_simulation(use_fixed_base=True)
-        self.robot.load_in_simulation()
+
+        # Recarregar robô diretamente na posição correta
+
+        start_position = [0.2, 0, 0.06]  # x=0.2m, y=0, z=0.06m
+        start_orientation = p.getQuaternionFromEuler([0, 0, 0])
+
+        self.robot.id = p.loadURDF(self.robot.urdf_path, start_position, start_orientation)
+
+        # Reconfigurar o robô após carregamento
+        self.robot.imu_link_index = self.robot.get_link_index("imu_link")
+        num_joints = p.getNumJoints(self.robot.id)
+        self.robot.revolute_indices = [i for i in range(num_joints) if p.getJointInfo(self.robot.id, i)[2] == p.JOINT_REVOLUTE]
+        self.robot.initial_position, self.robot.initial_orientation = p.getBasePositionAndOrientation(self.robot.id)
+
+        self.robot.initial_joint_states = []
+        for j in range(p.getNumJoints(self.robot.id)):
+            joint_info = p.getJointState(self.robot.id, j)
+            self.robot.initial_joint_states.append(joint_info[0])
 
     def reset_episode_vars(self):
         self.episode_reward = 0.0
@@ -256,7 +289,6 @@ class Simulation(gym.Env):
         if self.is_real_time_enabled != self.enable_real_time_value.value:
             self.is_real_time_enabled = self.enable_real_time_value.value
             self.setup_sim_env()
-
         else:
             self.soft_env_reset()
 
@@ -400,9 +432,6 @@ class Simulation(gym.Env):
         for _ in range(self.physics_step_multiplier):
             p.stepSimulation()
 
-            # if self.is_real_time_enabled:
-            #     time.sleep(self.physics_step_s)
-
         self.episode_steps += 1
 
         # Enviar contagem de steps para a GUI
@@ -494,7 +523,11 @@ class Simulation(gym.Env):
             p.removeBody(self.environment.id)
 
         self.environment.load_in_simulation(use_fixed_base=True)
-        self.robot.load_in_simulation()
+
+        # Carregar robô na posição correta
+        start_position = [0.5, 0, 0.7]
+        start_orientation = p.getQuaternionFromEuler([0, 0, 0])
+        self.robot.id = p.loadURDF(self.robot.urdf_path, start_position, start_orientation)
 
         # Configuração inicial
         pos, _ = p.getBasePositionAndOrientation(self.robot.id)

@@ -1,5 +1,36 @@
 <?xml version="1.0"?>
-<robot name="descending_ramp">
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="descending_ramp_with_pr_sections">
+  
+  <!-- Base Link - PR Initial Section (plano) -->
+  <link name="pr_initial_link">
+    <contact>
+      <lateral_friction value="0.8"/>
+      <rolling_friction value="0.0"/>
+      <spinning_friction value="0.0"/>
+    </contact>
+    <inertial>
+      <origin xyz="0 0 0"/>
+      <mass value="10000"/>
+      <inertia ixx="1000" ixy="0" ixz="0" iyy="1000" iyz="0" izz="1000"/>
+    </inertial>
+    <visual>
+      <origin xyz="0.5 0 0"/>
+      <geometry>
+        <box size="1.0 1.5 0.1"/>
+      </geometry>
+      <material name="grey">
+        <color rgba="0.8 0.8 0.8 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.5 0 0"/>
+      <geometry>
+        <box size="1.0 1.5 0.1"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- Ramp Section - INCLINADA para baixo -->
   <link name="ramp_link">
     <contact>
       <lateral_friction value="0.5"/>
@@ -12,20 +43,67 @@
       <inertia ixx="1000" ixy="0" ixz="0" iyy="1000" iyz="0" izz="1000"/>
     </inertial>
     <visual>
-      <!-- Para a rampa descendente, a rotação é negativa -->
-      <origin xyz="5.0 0 -0.74" rpy="-0.145 0 0"/> <!-- rpy: ~ -8.33° em radianos -->
+      <!-- Centro em x=4.0, altura Z=0 mas INCLINADA para baixo -->
+      <origin xyz="4.0 0 0" rpy="0 -0.145 0"/>
       <geometry>
-        <box size="10.0 1.5 0.1"/>
+        <box size="8.0 1.5 0.1"/>
       </geometry>
       <material name="dark_grey_ramp">
         <color rgba="0.4 0.4 0.4 1"/>
       </material>
     </visual>
     <collision>
-      <origin xyz="5.0 0 -0.74" rpy="-0.145 0 0"/>
+      <origin xyz="4.0 0 0" rpy="0 -0.145 0"/>
       <geometry>
-        <box size="10.0 1.5 0.1"/>
+        <box size="8.0 1.5 0.1"/>
       </geometry>
     </collision>
   </link>
+
+  <!-- PR Final Section - CONECTADA na altura correta da rampa -->
+  <link name="pr_final_link">
+    <contact>
+      <lateral_friction value="0.8"/>
+      <rolling_friction value="0.0"/>
+      <spinning_friction value="0.0"/>
+    </contact>
+    <inertial>
+      <origin xyz="0 0 0"/>
+      <mass value="10000"/>
+      <inertia ixx="1000" ixy="0" ixz="0" iyy="1000" iyz="0" izz="1000"/>
+    </inertial>
+    <visual>
+      <!-- Altura = -8.0 * sin(0.145) = -1.156m -->
+      <origin xyz="0.5 0 -1.156"/>
+      <geometry>
+        <box size="1.0 1.5 0.1"/>
+      </geometry>
+      <material name="grey">
+        <color rgba="0.8 0.8 0.8 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.5 0 -1.156"/>
+      <geometry>
+        <box size="1.0 1.5 0.1"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- Joints - CONEXÕES SUAVES seguindo padrão PR -->
+  <joint name="initial_to_ramp_joint" type="fixed">
+    <parent link="pr_initial_link"/>
+    <child link="ramp_link"/>
+    <!-- Conecta final da inicial (x=1.0) ao início da rampa (x=0) - mesma altura z=0 -->
+    <origin xyz="1.0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <joint name="ramp_to_final_joint" type="fixed">
+    <parent link="ramp_link"/>
+    <child link="pr_final_link"/>
+    <!-- CORREÇÃO CRÍTICA: Conecta final da rampa (x=8.0) ao início da final (x=0) -->
+    <!-- MAS ajusta a altura para coincidir com o final da rampa inclinada -->
+    <origin xyz="8.0 0 -1.156" rpy="0 0 0"/>
+  </joint>
+
 </robot>

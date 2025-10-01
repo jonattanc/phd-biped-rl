@@ -1,11 +1,8 @@
 <?xml version="1.0"?>
-<robot name="regular_plane_with_joint_lock">
-  <!-- NOTA: O bloqueio articular NÃO é uma propriedade do ambiente (URDF).
-       É uma perturbação INTRÍNSECA que deve ser implementada no código de controle do ambiente (ex: exoskeleton_pr_stage1.py).
-       Este arquivo URDF é IDÊNTICO ao PR.urdf, pois a superfície é a mesma.
-       A lógica do bloqueio deve ser codificada na classe de ambiente, por exemplo,
-       desativando o motor da junta ou aplicando um torque contrário muito alto em momentos aleatórios. -->
-  <link name="plane_link">
+<robot name="regular_plane_with_pr_sections">
+  
+  <!-- Base Link - PR Initial Section -->
+  <link name="pr_initial_link">
     <contact>
       <lateral_friction value="0.8"/>
       <rolling_friction value="0.0"/>
@@ -17,19 +14,91 @@
       <inertia ixx="1000" ixy="0" ixz="0" iyy="1000" iyz="0" izz="1000"/>
     </inertial>
     <visual>
-      <origin xyz="0 0 0"/>
+      <origin xyz="0.5 0 0"/>
       <geometry>
-        <box size="10.0 1.5 0.1"/>
+        <box size="1.0 1.5 0.1"/>
       </geometry>
-      <material name="red_highlight"> <!-- Cor para indicar que este circuito tem uma perturbação especial -->
+      <material name="grey">
+        <color rgba="0.8 0.8 0.8 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.5 0 0"/>
+      <geometry>
+        <box size="1.0 1.5 0.1"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- Middle Section (where joint lock occurs) -->
+  <link name="middle_link">
+    <contact>
+      <lateral_friction value="0.8"/>
+      <rolling_friction value="0.0"/>
+      <spinning_friction value="0.0"/>
+    </contact>
+    <inertial>
+      <origin xyz="0 0 0"/>
+      <mass value="10000"/>
+      <inertia ixx="1000" ixy="0" ixz="0" iyy="1000" iyz="0" izz="1000"/>
+    </inertial>
+    <visual>
+      <origin xyz="4.0 0 0"/>
+      <geometry>
+        <box size="8.0 1.5 0.1"/>
+      </geometry>
+      <material name="red_highlight">
         <color rgba="0.8 0.3 0.3 1"/>
       </material>
     </visual>
     <collision>
-      <origin xyz="0 0 0"/>
+      <origin xyz="4.0 0 0"/>
       <geometry>
-        <box size="10.0 1.5 0.1"/>
+        <box size="8.0 1.5 0.1"/>
       </geometry>
     </collision>
   </link>
+
+  <!-- PR Final Section -->
+  <link name="pr_final_link">
+    <contact>
+      <lateral_friction value="0.8"/>
+      <rolling_friction value="0.0"/>
+      <spinning_friction value="0.0"/>
+    </contact>
+    <inertial>
+      <origin xyz="0 0 0"/>
+      <mass value="10000"/>
+      <inertia ixx="1000" ixy="0" ixz="0" iyy="1000" iyz="0" izz="1000"/>
+    </inertial>
+    <visual>
+      <origin xyz="0.5 0 0"/>
+      <geometry>
+        <box size="1.0 1.5 0.1"/>
+      </geometry>
+      <material name="grey">
+        <color rgba="0.8 0.8 0.8 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.5 0 0"/>
+      <geometry>
+        <box size="1.0 1.5 0.1"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- Joints to connect all sections -->
+  <joint name="initial_to_middle_joint" type="fixed">
+    <parent link="pr_initial_link"/>
+    <child link="middle_link"/>
+    <origin xyz="1.0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <joint name="middle_to_final_joint" type="fixed">
+    <parent link="middle_link"/>
+    <child link="pr_final_link"/>
+    <origin xyz="8.0 0 0" rpy="0 0 0"/>
+  </joint>
+
 </robot>

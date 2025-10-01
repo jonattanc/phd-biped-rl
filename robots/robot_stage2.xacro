@@ -1,141 +1,248 @@
 <?xml version="1.0"?>
-<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="exoskeleton_stage2">
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="myrobot_st2">
+  <!-- Body properties -->
+  <xacro:property name="body_radius" value="0.15" />
+  <xacro:property name="body_length" value="0.3" />
+  <xacro:property name="body_mass" value="5.0" />
+  <xacro:property name="body_ixx" value="0.1" />
+  <xacro:property name="body_iyy" value="0.1" />
+  <xacro:property name="body_izz" value="0.05" />
 
-  <!-- Propriedades -->
-  <xacro:property name="torso_height" value="0.50" />
-  <xacro:property name="torso_radius" value="0.15" />
-  <xacro:property name="thigh_length" value="0.40" />
-  <xacro:property name="shin_length" value="0.43" />
-  <xacro:property name="foot_length" value="0.25" />
-  <xacro:property name="foot_width" value="0.10" />
-  <xacro:property name="foot_thickness" value="0.05" />
-  <xacro:property name="leg_radius" value="0.06" />
-  <xacro:property name="hip_offset_y" value="0.10" />
+  <!-- Hip properties -->
+  <xacro:property name="hip_radius" value="0.05" />
 
-  <material name="robot_material">
-    <color rgba="0.37 0.09 0.09 1"/>
+  <!-- Thigh properties -->
+  <xacro:property name="thigh_radius" value="0.04" />
+  <xacro:property name="thigh_length" value="0.4" />
+  <xacro:property name="thigh_mass" value="1.5" />
+  <xacro:property name="thigh_ixx" value="0.02" />
+  <xacro:property name="thigh_iyy" value="0.02" />
+  <xacro:property name="thigh_izz" value="0.01" />
+
+  <!-- Knee properties -->
+  <xacro:property name="knee_radius" value="0.04" />
+
+  <!-- Shin properties -->
+  <xacro:property name="shin_radius" value="0.035" />
+  <xacro:property name="shin_length" value="0.33" />
+  <xacro:property name="shin_mass" value="1.0" />
+  <xacro:property name="shin_ixx" value="0.015" />
+  <xacro:property name="shin_iyy" value="0.015" />
+  <xacro:property name="shin_izz" value="0.008" />
+
+  <!-- Foot properties -->
+  <xacro:property name="foot_length" value="0.2" />
+  <xacro:property name="foot_width" value="0.1" />
+  <xacro:property name="foot_height" value="0.03" />
+  <xacro:property name="foot_offset_front" value="0.05" />
+  <xacro:property name="foot_mass" value="0.3" />
+  <xacro:property name="foot_ixx" value="0.001" />
+  <xacro:property name="foot_iyy" value="0.001" />
+  <xacro:property name="foot_izz" value="0.0005" />
+
+  <!-- Head properties -->
+  <xacro:property name="head_radius" value="0.1" />
+  <xacro:property name="head_mass" value="0.2" />
+  <xacro:property name="head_ixx" value="0.005" />
+  <xacro:property name="head_iyy" value="0.005" />
+  <xacro:property name="head_izz" value="0.005" />
+
+  <!-- IMU properties -->
+  <xacro:property name="imu_length" value="0.02" />
+  <xacro:property name="imu_width" value="0.03" />
+  <xacro:property name="imu_height" value="0.01" />
+  <xacro:property name="imu_mass" value="0.01" />
+  <xacro:property name="imu_ixx" value="0.00001" />
+  <xacro:property name="imu_iyy" value="0.00001" />
+  <xacro:property name="imu_izz" value="0.00001" />
+  
+  <!-- Materials -->
+  <material name="robot_material_1">
+    <color rgba="0.7 0.7 0.8 1"/>
+  </material>
+  <material name="robot_material_2">
+    <color rgba="0.9 0.9 1.0 1"/>
   </material>
 
-  <!-- Link do Torso (inclui tronco e cabeça) -->
-  <link name="torso">
+  <!-- altura total -->
+  <xacro:property name="leg_total_length" value="${thigh_length + shin_length + foot_height}" />
+  <xacro:property name="body_offset" value="${body_length/2 + leg_total_length}" />
+   
+  <!-- Body (main cylinder) -->
+  <link name="base_link">
+    <origin xyz="0 0 0"/>
     <visual>
+      <origin xyz="0 0 ${body_offset}"/>
       <geometry>
-        <cylinder length="${torso_height}" radius="${torso_radius}"/>
+        <cylinder length="${body_length}" radius="${body_radius}"/>
       </geometry>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <material name="robot_material"/>
+      <material name="robot_material_1"/>
     </visual>
     <collision>
+      <origin xyz="0 0 ${body_offset}"/>
       <geometry>
-        <cylinder length="${torso_height}" radius="${torso_radius}"/>
+        <cylinder length="${body_length}" radius="${body_radius}"/>
       </geometry>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
     </collision>
     <inertial>
-      <mass value="35.1"/> <!-- Massa do tronco conforme tese -->
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <inertia ixx="1.0" ixy="0.0" ixz="0.0" iyy="1.0" iyz="0.0" izz="1.0"/>
+      <mass value="${body_mass}"/>
+      <inertia ixx="${body_ixx}" ixy="0.0" ixz="0.0" iyy="${body_iyy}" iyz="0.0" izz="${body_izz}"/>
     </inertial>
   </link>
 
-  <!-- Macro para uma perna completa (Quadril + Coxa + Joelho + Perna + Pé) -->
+  <!-- IMU (simulated sensor, offset from body center) -->
+  <link name="imu_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="${imu_length} ${imu_width} ${imu_height}"/>
+      </geometry>
+      <material name="robot_material_2"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="${imu_length} ${imu_width} ${imu_height}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="${imu_mass}"/>
+      <inertia ixx="${imu_ixx}" ixy="0.0" ixz="0.0" iyy="${imu_iyy}" iyz="0.0" izz="${imu_izz}"/>
+    </inertial>
+  </link>
+
+  <joint name="base_to_imu" type="fixed">
+    <parent link="base_link"/>
+    <child link="imu_link"/>
+    <origin xyz="${body_radius} 0 ${body_offset - body_length/4}" rpy="0 0 0"/>
+  </joint>
+  
+  <!-- Head (sphere) -->
+  <link name="head_link">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 ${head_radius}"/>
+      <geometry>
+        <sphere radius="${head_radius}"/>
+      </geometry>
+      <material name="robot_material_2"/>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 ${head_radius}"/>
+      <geometry>
+        <sphere radius="${head_radius}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="${head_mass}"/>
+      <inertia ixx="${head_ixx}" ixy="0.0" ixz="0.0" iyy="${head_iyy}" iyz="0.0" izz="${head_izz}"/>
+    </inertial>
+  </link>
+
+  <!-- Head joint: body to head -->
+  <joint name="base_to_head" type="fixed">
+    <parent link="base_link"/>
+    <child link="head_link"/>
+    <origin xyz="0 0 ${body_offset + body_length/2}"/>
+  </joint>
+
+  <!-- Leg macro (creates left/right leg: thigh, shin, foot) -->
   <xacro:macro name="leg" params="prefix reflect">
-    <!-- Link da Coxa -->
-    <link name="${prefix}_thigh">
+    <!-- Thigh -->
+    <link name="${prefix}_thigh_link">
       <visual>
+        <origin rpy="0 0 0" xyz="0 0 ${-thigh_length/2 - hip_radius}"/>
         <geometry>
-          <cylinder length="${thigh_length}" radius="${leg_radius}"/>
+          <cylinder length="${thigh_length}" radius="${thigh_radius}"/>
         </geometry>
-        <origin xyz="0 0 ${-thigh_length/2}" rpy="0 0 0"/>
-        <material name="robot_material"/>
+        <material name="robot_material_2"/>
       </visual>
       <collision>
+        <origin rpy="0 0 0" xyz="0 0 ${-thigh_length/2 - hip_radius}"/>
         <geometry>
-          <cylinder length="${thigh_length}" radius="${leg_radius}"/>
+          <cylinder length="${thigh_length}" radius="${thigh_radius}"/>
         </geometry>
-        <origin xyz="0 0 ${-thigh_length/2}" rpy="0 0 0"/>
       </collision>
       <inertial>
-        <mass value="18.5"/> <!-- Massa da coxa conforme tese -->
-        <origin xyz="0 0 ${-thigh_length/2}" rpy="0 0 0"/>
-        <inertia ixx="0.5" ixy="0.0" ixz="0.0" iyy="0.5" iyz="0.0" izz="0.5"/>
+        <mass value="${thigh_mass}"/>
+        <inertia ixx="${thigh_ixx}" ixy="0.0" ixz="0.0" iyy="${thigh_iyy}" iyz="0.0" izz="${thigh_izz}"/>
       </inertial>
     </link>
 
-    <!-- Junta do Quadril (Flexão/Extensão) -->
-    <joint name="${prefix}_hip_joint" type="revolute">
-      <parent link="torso"/>
-      <child link="${prefix}_thigh"/>
-      <origin xyz="0 ${hip_offset_y * reflect} ${-torso_height/2}" rpy="0 0 0"/>
-      <axis xyz="0 1 0"/> <!-- Rotação no eixo Y para flexão/extensão -->
-      <limit lower="-0.52" upper="2.09" effort="150" velocity="10"/> <!-- -30° a 120° -->
+    <!-- Hip joint: base_link to thigh - EVOLUÇÃO: Limites do Stage2 -->
+    <joint name="base_to_${prefix}_thigh" type="revolute">
+      <parent link="base_link"/>
+      <child link="${prefix}_thigh_link"/>
+      <origin xyz="0 ${(body_radius + hip_radius) * reflect} ${body_offset - body_length/2 + hip_radius}"/>
+      <axis xyz="0 1 0"/>
+      <!-- EVOLUÇÃO: Limites do Stage2 (-30° a 120°) -->
+      <limit lower="-0.52" upper="2.09" effort="150" velocity="10"/>
     </joint>
 
-    <!-- Link da Perna (Shin) -->
-    <link name="${prefix}_shin">
+    <!-- Shin -->
+    <link name="${prefix}_shin_link">
       <visual>
+        <origin rpy="0 0 0" xyz="0 0 ${-shin_length/2 - knee_radius}"/>
         <geometry>
-          <cylinder length="${shin_length}" radius="${leg_radius}"/>
+          <cylinder length="${shin_length}" radius="${shin_radius}"/>
         </geometry>
-        <origin xyz="0 0 ${-shin_length/2}" rpy="0 0 0"/>
-        <material name="robot_material"/>
+        <material name="robot_material_1"/>
       </visual>
       <collision>
+        <origin rpy="0 0 0" xyz="0 0 ${-shin_length/2 - knee_radius}"/>
         <geometry>
-          <cylinder length="${shin_length}" radius="${leg_radius}"/>
+          <cylinder length="${shin_length}" radius="${shin_radius}"/>
         </geometry>
-        <origin xyz="0 0 ${-shin_length/2}" rpy="0 0 0"/>
       </collision>
       <inertial>
-        <mass value="7.6"/> <!-- Massa da perna conforme tese -->
-        <origin xyz="0 0 ${-shin_length/2}" rpy="0 0 0"/>
-        <inertia ixx="0.3" ixy="0.0" ixz="0.0" iyy="0.3" iyz="0.0" izz="0.3"/>
+        <mass value="${shin_mass}"/>
+        <inertia ixx="${shin_ixx}" ixy="0.0" ixz="0.0" iyy="${shin_iyy}" iyz="0.0" izz="${shin_izz}"/>
       </inertial>
     </link>
 
-    <!-- Junta do Joelho (Flexão/Extensão) -->
-    <joint name="${prefix}_knee_joint" type="revolute">
-      <parent link="${prefix}_thigh"/>
-      <child link="${prefix}_shin"/>
-      <origin xyz="0 0 ${-thigh_length}" rpy="0 0 0"/>
-      <axis xyz="0 1 0"/> <!-- Rotação no eixo Y -->
-      <limit lower="0" upper="2.36" effort="100" velocity="10"/> <!-- 0° a 135° -->
+    <!-- Knee joint: thigh to shin - EVOLUÇÃO: Limites do Stage2 -->
+    <joint name="${prefix}_knee" type="revolute">
+      <parent link="${prefix}_thigh_link"/>
+      <child link="${prefix}_shin_link"/>
+      <origin xyz="0 ${(-thigh_radius + -knee_radius) * reflect} ${-hip_radius - thigh_length + knee_radius}"/>
+      <axis xyz="0 1 0"/>
+      <!-- EVOLUÇÃO: Limites do Stage2 (0° a 135°) -->
+      <limit lower="0" upper="2.36" effort="100" velocity="10"/>
     </joint>
 
-    <!-- Link do Pé -->
-    <link name="${prefix}_foot">
+    <!-- Foot -->
+    <link name="${prefix}_foot_link">
       <visual>
+        <origin rpy="0 0 0" xyz="${foot_offset_front} 0 ${-foot_height/2}"/>
         <geometry>
-          <box size="${foot_length} ${foot_width} ${foot_thickness}"/>
+          <box size="${foot_length} ${foot_width} ${foot_height}"/>
         </geometry>
-        <origin xyz="${foot_length/2} 0 ${-foot_thickness/2}" rpy="0 0 0"/>
-        <material name="robot_material"/>
+        <material name="robot_material_2"/>
       </visual>
       <collision>
+        <origin rpy="0 0 0" xyz="0 0 ${-foot_height/2}"/>
         <geometry>
-          <box size="${foot_length} ${foot_width} ${foot_thickness}"/>
+          <box size="${foot_length} ${foot_width} ${foot_height}"/>
         </geometry>
-        <origin xyz="${foot_length/2} 0 ${-foot_thickness/2}" rpy="0 0 0"/>
       </collision>
       <inertial>
-        <mass value="2.1"/> <!-- Massa do pé conforme tese -->
-        <origin xyz="${foot_length/2} 0 ${-foot_thickness/2}" rpy="0 0 0"/>
-        <inertia ixx="0.1" ixy="0.0" ixz="0.0" iyy="0.1" iyz="0.0" izz="0.1"/>
+        <mass value="${foot_mass}"/>
+        <inertia ixx="${foot_ixx}" ixy="0.0" ixz="0.0" iyy="${foot_iyy}" iyz="0.0" izz="${foot_izz}"/>
       </inertial>
     </link>
 
-    <!-- Junta do Tornozelo (Flexão Plantar/Dorsiflexão) -->
-    <joint name="${prefix}_ankle_joint" type="revolute">
-      <parent link="${prefix}_shin"/>
-      <child link="${prefix}_foot"/>
-      <origin xyz="0 0 ${-shin_length}" rpy="0 0 0"/>
-      <axis xyz="0 1 0"/> <!-- Rotação no eixo Y -->
-      <limit lower="-0.52" upper="0.52" effort="80" velocity="10"/> <!-- -30° a 30° -->
+    <!-- Foot joint: shin to foot - EVOLUÇÃO: Agora é revoluta com limites do Stage2 -->
+    <joint name="${prefix}_foot_joint" type="revolute">
+      <parent link="${prefix}_shin_link"/>
+      <child link="${prefix}_foot_link"/>
+      <origin xyz="0 0 ${-knee_radius - shin_length}"/>
+      <axis xyz="0 1 0"/>
+      <!-- EVOLUÇÃO: Tornozelo com flexão plantar/dorsiflexão (-30° a 30°) -->
+      <limit lower="-0.52" upper="0.52" effort="80" velocity="10"/>
     </joint>
   </xacro:macro>
 
-  <!-- Instancia as duas pernas -->
-  <xacro:leg prefix="left" reflect="1" />
+  <!-- Instantiate right and left legs -->
   <xacro:leg prefix="right" reflect="-1" />
-
+  <xacro:leg prefix="left" reflect="1" />
+  
 </robot>

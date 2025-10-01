@@ -1,16 +1,12 @@
 <?xml version="1.0"?>
-<robot name="granular_plane">
-  <link name="plane_link">
+<robot name="granular_plane_with_pr_sections">
+  
+  <!-- Base Link - PR Initial Section -->
+  <link name="pr_initial_link">
     <contact>
-      <!-- Para simular areia, o atrito pode ser mais alto, mas a principal característica
-           é a deformação. O PyBullet não modela deformação granular de forma nativa com URDF simples.
-           Uma abordagem prática é usar um atrito mais alto e talvez um damping maior.
-           Para uma simulação mais fiel, seria necessário usar o plugin de heightfield ou malhas complexas,
-           o que está além do escopo deste modelo URDF básico. -->
-      <lateral_friction value="0.6"/>
-      <rolling_friction value="0.05"/> <!-- Adiciona um pouco de resistência ao rolamento -->
-      <spinning_friction value="0.05"/>
-      <!-- Parâmetros de damping podem ser ajustados via changeDynamics após o carregamento -->
+      <lateral_friction value="0.8"/>
+      <rolling_friction value="0.0"/>
+      <spinning_friction value="0.0"/>
     </contact>
     <inertial>
       <origin xyz="0 0 0"/>
@@ -18,19 +14,91 @@
       <inertia ixx="1000" ixy="0" ixz="0" iyy="1000" iyz="0" izz="1000"/>
     </inertial>
     <visual>
-      <origin xyz="0 0 0"/>
+      <origin xyz="0.5 0 0"/>
       <geometry>
-        <box size="10.0 1.5 0.1"/>
+        <box size="1.0 1.5 0.1"/>
       </geometry>
-      <material name="beige_sand">
-        <color rgba="0.9 0.8 0.6 1"/> <!-- Cor de areia -->
+      <material name="grey">
+        <color rgba="0.8 0.8 0.8 1"/>
       </material>
     </visual>
     <collision>
-      <origin xyz="0 0 0"/>
+      <origin xyz="0.5 0 0"/>
       <geometry>
-        <box size="10.0 1.5 0.1"/>
+        <box size="1.0 1.5 0.1"/>
       </geometry>
     </collision>
   </link>
+
+  <!-- Granular Section -->
+  <link name="granular_link">
+    <contact>
+      <lateral_friction value="0.6"/>
+      <rolling_friction value="0.05"/>
+      <spinning_friction value="0.05"/>
+    </contact>
+    <inertial>
+      <origin xyz="0 0 0"/>
+      <mass value="10000"/>
+      <inertia ixx="1000" ixy="0" ixz="0" iyy="1000" iyz="0" izz="1000"/>
+    </inertial>
+    <visual>
+      <origin xyz="4.0 0 0.025"/>
+      <geometry>
+        <box size="8.0 1.5 0.05"/>
+      </geometry>
+      <material name="beige_sand">
+        <color rgba="0.9 0.8 0.6 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="4.0 0 0.025"/>
+      <geometry>
+        <box size="8.0 1.5 0.05"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- PR Final Section -->
+  <link name="pr_final_link">
+    <contact>
+      <lateral_friction value="0.8"/>
+      <rolling_friction value="0.0"/>
+      <spinning_friction value="0.0"/>
+    </contact>
+    <inertial>
+      <origin xyz="0 0 0"/>
+      <mass value="10000"/>
+      <inertia ixx="1000" ixy="0" ixz="0" iyy="1000" iyz="0" izz="1000"/>
+    </inertial>
+    <visual>
+      <origin xyz="0.5 0 0"/>
+      <geometry>
+        <box size="1.0 1.5 0.1"/>
+      </geometry>
+      <material name="grey">
+        <color rgba="0.8 0.8 0.8 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.5 0 0"/>
+      <geometry>
+        <box size="1.0 1.5 0.1"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- Joints to connect all sections -->
+  <joint name="initial_to_granular_joint" type="fixed">
+    <parent link="pr_initial_link"/>
+    <child link="granular_link"/>
+    <origin xyz="1.0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <joint name="granular_to_final_joint" type="fixed">
+    <parent link="granular_link"/>
+    <child link="pr_final_link"/>
+    <origin xyz="8.0 0 0" rpy="0 0 0"/>
+  </joint>
+
 </robot>

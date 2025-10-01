@@ -623,6 +623,7 @@ class TrainingTab:
                 return
 
             # Carregar dados do treinamento
+            self.resumed_session_dir = session_dir
             training_data = self._load_training_data_file(session_dir)
 
             # Encontrar modelo
