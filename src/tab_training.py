@@ -13,6 +13,7 @@ import shutil
 from datetime import datetime
 
 import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import train_process
@@ -24,17 +25,13 @@ class TrainingTab:
         self.frame = ttk.Frame(parent, padding="10")
         self.device = device
         self.logger = logger
-        
+
         # Dados de treinamento
         self.current_env = ""
         self.current_robot = ""
         self.current_algorithm = ""
-        self.episode_data = {
-            "episodes": [], "rewards": [], "times": [], "distances": [],
-            "imu_x": [], "imu_y": [], "imu_z": [],
-            "roll": [], "pitch": [], "yaw": []
-        }
-        
+        self.episode_data = {"episodes": [], "rewards": [], "times": [], "distances": [], "imu_x": [], "imu_y": [], "imu_z": [], "roll": [], "pitch": [], "yaw": []}
+
         # Controle de processos
         self.processes = []
         self.pause_values = []
@@ -46,7 +43,7 @@ class TrainingTab:
         self.plot_data_lock = threading.Lock()
         self.gui_closed = False
         self.new_plot_data = False
-        
+
         # Componentes da UI
         self.algorithm_var = None
         self.env_var = None
@@ -62,12 +59,12 @@ class TrainingTab:
         self.real_time_check = None
         self.steps_label = None
         self.log_text = None
-        
+
         # Gráficos
         self.fig = None
         self.axs = None
         self.canvas = None
-        
+
         # Configurações de treinamento
         self.total_steps = 0
         self.steps_per_second = 0
@@ -79,26 +76,20 @@ class TrainingTab:
         self.is_resuming = False
         self.resumed_session_dir = None
         self.hyperparams = {}
-        
+
         # Configurações de plot
-        self.plot_titles = [
-            "Recompensa por Episódio", "Duração do Episódio", "Distância Percorrida",
-            "Posição IMU (X, Y, Z)", "Orientação (Roll, Pitch, Yaw)"
-        ]
-        self.plot_ylabels = [
-            "Recompensa", "Tempo (s)", "Distância (m)",
-            "Posição (m)", "Ângulo (rad)"
-        ]
+        self.plot_titles = ["Recompensa por Episódio", "Duração do Episódio", "Distância Percorrida", "Posição IMU (X, Y, Z)", "Orientação (Roll, Pitch, Yaw)"]
+        self.plot_ylabels = ["Recompensa", "Tempo (s)", "Distância (m)", "Posição (m)", "Ângulo (rad)"]
         self.plot_colors = ["blue", "orange", "green", "red", "purple", "brown"]
         self.plot_data_keys = ["rewards", "times", "distances", "imu_xyz", "rpy"]
-        
+
         # Configurar IPC logging
         setup_ipc_logging(self.logger, self.ipc_queue)
 
         # Controle de callbacks
         self.after_ids = []
         self.gui_active = True
-        
+
         self.setup_ui()
         self.setup_ipc()
 
@@ -158,32 +149,21 @@ class TrainingTab:
         # Linha 2: Botões secundários e checkboxes
         row2_frame = ttk.Frame(control_frame)
         row2_frame.grid(row=1, column=0, columnspan=12, sticky=(tk.W, tk.E), pady=5)
-        
-        self.save_training_btn = ttk.Button(row2_frame, text="Salvar Treino", 
-                                          command=self.save_training_data, state=tk.DISABLED, width=15)
+
+        self.save_training_btn = ttk.Button(row2_frame, text="Salvar Treino", command=self.save_training_data, state=tk.DISABLED, width=15)
         self.save_training_btn.grid(row=0, column=0, padx=5)
-        
-        self.load_training_btn = ttk.Button(row2_frame, text="Carregar Treino", 
-                                          command=self.load_training_data, width=15)
+
+        self.load_training_btn = ttk.Button(row2_frame, text="Carregar Treino", command=self.load_training_data, width=15)
         self.load_training_btn.grid(row=0, column=1, padx=5)
-        
-        self.export_plots_btn = ttk.Button(row2_frame, text="Exportar Gráficos", 
-                                         command=self.export_plots, state=tk.DISABLED, width=15)
+
+        self.export_plots_btn = ttk.Button(row2_frame, text="Exportar Gráficos", command=self.export_plots, state=tk.DISABLED, width=15)
         self.export_plots_btn.grid(row=0, column=2, padx=5)
 
-        self.save_btn = ttk.Button(row2_frame, text="Salvar Snapshot", 
-                                 command=self.save_snapshot, state=tk.DISABLED, width=15)
+        self.save_btn = ttk.Button(row2_frame, text="Salvar Snapshot", command=self.save_snapshot, state=tk.DISABLED, width=15)
         self.save_btn.grid(row=0, column=3, padx=5)
-        
+
         self.real_time_var = tk.BooleanVar(value=False)
-        self.real_time_check = ttk.Checkbutton(
-            row2_frame, 
-            text="Visualizar Robô", 
-            variable=self.real_time_var,
-            command=self.toggle_real_time,
-            state=tk.DISABLED,
-            width=15
-        )
+        self.real_time_check = ttk.Checkbutton(row2_frame, text="Visualizar Robô", variable=self.real_time_var, command=self.toggle_real_time, state=tk.DISABLED, width=15)
         self.real_time_check.grid(row=0, column=4, padx=5)
 
         self.steps_label = ttk.Label(row2_frame, text="Total Steps: 0 | Steps/s: 0.0")
@@ -202,7 +182,7 @@ class TrainingTab:
         # Logs
         log_frame = ttk.LabelFrame(main_frame, text="Log de Treinamento", padding="10")
         log_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
-        
+
         # Configurar o grid dentro do log_frame para que o texto expanda
         log_frame.columnconfigure(0, weight=1)
         log_frame.rowconfigure(0, weight=1)
@@ -228,17 +208,16 @@ class TrainingTab:
             if not os.path.exists(directory):
                 self.logger.error(f"Diretório não encontrado: {directory}")
                 return []
-            
-            files = [file.replace(".xacro", "") for file in os.listdir(directory) 
-                    if file.endswith(".xacro")]
-            
+
+            files = [file.replace(".xacro", "") for file in os.listdir(directory) if file.endswith(".xacro")]
+
             # Ordenar com PR primeiro se existir
             if "PR" in files:
                 files.remove("PR")
                 files.insert(0, "PR")
-            
+
             return files
-            
+
         except Exception as e:
             self.logger.error(f"Erro ao listar arquivos .xacro: {e}")
             return []
@@ -271,7 +250,7 @@ class TrainingTab:
 
             self.axs[-1].set_xlabel("Episódio")
             self.canvas.draw_idle()
-            
+
         except Exception as e:
             self.logger.error(f"Erro ao inicializar gráficos: {e}")
 
@@ -280,7 +259,7 @@ class TrainingTab:
     def start_training(self):
         """Inicia um novo treinamento do zero"""
         self.start_btn.config(state=tk.DISABLED, text="Iniciando...")
-    
+
         if self.is_resuming:
             self.logger.info(f"Retomando treinamento - current_episode: {self.current_episode}")
             self._resume_training()
@@ -325,9 +304,7 @@ class TrainingTab:
             self.enable_real_time_values.append(realtime_val)
 
             p = multiprocessing.Process(
-                target=train_process.process_runner, 
-                args=(self.current_env, self.current_robot, self.current_algorithm, 
-                      self.ipc_queue, pause_val, exit_val, realtime_val, self.device)
+                target=train_process.process_runner, args=(self.current_env, self.current_robot, self.current_algorithm, self.ipc_queue, pause_val, exit_val, realtime_val, self.device)
             )
             p.start()
             self.processes.append(p)
@@ -336,14 +313,14 @@ class TrainingTab:
 
             # Criar sessão de treinamento atual
             self.current_training_session = {
-                'start_time': datetime.now(),
-                'environment': self.current_env,
-                'robot': self.current_robot,
-                'algorithm': self.current_algorithm,
-                'episode_data': self.episode_data.copy(),
-                'hyperparams': self.hyperparams
+                "start_time": datetime.now(),
+                "environment": self.current_env,
+                "robot": self.current_robot,
+                "algorithm": self.current_algorithm,
+                "episode_data": self.episode_data.copy(),
+                "hyperparams": self.hyperparams,
             }
-            
+
             # Habilitar botões
             self.save_training_btn.config(state=tk.NORMAL)
             self.export_plots_btn.config(state=tk.NORMAL)
@@ -379,12 +356,10 @@ class TrainingTab:
             self.enable_real_time_values.append(realtime_val)
 
             self.logger.info(f"Retomando treinamento - episódio: {self.current_episode}")
-            
+
             p = multiprocessing.Process(
                 target=train_process.process_runner_resume,
-                args=(self.current_env, self.current_robot, self.current_algorithm, 
-                      self.ipc_queue, pause_val, exit_val, realtime_val, 
-                      self.device, model_path, self.current_episode)
+                args=(self.current_env, self.current_robot, self.current_algorithm, self.ipc_queue, pause_val, exit_val, realtime_val, self.device, model_path, self.current_episode),
             )
             p.start()
             self.processes.append(p)
@@ -392,7 +367,7 @@ class TrainingTab:
             self.logger.info(f"Processo de treinamento retomado: {self.current_env} + {self.current_robot} + {self.current_algorithm}")
             self.start_btn.config(text="Iniciar Treinamento")
             self.is_resuming = False
-            
+
         except Exception as e:
             self.logger.error(f"Erro ao retomar treinamento: {e}")
             messagebox.showerror("Erro", f"Erro ao retomar treinamento: {e}")
@@ -404,17 +379,17 @@ class TrainingTab:
             raise ValueError("Diretório de sessão não definido para retomada.")
 
         # Buscar em models/
-        models_dir = os.path.join(self.resumed_session_dir, 'models')
+        models_dir = os.path.join(self.resumed_session_dir, "models")
         if os.path.exists(models_dir):
             for file in os.listdir(models_dir):
-                if file.endswith('.zip'):
+                if file.endswith(".zip"):
                     model_path = os.path.join(models_dir, file)
                     self.logger.info(f"Modelo encontrado para retomada: {file}")
                     return model_path
 
         # Buscar no diretório principal
         for file in os.listdir(self.resumed_session_dir):
-            if file.endswith('.zip'):
+            if file.endswith(".zip"):
                 model_path = os.path.join(self.resumed_session_dir, file)
                 self.logger.info(f"Modelo encontrado no diretório principal: {file}")
                 return model_path
@@ -422,7 +397,7 @@ class TrainingTab:
         # Buscar recursivamente
         for root, dirs, files in os.walk(self.resumed_session_dir):
             for file in files:
-                if file.endswith('.zip'):
+                if file.endswith(".zip"):
                     model_path = os.path.join(root, file)
                     self.logger.info(f"Modelo encontrado em subdiretório: {model_path}")
                     return model_path
@@ -444,10 +419,10 @@ class TrainingTab:
                 self.logger.info("Pausando treinamento.")
                 self.pause_values[-1].value = 1
                 self.pause_btn.config(text="Retomar")
-            
+
             # Salvar modelo durante pausa/retomada
             self._save_model_during_training()
-            
+
         except Exception as e:
             self.logger.error(f"Erro ao pausar/retomar treinamento: {e}")
 
@@ -460,11 +435,11 @@ class TrainingTab:
             # Usar ensure_directory do utils
             models_dir = ensure_directory(os.path.join(self.training_data_dir, "current_session", "models"))
             model_path = os.path.join(models_dir, "model.zip")
-            
+
             # Enviar comando para salvar o modelo via IPC
             self.ipc_queue.put({"type": "save_model", "model_path": model_path})
             self.logger.info(f"Modelo salvo durante pausa/retomada: {model_path}")
-            
+
         except Exception as e:
             self.logger.error(f"Erro ao salvar modelo durante treinamento: {e}")
 
@@ -489,57 +464,51 @@ class TrainingTab:
         if not self.current_training_session:
             messagebox.showwarning("Aviso", "Nenhum treinamento em andamento para salvar.")
             return
-        
+
         try:
             # Usar ensure_directory do utils
             ensure_directory(self.training_data_dir)
-            
+
             # Criar pasta específica para esta sessão
-            timestamp = self.current_training_session['start_time'].strftime("%Y%m%d_%H%M%S")
+            timestamp = self.current_training_session["start_time"].strftime("%Y%m%d_%H%M%S")
             session_name = f"{self.current_env}_{self.current_robot}_{self.current_algorithm}_{timestamp}"
             session_dir = ensure_directory(os.path.join(self.training_data_dir, session_name))
-            
+
             # Determinar episódio atual
             current_episode = max(self.episode_data["episodes"]) if self.episode_data["episodes"] else 0
             total_episodes = len(self.episode_data["episodes"])
-        
+
             # Salvar dados do treinamento
             training_data = {
-                'session_info': {
-                    'environment': self.current_env,
-                    'robot': self.current_robot,
-                    'algorithm': self.current_algorithm,
-                    'start_time': self.current_training_session['start_time'].isoformat(),
-                    'total_steps': self.total_steps,
-                    'current_episode': current_episode,
-                    'total_episodes': total_episodes,
-                    'device': self.device
+                "session_info": {
+                    "environment": self.current_env,
+                    "robot": self.current_robot,
+                    "algorithm": self.current_algorithm,
+                    "start_time": self.current_training_session["start_time"].isoformat(),
+                    "total_steps": self.total_steps,
+                    "current_episode": current_episode,
+                    "total_episodes": total_episodes,
+                    "device": self.device,
                 },
-                'episode_data': self.episode_data,
-                'hyperparams': self.hyperparams
+                "episode_data": self.episode_data,
+                "hyperparams": self.hyperparams,
             }
-            
-            with open(os.path.join(session_dir, 'training_data.json'), 'w') as f:
+
+            with open(os.path.join(session_dir, "training_data.json"), "w") as f:
                 json.dump(training_data, f, indent=2)
-            
+
             # Salvar modelo usando sistema de controle
             model_saved = self._save_model_with_control(session_dir, session_name)
-            
+
             # Salvar logs e gráficos
             self._save_additional_data(session_dir)
-            
+
             # Mensagem final
             if model_saved:
-                messagebox.showinfo("Sucesso", 
-                    f"Treinamento salvo com sucesso!\n"
-                    f"Diretório: {session_dir}\n"
-                    f"Pronto para retomada!")
+                messagebox.showinfo("Sucesso", f"Treinamento salvo com sucesso!\n" f"Diretório: {session_dir}\n" f"Pronto para retomada!")
             else:
-                messagebox.showwarning("Aviso", 
-                    f"Dados salvos, mas modelo pode não estar atualizado.\n"
-                    f"Tente pausar o treinamento antes de salvar.\n"
-                    f"Diretório: {session_dir}")
-            
+                messagebox.showwarning("Aviso", f"Dados salvos, mas modelo pode não estar atualizado.\n" f"Tente pausar o treinamento antes de salvar.\n" f"Diretório: {session_dir}")
+
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao salvar treinamento: {e}")
             self.logger.error(f"Erro ao salvar treinamento: {e}")
@@ -547,36 +516,32 @@ class TrainingTab:
     def _save_model_with_control(self, session_dir, session_name):
         """Salva modelo usando sistema de controle de arquivos"""
         try:
-            models_dir = ensure_directory(os.path.join(session_dir, 'models'))
-            model_path = os.path.join(models_dir, 'model.zip')
-            
+            models_dir = ensure_directory(os.path.join(session_dir, "models"))
+            model_path = os.path.join(models_dir, "model.zip")
+
             self.logger.info(f"INICIANDO SALVAMENTO DO MODELO: {model_path}")
-            
+
             # Sistema de controle
             control_dir = ensure_directory("training_control")
             control_file = f"save_model_{int(time.time() * 1000)}.json"
             control_path = os.path.join(control_dir, control_file)
-            
-            control_data = {
-                "model_path": model_path,
-                "timestamp": time.time(),
-                "session": session_name
-            }
-            
-            with open(control_path, 'w') as f:
+
+            control_data = {"model_path": model_path, "timestamp": time.time(), "session": session_name}
+
+            with open(control_path, "w") as f:
                 json.dump(control_data, f, indent=2)
-            
+
             self.logger.info(f"Arquivo de controle criado: {control_path}")
-            
+
             # Aguardar salvamento
             max_wait = 21
             check_interval = 1
-            
+
             for wait_time in range(max_wait):
                 if os.path.exists(model_path):
                     file_size = os.path.getsize(model_path)
                     self.logger.info(f"MODELO SALVO: {model_path} ({file_size} bytes)")
-                    
+
                     # Limpar arquivo de controle
                     try:
                         if os.path.exists(control_path):
@@ -584,13 +549,13 @@ class TrainingTab:
                             self.logger.info("Arquivo de controle removido")
                     except:
                         pass
-                    
+
                     return True
-                
+
                 time.sleep(check_interval)
-            
+
             return False
-            
+
         except Exception as e:
             self.logger.error(f"Erro no sistema de controle de salvamento: {e}")
             return False
@@ -599,25 +564,22 @@ class TrainingTab:
         """Salva logs e gráficos adicionais"""
         try:
             # Salvar logs
-            logs_dir = ensure_directory(os.path.join(session_dir, 'logs'))
-            log_files = [f for f in os.listdir('logs') if f.endswith('.txt')]
+            logs_dir = ensure_directory(os.path.join(session_dir, "logs"))
+            log_files = [f for f in os.listdir("logs") if f.endswith(".txt")]
             for log_file in log_files:
-                shutil.copy2(os.path.join('logs', log_file), logs_dir)
-            
+                shutil.copy2(os.path.join("logs", log_file), logs_dir)
+
             # Salvar gráficos
-            plots_dir = ensure_directory(os.path.join(session_dir, 'plots'))
+            plots_dir = ensure_directory(os.path.join(session_dir, "plots"))
             self.save_plots_to_directory(plots_dir)
-            
+
         except Exception as e:
             self.logger.error(f"Erro ao salvar dados adicionais: {e}")
 
     def load_training_data(self):
         """Carrega dados de treinamento salvos e prepara para retomada"""
         try:
-            session_dir = filedialog.askdirectory(
-                title="Selecione a pasta do treinamento",
-                initialdir=self.training_data_dir
-            )
+            session_dir = filedialog.askdirectory(title="Selecione a pasta do treinamento", initialdir=self.training_data_dir)
 
             if not session_dir:
                 return
@@ -651,11 +613,9 @@ class TrainingTab:
             self.save_training_btn.config(state=tk.NORMAL)
             self.export_plots_btn.config(state=tk.NORMAL)
 
-            messagebox.showinfo("Sucesso", 
-                f"Treinamento carregado!\n"
-                f"Modelo: {os.path.basename(model_path)}\n"
-                f"Próximo episódio: {self.current_episode}\n"
-                f"Clique em 'Retomar Treinamento' para continuar.")
+            messagebox.showinfo(
+                "Sucesso", f"Treinamento carregado!\n" f"Modelo: {os.path.basename(model_path)}\n" f"Próximo episódio: {self.current_episode}\n" f"Clique em 'Retomar Treinamento' para continuar."
+            )
 
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao carregar treinamento: {e}")
@@ -663,22 +623,22 @@ class TrainingTab:
 
     def _load_training_data_file(self, session_dir):
         """Carrega arquivo de dados de treinamento"""
-        data_file = os.path.join(session_dir, 'training_data.json')
+        data_file = os.path.join(session_dir, "training_data.json")
         if not os.path.exists(data_file):
             raise FileNotFoundError("Arquivo de dados não encontrado.")
-        
-        with open(data_file, 'r') as f:
+
+        with open(data_file, "r") as f:
             return json.load(f)
 
     def _restore_training_data(self, training_data, session_dir):
         """Restaura dados do treinamento carregado"""
-        session_info = training_data['session_info']
-        self.episode_data = training_data['episode_data']
-        self.hyperparams = training_data.get('hyperparams', {})
+        session_info = training_data["session_info"]
+        self.episode_data = training_data["episode_data"]
+        self.hyperparams = training_data.get("hyperparams", {})
 
-        saved_current_episode = session_info.get('current_episode', 0)
-        total_episodes = session_info.get('total_episodes', 0)
-        
+        saved_current_episode = session_info.get("current_episode", 0)
+        total_episodes = session_info.get("total_episodes", 0)
+
         if self.episode_data["episodes"]:
             last_episode_in_data = max(self.episode_data["episodes"])
             self.current_episode = max(saved_current_episode, last_episode_in_data) + 1
@@ -688,48 +648,44 @@ class TrainingTab:
         self.loaded_episode_count = total_episodes
 
         # Atualizar configurações
-        self.current_env = session_info['environment']
-        self.current_robot = session_info['robot'] 
-        self.current_algorithm = session_info['algorithm']
+        self.current_env = session_info["environment"]
+        self.current_robot = session_info["robot"]
+        self.current_algorithm = session_info["algorithm"]
 
         self.current_training_session = {
-            'start_time': datetime.fromisoformat(session_info['start_time']),
-            'environment': self.current_env,
-            'robot': self.current_robot,
-            'algorithm': self.current_algorithm,
-            'episode_data': self.episode_data.copy(),
-            'hyperparams': self.hyperparams
+            "start_time": datetime.fromisoformat(session_info["start_time"]),
+            "environment": self.current_env,
+            "robot": self.current_robot,
+            "algorithm": self.current_algorithm,
+            "episode_data": self.episode_data.copy(),
+            "hyperparams": self.hyperparams,
         }
 
-    
     def export_plots(self):
         """Exporta gráficos como imagens para uso na tese"""
         try:
-            export_dir = filedialog.askdirectory(
-                title="Selecione onde salvar os gráficos",
-                initialdir=os.path.expanduser("~")
-            )
-            
+            export_dir = filedialog.askdirectory(title="Selecione onde salvar os gráficos", initialdir=os.path.expanduser("~"))
+
             if not export_dir:
                 return
-            
+
             # Opções de dimensões
             dimension_window = tk.Toplevel(self.root)
             dimension_window.title("Configurações de Exportação")
             dimension_window.geometry("300x200")
             dimension_window.transient(self.root)
             dimension_window.grab_set()
-            
+
             ttk.Label(dimension_window, text="Largura (polegadas):").pack(pady=5)
             width_var = tk.StringVar(value="10")
             width_entry = ttk.Entry(dimension_window, textvariable=width_var)
             width_entry.pack(pady=5)
-            
+
             ttk.Label(dimension_window, text="Altura (polegadas):").pack(pady=5)
             height_var = tk.StringVar(value="8")
             height_entry = ttk.Entry(dimension_window, textvariable=height_var)
             height_entry.pack(pady=5)
-            
+
             dpi_var = tk.StringVar(value="300")
             ttk.Label(dimension_window, text="DPI:").pack(pady=5)
             dpi_entry = ttk.Entry(dimension_window, textvariable=dpi_var)
@@ -737,7 +693,7 @@ class TrainingTab:
 
             button_frame = ttk.Frame(dimension_window)
             button_frame.pack(pady=10)
-            
+
             def do_export():
                 try:
                     width = float(width_var.get())
@@ -746,14 +702,14 @@ class TrainingTab:
                     if width <= 0 or height <= 0 or dpi <= 0:
                         messagebox.showerror("Erro", "Valores devem ser maiores que zero.")
                         return
-                    
+
                     self.save_plots_to_directory(export_dir, width, height, dpi)
                     dimension_window.destroy()
                     messagebox.showinfo("Sucesso", f"Gráficos exportados para: {export_dir}")
-                    
+
                 except ValueError:
                     messagebox.showerror("Erro", "Valores inválidos para dimensões ou DPI.")
-            
+
             def cancel_export():
                 dimension_window.destroy()
 
@@ -761,31 +717,28 @@ class TrainingTab:
             ttk.Button(button_frame, text="Cancelar", command=cancel_export).pack(side=tk.LEFT, padx=5)
 
             width_entry.focus()
-            dimension_window.bind('<Return>', lambda e: do_export())
-            dimension_window.bind('<Escape>', lambda e: cancel_export())
-            
+            dimension_window.bind("<Return>", lambda e: do_export())
+            dimension_window.bind("<Escape>", lambda e: cancel_export())
+
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao exportar gráficos: {e}")
-
 
     def save_plots_to_directory(self, directory, width=10, height=8, dpi=300):
         """Salva todos os gráficos em um diretório"""
         try:
             # Salvar gráfico combinado
-            combined_fig, combined_axs = plt.subplots(5, 1, figsize=(width, height*2.5), constrained_layout=True)
+            combined_fig, combined_axs = plt.subplots(5, 1, figsize=(width, height * 2.5), constrained_layout=True)
             self._plot_to_figure(combined_axs)
-            combined_fig.savefig(os.path.join(directory, 'all_plots.png'), dpi=dpi, bbox_inches='tight')
+            combined_fig.savefig(os.path.join(directory, "all_plots.png"), dpi=dpi, bbox_inches="tight")
             plt.close(combined_fig)
-            
+
             # Salvar gráficos individuais
-            for i, (title, ylabel, color, data_key) in enumerate(zip(
-                self.plot_titles, self.plot_ylabels, self.plot_colors, self.plot_data_keys
-            )):
+            for i, (title, ylabel, color, data_key) in enumerate(zip(self.plot_titles, self.plot_ylabels, self.plot_colors, self.plot_data_keys)):
                 fig, ax = plt.subplots(figsize=(width, height))
-                
+
                 if i == 3:  # Gráfico de posição IMU
                     ax.plot(self.episode_data["episodes"], self.episode_data["imu_x"], label="X", color="red")
-                    ax.plot(self.episode_data["episodes"], self.episode_data["imu_y"], label="Y", color="green") 
+                    ax.plot(self.episode_data["episodes"], self.episode_data["imu_y"], label="Y", color="green")
                     ax.plot(self.episode_data["episodes"], self.episode_data["imu_z"], label="Z", color="blue")
                 elif i == 4:  # Gráfico de orientação
                     ax.plot(self.episode_data["episodes"], self.episode_data["roll"], label="Roll", color="red")
@@ -793,26 +746,23 @@ class TrainingTab:
                     ax.plot(self.episode_data["episodes"], self.episode_data["yaw"], label="Yaw", color="blue")
                 else:
                     ax.plot(self.episode_data["episodes"], self.episode_data[data_key], label=ylabel, color=color)
-                
+
                 ax.set_title(title)
                 ax.set_ylabel(ylabel)
                 ax.set_xlabel("Episódio")
                 ax.legend()
                 ax.grid(True, alpha=0.3)
-                
+
                 filename = f"plot_{data_key}.png"
-                fig.savefig(os.path.join(directory, filename), dpi=dpi, bbox_inches='tight')
+                fig.savefig(os.path.join(directory, filename), dpi=dpi, bbox_inches="tight")
                 plt.close(fig)
-                
+
         except Exception as e:
             self.logger.error(f"Erro ao salvar gráficos: {e}")
 
-
     def _plot_to_figure(self, axs):
         """Plota dados nos eixos fornecidos"""
-        for i, (title, ylabel, color, data_key) in enumerate(zip(
-            self.plot_titles, self.plot_ylabels, self.plot_colors, self.plot_data_keys
-        )):
+        for i, (title, ylabel, color, data_key) in enumerate(zip(self.plot_titles, self.plot_ylabels, self.plot_colors, self.plot_data_keys)):
             axs[i].clear()
             if i == 3:  # Gráfico de posição IMU
                 axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_x"], label="X", color="red")
@@ -824,14 +774,13 @@ class TrainingTab:
                 axs[i].plot(self.episode_data["episodes"], self.episode_data["yaw"], label="Yaw", color="blue")
             else:
                 axs[i].plot(self.episode_data["episodes"], self.episode_data[data_key], label=ylabel, color=color)
-            
+
             axs[i].set_title(title)
             axs[i].set_ylabel(ylabel)
             axs[i].legend()
             axs[i].grid(True, alpha=0.3)
 
         axs[-1].set_xlabel("Episódio")
-        
 
     def save_snapshot(self):
         """Salva o modelo treinado e executa avaliação para gerar métricas de complexidade."""
@@ -855,7 +804,6 @@ class TrainingTab:
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao salvar snapshot: {e}")
 
-
     def toggle_real_time(self):
         """Alterna o modo tempo real da simulação"""
         if not self.enable_real_time_values:
@@ -864,38 +812,36 @@ class TrainingTab:
 
         new_value = self.real_time_var.get()
         self.enable_real_time_values[-1].value = new_value
-        
+
         if new_value:
             self.logger.info("Modo tempo real ativado")
         else:
             self.logger.info("Modo tempo real desativado")
-    
 
     def _update_step_counter(self):
         """Atualiza o contador de steps a cada segundo"""
         if not self.gui_active:
             return
-            
+
         current_time = time.time()
         time_diff = current_time - self.last_step_time
-        
+
         if time_diff >= 1.0:
             if time_diff > 0:
                 self.steps_per_second = self.total_steps / time_diff
             self.steps_label.config(text=f"Total Steps: {self.total_steps} | Steps/s: {self.steps_per_second:.1f}")
             self.total_steps = 0
             self.last_step_time = current_time
-        
+
         if self.gui_active:
             after_id = self.root.after(100, self._update_step_counter)
             self.after_ids.append(after_id)
-        
-        
+
     def _refresh_plots(self):
         """Atualiza os gráficos com os dados atuais"""
         if not self.gui_active:
             return
-        
+
         try:
             if not self.episode_data["episodes"] or not self.new_plot_data:
                 if self.gui_active:
@@ -918,7 +864,7 @@ class TrainingTab:
                         self.axs[i].plot(self.episode_data["episodes"], self.episode_data["yaw"], label="Yaw", color="blue", linestyle="-", markersize=3)
                     else:  # Gráficos normais
                         self.axs[i].plot(self.episode_data["episodes"], self.episode_data[data_key], label=ylabel, color=color, linestyle="-", markersize=3)
-                    
+
                     self.axs[i].set_title(title)
                     self.axs[i].set_ylabel(ylabel)
                     self.axs[i].legend()
@@ -934,13 +880,12 @@ class TrainingTab:
         if self.gui_active:
             after_id = self.root.after(500, self._refresh_plots)
             self.after_ids.append(after_id)
-    
 
     def _update_log_display(self):
         """Atualiza a exibição de logs"""
         if not self.gui_active:
             return
-        
+
         if self.gui_log_queue.empty():
             if self.gui_active:
                 after_id = self.root.after(500, self._update_log_display)
@@ -963,7 +908,6 @@ class TrainingTab:
         if self.gui_active:
             after_id = self.root.after(500, self._update_log_display)
             self.after_ids.append(after_id)
-
 
     def ipc_runner(self):
         """Thread para monitorar a fila IPC e atualizar logs"""
@@ -1026,7 +970,7 @@ class TrainingTab:
                     else:
                         self.logger.error(f"Tipo de dados desconhecido: {data_type} - Conteúdo: {msg}")
                 except queue.Empty:
-                # Timeout normal, continuar loop
+                    # Timeout normal, continuar loop
                     continue
                 except EOFError:
                     self.logger.info("IPC queue fechada (EOFError)")
@@ -1043,10 +987,10 @@ class TrainingTab:
     def on_closing(self):
         """Limpeza adequada ao fechar"""
         self.logger.info("Gui fechando")
-        
+
         # Marcar GUI como inativa
         self.gui_active = False
-        
+
         # Cancelar todas as callbacks agendadas
         for after_id in self.after_ids:
             try:
@@ -1056,14 +1000,14 @@ class TrainingTab:
         self.after_ids.clear()
 
         self.gui_closed = True
-        if hasattr(self, 'ipc_queue'):
+        if hasattr(self, "ipc_queue"):
             self.ipc_queue.put(None)  # Sinaliza para a thread IPC terminar
 
         for v in self.exit_values:
             v.value = 1  # Sinaliza para os processos terminarem
 
         self.logger.info("Aguardando thread IPC terminar...")
-        if hasattr(self, 'ipc_thread') and self.ipc_thread and self.ipc_thread.is_alive():
+        if hasattr(self, "ipc_thread") and self.ipc_thread and self.ipc_thread.is_alive():
             self.ipc_thread.join(timeout=5.0)
 
         # Terminar processos
@@ -1081,15 +1025,15 @@ class TrainingTab:
     def start(self):
         """Inicializa a aba de treinamento"""
         self.logger.info("Aba de treinamento inicializada")
-        
+
         # Iniciar threads de atualização
         if self.gui_active:
             after_id = self.root.after(500, self._update_log_display)
             self.after_ids.append(after_id)
-            
+
             after_id = self.root.after(500, self._refresh_plots)
             self.after_ids.append(after_id)
-            
+
             after_id = self.root.after(100, self._update_step_counter)
             self.after_ids.append(after_id)
 
