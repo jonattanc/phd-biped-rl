@@ -36,11 +36,11 @@ class Environment:
     def load_in_simulation(self, use_fixed_base=True):
         # Carrega o URDF que contém as 3 partes conectadas
         self.id = p.loadURDF(self.urdf_path, useFixedBase=use_fixed_base)
-        
+
         # Identifica as partes do ambiente (links definidos no PR.xacro)
         self.parts = ["pr_initial_link", "middle_pr_link", "pr_final_link"]
         return self.id
 
     def get_parts_count(self):
         """Retorna o número de partes do ambiente"""
-        return len(self.parts) if hasattr(self, 'parts') else 0
+        return len(self.parts) if hasattr(self, "parts") else 0
