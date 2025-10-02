@@ -8,7 +8,7 @@ import random
 
 
 class Simulation(gym.Env):
-    def __init__(self, logger, robot, environment, ipc_queue, pause_value, exit_value, enable_visualization_value, enable_real_time_value, num_episodes=1, seed=42):
+    def __init__(self, logger, robot, environment, ipc_queue, pause_value, exit_value, enable_visualization_value, num_episodes=1, seed=42):
         super(Simulation, self).__init__()
         np.random.seed(seed)
         random.seed(seed)
@@ -20,7 +20,6 @@ class Simulation(gym.Env):
         self.exit_value = exit_value
         self.enable_visualization_value = enable_visualization_value
         self.is_visualization_enabled = enable_visualization_value.value
-        self.enable_real_time_value = enable_real_time_value
         self.num_episodes = num_episodes
         self.current_episode = 0
 
@@ -55,7 +54,6 @@ class Simulation(gym.Env):
         self.logger.info(f"DOF: {self.action_dim}")
         self.logger.info(f"Ambiente: {self.environment.name}")
         self.logger.info(f"Visualização: {self.enable_visualization_value.value}")
-        self.logger.info(f"Tempo Real: {self.enable_real_time_value.value}")
         self.logger.info(f"Action space: {self.action_dim}, Observation space: {self.observation_dim}")
 
         # Variáveis para coleta de dados
@@ -197,7 +195,7 @@ class Simulation(gym.Env):
             p.stepSimulation()
             steps += 1
 
-            if self.is_visualization_enabled and self.enable_real_time_value.value:
+            if self.is_visualization_enabled:
                 time.sleep(self.time_step_s)
 
             if steps % 100 == 0:
@@ -441,7 +439,7 @@ class Simulation(gym.Env):
         for _ in range(self.physics_step_multiplier):
             p.stepSimulation()
 
-        if self.is_visualization_enabled and self.enable_real_time_value.value:
+        if self.is_visualization_enabled:
             time.sleep(self.time_step_s)
 
         self.episode_steps += 1

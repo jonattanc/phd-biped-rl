@@ -15,6 +15,7 @@ import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from best_model_tracker import BestModelTracker
 import train_process
 import utils
 from utils import ensure_directory, setup_ipc_logging, ENVIRONMENT_PATH, ROBOTS_PATH
@@ -36,7 +37,6 @@ class TrainingTab:
         self.processes = []
         self.pause_values = []
         self.exit_values = []
-        self.enable_real_time_values = []
         self.enable_visualization_values = []
         self.gui_log_queue = queue.Queue()
         self.ipc_queue = multiprocessing.Queue()
@@ -56,8 +56,6 @@ class TrainingTab:
         self.save_training_btn = None
         self.load_training_btn = None
         self.export_plots_btn = None
-        self.real_time_var = None
-        self.real_time_check = None
         self.steps_label = None
         self.log_text = None
 
@@ -77,6 +75,11 @@ class TrainingTab:
         self.is_resuming = False
         self.resumed_session_dir = None
         self.hyperparams = {}
+
+        # Sistema de tracking de performance
+        self.tracker = BestModelTracker()
+        self.total_steps = 0
+        self.current_best_model_path = None
 
         # Configurações de plot
         self.plot_titles = ["Recompensa por Episódio", "Duração do Episódio", "Distância Percorrida", "Posição IMU (X, Y, Z)", "Orientação (Roll, Pitch, Yaw)"]
@@ -160,12 +163,6 @@ class TrainingTab:
         self.enable_visualization_check = ttk.Checkbutton(row2_frame, text="Visualizar Robô", variable=self.enable_visualization_var, command=self.toggle_visualization, state=tk.DISABLED, width=15)
         self.enable_visualization_check.grid(row=0, column=3, padx=5)
 
-        self.real_time_var = tk.BooleanVar(value=False)
-        self.real_time_check = ttk.Checkbutton(row2_frame, text="Tempo Real", variable=self.real_time_var, command=self.toggle_real_time, state=tk.DISABLED, width=15)
-        self.real_time_check.grid(row=0, column=4, padx=5)
-
-        self.steps_label = ttk.Label(row2_frame, text=self.build_steps_label_text(0, 0))
-        self.steps_label.grid(row=0, column=5, padx=5)
 
         # Gráficos
         graph_frame = ttk.LabelFrame(main_frame, text="Desempenho em Tempo Real", padding="10")
@@ -180,6 +177,14 @@ class TrainingTab:
         # Logs
         log_frame = ttk.LabelFrame(main_frame, text="Log de Treinamento", padding="10")
         log_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
+        
+        status_frame = ttk.Frame(log_frame)
+        status_frame.grid(row=3, column=0, columnspan=12, sticky=(tk.W, tk.E), pady=5)
+        
+        self.steps_label = ttk.Label(status_frame, text=self.build_steps_label_text(0, 0))
+        self.steps_label.grid(row=0, column=0, sticky=tk.W, padx=5)
+        self.tracker_status_label = ttk.Label(status_frame, text="Melhor recompensa: N/A | Steps sem melhoria: 0")
+        self.tracker_status_label.grid(row=0, column=1, sticky=tk.W, padx=5)
 
         # Configurar o grid dentro do log_frame para que o texto expanda
         log_frame.columnconfigure(0, weight=1)
@@ -290,22 +295,24 @@ class TrainingTab:
             self.pause_btn.config(state=tk.NORMAL)
             self.stop_btn.config(state=tk.NORMAL)
             self.enable_visualization_check.config(state=tk.NORMAL)
-            self.real_time_check.config(state=tk.NORMAL)
+
+            # Reiniciar tracker para novo treinamento
+            self.tracker = BestModelTracker()
+            self.total_steps = 0
+            self.current_best_model_path = None
 
             # Iniciar treinamento em processo separado
             pause_val = multiprocessing.Value("b", 0)
             exit_val = multiprocessing.Value("b", 0)
             enable_visualization_val = multiprocessing.Value("b", self.enable_visualization_var.get())
-            realtime_val = multiprocessing.Value("b", self.real_time_var.get())
 
             self.pause_values.append(pause_val)
             self.exit_values.append(exit_val)
             self.enable_visualization_values.append(enable_visualization_val)
-            self.enable_real_time_values.append(realtime_val)
 
             p = multiprocessing.Process(
                 target=train_process.process_runner,
-                args=(self.current_env, self.current_robot, self.current_algorithm, self.ipc_queue, pause_val, exit_val, enable_visualization_val, realtime_val, self.device),
+                args=(self.current_env, self.current_robot, self.current_algorithm, self.ipc_queue, pause_val, exit_val, enable_visualization_val, self.device),
             )
             p.start()
             self.processes.append(p)
@@ -344,22 +351,26 @@ class TrainingTab:
             self.start_btn.config(state=tk.DISABLED, text="Retomando...")
             self.pause_btn.config(state=tk.NORMAL)
             self.stop_btn.config(state=tk.NORMAL)
-            self.real_time_check.config(state=tk.NORMAL)
 
             # Iniciar processo de retomada
             pause_val = multiprocessing.Value("b", 0)
             exit_val = multiprocessing.Value("b", 0)
-            realtime_val = multiprocessing.Value("b", self.real_time_var.get())
 
             self.pause_values.append(pause_val)
             self.exit_values.append(exit_val)
-            self.enable_real_time_values.append(realtime_val)
 
             self.logger.info(f"Retomando treinamento - episódio: {self.current_episode}")
 
+            # Carregar estado do tracker se existir
+            tracker_state_path = os.path.join(self.resumed_session_dir, "tracker_state.json")
+            if os.path.exists(tracker_state_path):
+                self.tracker.load_state(tracker_state_path)
+                self.total_steps = self.tracker.total_steps
+                self.logger.info(f"Estado do tracker carregado: {self.tracker.get_status()}")
+                
             p = multiprocessing.Process(
                 target=train_process.process_runner_resume,
-                args=(self.current_env, self.current_robot, self.current_algorithm, self.ipc_queue, pause_val, exit_val, realtime_val, self.device, model_path, self.current_episode),
+                args=(self.current_env, self.current_robot, self.current_algorithm, self.ipc_queue, pause_val, exit_val, self.device, model_path, self.current_episode),
             )
             p.start()
             self.processes.append(p)
@@ -465,7 +476,6 @@ class TrainingTab:
         self.pause_btn.config(state=tk.DISABLED)
         self.stop_btn.config(state=tk.DISABLED)
         self.enable_visualization_check.config(state=tk.DISABLED)
-        self.real_time_check.config(state=tk.DISABLED)
         self.save_training_btn.config(state=tk.DISABLED)
         self.export_plots_btn.config(state=tk.DISABLED)
 
@@ -815,20 +825,6 @@ class TrainingTab:
         else:
             self.logger.info("Visualização do robô desativada")
 
-    def toggle_real_time(self):
-        """Alterna o modo tempo real da simulação"""
-        if not self.enable_real_time_values:
-            self.logger.warning("toggle_real_time: Nenhum processo de treinamento ativo.")
-            return
-
-        new_value = self.real_time_var.get()
-        self.enable_real_time_values[-1].value = new_value
-
-        if new_value:
-            self.logger.info("Modo tempo real ativado")
-        else:
-            self.logger.info("Modo tempo real desativado")
-
     def build_steps_label_text(self, total_steps, steps_per_second):
         return f"Total Steps: {total_steps} | Steps/s: {steps_per_second:.1f}"
 
@@ -919,6 +915,72 @@ class TrainingTab:
         after_id = self.root.after(500, self._update_log_display)
         self.after_ids["_update_log_display"] = after_id
 
+    def _update_tracker_status(self):
+        """Atualiza o label de status do tracker"""
+        status = self.tracker.get_status()
+        status_text = f"Melhor recompensa: {status['best_reward']:.2f} | Steps sem melhoria: {status['steps_since_improvement']}"
+        self.tracker_status_label.config(text=status_text)
+        
+    def _handle_episode_data(self, episode_data):
+        """Processa dados do episódio para o tracker"""
+        try:
+            episode_reward = episode_data.get("reward", 0)
+            
+            # Atualizar tracker
+            should_save_model = self.tracker.update(episode_reward, self.total_steps)
+            
+            if should_save_model:
+                self.logger.info(f"NOVA MELHORIA! Recompensa: {episode_reward:.2f} (anterior: {self.tracker.best_reward:.2f})")
+                self._save_best_model_automatically()
+            
+            # Verificar se deve pausar por plateau
+            if self.tracker.should_pause():
+                self.logger.info("Pausa automática por plateau de performance")
+                self.pause_training()
+                messagebox.showinfo(
+                    "Treinamento Pausado", 
+                    f"Treinamento pausado automaticamente após {self.tracker.patience_steps} steps sem melhoria."
+                )
+            
+            # Atualizar status na interface
+            self._update_tracker_status()
+            
+        except Exception as e:
+            self.logger.exception("Erro ao processar dados do episódio para tracker")
+
+    def _save_best_model_automatically(self):
+        """Salva automaticamente o melhor modelo"""
+        try:
+            # Criar diretório para melhores modelos
+            best_models_dir = utils.ensure_directory(
+                os.path.join(utils.TRAINING_DATA_PATH, "best_models_temp")
+            )
+            
+            # Salvar modelo com timestamp
+            timestamp = int(time.time())
+            model_path = os.path.join(best_models_dir, f"best_model_{timestamp}.zip")
+            
+            # Usar sistema de controle para salvar
+            control_dir = utils.ensure_directory(utils.TRAINING_CONTROL_PATH)
+            control_file = f"save_model_{timestamp}.json"
+            control_path = os.path.join(control_dir, control_file)
+            
+            control_data = {
+                "model_path": model_path,
+                "timestamp": timestamp,
+                "best_reward": self.tracker.best_reward,
+                "auto_save": True
+            }
+            
+            with open(control_path, "w") as f:
+                json.dump(control_data, f, indent=2)
+            
+            self.current_best_model_path = model_path
+            self.logger.info(f"Modelo salvo automaticamente: {model_path}")
+            
+        except Exception as e:
+            self.logger.exception("Erro ao salvar modelo automaticamente")
+            
     def ipc_runner(self):
         """Thread para monitorar a fila IPC e atualizar logs"""
         try:
@@ -951,7 +1013,13 @@ class TrainingTab:
                             self.episode_data["yaw"].append(msg.get("yaw", 0))
 
                         self.new_plot_data = True
+                        self._handle_episode_data(msg)
 
+                    elif data_type == "training_progress":
+                        # Atualizar contador de steps
+                        self.total_steps = msg.get("steps_completed", 0)
+                        self.logger.debug(f"Progresso: {self.total_steps} steps")
+                
                     elif data_type == "step_count":
                         # Atualizar contador de steps
                         if self.total_steps is None:
@@ -976,7 +1044,6 @@ class TrainingTab:
                         self.pause_btn.config(state=tk.DISABLED)
                         self.stop_btn.config(state=tk.DISABLED)
                         self.enable_visualization_check.config(state=tk.DISABLED)
-                        self.real_time_check.config(state=tk.DISABLED)
                         self.save_training_btn.config(state=tk.DISABLED)
                         self.export_plots_btn.config(state=tk.DISABLED)
                         self.is_resuming = False
