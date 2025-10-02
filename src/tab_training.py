@@ -163,7 +163,6 @@ class TrainingTab:
         self.enable_visualization_check = ttk.Checkbutton(row2_frame, text="Visualizar Robô", variable=self.enable_visualization_var, command=self.toggle_visualization, state=tk.DISABLED, width=15)
         self.enable_visualization_check.grid(row=0, column=3, padx=5)
 
-
         # Gráficos
         graph_frame = ttk.LabelFrame(main_frame, text="Desempenho em Tempo Real", padding="10")
         graph_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
@@ -915,71 +914,152 @@ class TrainingTab:
         after_id = self.root.after(500, self._update_log_display)
         self.after_ids["_update_log_display"] = after_id
 
+    def _trigger_auto_pause(self):
+        """Ativa pausa automática por plateau"""
+        try:
+            # Pausar o treinamento
+            if self.pause_values and not self.pause_values[-1].value:
+                self.pause_values[-1].value = 1
+                self.pause_btn.config(text="Retomar")
+                self.save_training_btn.config(state=tk.NORMAL)
+
+                # Salvar modelo atual antes de pausar
+                self._save_best_model_automatically("pre_pause")
+
+                # Mostrar mensagem informativa
+                self.root.after(100, lambda: self._show_auto_pause_message())
+
+        except Exception as e:
+            self.logger.exception("Erro ao ativar pausa automática")
+
+    def _show_auto_pause_message(self):
+        """Mostra mensagem de pausa automática"""
+        messagebox.showinfo(
+            "Treinamento Pausado Automaticamente", 
+            f"O treinamento foi pausado automaticamente após {self.tracker.patience_steps:,} steps sem melhoria significativa.\n\n"
+            f"• Melhor recompensa: {self.tracker.best_reward:.2f}\n"
+            f"• Steps totais: {self.tracker.total_steps:,}\n"
+            f"• Steps sem melhoria: {self.tracker.steps_since_improvement:,}\n\n"
+            "Clique em 'Retomar' para continuar o treinamento ou 'Salvar Treino' para finalizar."
+        )
+
     def _update_tracker_status(self):
         """Atualiza o label de status do tracker"""
         status = self.tracker.get_status()
-        status_text = f"Melhor recompensa: {status['best_reward']:.2f} | Steps sem melhoria: {status['steps_since_improvement']}"
+
+        # Criar texto de status para melhor visualização
+        status_parts = []
+        status_parts.append(f"Melhor: {status['best_reward']:.2f}")
+        status_parts.append(f"Steps: {status['total_steps']:,}")
+        status_parts.append(f"Sem melhoria: {status['steps_since_improvement']:,}")
+
+        if status['auto_save_count'] > 0:
+            status_parts.append(f"Salvamentos: {status['auto_save_count']}")
+
+        status_text = " | ".join(status_parts)
         self.tracker_status_label.config(text=status_text)
+
+        # Mudar cor do texto se estiver perto de pausar
+        if status['steps_since_improvement'] > status['patience_steps'] * 0.8:
+            self.tracker_status_label.config(foreground="orange")
+        elif status['steps_since_improvement'] > status['patience_steps'] * 0.9:
+            self.tracker_status_label.config(foreground="red")
+        else:
+            self.tracker_status_label.config(foreground="black")
         
+    def _setup_auto_save_system(self):
+        """Configura sistema automático de salvamento"""
+        self.best_models_dir = utils.ensure_directory(
+            os.path.join(utils.TRAINING_DATA_PATH, "best_models_temp")
+        )
+        self.current_best_model_path = None
+        self.auto_save_enabled = True
+
+        # Limpar modelos antigos (manter apenas os últimos 10)
+        self._cleanup_old_models()
+
+    def _cleanup_old_models(self, keep_count=10):
+        """Remove modelos antigos, mantendo apenas os mais recentes"""
+        try:
+            if os.path.exists(self.best_models_dir):
+                model_files = [f for f in os.listdir(self.best_models_dir) if f.endswith('.zip')]
+                model_files.sort(key=lambda x: os.path.getmtime(os.path.join(self.best_models_dir, x)))
+
+                # Manter apenas os mais recentes
+                if len(model_files) > keep_count:
+                    for old_file in model_files[:-keep_count]:
+                        old_path = os.path.join(self.best_models_dir, old_file)
+                        os.remove(old_path)
+                        self.logger.info(f"Modelo antigo removido: {old_file}")
+        except Exception as e:
+            self.logger.exception("Erro ao limpar modelos antigos")
+
+    def _save_best_model_automatically(self, reason="improvement"):
+        """Salva automaticamente o melhor modelo"""
+        if not self.auto_save_enabled:
+            return
+
+        try:
+            # Gerar nome do arquivo baseado na recompensa e steps
+            filename = self.tracker.get_auto_save_filename()
+            model_path = os.path.join(self.best_models_dir, filename)
+
+            # Usar sistema de controle para salvar
+            control_dir = utils.ensure_directory(utils.TRAINING_CONTROL_PATH)
+            control_file = f"auto_save_{int(time.time() * 1000)}.json"
+            control_path = os.path.join(control_dir, control_file)
+
+            control_data = {
+                "model_path": model_path,
+                "timestamp": time.time(),
+                "best_reward": self.tracker.best_reward,
+                "total_steps": self.tracker.total_steps,
+                "reason": reason,
+                "auto_save": True
+            }
+
+            with open(control_path, "w") as f:
+                json.dump(control_data, f, indent=2)
+
+            self.current_best_model_path = model_path
+            self.tracker.last_auto_save_path = model_path
+
+            self.logger.info(f"Modelo salvo automaticamente ({reason}): {os.path.basename(model_path)}")
+
+            # Atualizar status
+            self._update_tracker_status()
+
+        except Exception as e:
+            self.logger.exception("Erro ao salvar modelo automaticamente")
+
     def _handle_episode_data(self, episode_data):
         """Processa dados do episódio para o tracker"""
         try:
             episode_reward = episode_data.get("reward", 0)
-            
+
             # Atualizar tracker
-            should_save_model = self.tracker.update(episode_reward, self.total_steps)
-            
-            if should_save_model:
-                self.logger.info(f"NOVA MELHORIA! Recompensa: {episode_reward:.2f} (anterior: {self.tracker.best_reward:.2f})")
-                self._save_best_model_automatically()
-            
-            # Verificar se deve pausar por plateau
+            should_save, reason = self.tracker.update(episode_reward, self.total_steps)
+
+            if should_save:
+                self.logger.info(f"NOVA MELHORIA! Recompensa: {episode_reward:.2f} (Motivo: {reason})")
+                self._save_best_model_automatically(reason)
+
+            # Verificar checkpoint por tempo (300k steps)
+            if self.tracker.should_checkpoint():
+                self.logger.info("Checkpoint por tempo atingido (300k steps)")
+                self._save_best_model_automatically("checkpoint")
+                self.tracker.last_improvement_steps = self.total_steps
+
+            # Verificar se deve pausar por plateau (500k steps sem melhoria)
             if self.tracker.should_pause():
                 self.logger.info("Pausa automática por plateau de performance")
-                self.pause_training()
-                messagebox.showinfo(
-                    "Treinamento Pausado", 
-                    f"Treinamento pausado automaticamente após {self.tracker.patience_steps} steps sem melhoria."
-                )
-            
+                self._trigger_auto_pause()
+
             # Atualizar status na interface
             self._update_tracker_status()
-            
+
         except Exception as e:
             self.logger.exception("Erro ao processar dados do episódio para tracker")
-
-    def _save_best_model_automatically(self):
-        """Salva automaticamente o melhor modelo"""
-        try:
-            # Criar diretório para melhores modelos
-            best_models_dir = utils.ensure_directory(
-                os.path.join(utils.TRAINING_DATA_PATH, "best_models_temp")
-            )
-            
-            # Salvar modelo com timestamp
-            timestamp = int(time.time())
-            model_path = os.path.join(best_models_dir, f"best_model_{timestamp}.zip")
-            
-            # Usar sistema de controle para salvar
-            control_dir = utils.ensure_directory(utils.TRAINING_CONTROL_PATH)
-            control_file = f"save_model_{timestamp}.json"
-            control_path = os.path.join(control_dir, control_file)
-            
-            control_data = {
-                "model_path": model_path,
-                "timestamp": timestamp,
-                "best_reward": self.tracker.best_reward,
-                "auto_save": True
-            }
-            
-            with open(control_path, "w") as f:
-                json.dump(control_data, f, indent=2)
-            
-            self.current_best_model_path = model_path
-            self.logger.info(f"Modelo salvo automaticamente: {model_path}")
-            
-        except Exception as e:
-            self.logger.exception("Erro ao salvar modelo automaticamente")
             
     def ipc_runner(self):
         """Thread para monitorar a fila IPC e atualizar logs"""
