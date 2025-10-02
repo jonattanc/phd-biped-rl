@@ -220,24 +220,40 @@ class EvaluationTab:
 
             self.logger.info(f"Iniciando avaliação: {model_path} no ambiente {environment}")
             self.logger.info(f"Configuração: {episodes} episódios, modo {'determinístico' if deterministic else 'estocástico'}")
-            self.logger.info(f"Gravação de vídeo: {'ATIVADA' if record_video else 'DESATIVADA'}")
+
+            # Verificar se o arquivo do modelo existe
+            if not os.path.exists(model_path):
+                error_msg = f"Arquivo do modelo não encontrado: {model_path}"
+                self.logger.error(error_msg)
+                self.root.after(0, lambda: messagebox.showerror("Erro", error_msg))
+                return
 
             # Executar avaliação
-            metrics = evaluate_and_save(model_path=model_path, circuit_name=environment, avatar_name=robot, num_episodes=episodes, deterministic=deterministic, seed=42, record_video=record_video)
+            metrics = evaluate_and_save(
+                model_path=model_path, 
+                circuit_name=environment, 
+                avatar_name=robot, 
+                num_episodes=episodes, 
+                deterministic=deterministic, 
+                seed=42, 
+                record_video=record_video
+            )
 
             if metrics:
                 # Atualizar interface com resultados
                 self.root.after(0, lambda: self._display_evaluation_results(metrics))
             else:
-                self.root.after(0, lambda: messagebox.showerror("Erro", "Falha na avaliação - nenhuma métrica retornada"))
+                error_msg = "Falha na avaliação - o método evaluate_and_save retornou None"
+                self.logger.error(error_msg)
+                self.root.after(0, lambda: messagebox.showerror("Erro", error_msg))
 
-        except ImportError:
-            error_msg = "Módulo evaluate_model não encontrado. Verifique a instalação."
+        except ImportError as e:
+            error_msg = f"Módulo evaluate_model não encontrado: {e}"
             self.logger.error(error_msg)
             self.root.after(0, lambda: messagebox.showerror("Erro", error_msg))
         except Exception as e:
             self.logger.exception("Erro na avaliação")
-            self.root.after(0, lambda: messagebox.showerror("Erro", f"Erro na avaliação: {e}"))
+            self.root.after(0, lambda: messagebox.showerror("Erro", error_msg))
         finally:
             self.root.after(0, lambda: self.eval_start_btn.config(state=tk.NORMAL, text="Executar Avaliação"))
 

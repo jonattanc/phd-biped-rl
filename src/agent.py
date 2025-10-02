@@ -1,5 +1,6 @@
 # agent.py
 import random
+import time
 import numpy as np
 from stable_baselines3 import PPO, TD3
 from stable_baselines3.common.vec_env import DummyVecEnv
@@ -158,17 +159,44 @@ class Agent:
 
     def set_env(self, env):
         """Configura o ambiente para um modelo carregado"""
-        if self.model is not None and env is not None:
+        self.logger.info("=== CONFIGURANDO AMBIENTE NO AGENT ===")
+
+        if self.model is None:
+            self.logger.error("Modelo não disponível para configurar ambiente")
+            return
+
+        if env is None:
+            self.logger.error("Ambiente não disponível")
+            return
+
+        try:
             # Criar ambiente vetorizado
+            self.logger.info("Criando ambiente vetorizado...")
             vec_env = DummyVecEnv([lambda: env])
 
             # Configurar o ambiente no modelo
+            self.logger.info("Configurando ambiente no modelo...")
             self.model.set_env(vec_env)
             self.env = vec_env
-            self.action_dim = env.action_dim
-            self.logger.info(f"Ambiente configurado para modelo {self.algorithm}")
-        else:
-            self.logger.warning("Não foi possível configurar ambiente: modelo ou ambiente não disponível")
+
+            # Tentar obter action_dim de várias formas
+            if hasattr(env, 'action_dim'):
+                self.action_dim = env.action_dim
+                self.logger.info(f"Action dim do env: {self.action_dim}")
+            elif hasattr(env, 'action_space'):
+                self.action_dim = env.action_space.shape[0]
+                self.logger.info(f"Action dim do action_space: {self.action_dim}")
+            elif self.model.action_space is not None:
+                self.action_dim = self.model.action_space.shape[0]
+                self.logger.info(f"Action dim do model: {self.action_dim}")
+            else:
+                self.logger.warning("Não foi possível determinar action_dim")
+
+            self.logger.info("Ambiente configurado com sucesso no agente")
+
+        except Exception as e:
+            self.logger.exception("Erro ao configurar ambiente")
+            raise
 
     def train(self, total_timesteps=100_000):
         """Treina o agente."""
@@ -194,50 +222,114 @@ class Agent:
         action, _ = self.model.predict(obs, deterministic=False)
         return action.flatten()  # Garante que é um array 1D
 
-    def evaluate(self, env, num_episodes=20, deterministic=True, record_video=False):
+    def set_agent(self, agent):
+        """Configura o agente no ambiente"""
+        self.agent = agent
+        self.logger.info(f"Agente {agent.algorithm} configurado na simulação")
+    
+    def evaluate(self, env, num_episodes=20, deterministic=True):
         """
         Avalia o agente treinado em um ambiente.
-        Retorna métricas completas incluindo contagem de sucessos.
         """
-        self.logger.info("Executando agent.evaluate")
-        self.logger.info(f"Modo determinístico: {deterministic}")
-        self.logger.info(f"Gravação de vídeo: {record_video}")
+        self.logger.info("=== INICIANDO AVALIAÇÃO ===")
 
         if self.model is None:
-            raise ValueError("Nenhum modelo treinado carregado para avaliação.")
+            self.logger.error("Nenhum modelo treinado carregado para avaliação.")
+            return None
 
-        if record_video and hasattr(env, 'set_record_video'):
-            env.set_record_video(True)
-        
+        # Configurar ambiente se necessário - MAS NÃO substituir a referência existente
+        try:
+            if self.model.get_env() is None:
+                self.logger.info("Configurando ambiente no modelo...")
+                vec_env = DummyVecEnv([lambda: env])
+                self.model.set_env(vec_env)
+                self.logger.info("Ambiente configurado")
+        except Exception as e:
+            self.logger.exception("Erro ao configurar ambiente")
+            return None
+
+        # Configurar o agente no ambiente
+        env.agent = self
+        self.logger.info("Agente configurado no ambiente")
+
         total_times = []
         success_count = 0
         total_rewards = []
 
+        self.logger.info(f"Executando {num_episodes} episódios de avaliação...")
+
         for episode in range(num_episodes):
-            obs, _ = env.reset()
-            done = False
-            steps = 0
-            episode_reward = 0
-            episode_success = False
+            try:
+                self.logger.info(f"--- Episódio {episode + 1}/{num_episodes} ---")
 
-            while not done:
-                action, _ = self.model.predict(obs, deterministic=deterministic)
-                obs, reward, done, _, info = env.step(action)
-                steps += 1
-                episode_reward += reward
-
-                # Verificar sucesso
-                if info.get("success", False) or info.get("termination") == "success":
-                    episode_success = True
-                    success_count += 1
+                # Verificar se o modelo ainda está disponível
+                if self.model is None:
+                    self.logger.error("Modelo se tornou None durante a avaliação")
                     break
 
-            episode_time = steps * (1 / 240.0)
-            total_times.append(episode_time)
-            total_rewards.append(episode_reward)
+                # Reset do ambiente
+                obs, _ = env.reset()
+                done = False
+                steps = 0
+                episode_reward = 0
+                episode_success = False
+                episode_start_time = time.time()
 
-        # Calcular métricas
-        avg_time = np.mean(total_times) if total_times else 0
+                while not done and steps < 1000:  # Limite de steps por segurança
+                    # Verificar novamente se o modelo está disponível
+                    if self.model is None:
+                        self.logger.error("Modelo se tornou None durante o episódio")
+                        break
+
+                    # Obter ação do modelo
+                    action, _ = self.model.predict(obs, deterministic=deterministic)
+
+                    # Executar ação
+                    obs, reward, terminated, truncated, info = env.step(action)
+                    done = terminated or truncated
+                    steps += 1
+                    episode_reward += reward
+
+                    # Verificar sucesso
+                    if info.get("success", False):
+                        episode_success = True
+                        self.logger.info(f"Episódio {episode + 1} SUCESSO no step {steps}")
+                        break
+
+                    # Condições de término
+                    if terminated or truncated:
+                        if info.get("termination") == "success":
+                            episode_success = True
+                            self.logger.info(f"Episódio {episode + 1} SUCESSO por término")
+                        else:
+                            self.logger.info(f"Episódio {episode + 1} FALHA: {info.get('termination', 'unknown')}")
+                        break
+
+                # Calcular tempo do episódio
+                episode_time = time.time() - episode_start_time
+                total_times.append(episode_time)
+                total_rewards.append(episode_reward)
+
+                if episode_success:
+                    success_count += 1
+
+                self.logger.info(f"Episódio {episode + 1} finalizado: {episode_time:.2f}s, {steps} steps, sucesso: {episode_success}")
+
+            except Exception as e:
+                self.logger.error(f"Erro no episódio {episode + 1}: {e}")
+                import traceback
+                self.logger.error(traceback.format_exc())
+                # Continuar para o próximo episódio
+                total_times.append(0.0)
+                total_rewards.append(0.0)
+                continue
+
+        # Calcular métricas finais
+        if not total_times:
+            self.logger.error("NENHUM episódio foi concluído com sucesso")
+            return None
+
+        avg_time = np.mean(total_times)
         std_time = np.std(total_times) if len(total_times) > 1 else 0
         success_rate = success_count / num_episodes
 
@@ -250,5 +342,10 @@ class Agent:
             "total_rewards": total_rewards,
             "num_episodes": num_episodes,
         }
+
+        self.logger.info(f"=== AVALIAÇÃO FINALIZADA ===")
+        self.logger.info(f"Sucessos: {success_count}/{num_episodes} ({success_rate*100:.1f}%)")
+        self.logger.info(f"Tempo médio: {avg_time:.2f}s")
+        self.logger.info(f"Desvio padrão: {std_time:.2f}s")
 
         return metrics

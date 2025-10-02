@@ -5,10 +5,11 @@ import gymnasium as gym
 import time
 import numpy as np
 import random
+from stable_baselines3.common.vec_env import DummyVecEnv
 
 
 class Simulation(gym.Env):
-    def __init__(self, logger, robot, environment, ipc_queue, pause_value, exit_value, enable_visualization_value, num_episodes=1, seed=42):
+    def __init__(self, logger, robot, environment, ipc_queue, pause_value, exit_value, enable_visualization_value, num_episodes=1, seed=42, record_video=False):
         super(Simulation, self).__init__()
         np.random.seed(seed)
         random.seed(seed)
@@ -22,6 +23,7 @@ class Simulation(gym.Env):
         self.is_visualization_enabled = enable_visualization_value.value
         self.num_episodes = num_episodes
         self.current_episode = 0
+        self.record_video = record_video
 
         self.logger = logger
         self.agent = None
@@ -292,6 +294,20 @@ class Simulation(gym.Env):
         else:
             self.soft_env_reset()
 
+        # IMPORTANTE: Reconfigurar o agente no ambiente após o reset
+        if self.agent is not None:
+            # Garantir que o agente ainda está configurado
+            self.agent.env = self
+            if hasattr(self.agent, 'model') and self.agent.model is not None:
+                # Reconfigurar o ambiente no modelo se necessário
+                try:
+                    if self.agent.model.get_env() is None:
+                        # USAR DummyVecEnv CORRETAMENTE
+                        vec_env = DummyVecEnv([lambda: self])
+                        self.agent.model.set_env(vec_env)
+                except Exception as e:
+                    self.logger.warning(f"Não foi possível reconfigurar ambiente no reset: {e}")
+
         # Obter posição inicial
         robot_position, robot_orientation = self.robot.get_imu_position_and_orientation()
         self.episode_robot_x_initial_position = robot_position[0]
@@ -313,6 +329,7 @@ class Simulation(gym.Env):
         p.changeDynamics(self.robot.id, -1, linearDamping=0.04, angularDamping=0.04)
 
     def transmit_episode_info(self):
+        """Transmite informações do episódio apenas se ipc_queue estiver disponível"""
         if len(self.agent.model.ep_info_buffer) > 0 and len(self.agent.model.ep_info_buffer[0]) > 0:
             if self.episode_done:
                 self.on_episode_end()
@@ -321,6 +338,7 @@ class Simulation(gym.Env):
                 self.agent.model.ep_info_buffer = []
 
     def on_episode_end(self):
+        """Processa o final do episódio apenas se ipc_queue estiver disponível"""
         self.episode_count += 1
 
         # Obter posição e orientação final da IMU
@@ -328,29 +346,34 @@ class Simulation(gym.Env):
 
         actual_episode_number = self.current_episode + self.episode_count
 
-        self.ipc_queue.put(
-            {
-                "type": "episode_data",
-                "episode": actual_episode_number,
-                "reward": self.episode_reward,
-                "time": self.episode_steps * self.time_step_s,
-                "steps": self.episode_steps,
-                "distance": self.episode_distance,
-                "success": self.episode_success,
-                "imu_x": imu_position[0],
-                "imu_y": imu_position[1],
-                "imu_z": imu_position[2],
-                "roll": imu_orientation[0],
-                "pitch": imu_orientation[1],
-                "yaw": imu_orientation[2],
-            }
-        )
+        # SÓ enviar para ipc_queue se estiver disponível
+        if self.ipc_queue is not None:
+            try:
+                self.ipc_queue.put(
+                    {
+                        "type": "episode_data",
+                        "episode": actual_episode_number,
+                        "reward": self.episode_reward,
+                        "time": self.episode_steps * self.time_step_s,
+                        "steps": self.episode_steps,
+                        "distance": self.episode_distance,
+                        "success": self.episode_success,
+                        "imu_x": imu_position[0],
+                        "imu_y": imu_position[1],
+                        "imu_z": imu_position[2],
+                        "roll": imu_orientation[0],
+                        "pitch": imu_orientation[1],
+                        "yaw": imu_orientation[2],
+                    }
+                )
 
-        # Enviar contagem de steps para a GUI
-        try:
-            self.ipc_queue.put_nowait({"type": "step_count", "steps": self.episode_steps})
-        except:
-            pass
+                # Enviar contagem de steps para a GUI
+                try:
+                    self.ipc_queue.put_nowait({"type": "step_count", "steps": self.episode_steps})
+                except:
+                    pass
+            except:
+                pass  # Ignorar erros de queue durante avaliação
 
         if actual_episode_number % 10 == 0:
             self.logger.info(f"Episódio {actual_episode_number} concluído")
@@ -423,75 +446,77 @@ class Simulation(gym.Env):
         """
         while self.pause_value.value and not self.exit_value.value:
             time.sleep(0.1)
-
+    
         if self.exit_value.value:
             self.logger.info("Sinal de saída recebido em step. Finalizando simulação.")
             return None, 0.0, True, False, {"exit": True}
-
+    
         # Atualizar configurações de visualização e tempo real se necessário
         if self.is_visualization_enabled != self.enable_visualization_value.value:
             self.is_visualization_enabled = self.enable_visualization_value.value
             self.setup_sim_env()
-
+    
         self.apply_action(action)
-
+    
         # Avançar simulação
         for _ in range(self.physics_step_multiplier):
             p.stepSimulation()
-
+    
         if self.is_visualization_enabled:
             time.sleep(self.time_step_s)
-
+    
         self.episode_steps += 1
-
+    
         # Obter observação
         obs = self.robot.get_observation()
-
+    
         robot_position, robot_orientation = self.robot.get_imu_position_and_orientation()
         robot_x_position = robot_position[0]
         robot_z_position = robot_position[2]
         robot_yaw = robot_orientation[2]
         self.episode_last_distance = self.episode_distance
         self.episode_distance = robot_x_position - self.episode_robot_x_initial_position
-
+    
         # Condições de Termino
         info = {"distance": self.episode_distance, "termination": "none"}
-
+    
         # Queda
         if robot_z_position < self.fall_threshold:
             self.episode_terminated = True
             info["termination"] = "fell"
-
+    
         # Desvio do caminho
         if abs(robot_yaw) >= self.yaw_threshold:
             self.episode_terminated = True
             info["termination"] = "yaw_deviated"
-
+    
         # Sucesso
         elif self.episode_distance >= self.success_distance:
             self.episode_terminated = True
             self.episode_success = True
             info["termination"] = "success"
-
+    
         # Timeout
         elif self.episode_steps * self.time_step_s >= self.episode_timeout_s:
             self.episode_truncated = True
             info["termination"] = "timeout"
-
+    
         info["success"] = self.episode_success
         self.episode_done = self.episode_truncated or self.episode_terminated
-
+    
         reward = self.get_reward(action, robot_orientation)
         self.episode_reward += reward
-
+    
         # Coletar info final quando o episódio terminar
         if self.episode_done:
             info["episode"] = {"r": self.episode_reward, "l": self.episode_steps, "distance": self.episode_distance, "success": self.episode_success}
-
-        self.transmit_episode_info()
-
+    
+        # MODIFICAÇÃO: Só chamar transmit_episode_info se ipc_queue estiver disponível
+        if self.ipc_queue is not None:
+            self.transmit_episode_info()
+    
         self.episode_last_action = action
-
+    
         return obs, reward, self.episode_terminated, self.episode_truncated, info
 
     def get_episode_info(self):
