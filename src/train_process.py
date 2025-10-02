@@ -35,7 +35,7 @@ def process_runner(selected_environment, selected_robot, algorithm, ipc_queue, p
         timesteps_completed = 0
 
         # Diretório para controle de salvamento
-        control_dir = "training_control"
+        control_dir = utils.TRAINING_CONTROL_PATH
         os.makedirs(control_dir, exist_ok=True)
 
         while timesteps_completed < total_timesteps and not exit_value.value:
@@ -176,7 +176,7 @@ def process_runner_resume(selected_environment, selected_robot, algorithm, ipc_q
         timesteps_completed = 0
 
         # Diretório para controle de salvamento
-        control_dir = "training_control"
+        control_dir = utils.TRAINING_CONTROL_PATH
         os.makedirs(control_dir, exist_ok=True)
 
         while timesteps_completed < total_timesteps and not exit_value.value:

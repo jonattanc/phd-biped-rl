@@ -12,6 +12,7 @@ import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import utils
 from utils import setup_ipc_logging
 
 
@@ -169,7 +170,7 @@ class ComparisonTab:
 
     def add_comparison_model(self):
         """Adiciona modelo à lista de comparação"""
-        filename = filedialog.askopenfilename(title="Selecionar Modelo para Comparação", filetypes=[("Zip files", "*.zip"), ("All files", "*.*")], initialdir="training_data")
+        filename = filedialog.askopenfilename(title="Selecionar Modelo para Comparação", filetypes=[("Zip files", "*.zip"), ("All files", "*.*")], initialdir=utils.TRAINING_DATA_PATH)
         if filename:
             model_name = os.path.basename(filename)
             display_name = model_name.replace(".zip", "").replace("model_", "")

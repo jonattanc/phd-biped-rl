@@ -11,6 +11,7 @@ from datetime import datetime
 import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import utils
 from utils import setup_ipc_logging, validate_episodes_count, ensure_directory
 
 
@@ -174,7 +175,7 @@ class EvaluationTab:
 
     def browse_evaluation_model(self):
         """Abre diálogo para selecionar modelo para avaliação"""
-        filename = filedialog.askopenfilename(title="Selecionar Modelo para Avaliação", filetypes=[("Zip files", "*.zip"), ("All files", "*.*")], initialdir="training_data")
+        filename = filedialog.askopenfilename(title="Selecionar Modelo para Avaliação", filetypes=[("Zip files", "*.zip"), ("All files", "*.*")], initialdir=utils.TRAINING_DATA_PATH)
         if filename:
             self.eval_model_path.set(filename)
             self.logger.info(f"Modelo selecionado para avaliação: {os.path.basename(filename)}")

@@ -25,6 +25,8 @@ TMP_PATH = os.path.join(PROJECT_ROOT, "tmp")
 LOGS_PATH = os.path.join(PROJECT_ROOT, "logs")
 ENVIRONMENT_PATH = os.path.join(PROJECT_ROOT, "environments")
 ROBOTS_PATH = os.path.join(PROJECT_ROOT, "robots")
+TRAINING_DATA_PATH = os.path.join(PROJECT_ROOT, "training_data")
+TRAINING_CONTROL_PATH = os.path.join(PROJECT_ROOT, "training_control")
 
 
 def get_logger(description=["main"], ipc_queue=None):

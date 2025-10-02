@@ -11,12 +11,12 @@ import queue
 import json
 import shutil
 from datetime import datetime
-
 import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import train_process
+import utils
 from utils import ensure_directory, setup_ipc_logging, ENVIRONMENT_PATH, ROBOTS_PATH
 
 
@@ -72,7 +72,7 @@ class TrainingTab:
         self.training_start_time = time.time()
         self.current_episode = 0
         self.loaded_episode_count = 0
-        self.training_data_dir = "training_data"
+        self.training_data_dir = utils.TRAINING_DATA_PATH
         self.current_training_session = None
         self.is_resuming = False
         self.resumed_session_dir = None
@@ -519,7 +519,7 @@ class TrainingTab:
             self.logger.info(f"INICIANDO SALVAMENTO DO MODELO: {model_path}")
 
             # Sistema de controle
-            control_dir = ensure_directory("training_control")
+            control_dir = ensure_directory(utils.TRAINING_CONTROL_PATH)
             control_file = f"save_model_{int(time.time() * 1000)}.json"
             control_path = os.path.join(control_dir, control_file)
 

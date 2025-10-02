@@ -89,7 +89,7 @@ def evaluate_single_model_directly():
     logging.info("=== INICIANDO AVALIAÇÃO DIRETA ===")
 
     # Verificar se existe algum modelo
-    models_dir = "training_data"
+    models_dir = utils.TRAINING_DATA_PATH
     if not os.path.exists(models_dir):
         logging.error(f"Diretório de modelos não encontrado: {models_dir}")
         logging.info("Criando diretório...")
