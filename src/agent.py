@@ -194,17 +194,21 @@ class Agent:
         action, _ = self.model.predict(obs, deterministic=False)
         return action.flatten()  # Garante que é um array 1D
 
-    def evaluate(self, env, num_episodes=20, deterministic=True):
+    def evaluate(self, env, num_episodes=20, deterministic=True, record_video=False):
         """
         Avalia o agente treinado em um ambiente.
         Retorna métricas completas incluindo contagem de sucessos.
         """
         self.logger.info("Executando agent.evaluate")
         self.logger.info(f"Modo determinístico: {deterministic}")
+        self.logger.info(f"Gravação de vídeo: {record_video}")
 
         if self.model is None:
             raise ValueError("Nenhum modelo treinado carregado para avaliação.")
 
+        if record_video and hasattr(env, 'set_record_video'):
+            env.set_record_video(True)
+        
         total_times = []
         success_count = 0
         total_rewards = []

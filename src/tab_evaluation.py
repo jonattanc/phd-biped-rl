@@ -91,9 +91,12 @@ class EvaluationTab:
         self.eval_deterministic_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(row3_frame, text="Modo Determinístico", variable=self.eval_deterministic_var).grid(row=0, column=1, padx=5)
 
+        self.record_video_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(row3_frame, text="Gravar Vídeos", variable=self.record_video_var).grid(row=0, column=2, padx=5)
+
         # Botões de exportação
-        ttk.Button(row3_frame, text="Exportar Resultados", command=self.export_evaluation_results).grid(row=0, column=2, padx=5)
-        ttk.Button(row3_frame, text="Salvar Gráficos", command=self.export_evaluation_plots).grid(row=0, column=3, padx=5)
+        ttk.Button(row3_frame, text="Exportar Resultados", command=self.export_evaluation_results).grid(row=0, column=3, padx=5)
+        ttk.Button(row3_frame, text="Salvar Gráficos", command=self.export_evaluation_plots).grid(row=0, column=4, padx=5)
 
         # Resultados da avaliação
         results_frame = ttk.LabelFrame(main_frame, text="Resultados da Avaliação", padding="10")
@@ -213,12 +216,14 @@ class EvaluationTab:
             robot = self.eval_robot_var.get()
             episodes = int(self.eval_episodes_var.get())
             deterministic = self.eval_deterministic_var.get()
+            record_video = self.record_video_var.get()
 
             self.logger.info(f"Iniciando avaliação: {model_path} no ambiente {environment}")
             self.logger.info(f"Configuração: {episodes} episódios, modo {'determinístico' if deterministic else 'estocástico'}")
+            self.logger.info(f"Gravação de vídeo: {'ATIVADA' if record_video else 'DESATIVADA'}")
 
             # Executar avaliação
-            metrics = evaluate_and_save(model_path=model_path, circuit_name=environment, avatar_name=robot, num_episodes=episodes, deterministic=deterministic, seed=42)
+            metrics = evaluate_and_save(model_path=model_path, circuit_name=environment, avatar_name=robot, num_episodes=episodes, deterministic=deterministic, seed=42, record_video=record_video)
 
             if metrics:
                 # Atualizar interface com resultados
