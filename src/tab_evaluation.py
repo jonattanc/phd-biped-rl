@@ -10,6 +10,8 @@ import json
 from datetime import datetime
 import sys
 
+import pandas as pd
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import utils
 from utils import setup_ipc_logging, validate_episodes_count, ensure_directory
@@ -425,7 +427,7 @@ Análise:
             self.logger.info("Histórico de avaliações limpo")
 
     def export_evaluation_results(self):
-        """Exporta os resultados da avaliação para arquivo JSON"""
+        """Exporta os resultados da avaliação para arquivo CSV"""
         if not self.evaluation_data["current_evaluation"]:
             messagebox.showwarning("Aviso", "Nenhum resultado de avaliação para exportar.")
             return
@@ -433,17 +435,36 @@ Análise:
         try:
             filename = filedialog.asksaveasfilename(
                 title="Salvar Resultados da Avaliação",
-                defaultextension=".json",
-                filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
-                initialfile=f"evaluation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                defaultextension=".csv",
+                filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+                initialfile=f"evaluation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
             )
 
             if filename:
                 # Garantir que o diretório existe
                 ensure_directory(os.path.dirname(filename))
 
-                with open(filename, "w", encoding="utf-8") as f:
-                    json.dump(self.evaluation_data["current_evaluation"], f, indent=2, ensure_ascii=False, default=str)
+                # Exportar para CSV
+                evaluation = self.evaluation_data["current_evaluation"]
+                metrics = evaluation["metrics"]
+                
+                # Criar DataFrame com dados completos
+                data = {
+                    "timestamp": [datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
+                    "model_path": [evaluation["model_path"]],
+                    "environment": [evaluation["environment"]],
+                    "robot": [evaluation["robot"]],
+                    "episodes": [evaluation["episodes"]],
+                    "deterministic": [evaluation["deterministic"]],
+                    "avg_time": [metrics.get("avg_time", 0)],
+                    "std_time": [metrics.get("std_time", 0)],
+                    "success_rate": [metrics.get("success_rate", 0)],
+                    "success_count": [metrics.get("success_count", 0)],
+                    "num_episodes": [metrics.get("num_episodes", 0)],
+                }
+                
+                df = pd.DataFrame(data)
+                df.to_csv(filename, index=False, encoding='utf-8')
 
                 messagebox.showinfo("Sucesso", f"Resultados exportados para:\n{filename}")
                 self.logger.info(f"Resultados de avaliação exportados: {filename}")
