@@ -32,7 +32,7 @@ def process_runner(selected_environment, selected_robot, algorithm, ipc_queue, p
         logger.info(f"Iniciando treinamento {algorithm}...")
 
         # Loop principal do treinamento
-        total_timesteps = 10_000_000
+        total_timesteps = 50_000_000
         timesteps_completed = 0
 
         # Diretório para controle de salvamento
@@ -187,7 +187,7 @@ def process_runner_resume(selected_environment, selected_robot, algorithm, ipc_q
         logger.info(f"Retomando treinamento {algorithm} do episódio {initial_episode}...")
 
         # Loop principal do treinamento
-        total_timesteps = 10_000_000
+        total_timesteps = 50_000_000
         timesteps_completed = 0
 
         # Diretório para controle de salvamento

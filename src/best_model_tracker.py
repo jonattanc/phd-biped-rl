@@ -1,6 +1,7 @@
 # best_model_tracker.py
+import os
+import json
 import time
-import utils
 
 class BestModelTracker:
     def __init__(self, improvement_threshold=0.05, patience_steps=500000, checkpoint_steps=300000):
@@ -12,7 +13,6 @@ class BestModelTracker:
         self.total_steps = 0
         self.last_improvement_steps = 0
         self.auto_save_count = 0
-        self.last_auto_save_path = None
         
     def update(self, episode_reward, current_steps):
         """Atualiza tracker com nova recompensa e retorna se houve melhoria"""
@@ -23,13 +23,13 @@ class BestModelTracker:
             self.best_reward = episode_reward
             self.last_improvement_steps = current_steps
             self.steps_since_improvement = 0
+            self.auto_save_count += 1
             return True, "first_reward"
             
         # Calcular melhoria percentual
         improvement = (episode_reward - self.best_reward) / abs(self.best_reward)
         
         if improvement >= self.improvement_threshold:
-            old_reward = self.best_reward
             self.best_reward = episode_reward
             self.steps_since_improvement = 0
             self.last_improvement_steps = current_steps
@@ -50,7 +50,7 @@ class BestModelTracker:
     def get_auto_save_filename(self):
         """Gera nome de arquivo para salvamento automático"""
         timestamp = int(time.time())
-        return f"best_model_r{self.best_reward:.2f}_s{self.total_steps}_{timestamp}.zip"
+        return f"best_model_{timestamp}.zip"
         
     def get_status(self):
         """Retorna status atual para logging"""
@@ -60,6 +60,5 @@ class BestModelTracker:
             "steps_since_improvement": self.steps_since_improvement,
             "improvement_threshold": self.improvement_threshold,
             "patience_steps": self.patience_steps,
-            "auto_save_count": self.auto_save_count,
-            "last_auto_save_path": self.last_auto_save_path
+            "auto_save_count": self.auto_save_count
         }

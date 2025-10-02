@@ -100,19 +100,19 @@ class TrainingTab:
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
         # Controles
-        control_frame = ttk.LabelFrame(main_frame, text="Controle de Treinamento", padding="10")
-        control_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=5)
+        control_frame = ttk.LabelFrame(main_frame, text="Controle de Treinamento", padding="1")
+        control_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=1)
 
         # Linha1: Seleções Principais
         row1_frame = ttk.Frame(control_frame)
         row1_frame.grid(row=0, column=0, columnspan=12, sticky=(tk.W, tk.E), pady=0)
 
         # Seleção de algoritmo
-        ttk.Label(row1_frame, text="Algoritmo:").grid(row=0, column=0, sticky=tk.W, padx=5)
+        ttk.Label(row1_frame, text="Algoritmo:").grid(row=0, column=0, sticky=tk.W, padx=1)
         algorithms = ["TD3", "FastTD3", "PPO"]
         self.algorithm_var = tk.StringVar(value=algorithms[0])
         algorithm_combo = ttk.Combobox(row1_frame, textvariable=self.algorithm_var, values=algorithms, width=10)
-        algorithm_combo.grid(row=0, column=1, padx=5)
+        algorithm_combo.grid(row=0, column=1, padx=1)
 
         # Seleção de ambiente
         xacro_env_files = self._get_xacro_files(ENVIRONMENT_PATH)
@@ -120,7 +120,7 @@ class TrainingTab:
             messagebox.showerror("Erro", f"Nenhum arquivo .xacro encontrado em {ENVIRONMENT_PATH}.")
             return
 
-        ttk.Label(row1_frame, text="Ambiente:").grid(row=0, column=2, sticky=tk.W, padx=5)
+        ttk.Label(row1_frame, text="Ambiente:").grid(row=0, column=2, sticky=tk.W, padx=1)
         self.env_var = tk.StringVar(value=xacro_env_files[0])
         env_combo = ttk.Combobox(row1_frame, textvariable=self.env_var, values=xacro_env_files, width=10)
         env_combo.grid(row=0, column=3, padx=5)
@@ -131,41 +131,41 @@ class TrainingTab:
             messagebox.showerror("Erro", f"Nenhum arquivo .xacro encontrado em {ROBOTS_PATH}.")
             return
 
-        ttk.Label(row1_frame, text="Robô:").grid(row=0, column=4, sticky=tk.W, padx=5)
+        ttk.Label(row1_frame, text="Robô:").grid(row=0, column=4, sticky=tk.W, padx=1)
         self.robot_var = tk.StringVar(value=xacro_robot_files[0])
         robot_combo = ttk.Combobox(row1_frame, textvariable=self.robot_var, values=xacro_robot_files, width=12)
         robot_combo.grid(row=0, column=5, padx=5)
 
         # Botões de controle
         self.start_btn = ttk.Button(row1_frame, text="Iniciar Treino", command=self.start_training, width=15)
-        self.start_btn.grid(row=0, column=6, padx=5)
+        self.start_btn.grid(row=0, column=6, padx=1)
 
         self.pause_btn = ttk.Button(row1_frame, text="Pausar", command=self.pause_training, state=tk.DISABLED, width=10)
-        self.pause_btn.grid(row=0, column=7, padx=5)
+        self.pause_btn.grid(row=0, column=7, padx=1)
 
         self.stop_btn = ttk.Button(row1_frame, text="Finalizar", command=self.stop_training, state=tk.DISABLED, width=10)
-        self.stop_btn.grid(row=0, column=8, padx=5)
+        self.stop_btn.grid(row=0, column=8, padx=1)
 
         # Linha 2: Botões secundários e checkboxes
         row2_frame = ttk.Frame(control_frame)
-        row2_frame.grid(row=1, column=0, columnspan=12, sticky=(tk.W, tk.E), pady=5)
+        row2_frame.grid(row=1, column=0, columnspan=12, sticky=(tk.W, tk.E), pady=1)
 
         self.save_training_btn = ttk.Button(row2_frame, text="Salvar Treino", command=self.save_training_data, state=tk.DISABLED, width=15)
-        self.save_training_btn.grid(row=0, column=0, padx=5)
+        self.save_training_btn.grid(row=0, column=0, padx=1)
 
         self.load_training_btn = ttk.Button(row2_frame, text="Carregar Treino", command=self.load_training_data, width=15)
-        self.load_training_btn.grid(row=0, column=1, padx=5)
+        self.load_training_btn.grid(row=0, column=1, padx=1)
 
         self.export_plots_btn = ttk.Button(row2_frame, text="Exportar Gráficos", command=self.export_plots, state=tk.DISABLED, width=15)
-        self.export_plots_btn.grid(row=0, column=2, padx=5)
+        self.export_plots_btn.grid(row=0, column=2, padx=1)
 
         self.enable_visualization_var = tk.BooleanVar(value=False)
         self.enable_visualization_check = ttk.Checkbutton(row2_frame, text="Visualizar Robô", variable=self.enable_visualization_var, command=self.toggle_visualization, state=tk.DISABLED, width=15)
-        self.enable_visualization_check.grid(row=0, column=3, padx=5)
+        self.enable_visualization_check.grid(row=0, column=3, padx=1)
 
         # Gráficos
-        graph_frame = ttk.LabelFrame(main_frame, text="Desempenho em Tempo Real", padding="10")
-        graph_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
+        graph_frame = ttk.LabelFrame(main_frame, text="Desempenho em Tempo Real", padding="1")
+        graph_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=1)
 
         self.fig, self.axs = plt.subplots(5, 1, figsize=(10, 10), constrained_layout=True, sharex=True)
         self.canvas = FigureCanvasTkAgg(self.fig, master=graph_frame)
@@ -174,11 +174,11 @@ class TrainingTab:
         self._initialize_plots()
 
         # Logs
-        log_frame = ttk.LabelFrame(main_frame, text="Log de Treinamento", padding="10")
-        log_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
+        log_frame = ttk.LabelFrame(main_frame, text="Log de Treinamento", padding="1")
+        log_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=1)
         
         status_frame = ttk.Frame(log_frame)
-        status_frame.grid(row=3, column=0, columnspan=12, sticky=(tk.W, tk.E), pady=5)
+        status_frame.grid(row=3, column=0, columnspan=12, sticky=(tk.W, tk.E), pady=1)
         
         self.steps_label = ttk.Label(status_frame, text=self.build_steps_label_text(0, 0))
         self.steps_label.grid(row=0, column=0, sticky=tk.W, padx=5)
@@ -189,7 +189,7 @@ class TrainingTab:
         log_frame.columnconfigure(0, weight=1)
         log_frame.rowconfigure(0, weight=1)
 
-        self.log_text = tk.Text(log_frame, height=10, state=tk.DISABLED)
+        self.log_text = tk.Text(log_frame, height=12, state=tk.DISABLED)
         scrollbar = ttk.Scrollbar(log_frame, orient="vertical", command=self.log_text.yview)
         self.log_text.configure(yscrollcommand=scrollbar.set)
         self.log_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
@@ -295,10 +295,24 @@ class TrainingTab:
             self.stop_btn.config(state=tk.NORMAL)
             self.enable_visualization_check.config(state=tk.NORMAL)
 
-            # Reiniciar tracker para novo treinamento
-            self.tracker = BestModelTracker()
+            # Sistema tracker para novo treinamento
+            if not hasattr(self, 'tracker'):
+                self.tracker = BestModelTracker()
+                self.total_steps = 0
+
+            if not hasattr(self, 'best_models_dir'):
+                self.best_models_dir = utils.ensure_directory(
+                    os.path.join(utils.TRAINING_DATA_PATH, "best_models_temp")
+                )
+
+            # Reiniciar dados
+            self.tracker.best_reward = -float('inf')
+            self.tracker.total_steps = 0
+            self.tracker.steps_since_improvement = 0
             self.total_steps = 0
             self.current_best_model_path = None
+
+            self.logger.info("Sistema de tracking preparado para novo treinamento")
 
             # Iniciar treinamento em processo separado
             pause_val = multiprocessing.Value("b", 0)
@@ -515,8 +529,35 @@ class TrainingTab:
                 "hyperparams": self.hyperparams,
             }
 
-            with open(os.path.join(session_dir, "training_data.json"), "w") as f:
-                json.dump(training_data, f, indent=2)
+            best_model_used = False
+        
+            if hasattr(self, 'current_best_model_path') and self.current_best_model_path and os.path.exists(self.current_best_model_path):
+                # Copiar o melhor modelo automático para a sessão
+                models_dir = utils.ensure_directory(os.path.join(session_dir, "models"))
+                final_model_path = os.path.join(models_dir, "model.zip")
+
+                shutil.copy2(self.current_best_model_path, final_model_path)
+                best_model_used = True
+
+                self.logger.info(f"Usando melhor modelo automático: {os.path.basename(self.current_best_model_path)}")
+
+            if not best_model_used:
+                # Fallback para sistema tradicional
+                self.logger.info("Usando sistema tradicional de salvamento")
+                model_saved = self._save_model_with_control(session_dir, session_name)
+            else:
+                model_saved = True
+
+            # Salvar informações básicas do tracker se existir
+            if hasattr(self, 'tracker'):
+                tracker_info = {
+                    "best_reward": self.tracker.best_reward,
+                    "total_steps": self.tracker.total_steps,
+                    "used_best_model": best_model_used
+                }
+
+                with open(os.path.join(session_dir, "training_info.json"), "w") as f:
+                    json.dump(tracker_info, f, indent=2)
 
             # Salvar modelo usando sistema de controle
             model_saved = self._save_model_with_control(session_dir, session_name)
@@ -688,6 +729,33 @@ class TrainingTab:
             "episode_data": self.episode_data.copy(),
             "hyperparams": self.hyperparams,
         }
+
+        # Tentar carregar informações do tracker se existirem
+        training_info_path = os.path.join(session_dir, "training_info.json")
+        if os.path.exists(training_info_path):
+            try:
+                with open(training_info_path, "r") as f:
+                    training_info = json.load(f)
+
+                # Inicializar tracker se não existir
+                if not hasattr(self, 'tracker'):
+                    self.tracker = BestModelTracker()
+                    self.total_steps = 0
+
+                # Restaurar dados básicos
+                self.tracker.best_reward = training_info.get("best_reward", -float('inf'))
+                self.total_steps = training_info.get("total_steps", 0)
+
+                self.logger.info(f"Informações de treino carregadas: recompensa={self.tracker.best_reward}, steps={self.total_steps}")
+
+            except Exception as e:
+                self.logger.warning(f"Erro ao carregar informações de treino: {e}")
+
+        # Configurar sistema básico se não existir
+        if not hasattr(self, 'best_models_dir'):
+            self.best_models_dir = utils.ensure_directory(
+                os.path.join(utils.TRAINING_DATA_PATH, "best_models_temp")
+            )
 
     def export_plots(self):
         """Exporta gráficos como imagens para uso na tese"""
@@ -945,27 +1013,34 @@ class TrainingTab:
 
     def _update_tracker_status(self):
         """Atualiza o label de status do tracker"""
-        status = self.tracker.get_status()
+        try:
+            status = self.tracker.get_status()
 
-        # Criar texto de status para melhor visualização
-        status_parts = []
-        status_parts.append(f"Melhor: {status['best_reward']:.2f}")
-        status_parts.append(f"Steps: {status['total_steps']:,}")
-        status_parts.append(f"Sem melhoria: {status['steps_since_improvement']:,}")
+            # Criar texto de status com emojis para melhor visualização
+            status_parts = []
+            status_parts.append(f"Melhor: {status['best_reward']:.2f}")
+            status_parts.append(f"Steps: {status['total_steps']:,}")
+            status_parts.append(f"Sem melhoria: {status['steps_since_improvement']:,}")
 
-        if status['auto_save_count'] > 0:
-            status_parts.append(f"Salvamentos: {status['auto_save_count']}")
+            # Usar get() para evitar KeyError
+            auto_save_count = status.get('auto_save_count', 0)
+            if auto_save_count > 0:
+                status_parts.append(f"Salvamentos: {auto_save_count}")
 
-        status_text = " | ".join(status_parts)
-        self.tracker_status_label.config(text=status_text)
+            status_text = " | ".join(status_parts)
+            self.tracker_status_label.config(text=status_text)
 
-        # Mudar cor do texto se estiver perto de pausar
-        if status['steps_since_improvement'] > status['patience_steps'] * 0.8:
-            self.tracker_status_label.config(foreground="orange")
-        elif status['steps_since_improvement'] > status['patience_steps'] * 0.9:
-            self.tracker_status_label.config(foreground="red")
-        else:
-            self.tracker_status_label.config(foreground="black")
+            # Mudar cor do texto se estiver perto de pausar
+            if status['steps_since_improvement'] > status['patience_steps'] * 0.8:
+                self.tracker_status_label.config(foreground="orange")
+            elif status['steps_since_improvement'] > status['patience_steps'] * 0.9:
+                self.tracker_status_label.config(foreground="red")
+            else:
+                self.tracker_status_label.config(foreground="black")
+
+        except Exception as e:
+            self.logger.warning(f"Erro ao atualizar status do tracker: {e}")
+            self.tracker_status_label.config(text="Status: Erro no tracker")
         
     def _setup_auto_save_system(self):
         """Configura sistema automático de salvamento"""
@@ -996,11 +1071,14 @@ class TrainingTab:
 
     def _save_best_model_automatically(self, reason="improvement"):
         """Salva automaticamente o melhor modelo"""
-        if not self.auto_save_enabled:
-            return
-
         try:
-            # Gerar nome do arquivo baseado na recompensa e steps
+            # Verificar se o diretório existe
+            if not hasattr(self, 'best_models_dir'):
+                self.best_models_dir = utils.ensure_directory(
+                    os.path.join(utils.TRAINING_DATA_PATH, "best_models_temp")
+                )
+
+            # Gerar nome do arquivo
             filename = self.tracker.get_auto_save_filename()
             model_path = os.path.join(self.best_models_dir, filename)
 
@@ -1022,7 +1100,6 @@ class TrainingTab:
                 json.dump(control_data, f, indent=2)
 
             self.current_best_model_path = model_path
-            self.tracker.last_auto_save_path = model_path
 
             self.logger.info(f"Modelo salvo automaticamente ({reason}): {os.path.basename(model_path)}")
 
@@ -1036,6 +1113,12 @@ class TrainingTab:
         """Processa dados do episódio para o tracker"""
         try:
             episode_reward = episode_data.get("reward", 0)
+
+            # Verificar se tracker existe
+            if not hasattr(self, 'tracker'):
+                self.logger.warning("Tracker não inicializado, criando novo...")
+                self.tracker = BestModelTracker()
+                self.total_steps = 0
 
             # Atualizar tracker
             should_save, reason = self.tracker.update(episode_reward, self.total_steps)
@@ -1149,6 +1232,9 @@ class TrainingTab:
         """Limpeza adequada ao fechar"""
         self.logger.info("Gui fechando")
 
+        # Marcar como fechado ANTES de cancelar os callbacks
+        self.gui_closed = True
+
         # Cancelar todas as callbacks agendadas
         for after_id in self.after_ids.values():
             try:
@@ -1156,7 +1242,8 @@ class TrainingTab:
             except:
                 pass
 
-        self.gui_closed = True
+        # Limpar o dicionário de after_ids
+        self.after_ids.clear()
 
         if hasattr(self, "ipc_queue"):
             self.ipc_queue.put(None)  # Sinaliza para a thread IPC terminar
@@ -1178,6 +1265,7 @@ class TrainingTab:
                     p.terminate()
 
         self.logger.info("Todos os processos finalizados. Fechando GUI.")
+        self.logger.info("Programa finalizado com sucesso.")  # Log adicional
         self.root.quit()
 
     def start(self):
