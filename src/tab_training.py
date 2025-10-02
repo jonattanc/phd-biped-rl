@@ -37,6 +37,7 @@ class TrainingTab:
         self.pause_values = []
         self.exit_values = []
         self.enable_real_time_values = []
+        self.enable_visualization_values = []
         self.gui_log_queue = queue.Queue()
         self.ipc_queue = multiprocessing.Queue()
         self.ipc_thread = None
@@ -55,7 +56,6 @@ class TrainingTab:
         self.save_training_btn = None
         self.load_training_btn = None
         self.export_plots_btn = None
-        self.save_btn = None
         self.real_time_var = None
         self.real_time_check = None
         self.steps_label = None
@@ -156,15 +156,16 @@ class TrainingTab:
         self.export_plots_btn = ttk.Button(row2_frame, text="Exportar Gráficos", command=self.export_plots, state=tk.DISABLED, width=15)
         self.export_plots_btn.grid(row=0, column=2, padx=5)
 
-        self.save_btn = ttk.Button(row2_frame, text="Salvar Snapshot", command=self.save_snapshot, state=tk.DISABLED, width=15)
-        self.save_btn.grid(row=0, column=3, padx=5)
+        self.enable_visualization_var = tk.BooleanVar(value=False)
+        self.enable_visualization_check = ttk.Checkbutton(row2_frame, text="Visualizar Robô", variable=self.enable_visualization_var, command=self.toggle_visualization, state=tk.DISABLED, width=15)
+        self.enable_visualization_check.grid(row=0, column=3, padx=5)
 
         self.real_time_var = tk.BooleanVar(value=False)
-        self.real_time_check = ttk.Checkbutton(row2_frame, text="Visualizar Robô", variable=self.real_time_var, command=self.toggle_real_time, state=tk.DISABLED, width=15)
+        self.real_time_check = ttk.Checkbutton(row2_frame, text="Tempo Real", variable=self.real_time_var, command=self.toggle_real_time, state=tk.DISABLED, width=15)
         self.real_time_check.grid(row=0, column=4, padx=5)
 
         self.steps_label = ttk.Label(row2_frame, text=self.build_steps_label_text(0, 0))
-        self.steps_label.grid(row=0, column=6, padx=5)
+        self.steps_label.grid(row=0, column=5, padx=5)
 
         # Gráficos
         graph_frame = ttk.LabelFrame(main_frame, text="Desempenho em Tempo Real", padding="10")
@@ -288,20 +289,23 @@ class TrainingTab:
             self.start_btn.config(state=tk.DISABLED)
             self.pause_btn.config(state=tk.NORMAL)
             self.stop_btn.config(state=tk.NORMAL)
-            self.save_btn.config(state=tk.NORMAL)
+            self.enable_visualization_check.config(state=tk.NORMAL)
             self.real_time_check.config(state=tk.NORMAL)
 
             # Iniciar treinamento em processo separado
             pause_val = multiprocessing.Value("b", 0)
             exit_val = multiprocessing.Value("b", 0)
+            enable_visualization_val = multiprocessing.Value("b", self.enable_visualization_var.get())
             realtime_val = multiprocessing.Value("b", self.real_time_var.get())
 
             self.pause_values.append(pause_val)
             self.exit_values.append(exit_val)
+            self.enable_visualization_values.append(enable_visualization_val)
             self.enable_real_time_values.append(realtime_val)
 
             p = multiprocessing.Process(
-                target=train_process.process_runner, args=(self.current_env, self.current_robot, self.current_algorithm, self.ipc_queue, pause_val, exit_val, realtime_val, self.device)
+                target=train_process.process_runner,
+                args=(self.current_env, self.current_robot, self.current_algorithm, self.ipc_queue, pause_val, exit_val, enable_visualization_val, realtime_val, self.device),
             )
             p.start()
             self.processes.append(p)
@@ -321,12 +325,12 @@ class TrainingTab:
             # Habilitar botões
             self.save_training_btn.config(state=tk.NORMAL)
             self.export_plots_btn.config(state=tk.NORMAL)
-            self.start_btn.config(text="Iniciar Treinamento")
+            self.start_btn.config(text="Iniciar Treino")
 
         except Exception as e:
             self.logger.error(f"Erro ao iniciar treinamento: {e}")
             messagebox.showerror("Erro", f"Erro ao iniciar treinamento: {e}")
-            self.start_btn.config(state=tk.NORMAL, text="Iniciar Treinamento")
+            self.start_btn.config(state=tk.NORMAL, text="Iniciar Treino")
 
     def _resume_training(self):
         """Retoma um treinamento existente"""
@@ -340,7 +344,7 @@ class TrainingTab:
             self.start_btn.config(state=tk.DISABLED, text="Retomando...")
             self.pause_btn.config(state=tk.NORMAL)
             self.stop_btn.config(state=tk.NORMAL)
-            self.save_btn.config(state=tk.NORMAL)
+            self.enable_visualization_check.config(state=tk.NORMAL)
             self.real_time_check.config(state=tk.NORMAL)
 
             # Iniciar processo de retomada
@@ -362,13 +366,13 @@ class TrainingTab:
             self.processes.append(p)
 
             self.logger.info(f"Processo de treinamento retomado: {self.current_env} + {self.current_robot} + {self.current_algorithm}")
-            self.start_btn.config(text="Iniciar Treinamento")
+            self.start_btn.config(text="Iniciar Treino")
             self.is_resuming = False
 
         except Exception as e:
             self.logger.error(f"Erro ao retomar treinamento: {e}")
             messagebox.showerror("Erro", f"Erro ao retomar treinamento: {e}")
-            self.start_btn.config(state=tk.NORMAL, text="Iniciar Treinamento")
+            self.start_btn.config(state=tk.NORMAL, text="Iniciar Treino")
 
     def _find_model_for_resume(self):
         """Encontra modelo para retomada usando busca flexível"""
@@ -449,7 +453,7 @@ class TrainingTab:
         self.start_btn.config(state=tk.NORMAL)
         self.pause_btn.config(state=tk.DISABLED)
         self.stop_btn.config(state=tk.DISABLED)
-        self.save_btn.config(state=tk.DISABLED)
+        self.enable_visualization_check.config(state=tk.DISABLED)
         self.real_time_check.config(state=tk.DISABLED)
         self.save_training_btn.config(state=tk.DISABLED)
         self.export_plots_btn.config(state=tk.DISABLED)
@@ -598,7 +602,7 @@ class TrainingTab:
             self.resumed_session_dir = session_dir
 
             # Atualizar interface
-            self.start_btn.config(text="Retomar Treinamento", state=tk.NORMAL)
+            self.start_btn.config(text="Retomar Treino", state=tk.NORMAL)
             self.pause_btn.config(state=tk.DISABLED)
             self.stop_btn.config(state=tk.DISABLED)
 
@@ -611,7 +615,7 @@ class TrainingTab:
             self.export_plots_btn.config(state=tk.NORMAL)
 
             messagebox.showinfo(
-                "Sucesso", f"Treinamento carregado!\n" f"Modelo: {os.path.basename(model_path)}\n" f"Próximo episódio: {self.current_episode}\n" f"Clique em 'Retomar Treinamento' para continuar."
+                "Sucesso", f"Treinamento carregado!\n" f"Modelo: {os.path.basename(model_path)}\n" f"Próximo episódio: {self.current_episode}\n" f"Clique em 'Retomar Treino' para continuar."
             )
 
         except Exception as e:
@@ -779,27 +783,19 @@ class TrainingTab:
 
         axs[-1].set_xlabel("Episódio")
 
-    def save_snapshot(self):
-        """Salva o modelo treinado e executa avaliação para gerar métricas de complexidade."""
-        try:
-            models_dir = "logs/data/models"
-            os.makedirs(models_dir, exist_ok=True)
+    def toggle_visualization(self):
+        """Alterna entre visualizar ou não o robô durante o treinamento"""
+        if not self.enable_visualization_values:
+            self.logger.warning("toggle_visualization: Nenhum processo de treinamento ativo.")
+            return
 
-            timestamp = time.strftime("%Y%m%d_%H%M%S")
-            model_filename = os.path.join(models_dir, f"model_{self.current_env}_{self.current_robot}_{timestamp}.zip")
+        new_value = self.enable_visualization_var.get()
+        self.enable_visualization_values[-1].value = new_value
 
-            # TODO: Implementar lógica de salvamento do modelo
-            messagebox.showinfo(
-                "Salvar Snapshot",
-                f"Funcionalidade de salvamento será implementada\n"
-                f"Modelo: {self.current_algorithm}\n"
-                f"Robô: {self.current_robot}\n"
-                f"Ambiente: {self.current_env}\n"
-                f"Arquivo: {model_filename}",
-            )
-
-        except Exception as e:
-            messagebox.showerror("Erro", f"Erro ao salvar snapshot: {e}")
+        if new_value:
+            self.logger.info("Visualização do robô ativada")
+        else:
+            self.logger.info("Visualização do robô desativada")
 
     def toggle_real_time(self):
         """Alterna o modo tempo real da simulação"""
@@ -961,7 +957,7 @@ class TrainingTab:
                         self.start_btn.config(state=tk.NORMAL)
                         self.pause_btn.config(state=tk.DISABLED)
                         self.stop_btn.config(state=tk.DISABLED)
-                        self.save_btn.config(state=tk.NORMAL)
+                        self.enable_visualization_check.config(state=tk.DISABLED)
                         self.real_time_check.config(state=tk.DISABLED)
                         self.save_training_btn.config(state=tk.DISABLED)
                         self.export_plots_btn.config(state=tk.DISABLED)
