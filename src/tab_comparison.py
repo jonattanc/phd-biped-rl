@@ -166,7 +166,7 @@ class ComparisonTab:
             self.canvas_comparison.draw_idle()
 
         except Exception as e:
-            self.logger.error(f"Erro ao inicializar gráficos de comparação: {e}")
+            self.logger.exception("Erro ao inicializar gráficos de comparação")
 
     def add_comparison_model(self):
         """Adiciona modelo à lista de comparação"""
@@ -249,7 +249,7 @@ class ComparisonTab:
             self.root.after(0, lambda: self._display_comparison_results(comparison_results))
 
         except Exception as e:
-            self.logger.error(f"Erro na comparação: {e}")
+            self.logger.exception("Erro na comparação")
             self.root.after(0, lambda: messagebox.showerror("Erro", f"Erro na comparação: {e}"))
         finally:
             self.root.after(0, lambda: self.run_comparison_btn.config(state=tk.NORMAL, text="Executar Comparação"))
@@ -321,7 +321,7 @@ class ComparisonTab:
             messagebox.showinfo("Sucesso", f"Comparação concluída! {len(results)} modelos avaliados.")
 
         except Exception as e:
-            self.logger.error(f"Erro ao exibir comparação: {e}")
+            self.logger.exception("Erro ao exibir comparação")
             messagebox.showerror("Erro", f"Erro ao exibir resultados: {e}")
 
     def _update_comparison_plots(self, results):
@@ -406,7 +406,7 @@ class ComparisonTab:
             self.canvas_comparison.draw_idle()
 
         except Exception as e:
-            self.logger.error(f"Erro ao atualizar gráficos de comparação: {e}")
+            self.logger.exception("Erro ao atualizar gráficos de comparação")
 
     def export_comparison_results(self):
         """Exporta os resultados da comparação para arquivo JSON"""
@@ -442,7 +442,7 @@ class ComparisonTab:
 
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao exportar resultados: {e}")
-            self.logger.error(f"Erro ao exportar resultados: {e}")
+            self.logger.exception("Erro ao exportar resultados")
 
     def export_comparison_plots(self):
         """Exporta os gráficos de comparação como imagens"""
@@ -479,7 +479,7 @@ class ComparisonTab:
 
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao exportar gráficos: {e}")
-            self.logger.error(f"Erro ao exportar gráficos: {e}")
+            self.logger.exception("Erro ao exportar gráficos")
 
     def _plot_to_export_figure(self, axs, results):
         """Plota dados nos eixos fornecidos para exportação"""

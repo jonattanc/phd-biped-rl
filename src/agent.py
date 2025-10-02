@@ -149,15 +149,12 @@ class Agent:
                     self.action_dim = self.model.action_space.shape[0]
                 self.logger.info(f"Modelo TD3 carregado: {model_path}")
             except:
-                try:
-                    # Tentar carregar como FastTD3
-                    self.model = FastTD3.load(model_path)
-                    self.algorithm = "FastTD3"
-                    if hasattr(self.model, "action_space") and self.model.action_space is not None:
-                        self.action_dim = self.model.action_space.shape[0]
-                    self.logger.info(f"Modelo FastTD3 carregado: {model_path}")
-                except Exception as e:
-                    raise ValueError(f"Erro ao carregar modelo {model_path}: {e}")
+                # Tentar carregar como FastTD3
+                self.model = FastTD3.load(model_path)
+                self.algorithm = "FastTD3"
+                if hasattr(self.model, "action_space") and self.model.action_space is not None:
+                    self.action_dim = self.model.action_space.shape[0]
+                self.logger.info(f"Modelo FastTD3 carregado: {model_path}")
 
     def set_env(self, env):
         """Configura o ambiente para um modelo carregado"""

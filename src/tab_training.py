@@ -217,7 +217,7 @@ class TrainingTab:
             return files
 
         except Exception as e:
-            self.logger.error(f"Erro ao listar arquivos .xacro: {e}")
+            self.logger.exception("Erro ao listar arquivos .xacro")
             return []
 
     def setup_ipc(self):
@@ -250,7 +250,7 @@ class TrainingTab:
             self.canvas.draw_idle()
 
         except Exception as e:
-            self.logger.error(f"Erro ao inicializar gráficos: {e}")
+            self.logger.exception("Erro ao inicializar gráficos")
 
         self.root.after(500, self._refresh_plots)
 
@@ -328,7 +328,7 @@ class TrainingTab:
             self.start_btn.config(text="Iniciar Treino")
 
         except Exception as e:
-            self.logger.error(f"Erro ao iniciar treinamento: {e}")
+            self.logger.exception("Erro ao iniciar treinamento")
             messagebox.showerror("Erro", f"Erro ao iniciar treinamento: {e}")
             self.start_btn.config(state=tk.NORMAL, text="Iniciar Treino")
 
@@ -370,7 +370,7 @@ class TrainingTab:
             self.is_resuming = False
 
         except Exception as e:
-            self.logger.error(f"Erro ao retomar treinamento: {e}")
+            self.logger.exception("Erro ao retomar treinamento")
             messagebox.showerror("Erro", f"Erro ao retomar treinamento: {e}")
             self.start_btn.config(state=tk.NORMAL, text="Iniciar Treino")
 
@@ -425,7 +425,7 @@ class TrainingTab:
             self._save_model_during_training()
 
         except Exception as e:
-            self.logger.error(f"Erro ao pausar/retomar treinamento: {e}")
+            self.logger.exception("Erro ao pausar/retomar treinamento")
 
     def _save_model_during_training(self):
         """Salva o modelo durante o treinamento para permitir retomada"""
@@ -442,7 +442,7 @@ class TrainingTab:
             self.logger.info(f"Modelo salvo durante pausa/retomada: {model_path}")
 
         except Exception as e:
-            self.logger.error(f"Erro ao salvar modelo durante treinamento: {e}")
+            self.logger.exception("Erro ao salvar modelo durante treinamento")
 
     def stop_training(self):
         """Finaliza o treinamento"""
@@ -512,7 +512,7 @@ class TrainingTab:
 
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao salvar treinamento: {e}")
-            self.logger.error(f"Erro ao salvar treinamento: {e}")
+            self.logger.exception("Erro ao salvar treinamento")
 
     def _save_model_with_control(self, session_dir, session_name):
         """Salva modelo usando sistema de controle de arquivos"""
@@ -558,7 +558,7 @@ class TrainingTab:
             return False
 
         except Exception as e:
-            self.logger.error(f"Erro no sistema de controle de salvamento: {e}")
+            self.logger.exception(f"Erro no sistema de controle de salvamento")
             return False
 
     def _save_additional_data(self, session_dir):
@@ -575,7 +575,7 @@ class TrainingTab:
             self.save_plots_to_directory(plots_dir)
 
         except Exception as e:
-            self.logger.error(f"Erro ao salvar dados adicionais: {e}")
+            self.logger.exception(f"Erro ao salvar dados adicionais")
 
     def load_training_data(self):
         """Carrega dados de treinamento salvos e prepara para retomada"""
@@ -620,7 +620,7 @@ class TrainingTab:
 
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao carregar treinamento: {e}")
-            self.logger.error(f"Erro ao carregar treinamento: {e}")
+            self.logger.exception("Erro ao carregar treinamento")
 
     def _load_training_data_file(self, session_dir):
         """Carrega arquivo de dados de treinamento"""
@@ -759,7 +759,7 @@ class TrainingTab:
                 plt.close(fig)
 
         except Exception as e:
-            self.logger.error(f"Erro ao salvar gráficos: {e}")
+            self.logger.exception("Erro ao salvar gráficos")
 
     def _plot_to_figure(self, axs):
         """Plota dados nos eixos fornecidos"""
@@ -972,7 +972,7 @@ class TrainingTab:
                     self.logger.info("IPC queue fechada (EOFError)")
                     break
                 except Exception as e:
-                    self.logger.error(f"Erro ao receber mensagem IPC: {e}")
+                    self.logger.exception("Erro ao receber mensagem IPC")
                     continue
         except Exception as e:
             self.logger.exception("Erro em ipc_runner")

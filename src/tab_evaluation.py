@@ -171,7 +171,7 @@ class EvaluationTab:
             self.canvas_evaluation.draw_idle()
 
         except Exception as e:
-            self.logger.error(f"Erro ao inicializar gráficos de avaliação: {e}")
+            self.logger.exception("Erro ao inicializar gráficos de avaliação")
 
     def browse_evaluation_model(self):
         """Abre diálogo para selecionar modelo para avaliação"""
@@ -231,7 +231,7 @@ class EvaluationTab:
             self.logger.error(error_msg)
             self.root.after(0, lambda: messagebox.showerror("Erro", error_msg))
         except Exception as e:
-            self.logger.error(f"Erro na avaliação: {e}")
+            self.logger.exception("Erro na avaliação")
             self.root.after(0, lambda: messagebox.showerror("Erro", f"Erro na avaliação: {e}"))
         finally:
             self.root.after(0, lambda: self.eval_start_btn.config(state=tk.NORMAL, text="Executar Avaliação"))
@@ -308,7 +308,7 @@ Análise:
             messagebox.showinfo("Sucesso", "Avaliação concluída com sucesso!")
 
         except Exception as e:
-            self.logger.error(f"Erro ao exibir resultados: {e}")
+            self.logger.exception("Erro ao exibir resultados")
             messagebox.showerror("Erro", f"Erro ao exibir resultados: {e}")
 
     def _update_evaluation_plots(self, metrics):
@@ -370,7 +370,7 @@ Análise:
             self.canvas_evaluation.draw_idle()
 
         except Exception as e:
-            self.logger.error(f"Erro ao atualizar gráficos de avaliação: {e}")
+            self.logger.exception("Erro ao atualizar gráficos de avaliação")
 
     def _update_history_listbox(self):
         """Atualiza a lista de histórico de avaliações"""
@@ -429,7 +429,7 @@ Análise:
 
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao exportar resultados: {e}")
-            self.logger.error(f"Erro ao exportar resultados: {e}")
+            self.logger.exception("Erro ao exportar resultados")
 
     def export_evaluation_plots(self):
         """Exporta os gráficos de avaliação como imagens"""
@@ -456,7 +456,7 @@ Análise:
 
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao exportar gráficos: {e}")
-            self.logger.error(f"Erro ao exportar gráficos: {e}")
+            self.logger.exception("Erro ao exportar gráficos")
 
     def _plot_to_export_figure(self, axs, metrics):
         """Plota dados nos eixos fornecidos para exportação"""

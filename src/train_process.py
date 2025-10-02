@@ -80,10 +80,10 @@ def process_runner(selected_environment, selected_robot, algorithm, ipc_queue, p
                                 logger.warning(f"Não foi possível remover: {control_file}")
 
                     except Exception as e:
-                        logger.error(f"Erro ao processar arquivo de controle {control_file}: {e}")
+                        logger.exception(f"Erro ao processar arquivo de controle {control_file}: {e}")
 
             except Exception as e:
-                logger.error(f"Erro ao verificar arquivos de controle: {e}")
+                logger.exception("Erro ao verificar arquivos de controle")
 
             # Verificar pausa
             while pause_value.value and not exit_value.value:
@@ -116,9 +116,9 @@ def process_runner(selected_environment, selected_robot, algorithm, ipc_queue, p
                                     pass
 
                         except Exception as e:
-                            logger.error(f"Erro ao processar arquivo durante pausa: {e}")
+                            logger.exception("Erro ao processar arquivo durante pausa")
                 except Exception as e:
-                    logger.error(f"Erro ao verificar controles durante pausa: {e}")
+                    logger.exception("Erro ao verificar controles durante pausa")
 
             if exit_value.value:
                 break
@@ -136,7 +136,7 @@ def process_runner(selected_environment, selected_robot, algorithm, ipc_queue, p
                 if timesteps_completed % 10000 == 0:
                     logger.info(f"Progresso: {timesteps_completed}/{total_timesteps} timesteps")
             except Exception as e:
-                logger.error(f"Erro durante aprendizado: {e}")
+                logger.exception("Erro durante aprendizado")
                 break
 
         logger.info("Treinamento concluído!")
@@ -215,10 +215,10 @@ def process_runner_resume(selected_environment, selected_robot, algorithm, ipc_q
                                 logger.warning(f"Não foi possível remover: {control_file}")
 
                     except Exception as e:
-                        logger.error(f"Erro ao processar arquivo de controle {control_file}: {e}")
+                        logger.exception(f"Erro ao processar arquivo de controle {control_file}")
 
             except Exception as e:
-                logger.error(f"Erro ao verificar arquivos de controle: {e}")
+                logger.exception("Erro ao verificar arquivos de controle")
 
             # Verificar pausa
             while pause_value.value and not exit_value.value:
@@ -250,9 +250,9 @@ def process_runner_resume(selected_environment, selected_robot, algorithm, ipc_q
                                     pass
 
                         except Exception as e:
-                            logger.error(f"Erro ao processar arquivo durante pausa: {e}")
+                            logger.exception("Erro ao processar arquivo durante pausa")
                 except Exception as e:
-                    logger.error(f"Erro ao verificar controles durante pausa: {e}")
+                    logger.exception("Erro ao verificar controles durante pausa")
 
             if exit_value.value:
                 break
@@ -270,7 +270,7 @@ def process_runner_resume(selected_environment, selected_robot, algorithm, ipc_q
                 if timesteps_completed % 10000 == 0:
                     logger.info(f"Progresso: {timesteps_completed}/{total_timesteps} timesteps")
             except Exception as e:
-                logger.error(f"Erro durante aprendizado: {e}")
+                logger.exception("Erro durante aprendizado")
                 break
 
         logger.info("Treinamento concluído!")
@@ -305,4 +305,4 @@ def send_episode_data(ipc_queue, episode_data, episode_offset=0):
         )
     except Exception as e:
         logger = utils.get_logger()
-        logger.error(f"Erro ao enviar dados do episódio: {e}")
+        logger.exception("Erro ao enviar dados do episódio")
