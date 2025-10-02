@@ -336,6 +336,7 @@ class Simulation(gym.Env):
                 "episode": actual_episode_number,
                 "reward": self.episode_reward,
                 "time": self.episode_steps * self.time_step_s,
+                "steps": self.episode_steps,
                 "distance": self.episode_distance,
                 "success": self.episode_success,
                 "imu_x": imu_position[0],
@@ -346,6 +347,12 @@ class Simulation(gym.Env):
                 "yaw": imu_orientation[2],
             }
         )
+
+        # Enviar contagem de steps para a GUI
+        try:
+            self.ipc_queue.put_nowait({"type": "step_count", "steps": self.episode_steps})
+        except:
+            pass
 
         if actual_episode_number % 10 == 0:
             self.logger.info(f"Episódio {actual_episode_number} concluído")
@@ -438,12 +445,6 @@ class Simulation(gym.Env):
             time.sleep(self.time_step_s)
 
         self.episode_steps += 1
-
-        # Enviar contagem de steps para a GUI
-        try:
-            self.ipc_queue.put_nowait({"type": "step_count", "steps": self.physics_step_multiplier})
-        except:
-            pass
 
         # Obter observação
         obs = self.robot.get_observation()
