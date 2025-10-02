@@ -1,4 +1,4 @@
-# gui/training_tab.py
+# tab_training.py
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import matplotlib.pyplot as plt
@@ -323,7 +323,7 @@ class TrainingTab:
             }
 
             # Habilitar botões
-            self.save_training_btn.config(state=tk.NORMAL)
+            self.save_training_btn.config(state=tk.DISABLED)
             self.export_plots_btn.config(state=tk.NORMAL)
             self.start_btn.config(text="Iniciar Treino")
 
@@ -344,7 +344,6 @@ class TrainingTab:
             self.start_btn.config(state=tk.DISABLED, text="Retomando...")
             self.pause_btn.config(state=tk.NORMAL)
             self.stop_btn.config(state=tk.NORMAL)
-            self.enable_visualization_check.config(state=tk.NORMAL)
             self.real_time_check.config(state=tk.NORMAL)
 
             # Iniciar processo de retomada
@@ -416,33 +415,45 @@ class TrainingTab:
                 self.logger.info("Retomando treinamento.")
                 self.pause_values[-1].value = 0
                 self.pause_btn.config(text="Pausar")
+                self.save_training_btn.config(state=tk.DISABLED)
             else:
                 self.logger.info("Pausando treinamento.")
                 self.pause_values[-1].value = 1
                 self.pause_btn.config(text="Retomar")
+                self.save_training_btn.config(state=tk.NORMAL)
 
             # Salvar modelo durante pausa/retomada
-            self._save_model_during_training()
+            self._save_model_immediately()
 
         except Exception as e:
             self.logger.exception("Erro ao pausar/retomar treinamento")
 
-    def _save_model_during_training(self):
-        """Salva o modelo durante o treinamento para permitir retomada"""
-        if not self.current_training_session:
-            return
-
+    def _save_model_immediately(self):
+        """Salva o modelo imediatamente ao pausar - SEMPRE no current_session"""
         try:
-            # Usar ensure_directory do utils
-            models_dir = ensure_directory(os.path.join(self.training_data_dir, "current_session", "models"))
-            model_path = os.path.join(models_dir, "model.zip")
+            # SEMPRE salvar no current_session para pausa
+            temp_dir = utils.ensure_directory(os.path.join(utils.TRAINING_DATA_PATH, "current_session", "models"))
+            model_path = os.path.join(temp_dir, "model.zip")
 
-            # Enviar comando para salvar o modelo via IPC
-            self.ipc_queue.put({"type": "save_model", "model_path": model_path})
-            self.logger.info(f"Modelo salvo durante pausa/retomada: {model_path}")
+            # Usar sistema de arquivo para garantir o salvamento
+            control_dir = utils.ensure_directory(utils.TRAINING_CONTROL_PATH)
+            control_file = f"save_model_{int(time.time() * 1000)}.json"
+            control_path = os.path.join(control_dir, control_file)
+
+            control_data = {
+                "model_path": model_path, 
+                "timestamp": time.time(), 
+                "immediate": True
+            }
+
+            with open(control_path, "w") as f:
+                json.dump(control_data, f, indent=2)
+
+            self.logger.info(f"Salvamento imediato solicitado: {model_path}")
 
         except Exception as e:
-            self.logger.exception("Erro ao salvar modelo durante treinamento")
+            self.logger.exception("Erro ao solicitar salvamento imediato")
+
 
     def stop_training(self):
         """Finaliza o treinamento"""
@@ -515,15 +526,23 @@ class TrainingTab:
             self.logger.exception("Erro ao salvar treinamento")
 
     def _save_model_with_control(self, session_dir, session_name):
-        """Salva modelo usando sistema de controle de arquivos"""
+        """Salva modelo usando sistema de controle OU copia do current_session"""
         try:
-            models_dir = ensure_directory(os.path.join(session_dir, "models"))
+            models_dir = utils.ensure_directory(os.path.join(session_dir, "models"))
             model_path = os.path.join(models_dir, "model.zip")
 
             self.logger.info(f"INICIANDO SALVAMENTO DO MODELO: {model_path}")
 
-            # Sistema de controle
-            control_dir = ensure_directory(utils.TRAINING_CONTROL_PATH)
+            # PRIMEIRO: Tentar copiar do current_session (se existe do salvamento na pausa)
+            current_session_model = os.path.join(utils.TRAINING_DATA_PATH, "current_session", "models", "model.zip")
+            if os.path.exists(current_session_model):
+                self.logger.info(f"Copiando modelo do current_session: {current_session_model}")
+                shutil.copy2(current_session_model, model_path)
+                self.logger.info(f"Modelo copiado com sucesso: {model_path}")
+                return True
+
+            # SEGUNDO: Se não existe no current_session, usar sistema de controle
+            control_dir = utils.ensure_directory(utils.TRAINING_CONTROL_PATH)
             control_file = f"save_model_{int(time.time() * 1000)}.json"
             control_path = os.path.join(control_dir, control_file)
 
@@ -535,8 +554,8 @@ class TrainingTab:
             self.logger.info(f"Arquivo de controle criado: {control_path}")
 
             # Aguardar salvamento
-            max_wait = 21
-            check_interval = 1
+            max_wait = 10  # Reduzido para 10 segundos
+            check_interval = 0.5  # Verificar mais frequentemente
 
             for wait_time in range(max_wait):
                 if os.path.exists(model_path):
@@ -552,9 +571,9 @@ class TrainingTab:
                         pass
 
                     return True
-
                 time.sleep(check_interval)
 
+            self.logger.warning(f"Timeout ao aguardar salvamento do modelo")
             return False
 
         except Exception as e:
@@ -641,12 +660,11 @@ class TrainingTab:
         total_episodes = session_info.get("total_episodes", 0)
 
         if self.episode_data["episodes"]:
-            last_episode_in_data = max(self.episode_data["episodes"])
-            self.current_episode = max(saved_current_episode, last_episode_in_data) + 1
+            self.current_episode = max(self.episode_data["episodes"])
+            self.loaded_episode_count = len(self.episode_data["episodes"])
         else:
-            self.current_episode = saved_current_episode + 1
-
-        self.loaded_episode_count = total_episodes
+            self.current_episode = session_info.get("current_episode", 0)
+            self.loaded_episode_count = 0
 
         # Atualizar configurações
         self.current_env = session_info["environment"]

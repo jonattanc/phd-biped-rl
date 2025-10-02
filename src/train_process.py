@@ -1,4 +1,5 @@
 # train_process.py
+import multiprocessing
 from robot import Robot
 from simulation import Simulation
 from environment import Environment
@@ -160,9 +161,12 @@ def process_runner_resume(selected_environment, selected_robot, algorithm, ipc_q
         # Criar componentes
         environment = Environment(logger, name=selected_environment)
         robot = Robot(logger, name=selected_robot)
-        sim = Simulation(logger, robot, environment, ipc_queue, pause_value, exit_value, enable_real_time_value)
-
-        # Carregar modelo existente
+        enable_visualization_value = multiprocessing.Value("b", False)
+        sim = Simulation(
+            logger, robot, environment, ipc_queue, 
+            pause_value, exit_value, enable_visualization_value, enable_real_time_value
+        )
+        
         agent = Agent(logger, model_path=model_path, device=device, initial_episode=initial_episode)
 
         # CONFIGURAR O AMBIENTE NO MODELO CARREGADO
@@ -170,7 +174,7 @@ def process_runner_resume(selected_environment, selected_robot, algorithm, ipc_q
         agent.set_env(sim)
         sim.set_initial_episode(initial_episode)
         sim.set_agent(agent)
-        logger.info(f"Retomando treinamento {algorithm}...")
+        logger.info(f"Retomando treinamento {algorithm} do episódio {initial_episode}...")
 
         # Loop principal do treinamento
         total_timesteps = 10_000_000
@@ -181,8 +185,10 @@ def process_runner_resume(selected_environment, selected_robot, algorithm, ipc_q
         os.makedirs(control_dir, exist_ok=True)
 
         while timesteps_completed < total_timesteps and not exit_value.value:
+            # VERIFICAÇÃO DE COMANDOS - PROCESSAR IMEDIATAMENTE
             try:
                 control_files = [f for f in os.listdir(control_dir) if f.startswith("save_model_") and f.endswith(".json")]
+                control_files.sort()  # Processar em ordem
 
                 for control_file in control_files:
                     control_path = os.path.join(control_dir, control_file)
@@ -192,8 +198,9 @@ def process_runner_resume(selected_environment, selected_robot, algorithm, ipc_q
 
                         save_model_path = control_data.get("model_path")
                         if save_model_path:
-                            logger.info(f"COMANDO DE SALVAMENTO VIA ARQUIVO: {save_model_path}")
+                            logger.info(f"COMANDO DE SALVAMENTO: {save_model_path}")
 
+                            # SALVAR IMEDIATAMENTE - SEMPRE processar
                             agent.save_model(save_model_path)
                             logger.info(f"MODELO SALVO: {save_model_path}")
 
@@ -208,6 +215,7 @@ def process_runner_resume(selected_environment, selected_robot, algorithm, ipc_q
                             else:
                                 logger.error(f"FALHA: Arquivo não criado: {save_model_path}")
 
+                            # REMOVER ARQUIVO DE CONTROLE SEMPRE
                             try:
                                 os.remove(control_path)
                                 logger.info(f"Arquivo de controle removido: {control_file}")
