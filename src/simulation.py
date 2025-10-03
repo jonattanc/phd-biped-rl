@@ -40,6 +40,7 @@ class Simulation(gym.Env):
         self.max_motor_velocity = 2.0  # rad/s
         self.max_motor_torque = 130.0  # Nm
         self.apply_action = self.apply_position_action
+        self.max_steps = int(self.episode_timeout_s / self.time_step_s)
 
         # Configurar ambiente de simulação PRIMEIRO
         self.setup_sim_env()
@@ -404,37 +405,151 @@ class Simulation(gym.Env):
             forces=forces,
         )
 
-    def get_reward(self, action, robot_orientation):
+    def get_reward(self, action, robot_state, env_conditions=None):
+        """
+        Calcula a recompensa com parâmetro opcional para compatibilidade
+        """
         reward = 0.0
 
-        # Recompensa principal por progresso
+        # Se env_conditions não for fornecido, criar um padrão
+        if env_conditions is None:
+            env_conditions = {
+                "foot_slip": 0.0,
+                "ramp_speed": 0.0,
+                "com_drop": 0.0,
+                "joint_failure": False
+            }
+
+        # ===== FASE 1: RECOMPENSAS CRÍTICAS =====
+        # 1. Avanço no percurso
         progress = self.episode_distance - self.episode_last_distance
-        reward += progress * 5.0
+        reward += progress * 9.0
+        reward += self.episode_distance * 2.0  # incentivo de longo prazo
 
-        # Recompensa por distância total (incentivo de longo prazo)
-        reward += self.episode_distance * 2.0
+        # 2. Margem de Estabilidade Dinâmica (MOS)
+        # Se robot_state for apenas orientação (tupla), converter para dict
+        if isinstance(robot_state, (tuple, list)) and len(robot_state) == 3:
+            # Assumindo que é (roll, pitch, yaw)
+            roll, pitch, yaw = robot_state
+            robot_state = {
+                "mos": 0.1,  # valor padrão
+                "orientation": (roll, pitch, yaw),
+                "joint_torques": [0] * self.action_dim,
+                "jerk": 0.0,
+                "joint_velocities": [0] * self.action_dim,
+                "step_time_left": 0.5,
+                "step_time_right": 0.5,
+                "foot_impact": 0.5,
+                "foot_angle": 0.0,
+                "foot_clearance": 0.1,
+                "ankle_torque": 0.0,
+                "com_gain": 1.0,
+                "ds_left": 0.3,
+                "ds_right": 0.3,
+                "support_ratio": 0.6
+            }
 
-        # Recompensa por estabilidade (menor penalidade por movimento)
-        joint_positions, joint_velocities = self.robot.get_joint_states()
-        energy_penalty = -0.001 * sum(v**2 for v in joint_velocities)
-        reward += energy_penalty
+        mos = robot_state.get("mos", 0.1)
+        if mos > 0:
+            reward += mos * 3.0
+        else:
+            reward -= 100  # queda
+            self.episode_terminated = True
 
-        # Penalidade por mudança de direção de movimento em juntas
-        action_products = action * self.episode_last_action  # Números positivos indicam que a direção é a mesma
-        direction_changes = np.sum(action_products < 0)  # Conta mudanças de direção
-        movement_penalty = -0.2 * direction_changes
-        reward += movement_penalty
+        # 3. Orientação do torso
+        orientation = robot_state.get("orientation", (0, 0, 0))
+        roll, pitch, yaw = orientation
+        reward += -0.01 * roll*2 - 0.04 * pitch*2
+        if abs(yaw) > 20:  
+            reward -= 2.0
 
-        # Penalidade por inclinação do robô, para manter postura correta
-        roll, pitch, yaw = robot_orientation
-        posture_penalty = -0.01 * roll**2 - 0.04 * pitch**2
-        reward += posture_penalty
+        # ===== FASE 2: EFICIÊNCIA E ADAPTAÇÃO =====
+        # 4. Economia de torque
+        torque_sum = sum(abs(t) for t in robot_state.get("joint_torques", [0] * self.action_dim))
+        reward += -0.001 * torque_sum
 
-        # Recompensa por sucesso ou falha
+        # 5. Suavidade (jerk e velocidades articulares)
+        jerk = robot_state.get("jerk", 0.0)
+        reward += -0.05 * jerk
+        for v in robot_state.get("joint_velocities", [0] * self.action_dim):
+            if 60 <= abs(v) <= 120:
+                reward += 0.1
+            else:
+                reward -= 0.05
+
+        # 6. Ajuste ao atrito (escorregamento do pé)
+        slip = env_conditions.get("foot_slip", 0.0)
+        if slip < 0.01:
+            reward += 1.0
+        else:
+            reward -= 5.0
+
+        # 7. Eficiência em rampas
+        ramp_speed = env_conditions.get("ramp_speed", 0.0)
+        if ramp_speed > 0:
+            reward += ramp_speed * 2.0
+        else:
+            reward -= 10.0
+
+        # 8. Penetração controlada em piso granular
+        com_drop = env_conditions.get("com_drop", 0.0)
+        if com_drop < 0.05:
+            reward += 2.0
+        else:
+            reward -= com_drop * 20.0
+
+        # 9. Compensação articular para falhas
+        if env_conditions.get("joint_failure", False):
+            if progress > 0 and mos > 0:
+                reward += 10.0
+
+        # ===== FASE 3: REFINAMENTO =====
+        # 10. Regularidade da marcha
+        step_time_left = robot_state.get("step_time_left", 0.5)
+        step_time_right = robot_state.get("step_time_right", 0.5)
+        step_diff = abs(step_time_left - step_time_right)
+        if step_diff / max(step_time_left, 1e-6) < 0.1:
+            reward += 2.0
+        else:
+            reward -= 1.0
+
+        # 11. Contato inicial adequado
+        foot_impact = robot_state.get("foot_impact", 0.5)
+        foot_angle = robot_state.get("foot_angle", 0.0)
+        reward += -0.1 * abs(foot_impact - 0.5)
+        if abs(foot_angle) < 10:
+            reward += 1.0
+
+        # 12. Clearance do pé
+        clearance = robot_state.get("foot_clearance", 0.1)
+        if 0.05 <= clearance <= 0.15:
+            reward += 1.5
+        else:
+            reward -= 0.5
+
+        # 13. Propulsão eficiente no pré-balanço
+        ankle_torque = robot_state.get("ankle_torque", 0.0)
+        com_gain = robot_state.get("com_gain", 1.0)
+        reward += 0.1 * (ankle_torque * com_gain)
+
+        # 14. Simetria de duplo apoio
+        ds_left = robot_state.get("ds_left", 0.3)
+        ds_right = robot_state.get("ds_right", 0.3)
+        double_support_diff = abs(ds_left - ds_right)
+        if double_support_diff < 0.05:
+            reward += 1.0
+        else:
+            reward -= 1.0
+
+        # 15. Tempo relativo apoio/balanço
+        support_ratio = robot_state.get("support_ratio", 0.6)
+        if 0.5 <= support_ratio <= 0.7:  # próximo de 60/40
+            reward += 1.0
+
+        # ===== SUCESSO OU FALHA =====
         if self.episode_terminated:
             if self.episode_success:
                 reward += 100
-
             else:
                 reward -= 250
 
@@ -503,8 +618,29 @@ class Simulation(gym.Env):
     
         info["success"] = self.episode_success
         self.episode_done = self.episode_truncated or self.episode_terminated
+
+        # Obter dados do robô para o cálculo de recompensa
+        joint_positions, joint_velocities = self.robot.get_joint_states()
+        robot_position, robot_orientation = self.robot.get_imu_position_and_orientation()
+
+        # Criar robot_state básico com orientação
+        robot_state = {
+            "orientation": robot_orientation,
+            "mos": 0.1,  # valor padrão - você pode calcular isso se tiver dados
+            "joint_torques": [0] * self.action_dim,  # placeholder
+            "jerk": 0.0,  # placeholder
+            "joint_velocities": joint_velocities
+        }
+
+        # Criar env_conditions básico
+        env_conditions = {
+            "foot_slip": 0.0,
+            "ramp_speed": 0.0, 
+            "com_drop": 0.0,
+            "joint_failure": False
+        }
     
-        reward = self.get_reward(action, robot_orientation)
+        reward = self.get_reward(action, robot_state, env_conditions)
         self.episode_reward += reward
     
         # Coletar info final quando o episódio terminar

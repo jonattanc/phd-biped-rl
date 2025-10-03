@@ -37,6 +37,7 @@ class TrainingTab:
         self.processes = []
         self.pause_values = []
         self.exit_values = []
+        self.enable_real_time_values = []
         self.enable_visualization_values = []
         self.gui_log_queue = queue.Queue()
         self.ipc_queue = multiprocessing.Queue()
@@ -56,6 +57,8 @@ class TrainingTab:
         self.save_training_btn = None
         self.load_training_btn = None
         self.export_plots_btn = None
+        self.real_time_var = None
+        self.real_time_check = None
         self.steps_label = None
         self.log_text = None
 
@@ -163,6 +166,10 @@ class TrainingTab:
         self.enable_visualization_check = ttk.Checkbutton(row2_frame, text="Visualizar Robô", variable=self.enable_visualization_var, command=self.toggle_visualization, state=tk.DISABLED, width=15)
         self.enable_visualization_check.grid(row=0, column=3, padx=1)
 
+        self.real_time_var = tk.BooleanVar(value=False)
+        self.real_time_check = ttk.Checkbutton(row2_frame, text="Tempo Real", variable=self.real_time_var, command=self.toggle_real_time, state=tk.DISABLED, width=15)
+        self.real_time_check.grid(row=0, column=4, padx=5)
+        
         # Gráficos
         graph_frame = ttk.LabelFrame(main_frame, text="Desempenho em Tempo Real", padding="1")
         graph_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=1)
@@ -294,6 +301,7 @@ class TrainingTab:
             self.pause_btn.config(state=tk.NORMAL)
             self.stop_btn.config(state=tk.NORMAL)
             self.enable_visualization_check.config(state=tk.NORMAL)
+            self.real_time_check.config(state=tk.NORMAL)
 
             # Sistema tracker para novo treinamento
             if not hasattr(self, 'tracker'):
@@ -318,14 +326,16 @@ class TrainingTab:
             pause_val = multiprocessing.Value("b", 0)
             exit_val = multiprocessing.Value("b", 0)
             enable_visualization_val = multiprocessing.Value("b", self.enable_visualization_var.get())
+            realtime_val = multiprocessing.Value("b", self.real_time_var.get())
 
             self.pause_values.append(pause_val)
             self.exit_values.append(exit_val)
             self.enable_visualization_values.append(enable_visualization_val)
+            self.enable_real_time_values.append(realtime_val)
 
             p = multiprocessing.Process(
                 target=train_process.process_runner,
-                args=(self.current_env, self.current_robot, self.current_algorithm, self.ipc_queue, pause_val, exit_val, enable_visualization_val, self.device),
+                args=(self.current_env, self.current_robot, self.current_algorithm, self.ipc_queue, pause_val, exit_val, enable_visualization_val, realtime_val, self.device),
             )
             p.start()
             self.processes.append(p)
@@ -364,6 +374,7 @@ class TrainingTab:
             self.start_btn.config(state=tk.DISABLED, text="Retomando...")
             self.pause_btn.config(state=tk.NORMAL)
             self.stop_btn.config(state=tk.NORMAL)
+            self.real_time_check.config(state=tk.NORMAL)
 
             # Iniciar processo de retomada
             pause_val = multiprocessing.Value("b", 0)
@@ -371,6 +382,7 @@ class TrainingTab:
 
             self.pause_values.append(pause_val)
             self.exit_values.append(exit_val)
+            realtime_val = multiprocessing.Value("b", self.real_time_var.get())
 
             self.logger.info(f"Retomando treinamento - episódio: {self.current_episode}")
 
@@ -383,7 +395,7 @@ class TrainingTab:
                 
             p = multiprocessing.Process(
                 target=train_process.process_runner_resume,
-                args=(self.current_env, self.current_robot, self.current_algorithm, self.ipc_queue, pause_val, exit_val, self.device, model_path, self.current_episode),
+                args=(self.current_env, self.current_robot, self.current_algorithm, self.ipc_queue, pause_val, exit_val, realtime_val, self.device, model_path, self.current_episode),
             )
             p.start()
             self.processes.append(p)
@@ -489,6 +501,7 @@ class TrainingTab:
         self.pause_btn.config(state=tk.DISABLED)
         self.stop_btn.config(state=tk.DISABLED)
         self.enable_visualization_check.config(state=tk.DISABLED)
+        self.real_time_check.config(state=tk.DISABLED)
         self.save_training_btn.config(state=tk.DISABLED)
         self.export_plots_btn.config(state=tk.DISABLED)
 
@@ -892,6 +905,20 @@ class TrainingTab:
         else:
             self.logger.info("Visualização do robô desativada")
 
+    def toggle_real_time(self):
+        """Alterna o modo tempo real da simulação"""
+        if not self.enable_real_time_values:
+            self.logger.warning("toggle_real_time: Nenhum processo de treinamento ativo.")
+            return
+
+        new_value = self.real_time_var.get()
+        self.enable_real_time_values[-1].value = new_value
+
+        if new_value:
+            self.logger.info("Modo tempo real ativado")
+        else:
+            self.logger.info("Modo tempo real desativado")
+            
     def build_steps_label_text(self, total_steps, steps_per_second):
         return f"Total Steps: {total_steps} | Steps/s: {steps_per_second:.1f}"
 

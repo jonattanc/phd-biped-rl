@@ -474,27 +474,84 @@ Análise:
             self.logger.exception("Erro ao exportar resultados")
 
     def export_evaluation_plots(self):
-        """Exporta os gráficos de avaliação como imagens"""
+        """Exporta os gráficos de avaliação como imagens PNG separadas"""
         if not self.evaluation_data["current_evaluation"]:
             messagebox.showwarning("Aviso", "Nenhum gráfico para exportar.")
             return
 
         try:
             directory = filedialog.askdirectory(title="Selecione onde salvar os gráficos")
+            if not directory:
+                return
 
-            if directory:
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                model_name = os.path.basename(self.evaluation_data["current_evaluation"]["model_path"])
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            model_name = os.path.basename(self.evaluation_data["current_evaluation"]["model_path"])
+            environment = self.eval_env_var.get()
 
-                # Salvar gráfico combinado
-                fig_combined, axs_combined = plt.subplots(2, 2, figsize=(12, 10))
-                self._plot_to_export_figure(axs_combined, self.evaluation_data["current_evaluation"]["metrics"])
-                fig_combined.suptitle(f"Avaliação - {model_name} - {self.eval_env_var.get()}", fontsize=16)
-                fig_combined.savefig(os.path.join(directory, f"evaluation_combined_{timestamp}.png"), dpi=300, bbox_inches="tight")
-                plt.close(fig_combined)
+            metrics = self.evaluation_data["current_evaluation"]["metrics"]
+            times = metrics.get("total_times", [])
+            successes = [1] * metrics.get("success_count", 0) + [0] * (len(times) - metrics.get("success_count", 0))
 
-                messagebox.showinfo("Sucesso", f"Gráficos exportados para:\n{directory}")
-                self.logger.info(f"Gráficos de avaliação exportados: {directory}")
+            # Gráfico 1: Distribuição de Tempos
+            fig1, ax1 = plt.subplots(figsize=(8, 6))
+            if times:
+                ax1.hist(times, bins=min(10, len(times)), alpha=0.7, color="blue", edgecolor="black")
+                ax1.axvline(metrics.get("avg_time", 0), color="red", linestyle="--", label=f'Média: {metrics["avg_time"]:.2f}s')
+            ax1.set_title("Distribuição de Tempos")
+            ax1.set_ylabel("Frequência")
+            ax1.set_xlabel("Tempo (s)")
+            ax1.legend()
+            ax1.grid(True, alpha=0.3)
+            fig1.savefig(os.path.join(directory, f"distribuicao_tempos_{timestamp}.png"), dpi=300, bbox_inches="tight")
+            plt.close(fig1)
+
+            # Gráfico 2: Sucesso por Episódio
+            fig2, ax2 = plt.subplots(figsize=(8, 6))
+            if successes:
+                colors = ["green" if s == 1 else "red" for s in successes]
+                ax2.bar(range(len(successes)), successes, color=colors, alpha=0.7)
+                ax2.set_title("Sucesso por Episódio")
+                ax2.set_ylabel("Sucesso (1=Sim, 0=Não)")
+                ax2.set_xlabel("Episódio")
+                ax2.set_yticks([0, 1])
+                ax2.set_yticklabels(["Falha", "Sucesso"])
+                ax2.grid(True, alpha=0.3)
+            fig2.savefig(os.path.join(directory, f"sucesso_episodio_{timestamp}.png"), dpi=300, bbox_inches="tight")
+            plt.close(fig2)
+
+            # Gráfico 3: Progressão de Tempos
+            fig3, ax3 = plt.subplots(figsize=(8, 6))
+            if times:
+                ax3.plot(range(len(times)), times, "o-", color="orange", markersize=4)
+                ax3.axhline(y=metrics.get("avg_time", 0), color="red", linestyle="--", label=f'Média: {metrics["avg_time"]:.2f}s')
+                ax3.set_title("Progressão de Tempos")
+                ax3.set_ylabel("Tempo (s)")
+                ax3.set_xlabel("Episódio")
+                ax3.legend()
+                ax3.grid(True, alpha=0.3)
+            fig3.savefig(os.path.join(directory, f"progressao_tempos_{timestamp}.png"), dpi=300, bbox_inches="tight")
+            plt.close(fig3)
+
+            # Gráfico 4: Métricas Consolidadas
+            fig4, ax4 = plt.subplots(figsize=(8, 6))
+            metrics_names = ["Taxa Sucesso", "Tempo Médio", "Desvio Padrão"]
+            metrics_values = [metrics.get("success_rate", 0) * 100, metrics.get("avg_time", 0), metrics.get("std_time", 0)]
+            colors = ["green", "blue", "orange"]
+            bars = ax4.bar(metrics_names, metrics_values, color=colors, alpha=0.7)
+            ax4.set_title("Métricas Consolidadas")
+            ax4.set_ylabel("Valor")
+            ax4.grid(True, alpha=0.3)
+
+            # Adicionar valores nas barras
+            for bar, value in zip(bars, metrics_values):
+                height = bar.get_height()
+                ax4.text(bar.get_x() + bar.get_width() / 2.0, height, f"{value:.2f}", ha="center", va="bottom")
+
+            fig4.savefig(os.path.join(directory, f"metricas_consolidadas_{timestamp}.png"), dpi=300, bbox_inches="tight")
+            plt.close(fig4)
+
+            messagebox.showinfo("Sucesso", f"4 gráficos exportados como PNG para:\n{directory}")
+            self.logger.info(f"Gráficos de avaliação exportados: {directory}")
 
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao exportar gráficos: {e}")
