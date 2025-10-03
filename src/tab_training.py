@@ -540,6 +540,9 @@ class TrainingTab:
                 "episode_data": self.episode_data,
                 "hyperparams": self.hyperparams,
             }
+            training_data_path = os.path.join(session_dir, "training_data.json")
+            with open(training_data_path, "w", encoding="utf-8") as f:
+                json.dump(training_data, f, indent=2, ensure_ascii=False)
 
             best_model_used = False
         
@@ -564,6 +567,7 @@ class TrainingTab:
             if hasattr(self, 'tracker'):
                 tracker_info = {
                     "best_reward": self.tracker.best_reward,
+                    "best_distance": self.tracker.best_distance,
                     "total_steps": self.tracker.total_steps,
                     "used_best_model": best_model_used
                 }
@@ -756,6 +760,7 @@ class TrainingTab:
 
                 # Restaurar dados básicos
                 self.tracker.best_reward = training_info.get("best_reward", -float('inf'))
+                self.tracker.best_distance = training_info.get("best_distance", 0.0)
                 self.total_steps = training_info.get("total_steps", 0)
 
                 self.logger.info(f"Informações de treino carregadas: recompensa={self.tracker.best_reward}, steps={self.total_steps}")
@@ -1029,6 +1034,7 @@ class TrainingTab:
             "Treinamento Pausado Automaticamente", 
             f"O treinamento foi pausado automaticamente após {self.tracker.patience_steps:,} steps sem melhoria significativa.\n\n"
             f"• Melhor recompensa: {self.tracker.best_reward:.2f}\n"
+            f"• Melhor distância: {self.tracker.best_distance:.2f}m\n"
             f"• Steps totais: {self.tracker.total_steps:,}\n"
             f"• Steps sem melhoria: {self.tracker.steps_since_improvement:,}\n\n"
             "Clique em 'Retomar' para continuar o treinamento ou 'Salvar Treino' para finalizar."
@@ -1042,6 +1048,7 @@ class TrainingTab:
             # Criar texto de status com emojis para melhor visualização
             status_parts = []
             status_parts.append(f"Melhor: {status['best_reward']:.2f}")
+            status_parts.append(f"Distância: {status['best_distance']:.2f}m")
             status_parts.append(f"Steps: {status['total_steps']:,}")
             status_parts.append(f"Sem melhoria: {status['steps_since_improvement']:,}")
 
@@ -1114,6 +1121,7 @@ class TrainingTab:
                 "model_path": model_path,
                 "timestamp": time.time(),
                 "best_reward": self.tracker.best_reward,
+                "best_distance": self.tracker.best_distance,
                 "total_steps": self.tracker.total_steps,
                 "reason": reason,
                 "auto_save": True
@@ -1136,6 +1144,7 @@ class TrainingTab:
         """Processa dados do episódio para o tracker"""
         try:
             episode_reward = episode_data.get("reward", 0)
+            episode_distance = episode_data.get("distance", 0)
 
             # Verificar se tracker existe
             if not hasattr(self, 'tracker'):
@@ -1144,7 +1153,7 @@ class TrainingTab:
                 self.total_steps = 0
 
             # Atualizar tracker
-            should_save, reason = self.tracker.update(episode_reward, self.total_steps)
+            should_save, reason = self.tracker.update(episode_reward, episode_distance, self.total_steps)
 
             if should_save:
                 self.logger.info(f"NOVA MELHORIA! Recompensa: {episode_reward:.2f} (Motivo: {reason})")

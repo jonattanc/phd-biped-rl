@@ -6,6 +6,7 @@ import time
 class BestModelTracker:
     def __init__(self, improvement_threshold=0.05, patience_steps=500000, checkpoint_steps=300000):
         self.best_reward = -float('inf')
+        self.best_distance = 0.0
         self.improvement_threshold = improvement_threshold
         self.patience_steps = patience_steps
         self.checkpoint_steps = checkpoint_steps
@@ -14,10 +15,14 @@ class BestModelTracker:
         self.last_improvement_steps = 0
         self.auto_save_count = 0
         
-    def update(self, episode_reward, current_steps):
+    def update(self, episode_reward, episode_distance, current_steps):
         """Atualiza tracker com nova recompensa e retorna se houve melhoria"""
         self.total_steps = current_steps
         
+        # Atualizar melhor distância se for maior
+        if episode_distance > self.best_distance:
+            self.best_distance = episode_distance
+            
         # Primeira recompensa sempre é considerada melhoria
         if self.best_reward == -float('inf'):
             self.best_reward = episode_reward
@@ -56,6 +61,7 @@ class BestModelTracker:
         """Retorna status atual para logging"""
         return {
             "best_reward": self.best_reward,
+            "best_distance": self.best_distance,
             "total_steps": self.total_steps,
             "steps_since_improvement": self.steps_since_improvement,
             "improvement_threshold": self.improvement_threshold,
