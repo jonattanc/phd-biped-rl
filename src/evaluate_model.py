@@ -7,11 +7,10 @@ import multiprocessing
 import utils
 
 
-def evaluate_and_save(model_path, circuit_name="PR", avatar_name="robot_stage1", role="AE", num_episodes=5, seed=42, deterministic=True, record_video=False):
+def evaluate_and_save(model_path, circuit_name="PR", avatar_name="robot_stage1", role="AE", num_episodes=5, seed=42, deterministic=True, enable_visualization=False):
     """Avalia um modelo e salva as métricas"""
     
     logging.info(f"Avaliando {avatar_name} no circuito {circuit_name}...")
-    logging.info(f"Gravação de vídeo: {'HABILITADA' if record_video else 'DESABILITADA'}")
 
     if not os.path.exists(model_path):
         logging.error(f"Arquivo do modelo não existe: {model_path}")
@@ -24,6 +23,7 @@ def evaluate_and_save(model_path, circuit_name="PR", avatar_name="robot_stage1",
     pause_val = multiprocessing.Value("b", 0)
     exit_val = multiprocessing.Value("b", 0)
     realtime_val = multiprocessing.Value("b", 0)
+    enable_visualization_val = multiprocessing.Value("b", enable_visualization) 
     env = None
 
     try:
@@ -31,7 +31,7 @@ def evaluate_and_save(model_path, circuit_name="PR", avatar_name="robot_stage1",
         logger = utils.get_logger(["evaluation", circuit_name, avatar_name])
         robot = Robot(logger, name=avatar_name)
         env_obj = Environment(logger, name=circuit_name)
-        env = Simulation(logger, robot, env_obj, None, pause_val, exit_val, realtime_val, num_episodes=num_episodes, seed=seed, record_video=record_video)
+        env = Simulation(logger, robot, env_obj, None, pause_val, exit_val, enable_visualization_val, num_episodes, seed=seed)
         agent = Agent(logger, model_path=model_path)
 
         # Configurar o agente
@@ -54,7 +54,7 @@ def evaluate_and_save(model_path, circuit_name="PR", avatar_name="robot_stage1",
         logging.info(f"Tempo médio: {metrics.get('avg_time', 0):.2f}s")
         logging.info(f"Taxa de sucesso: {metrics.get('success_rate', 0)*100:.1f}%")
 
-        hyperparams = {"algorithm": agent.algorithm, "num_episodes": num_episodes, "seed": seed, "deterministic": deterministic, "model_path": model_path, "record_video": record_video}
+        hyperparams = {"algorithm": agent.algorithm, "num_episodes": num_episodes, "seed": seed, "deterministic": deterministic, "model_path": model_path, "enable_visualization": enable_visualization} 
         
         os.makedirs("logs/data", exist_ok=True)
         saved_files = save_complexity_metrics(metrics=metrics, circuit_name=circuit_name, avatar_name=avatar_name, role=role, seed=seed, hyperparams=hyperparams)
@@ -72,7 +72,4 @@ def evaluate_and_save(model_path, circuit_name="PR", avatar_name="robot_stage1",
         return None
     finally:
         if env is not None:
-            try:
-                env.close()
-            except:
-                pass
+            env.close()

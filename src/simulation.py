@@ -9,7 +9,7 @@ from stable_baselines3.common.vec_env import DummyVecEnv
 
 
 class Simulation(gym.Env):
-    def __init__(self, logger, robot, environment, ipc_queue, pause_value, exit_value, enable_visualization_value, num_episodes=1, seed=42, record_video=False):
+    def __init__(self, logger, robot, environment, ipc_queue, pause_value, exit_value, enable_visualization_value, num_episodes=1, seed=42):
         super(Simulation, self).__init__()
         np.random.seed(seed)
         random.seed(seed)
@@ -23,7 +23,6 @@ class Simulation(gym.Env):
         self.is_visualization_enabled = enable_visualization_value.value
         self.num_episodes = num_episodes
         self.current_episode = 0
-        self.record_video = record_video
 
         self.logger = logger
         self.agent = None
@@ -74,7 +73,11 @@ class Simulation(gym.Env):
         else:
             self.physics_client = p.connect(p.DIRECT)
 
-        p.resetDebugVisualizerCamera(cameraDistance=3, cameraYaw=35, cameraPitch=-25, cameraTargetPosition=[1.5, 0, 0.6])
+        p.resetDebugVisualizerCamera(
+            cameraDistance=8,
+            cameraYaw=35,
+            cameraPitch=-25,
+            cameraTargetPosition=[5.0, 0, 0.6])
 
         p.setGravity(0, 0, -9.807)
         p.setTimeStep(self.physics_step_s)
