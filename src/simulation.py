@@ -74,10 +74,10 @@ class Simulation(gym.Env):
             self.physics_client = p.connect(p.DIRECT)
 
         p.resetDebugVisualizerCamera(
-            cameraDistance=8,
+            cameraDistance=6.5,
             cameraYaw=35,
-            cameraPitch=-25,
-            cameraTargetPosition=[5.0, 0, 0.6])
+            cameraPitch=-45,
+            cameraTargetPosition=[6.0, 0.0, 0.6])
 
         p.setGravity(0, 0, -9.807)
         p.setTimeStep(self.physics_step_s)
