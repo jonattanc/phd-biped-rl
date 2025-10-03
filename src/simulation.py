@@ -422,20 +422,18 @@ class Simulation(gym.Env):
                 "com_drop": 0.0,
                 "joint_failure": False
             }
-
-        # ===== SISTEMA DE POSICIONAMENTO LATERAL NA PLATAFORMA =====
-        # Obter posição atual do robô
-        robot_position, robot_orientation = self.robot.get_imu_position_and_orientation()
-        pos_y = robot_position[1]  # Posição lateral (eixo Y)
     
         # Definir limites da plataforma
-        PLATFORM_CENTER = 0.0  # Centro da plataforma
         PLATFORM_WIDTH = 1.0   # Largura total da plataforma
-        SAFE_ZONE = 0.5        # Zona segura central
-        WARNING_ZONE = 0.25    # Zona de aviso
+        PLATFORM_CENTER = 0.0  # Centro da plataforma
+        SAFE_ZONE = 0.2       # Zona segura central
+        WARNING_ZONE = 0.4    # Zona de aviso
     
         # Calcular distância do centro
+        robot_position, robot_orientation = self.robot.get_imu_position_and_orientation()
+        pos_y = robot_position[1]      # Posição lateral (eixo Y)
         distance_from_center = abs(pos_y - PLATFORM_CENTER)
+        normalized_distance = distance_from_center / (PLATFORM_WIDTH / 2)
                 
         # ===== FASE 1: RECOMPENSAS CRÍTICAS =====
         # 1. Avanço no percurso
@@ -565,14 +563,16 @@ class Simulation(gym.Env):
 
         # 16. Manutenção no centro da plataforma
         if distance_from_center <= SAFE_ZONE:
-            center_reward = (1.0 - (distance_from_center / SAFE_ZONE)) * 2.0
+            # Zona segura: recompensa máxima no centro, decaindo suavemente
+            safe_factor = 1.0 - (distance_from_center / SAFE_ZONE)
+            center_reward = safe_factor * 5.0 
             reward += center_reward
+
         elif distance_from_center <= WARNING_ZONE:
-            warning_penalty = -1.0 * (distance_from_center - SAFE_ZONE) / (WARNING_ZONE - SAFE_ZONE)
-            reward += warning_penalty    
-        else:
-            danger_penalty = -5.0 * (distance_from_center - WARNING_ZONE) / (PLATFORM_WIDTH/2 - WARNING_ZONE)
-            reward += danger_penalty
+            # Zona de aviso: penalidade leve que aumenta com a distância
+            warning_factor = (distance_from_center - SAFE_ZONE) / (WARNING_ZONE - SAFE_ZONE)
+            warning_penalty = -3.0 * warning_factor  
+            reward += warning_penalty
 
         # ===== SUCESSO OU FALHA =====
         if self.episode_terminated:

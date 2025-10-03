@@ -15,7 +15,7 @@ from tab_comparison import ComparisonTab
 class TrainingGUI:
     def __init__(self, device="cpu"):
         self.root = tk.Tk()
-        self.root.title("Cruzada Generalization - Training Dashboard")
+        self.root.title("Generalização Cruzada")
         self.root.geometry("1400x1000")
 
         self.device = device
@@ -38,8 +38,8 @@ class TrainingGUI:
 
         # Adicionar abas ao notebook
         notebook.add(self.training_tab.frame, text="Treinamento")
-        notebook.add(self.evaluation_tab.frame, text="Avaliação")
-        notebook.add(self.comparison_tab.frame, text="Comparação")
+        notebook.add(self.evaluation_tab.frame, text="Avaliação Individual")
+        notebook.add(self.comparison_tab.frame, text="Avaliação Cruzada")
 
     def on_closing(self):
         """Fecha todas as abas adequadamente"""
