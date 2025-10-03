@@ -85,7 +85,7 @@ class TrainingTab:
         self.current_best_model_path = None
 
         # Configurações de plot
-        self.plot_titles = ["Recompensa por Episódio", "Duração do Episódio", "Distância Percorrida", "Posição IMU (X, Y, Z)", "Orientação (Roll, Pitch, Yaw)"]
+        self.plot_titles = ["Recompensa por Episódio", "Duração do Episódio", "Distância Percorrida (X)", "Posição IMU (Y, Z)", "Orientação (Roll, Pitch, Yaw)"]
         self.plot_ylabels = ["Recompensa", "Tempo (s)", "Distância (m)", "Posição (m)", "Ângulo (rad)"]
         self.plot_colors = ["blue", "orange", "green", "red", "purple", "brown"]
         self.plot_data_keys = ["rewards", "times", "distances", "imu_xyz", "rpy"]
@@ -241,8 +241,7 @@ class TrainingTab:
         try:
             for i, (title, ylabel, color) in enumerate(zip(self.plot_titles, self.plot_ylabels, self.plot_colors)):
                 self.axs[i].clear()
-                if i == 3:  # Gráfico de posição IMU (X, Y, Z)
-                    self.axs[i].plot([], [], label="X", color="red", linestyle="-", markersize=3)
+                if i == 3:  # Gráfico de posição IMU (Y, Z)
                     self.axs[i].plot([], [], label="Y", color="green", linestyle="-", markersize=3)
                     self.axs[i].plot([], [], label="Z", color="blue", linestyle="-", markersize=3)
                 elif i == 4:  # Gráfico de orientação (Roll, Pitch, Yaw)
@@ -255,7 +254,7 @@ class TrainingTab:
                 self.axs[i].set_title(title)
                 self.axs[i].set_ylabel(ylabel)
                 self.axs[i].grid(True, alpha=0.3)
-                self.axs[i].legend()
+                self.axs[i].legend(loc='upper left')
 
             self.axs[-1].set_xlabel("Episódio")
             self.canvas.draw_idle()
@@ -846,7 +845,6 @@ class TrainingTab:
                 fig, ax = plt.subplots(figsize=(width, height))
 
                 if i == 3:  # Gráfico de posição IMU
-                    ax.plot(self.episode_data["episodes"], self.episode_data["imu_x"], label="X", color="red")
                     ax.plot(self.episode_data["episodes"], self.episode_data["imu_y"], label="Y", color="green")
                     ax.plot(self.episode_data["episodes"], self.episode_data["imu_z"], label="Z", color="blue")
                 elif i == 4:  # Gráfico de orientação
@@ -859,7 +857,7 @@ class TrainingTab:
                 ax.set_title(title)
                 ax.set_ylabel(ylabel)
                 ax.set_xlabel("Episódio")
-                ax.legend()
+                ax.legend(loc='upper left')
                 ax.grid(True, alpha=0.3)
 
                 filename = f"plot_{data_key}.png"
@@ -874,7 +872,6 @@ class TrainingTab:
         for i, (title, ylabel, color, data_key) in enumerate(zip(self.plot_titles, self.plot_ylabels, self.plot_colors, self.plot_data_keys)):
             axs[i].clear()
             if i == 3:  # Gráfico de posição IMU
-                axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_x"], label="X", color="red")
                 axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_y"], label="Y", color="green")
                 axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_z"], label="Z", color="blue")
             elif i == 4:  # Gráfico de orientação
@@ -886,7 +883,7 @@ class TrainingTab:
 
             axs[i].set_title(title)
             axs[i].set_ylabel(ylabel)
-            axs[i].legend()
+            axs[i].legend(loc='upper left')
             axs[i].grid(True, alpha=0.3)
 
         axs[-1].set_xlabel("Episódio")
@@ -958,7 +955,6 @@ class TrainingTab:
                 for i, (title, ylabel, color, data_key) in enumerate(zip(self.plot_titles, self.plot_ylabels, self.plot_colors, self.plot_data_keys)):
                     self.axs[i].clear()
                     if i == 3:  # Gráfico de posição IMU
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_x"], label="X", color="red", linestyle="-", markersize=3)
                         self.axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_y"], label="Y", color="green", linestyle="-", markersize=3)
                         self.axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_z"], label="Z", color="blue", linestyle="-", markersize=3)
                     elif i == 4:  # Gráfico de orientação
@@ -970,7 +966,7 @@ class TrainingTab:
 
                     self.axs[i].set_title(title)
                     self.axs[i].set_ylabel(ylabel)
-                    self.axs[i].legend()
+                    self.axs[i].legend(loc='upper left')
                     self.axs[i].grid(True, alpha=0.3)
 
                 self.axs[-1].set_xlabel("Episódio")
