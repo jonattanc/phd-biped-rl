@@ -2,7 +2,7 @@
 import os
 import logging
 from agent import Agent
-from metrics_saver import save_complexity_metrics, compile_results, generate_report
+import metrics_saver
 import multiprocessing
 import utils
 
@@ -57,7 +57,7 @@ def evaluate_and_save(model_path, circuit_name="PR", avatar_name="robot_stage1",
         hyperparams = {"algorithm": agent.algorithm, "num_episodes": num_episodes, "seed": seed, "deterministic": deterministic, "model_path": model_path, "enable_visualization": enable_visualization}
 
         os.makedirs("logs/data", exist_ok=True)
-        saved_files = save_complexity_metrics(metrics=metrics, circuit_name=circuit_name, avatar_name=avatar_name, role=role, seed=seed, hyperparams=hyperparams)
+        saved_files = metrics_saver.save_complexity_metrics(metrics=metrics, circuit_name=circuit_name, avatar_name=avatar_name, role=role, seed=seed, hyperparams=hyperparams)
 
         if saved_files and saved_files[0] is not None:
             logging.info(f"CSV salvo com sucesso: {saved_files[0]}")

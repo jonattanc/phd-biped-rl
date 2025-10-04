@@ -13,7 +13,6 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import utils
-from utils import setup_ipc_logging
 from cross_evaluation import CrossEvaluation
 
 
@@ -31,7 +30,7 @@ class ComparisonTab:
         self.cross_evaluator = None
 
         # Configurar IPC logging
-        setup_ipc_logging(self.logger, self.ipc_queue)
+        utils.setup_ipc_logging(self.logger, self.ipc_queue)
 
         self.setup_ui()
 

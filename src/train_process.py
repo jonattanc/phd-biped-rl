@@ -6,7 +6,6 @@ from environment import Environment
 from agent import Agent, TrainingCallback
 import utils
 import time
-import queue
 import os
 import json
 

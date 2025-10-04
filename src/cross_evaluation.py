@@ -4,8 +4,6 @@ import json
 import pandas as pd
 from datetime import datetime
 import numpy as np
-from typing import Dict, List, Tuple
-import logging
 
 
 class CrossEvaluation:
