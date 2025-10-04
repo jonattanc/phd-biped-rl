@@ -2,9 +2,9 @@
   "metadata": {
     "name": "nova",
     "version": "1.0",
-    "description": "nova",
-    "created": "2025-10-04T01:35:11.646106",
-    "based_on": "training/completo"
+    "description": "poucas",
+    "created": "2025-10-04T02:32:09.947601",
+    "based_on": "default"
   },
   "global_settings": {
     "fall_threshold": 0.5,
@@ -15,7 +15,7 @@
   },
   "components": {
     "progress": {
-      "weight": 166.33922724296005,
+      "weight": 15.0,
       "enabled": true,
       "min_value": -Infinity,
       "max_value": Infinity
@@ -58,43 +58,43 @@
     },
     "effort_penalty": {
       "weight": -0.001,
-      "enabled": true,
+      "enabled": false,
       "min_value": -Infinity,
       "max_value": Infinity
     },
     "jerk_penalty": {
       "weight": -0.05,
-      "enabled": true,
+      "enabled": false,
       "min_value": -Infinity,
       "max_value": Infinity
     },
     "center_bonus": {
       "weight": 5.0,
-      "enabled": true,
+      "enabled": false,
       "min_value": -Infinity,
       "max_value": Infinity
     },
     "warning_penalty": {
       "weight": -3.0,
-      "enabled": true,
+      "enabled": false,
       "min_value": -Infinity,
       "max_value": Infinity
     },
     "gait_regularity": {
       "weight": 4.223968565815324,
-      "enabled": true,
+      "enabled": false,
       "min_value": -Infinity,
       "max_value": Infinity
     },
     "symmetry_bonus": {
       "weight": 1.0,
-      "enabled": true,
+      "enabled": false,
       "min_value": -Infinity,
       "max_value": Infinity
     },
     "clearance_bonus": {
       "weight": 1.5,
-      "enabled": true,
+      "enabled": false,
       "min_value": -Infinity,
       "max_value": Infinity
     }

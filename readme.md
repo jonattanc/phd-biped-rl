@@ -181,21 +181,24 @@ phd-biped-rl/
 │   ├── agent.py                # Classe agente de RL.
 │   ├── best_model_tracker.py   # Tracker dos melhores modelos.
 │   ├── cross_evaluation.py     # Lógica de avaliação cruzada (RF-08 a RF-11)
-│   ├── environment.py          # Classe ambiente/cenário. Carrega .xacro de ambientes.
+│   ├── environment.py          # Classe ambiente. Carrega .xacro de ambientes.
 │   ├── evaluate_model.py       # Calcula métricas estatisticas e salva.
 │   ├── logger.py               # Sistema de Logger.
 │   ├── main.py                 # Ponto de entrada. Inicializa a GUI e processos.
-│   ├── metrics_saver.py        # Sistema de métricas e exportação
+│   ├── metrics_saver.py        # Sistema de métricas e exportação.
+│   ├── reward_system.py        # Sistema de recompensas.
 │   ├── robot.py                # Classe Robot. Carrega .xacro, obtém juntas.
 │   ├── simulation.py           # Lógica de simulação e cálculo de recompensa.
-│   ├── tab_training.py         # Aba de treinamento
-│   ├── tab_evaluation.py       # Aba de avaliação individual
 │   ├── tab_comparison.py       # Aba de avaliação cruzada
+│   ├── tab_evaluation.py       # Aba de avaliação individual
+│   ├── tab_reward.py           # Aba de recompensas
+│   ├── tab_training.py         # Aba de treinamento
 │   ├── simulation.py           # Lógica de simulação e recompensas
 │   ├── train_process.py        # Lógica do treino
 │   └── utils.py                # Utilitários e paths
 ├── environments/           # Modelos .xacro dos circuitos
-├── especialistas/          # Modelos dos especialistasd treinados (model_PR.zip)
+├── especialistas/          # Modelos dos especialistas treinados (model_PR.zip)
+├── reward_configs/         # Modelos de configurações (defaul.json)
 ├── robots/                 # Modelos .xacro dos robôs
 ├── training_data/          # Modelos treinados e sessões
 ├── tmp/                    # Arquivos temporários (URDFs)
