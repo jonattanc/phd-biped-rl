@@ -170,7 +170,7 @@ class TrainingTab:
         self.real_time_var = tk.BooleanVar(value=False)
         self.real_time_check = ttk.Checkbutton(row2_frame, text="Tempo Real", variable=self.real_time_var, command=self.toggle_real_time, state=tk.DISABLED, width=15)
         self.real_time_check.grid(row=0, column=4, padx=5)
-        
+
         # Gráficos
         graph_frame = ttk.LabelFrame(main_frame, text="Desempenho em Tempo Real", padding="1")
         graph_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=1)
@@ -184,10 +184,10 @@ class TrainingTab:
         # Logs
         log_frame = ttk.LabelFrame(main_frame, text="Log de Treinamento", padding="1")
         log_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=1)
-        
+
         status_frame = ttk.Frame(log_frame)
         status_frame.grid(row=3, column=0, columnspan=12, sticky=(tk.W, tk.E), pady=1)
-        
+
         self.steps_label = ttk.Label(status_frame, text=self.build_steps_label_text(0, 0))
         self.steps_label.grid(row=0, column=0, sticky=tk.W, padx=5)
         self.tracker_status_label = ttk.Label(status_frame, text="Melhor recompensa: N/A | Steps sem melhoria: 0")
@@ -255,7 +255,7 @@ class TrainingTab:
                 self.axs[i].set_title(title)
                 self.axs[i].set_ylabel(ylabel)
                 self.axs[i].grid(True, alpha=0.3)
-                self.axs[i].legend(loc='upper left')
+                self.axs[i].legend(loc="upper left")
 
             self.axs[-1].set_xlabel("Episódio")
             self.canvas.draw_idle()
@@ -304,17 +304,15 @@ class TrainingTab:
             self.real_time_check.config(state=tk.NORMAL)
 
             # Sistema tracker para novo treinamento
-            if not hasattr(self, 'tracker'):
+            if not hasattr(self, "tracker"):
                 self.tracker = BestModelTracker()
                 self.total_steps = 0
 
-            if not hasattr(self, 'best_models_dir'):
-                self.best_models_dir = utils.ensure_directory(
-                    os.path.join(utils.TRAINING_DATA_PATH, "best_models_temp")
-                )
+            if not hasattr(self, "best_models_dir"):
+                self.best_models_dir = utils.ensure_directory(os.path.join(utils.TRAINING_DATA_PATH, "best_models_temp"))
 
             # Reiniciar dados
-            self.tracker.best_reward = -float('inf')
+            self.tracker.best_reward = -float("inf")
             self.tracker.total_steps = 0
             self.tracker.steps_since_improvement = 0
             self.total_steps = 0
@@ -342,13 +340,11 @@ class TrainingTab:
                     self.logger.info("Configuração ativa de recompensas carregada")
             except Exception as e:
                 self.logger.warning(f"Erro ao carregar configuração de recompensas: {e}. Usando padrão.")
-            
+
             # Iniciar processo com config
             p = multiprocessing.Process(
                 target=train_process.process_runner,
-                args=(self.current_env, self.current_robot, self.current_algorithm, 
-                      self.ipc_queue, pause_val, exit_val, enable_visualization_val, 
-                      realtime_val, self.device, reward_config),
+                args=(self.current_env, self.current_robot, self.current_algorithm, self.ipc_queue, pause_val, exit_val, enable_visualization_val, realtime_val, self.device, reward_config),
             )
             p.start()
             self.processes.append(p)
@@ -405,7 +401,7 @@ class TrainingTab:
                 self.tracker.load_state(tracker_state_path)
                 self.total_steps = self.tracker.total_steps
                 self.logger.info(f"Estado do tracker carregado: {self.tracker.get_status()}")
-                
+
             p = multiprocessing.Process(
                 target=train_process.process_runner_resume,
                 args=(self.current_env, self.current_robot, self.current_algorithm, self.ipc_queue, pause_val, exit_val, realtime_val, self.device, model_path, self.current_episode),
@@ -489,11 +485,7 @@ class TrainingTab:
             control_file = f"save_model_{int(time.time() * 1000)}.json"
             control_path = os.path.join(control_dir, control_file)
 
-            control_data = {
-                "model_path": model_path, 
-                "timestamp": time.time(), 
-                "immediate": True
-            }
+            control_data = {"model_path": model_path, "timestamp": time.time(), "immediate": True}
 
             with open(control_path, "w") as f:
                 json.dump(control_data, f, indent=2)
@@ -502,7 +494,6 @@ class TrainingTab:
 
         except Exception as e:
             self.logger.exception("Erro ao solicitar salvamento imediato")
-
 
     def stop_training(self):
         """Finaliza o treinamento"""
@@ -559,8 +550,8 @@ class TrainingTab:
                 json.dump(training_data, f, indent=2, ensure_ascii=False)
 
             best_model_used = False
-        
-            if hasattr(self, 'current_best_model_path') and self.current_best_model_path and os.path.exists(self.current_best_model_path):
+
+            if hasattr(self, "current_best_model_path") and self.current_best_model_path and os.path.exists(self.current_best_model_path):
                 # Copiar o melhor modelo automático para a sessão
                 models_dir = utils.ensure_directory(os.path.join(session_dir, "models"))
                 final_model_path = os.path.join(models_dir, "model.zip")
@@ -578,13 +569,8 @@ class TrainingTab:
                 model_saved = True
 
             # Salvar informações básicas do tracker se existir
-            if hasattr(self, 'tracker'):
-                tracker_info = {
-                    "best_reward": self.tracker.best_reward,
-                    "best_distance": self.tracker.best_distance,
-                    "total_steps": self.tracker.total_steps,
-                    "used_best_model": best_model_used
-                }
+            if hasattr(self, "tracker"):
+                tracker_info = {"best_reward": self.tracker.best_reward, "best_distance": self.tracker.best_distance, "total_steps": self.tracker.total_steps, "used_best_model": best_model_used}
 
                 with open(os.path.join(session_dir, "training_info.json"), "w") as f:
                     json.dump(tracker_info, f, indent=2)
@@ -768,12 +754,12 @@ class TrainingTab:
                     training_info = json.load(f)
 
                 # Inicializar tracker se não existir
-                if not hasattr(self, 'tracker'):
+                if not hasattr(self, "tracker"):
                     self.tracker = BestModelTracker()
                     self.total_steps = 0
 
                 # Restaurar dados básicos
-                self.tracker.best_reward = training_info.get("best_reward", -float('inf'))
+                self.tracker.best_reward = training_info.get("best_reward", -float("inf"))
                 self.tracker.best_distance = training_info.get("best_distance", 0.0)
                 self.total_steps = training_info.get("total_steps", 0)
 
@@ -783,10 +769,8 @@ class TrainingTab:
                 self.logger.warning(f"Erro ao carregar informações de treino: {e}")
 
         # Configurar sistema básico se não existir
-        if not hasattr(self, 'best_models_dir'):
-            self.best_models_dir = utils.ensure_directory(
-                os.path.join(utils.TRAINING_DATA_PATH, "best_models_temp")
-            )
+        if not hasattr(self, "best_models_dir"):
+            self.best_models_dir = utils.ensure_directory(os.path.join(utils.TRAINING_DATA_PATH, "best_models_temp"))
 
     def export_plots(self):
         """Exporta gráficos como imagens para uso na tese"""
@@ -876,7 +860,7 @@ class TrainingTab:
                 ax.set_title(title)
                 ax.set_ylabel(ylabel)
                 ax.set_xlabel("Episódio")
-                ax.legend(loc='upper left')
+                ax.legend(loc="upper left")
                 ax.grid(True, alpha=0.3)
 
                 filename = f"plot_{data_key}.png"
@@ -902,7 +886,7 @@ class TrainingTab:
 
             axs[i].set_title(title)
             axs[i].set_ylabel(ylabel)
-            axs[i].legend(loc='upper left')
+            axs[i].legend(loc="upper left")
             axs[i].grid(True, alpha=0.3)
 
         axs[-1].set_xlabel("Episódio")
@@ -934,7 +918,7 @@ class TrainingTab:
             self.logger.info("Modo tempo real ativado")
         else:
             self.logger.info("Modo tempo real desativado")
-            
+
     def build_steps_label_text(self, total_steps, steps_per_second):
         return f"Total Steps: {total_steps} | Steps/s: {steps_per_second:.1f}"
 
@@ -985,7 +969,7 @@ class TrainingTab:
 
                     self.axs[i].set_title(title)
                     self.axs[i].set_ylabel(ylabel)
-                    self.axs[i].legend(loc='upper left')
+                    self.axs[i].legend(loc="upper left")
                     self.axs[i].grid(True, alpha=0.3)
 
                 self.axs[-1].set_xlabel("Episódio")
@@ -1045,13 +1029,13 @@ class TrainingTab:
     def _show_auto_pause_message(self):
         """Mostra mensagem de pausa automática"""
         messagebox.showinfo(
-            "Treinamento Pausado Automaticamente", 
+            "Treinamento Pausado Automaticamente",
             f"O treinamento foi pausado automaticamente após {self.tracker.patience_steps:,} steps sem melhoria significativa.\n\n"
             f"• Melhor recompensa: {self.tracker.best_reward:.2f}\n"
             f"• Melhor distância: {self.tracker.best_distance:.2f}m\n"
             f"• Steps totais: {self.tracker.total_steps:,}\n"
             f"• Steps sem melhoria: {self.tracker.steps_since_improvement:,}\n\n"
-            "Clique em 'Retomar' para continuar o treinamento ou 'Salvar Treino' para finalizar."
+            "Clique em 'Retomar' para continuar o treinamento ou 'Salvar Treino' para finalizar.",
         )
 
     def _update_tracker_status(self):
@@ -1067,7 +1051,7 @@ class TrainingTab:
             status_parts.append(f"Sem melhoria: {status['steps_since_improvement']:,}")
 
             # Usar get() para evitar KeyError
-            auto_save_count = status.get('auto_save_count', 0)
+            auto_save_count = status.get("auto_save_count", 0)
             if auto_save_count > 0:
                 status_parts.append(f"Salvamentos: {auto_save_count}")
 
@@ -1075,9 +1059,9 @@ class TrainingTab:
             self.tracker_status_label.config(text=status_text)
 
             # Mudar cor do texto se estiver perto de pausar
-            if status['steps_since_improvement'] > status['patience_steps'] * 0.8:
+            if status["steps_since_improvement"] > status["patience_steps"] * 0.8:
                 self.tracker_status_label.config(foreground="orange")
-            elif status['steps_since_improvement'] > status['patience_steps'] * 0.9:
+            elif status["steps_since_improvement"] > status["patience_steps"] * 0.9:
                 self.tracker_status_label.config(foreground="red")
             else:
                 self.tracker_status_label.config(foreground="black")
@@ -1085,12 +1069,10 @@ class TrainingTab:
         except Exception as e:
             self.logger.warning(f"Erro ao atualizar status do tracker: {e}")
             self.tracker_status_label.config(text="Status: Erro no tracker")
-        
+
     def _setup_auto_save_system(self):
         """Configura sistema automático de salvamento"""
-        self.best_models_dir = utils.ensure_directory(
-            os.path.join(utils.TRAINING_DATA_PATH, "best_models_temp")
-        )
+        self.best_models_dir = utils.ensure_directory(os.path.join(utils.TRAINING_DATA_PATH, "best_models_temp"))
         self.current_best_model_path = None
         self.auto_save_enabled = True
 
@@ -1101,7 +1083,7 @@ class TrainingTab:
         """Remove modelos antigos, mantendo apenas os mais recentes"""
         try:
             if os.path.exists(self.best_models_dir):
-                model_files = [f for f in os.listdir(self.best_models_dir) if f.endswith('.zip')]
+                model_files = [f for f in os.listdir(self.best_models_dir) if f.endswith(".zip")]
                 model_files.sort(key=lambda x: os.path.getmtime(os.path.join(self.best_models_dir, x)))
 
                 # Manter apenas os mais recentes
@@ -1117,10 +1099,8 @@ class TrainingTab:
         """Salva automaticamente o melhor modelo"""
         try:
             # Verificar se o diretório existe
-            if not hasattr(self, 'best_models_dir'):
-                self.best_models_dir = utils.ensure_directory(
-                    os.path.join(utils.TRAINING_DATA_PATH, "best_models_temp")
-                )
+            if not hasattr(self, "best_models_dir"):
+                self.best_models_dir = utils.ensure_directory(os.path.join(utils.TRAINING_DATA_PATH, "best_models_temp"))
 
             # Gerar nome do arquivo
             filename = self.tracker.get_auto_save_filename()
@@ -1138,7 +1118,7 @@ class TrainingTab:
                 "best_distance": self.tracker.best_distance,
                 "total_steps": self.tracker.total_steps,
                 "reason": reason,
-                "auto_save": True
+                "auto_save": True,
             }
 
             with open(control_path, "w") as f:
@@ -1161,7 +1141,7 @@ class TrainingTab:
             episode_distance = episode_data.get("distance", 0)
 
             # Verificar se tracker existe
-            if not hasattr(self, 'tracker'):
+            if not hasattr(self, "tracker"):
                 self.logger.warning("Tracker não inicializado, criando novo...")
                 self.tracker = BestModelTracker()
                 self.total_steps = 0
@@ -1189,7 +1169,7 @@ class TrainingTab:
 
         except Exception as e:
             self.logger.exception("Erro ao processar dados do episódio para tracker")
-            
+
     def ipc_runner(self):
         """Thread para monitorar a fila IPC e atualizar logs"""
         try:
@@ -1228,7 +1208,7 @@ class TrainingTab:
                         # Atualizar contador de steps
                         self.total_steps = msg.get("steps_completed", 0)
                         self.logger.debug(f"Progresso: {self.total_steps} steps")
-                
+
                     elif data_type == "step_count":
                         # Atualizar contador de steps
                         if self.total_steps is None:

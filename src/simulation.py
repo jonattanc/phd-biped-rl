@@ -28,7 +28,7 @@ class Simulation(gym.Env):
         self.agent = None
         self.physics_client = None
         self.reward_system = RewardSystem(logger)
-        
+
         # Configurações de simulação
         self.fall_threshold = 0.5  # m
         self.yaw_threshold = 0.5  # rad
@@ -74,11 +74,7 @@ class Simulation(gym.Env):
         else:
             self.physics_client = p.connect(p.DIRECT)
 
-        p.resetDebugVisualizerCamera(
-            cameraDistance=6.5,
-            cameraYaw=35,
-            cameraPitch=-45,
-            cameraTargetPosition=[6.0, 0.0, 0.6])
+        p.resetDebugVisualizerCamera(cameraDistance=6.5, cameraYaw=35, cameraPitch=-45, cameraTargetPosition=[6.0, 0.0, 0.6])
 
         p.setGravity(0, 0, -9.807)
         p.setTimeStep(self.physics_step_s)
@@ -305,7 +301,7 @@ class Simulation(gym.Env):
         if self.agent is not None:
             # Garantir que o agente ainda está configurado
             self.agent.env = self
-            if hasattr(self.agent, 'model') and self.agent.model is not None:
+            if hasattr(self.agent, "model") and self.agent.model is not None:
                 # Reconfigurar o ambiente no modelo se necessário
                 try:
                     if self.agent.model.get_env() is None:
@@ -424,61 +420,61 @@ class Simulation(gym.Env):
         """
         while self.pause_value.value and not self.exit_value.value:
             time.sleep(0.1)
-    
+
         if self.exit_value.value:
             self.logger.info("Sinal de saída recebido em step. Finalizando simulação.")
             return None, 0.0, True, False, {"exit": True}
-    
+
         # Atualizar configurações de visualização e tempo real se necessário
         if self.is_visualization_enabled != self.enable_visualization_value.value:
             self.is_visualization_enabled = self.enable_visualization_value.value
             self.setup_sim_env()
-    
+
         self.apply_action(action)
-    
+
         # Avançar simulação
         for _ in range(self.physics_step_multiplier):
             p.stepSimulation()
-    
+
         if self.is_visualization_enabled:
             time.sleep(self.time_step_s)
-    
+
         self.episode_steps += 1
-    
+
         # Obter observação
         obs = self.robot.get_observation()
-    
+
         robot_position, robot_orientation = self.robot.get_imu_position_and_orientation()
         robot_x_position = robot_position[0]
         robot_z_position = robot_position[2]
         robot_yaw = robot_orientation[2]
         self.episode_last_distance = self.episode_distance
         self.episode_distance = robot_x_position - self.episode_robot_x_initial_position
-    
+
         # Condições de Termino
         info = {"distance": self.episode_distance, "termination": "none"}
-    
+
         # Queda
         if robot_z_position < self.fall_threshold:
             self.episode_terminated = True
             info["termination"] = "fell"
-    
+
         # Desvio do caminho
         if abs(robot_yaw) >= self.yaw_threshold:
             self.episode_terminated = True
             info["termination"] = "yaw_deviated"
-    
+
         # Sucesso
         elif self.episode_distance >= self.success_distance:
             self.episode_terminated = True
             self.episode_success = True
             info["termination"] = "success"
-    
+
         # Timeout
         elif self.episode_steps * self.time_step_s >= self.episode_timeout_s:
             self.episode_truncated = True
             info["termination"] = "timeout"
-    
+
         info["success"] = self.episode_success
         self.episode_done = self.episode_truncated or self.episode_terminated
 
@@ -492,30 +488,25 @@ class Simulation(gym.Env):
             "mos": 0.1,  # valor padrão - você pode calcular isso se tiver dados
             "joint_torques": [0] * self.action_dim,  # placeholder
             "jerk": 0.0,  # placeholder
-            "joint_velocities": joint_velocities
+            "joint_velocities": joint_velocities,
         }
 
         # Criar env_conditions básico
-        env_conditions = {
-            "foot_slip": 0.0,
-            "ramp_speed": 0.0, 
-            "com_drop": 0.0,
-            "joint_failure": False
-        }
-    
+        env_conditions = {"foot_slip": 0.0, "ramp_speed": 0.0, "com_drop": 0.0, "joint_failure": False}
+
         reward = self.get_reward(action, robot_state, env_conditions)
         self.episode_reward += reward
-    
+
         # Coletar info final quando o episódio terminar
         if self.episode_done:
             info["episode"] = {"r": self.episode_reward, "l": self.episode_steps, "distance": self.episode_distance, "success": self.episode_success}
-    
+
         # MODIFICAÇÃO: Só chamar transmit_episode_info se ipc_queue estiver disponível
         if self.ipc_queue is not None:
             self.transmit_episode_info()
-    
+
         self.episode_last_action = action
-    
+
         return obs, reward, self.episode_terminated, self.episode_truncated, info
 
     def get_episode_info(self):

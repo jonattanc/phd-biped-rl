@@ -76,7 +76,7 @@ class Robot:
         try:
             if self.id is None or self.revolute_indices is None:
                 return [], []  # Retorna listas vazias em vez de None
-            
+
             joint_states = p.getJointStates(self.id, self.revolute_indices)
             joint_positions = [s[0] for s in joint_states]
             joint_velocities = [s[1] for s in joint_states]
@@ -105,7 +105,7 @@ class Robot:
         try:
             if self.id is None:
                 return [0, 0, 0], [0, 0, 0]  # Valores padrão
-            
+
             link_state = p.getLinkState(self.id, self.imu_link_index, computeLinkVelocity=1)
             position = link_state[0]
             orientation = p.getEulerFromQuaternion(link_state[1])
