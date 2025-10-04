@@ -37,8 +37,9 @@ class FastTD3(TD3):
 
 
 class TrainingCallback(BaseCallback):
-    def __init__(self, verbose=0):
+    def __init__(self, logger, verbose=0):
         super(TrainingCallback, self).__init__(verbose)
+        self.custom_logger = logger
 
     def _on_step(self) -> bool:
         try:
@@ -51,6 +52,7 @@ class TrainingCallback(BaseCallback):
 
         except Exception as e:
             # Em caso de erro, continuar o treinamento
+            self.custom_logger.exception("Erro no callback de treinamento")
             pass
 
         return True
@@ -208,7 +210,7 @@ class Agent:
                 self.logger.error("Ambiente não configurado para o modelo!")
                 raise ValueError("O ambiente deve ser configurado antes do treinamento. Chame set_env() primeiro.")
 
-            callback = TrainingCallback()
+            callback = TrainingCallback(self.logger)
             self.model.learn(total_timesteps=total_timesteps, reset_num_timesteps=False, callback=callback)
         else:
             raise ValueError("Modelo não foi inicializado.")

@@ -131,7 +131,7 @@ def process_runner(selected_environment, selected_robot, algorithm, ipc_queue, p
                     agent.set_env(sim)
 
                 # Usar agent.model.learn diretamente com parâmetros corretos
-                callback = TrainingCallback()
+                callback = TrainingCallback(logger)
                 agent.model.learn(total_timesteps=1000, reset_num_timesteps=False, callback=callback)
                 timesteps_completed = agent.model.num_timesteps
 
@@ -277,7 +277,7 @@ def process_runner_resume(selected_environment, selected_robot, algorithm, ipc_q
                     agent.set_env(sim)
 
                 # Usar agent.model.learn diretamente
-                callback = TrainingCallback()
+                callback = TrainingCallback(logger)
                 agent.model.learn(total_timesteps=1000, reset_num_timesteps=False, callback=callback)
                 timesteps_completed += 1000
                 if timesteps_completed % 10000 == 0:
