@@ -134,20 +134,16 @@ def process_runner(selected_environment, selected_robot, algorithm, ipc_queue, p
                 callback = TrainingCallback()
                 agent.model.learn(total_timesteps=1000, reset_num_timesteps=False, callback=callback)
                 timesteps_completed = agent.model.num_timesteps
-                
+
                 # Enviar progresso para GUI
                 try:
-                    ipc_queue.put_nowait({
-                        "type": "training_progress", 
-                        "steps_completed": timesteps_completed,
-                        "total_steps": total_timesteps
-                    })
+                    ipc_queue.put_nowait({"type": "training_progress", "steps_completed": timesteps_completed, "total_steps": total_timesteps})
                 except:
                     pass
-                
+
                 if timesteps_completed % 10000 == 0:
                     logger.info(f"Progresso: {timesteps_completed}/{total_timesteps} timesteps")
-                    
+
             except Exception as e:
                 logger.exception("Erro durante aprendizado")
                 break
@@ -174,11 +170,8 @@ def process_runner_resume(selected_environment, selected_robot, algorithm, ipc_q
         environment = Environment(logger, name=selected_environment)
         robot = Robot(logger, name=selected_robot)
         enable_visualization_value = multiprocessing.Value("b", False)
-        sim = Simulation(
-            logger, robot, environment, ipc_queue, 
-            pause_value, exit_value, enable_visualization_value, enable_real_time_value
-        )
-        
+        sim = Simulation(logger, robot, environment, ipc_queue, pause_value, exit_value, enable_visualization_value, enable_real_time_value)
+
         agent = Agent(logger, model_path=model_path, device=device, initial_episode=initial_episode)
 
         # CONFIGURAR O AMBIENTE NO MODELO CARREGADO

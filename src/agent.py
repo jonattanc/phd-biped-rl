@@ -180,10 +180,10 @@ class Agent:
             self.env = vec_env
 
             # Tentar obter action_dim de várias formas
-            if hasattr(env, 'action_dim'):
+            if hasattr(env, "action_dim"):
                 self.action_dim = env.action_dim
                 self.logger.info(f"Action dim do env: {self.action_dim}")
-            elif hasattr(env, 'action_space'):
+            elif hasattr(env, "action_space"):
                 self.action_dim = env.action_space.shape[0]
                 self.logger.info(f"Action dim do action_space: {self.action_dim}")
             elif self.model.action_space is not None:
@@ -226,7 +226,7 @@ class Agent:
         """Configura o agente no ambiente"""
         self.agent = agent
         self.logger.info(f"Agente {agent.algorithm} configurado na simulação")
-    
+
     def evaluate(self, env, num_episodes=20, deterministic=True):
         """
         Avalia o agente treinado em um ambiente.
@@ -318,6 +318,7 @@ class Agent:
             except Exception as e:
                 self.logger.error(f"Erro no episódio {episode + 1}: {e}")
                 import traceback
+
                 self.logger.error(traceback.format_exc())
                 # Continuar para o próximo episódio
                 total_times.append(0.0)

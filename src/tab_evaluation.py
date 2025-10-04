@@ -96,7 +96,7 @@ class EvaluationTab:
         self.enable_visualization_var = tk.BooleanVar(value=False)
         self.enable_visualization_check = ttk.Checkbutton(row3_frame, text="Visualizar Robô", variable=self.enable_visualization_var, width=15)
         self.enable_visualization_check.grid(row=0, column=2, padx=5)
-        
+
         # Botões de exportação
         ttk.Button(row3_frame, text="Exportar Resultados", command=self.export_evaluation_results).grid(row=0, column=3, padx=5)
         ttk.Button(row3_frame, text="Salvar Gráficos", command=self.export_evaluation_plots).grid(row=0, column=4, padx=5)
@@ -233,13 +233,7 @@ class EvaluationTab:
 
             # Executar avaliação
             metrics = evaluate_and_save(
-                model_path=model_path, 
-                circuit_name=environment, 
-                avatar_name=robot, 
-                num_episodes=episodes, 
-                deterministic=deterministic, 
-                seed=42,
-                enable_visualization=enable_visualization
+                model_path=model_path, circuit_name=environment, avatar_name=robot, num_episodes=episodes, deterministic=deterministic, seed=42, enable_visualization=enable_visualization
             )
 
             if metrics:
@@ -448,7 +442,7 @@ Análise:
                 # Exportar para CSV
                 evaluation = self.evaluation_data["current_evaluation"]
                 metrics = evaluation["metrics"]
-                
+
                 # Criar DataFrame com dados completos
                 data = {
                     "timestamp": [datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
@@ -463,9 +457,9 @@ Análise:
                     "success_count": [metrics.get("success_count", 0)],
                     "num_episodes": [metrics.get("num_episodes", 0)],
                 }
-                
+
                 df = pd.DataFrame(data)
-                df.to_csv(filename, index=False, encoding='utf-8')
+                df.to_csv(filename, index=False, encoding="utf-8")
 
                 messagebox.showinfo("Sucesso", f"Resultados exportados para:\n{filename}")
                 self.logger.info(f"Resultados de avaliação exportados: {filename}")

@@ -16,6 +16,7 @@ import utils
 from utils import setup_ipc_logging
 from cross_evaluation import CrossEvaluation
 
+
 class ComparisonTab:
     def __init__(self, parent, device, logger):
         self.frame = ttk.Frame(parent)
@@ -66,12 +67,7 @@ class ComparisonTab:
         button_frame = ttk.Frame(control_frame)
         button_frame.pack(fill=tk.X, pady=1)
 
-        self.run_evaluation_btn = ttk.Button(
-            button_frame, 
-            text="Executar Avaliação Cruzada", 
-            command=self.run_cross_evaluation,
-            width=30
-        )
+        self.run_evaluation_btn = ttk.Button(button_frame, text="Executar Avaliação Cruzada", command=self.run_cross_evaluation, width=30)
         self.run_evaluation_btn.pack(pady=1)
 
         # Frame para resultados
@@ -89,7 +85,7 @@ class ComparisonTab:
         self.results_text = tk.Text(report_frame, height=15, state=tk.DISABLED, wrap=tk.WORD)
         text_scrollbar = ttk.Scrollbar(report_frame, orient="vertical", command=self.results_text.yview)
         self.results_text.configure(yscrollcommand=text_scrollbar.set)
-        
+
         self.results_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         text_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
@@ -108,22 +104,10 @@ class ComparisonTab:
         export_frame = ttk.Frame(results_frame)
         export_frame.pack(fill=tk.X, pady=5)
 
-        self.export_report_btn = ttk.Button(
-            export_frame, 
-            text="Exportar Relatório Completo", 
-            command=self.export_cross_evaluation_report,
-            state=tk.DISABLED,
-            width=20
-        )
+        self.export_report_btn = ttk.Button(export_frame, text="Exportar Relatório Completo", command=self.export_cross_evaluation_report, state=tk.DISABLED, width=20)
         self.export_report_btn.pack(side=tk.LEFT, padx=5)
 
-        ttk.Button(
-            export_frame, 
-            text="Exportar Gráficos", 
-            command=self.export_cross_plots,
-            state=tk.DISABLED,
-            width=15
-        ).pack(side=tk.LEFT, padx=5)
+        ttk.Button(export_frame, text="Exportar Gráficos", command=self.export_cross_plots, state=tk.DISABLED, width=15).pack(side=tk.LEFT, padx=5)
 
         # Inicializar avaliador
         self.cross_evaluator = CrossEvaluation(self.logger, self.models_dir_var.get())
@@ -158,10 +142,7 @@ class ComparisonTab:
 
     def browse_models_dir(self):
         """Seleciona diretório com modelos especialistas"""
-        directory = filedialog.askdirectory(
-            title="Selecionar Diretório de Modelos Especialistas",
-            initialdir=utils.TRAINING_DATA_PATH
-        )
+        directory = filedialog.askdirectory(title="Selecionar Diretório de Modelos Especialistas", initialdir=utils.TRAINING_DATA_PATH)
         if directory:
             self.models_dir_var.set(directory)
             self.cross_evaluator = CrossEvaluation(self.logger, directory)
@@ -179,11 +160,7 @@ class ComparisonTab:
 
         # Verificar se existem modelos no diretório
         if not self._check_models_exist():
-            messagebox.showwarning(
-                "Aviso", 
-                f"Nenhum modelo especialista encontrado em:\n{self.models_dir_var.get()}\n"
-                f"Certifique-se de que existem modelos para: PR, PBA, PRA, PRD, PG, PRB"
-            )
+            messagebox.showwarning("Aviso", f"Nenhum modelo especialista encontrado em:\n{self.models_dir_var.get()}\n" f"Certifique-se de que existem modelos para: PR, PBA, PRA, PRD, PG, PRB")
             return
 
         # Atualizar diretório do avaliador
@@ -193,22 +170,18 @@ class ComparisonTab:
         self.run_evaluation_btn.config(state=tk.DISABLED, text="Executando Avaliação Cruzada...")
 
         # Executar em thread separada
-        eval_thread = threading.Thread(
-            target=self._run_cross_evaluation_thread, 
-            args=(episodes, self.cross_deterministic_var.get()),
-            daemon=True
-        )
+        eval_thread = threading.Thread(target=self._run_cross_evaluation_thread, args=(episodes, self.cross_deterministic_var.get()), daemon=True)
         eval_thread.start()
 
     def _check_models_exist(self):
         """Verifica se existem modelos especialistas no diretório"""
         required_circuits = ["PR", "PBA", "PRA", "PRD", "PG", "PRB"]
         found_models = 0
-        
+
         for circuit in required_circuits:
             if self.cross_evaluator._find_specialist_model(circuit):
                 found_models += 1
-                
+
         self.logger.info(f"Modelos encontrados: {found_models}/6")
         return found_models > 0  # Pelo menos um modelo
 
@@ -216,19 +189,16 @@ class ComparisonTab:
         """Executa avaliação cruzada em thread separada"""
         try:
             self.logger.info("Iniciando avaliação cruzada completa...")
-            
+
             # Executar avaliação completa
-            report = self.cross_evaluator.run_complete_evaluation(
-                num_episodes=episodes, 
-                deterministic=deterministic
-            )
-            
+            report = self.cross_evaluator.run_complete_evaluation(num_episodes=episodes, deterministic=deterministic)
+
             # Exportar relatório automaticamente
             report_path = self.cross_evaluator.export_report(report)
-            
+
             # Atualizar interface
             self.root.after(0, lambda: self._display_cross_evaluation_results(report, report_path))
-            
+
         except Exception as e:
             self.logger.exception("Erro na avaliação cruzada")
             self.root.after(0, lambda: messagebox.showerror("Erro", f"Erro na avaliação cruzada: {e}"))
@@ -239,15 +209,15 @@ class ComparisonTab:
         """Exibe resultados da avaliação cruzada"""
         try:
             self.cross_evaluation_results = report
-            
+
             self.results_text.config(state=tk.NORMAL)
             self.results_text.delete(1.0, tk.END)
-            
+
             results_text = "=== AVALIAÇÃO CRUZADA COMPLETA ===\n\n"
             results_text += f"Data: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n"
             results_text += f"Total de avaliações: {report['metadata']['total_evaluations']}\n"
             results_text += f"Episódios por avaliação: {report['metadata']['num_episodes']}\n\n"
-            
+
             # 1. Ranking de Complexidade (RF-08)
             results_text += "1. RANKING DE COMPLEXIDADE (RF-08)\n"
             results_text += "=" * 50 + "\n"
@@ -255,11 +225,11 @@ class ComparisonTab:
                 specialist = report["best_specialists"][circuit["circuit"]]
                 results_text += f"{i}º - {circuit['circuit']}: {circuit['avg_time']:.2f}s "
                 results_text += f"({specialist['success_rate']*100:.1f}% sucesso)\n"
-            
+
             # 2. Análise de Generalização (RF-09)
             results_text += "\n2. ANÁLISE DE GENERALIZAÇÃO (RF-09)\n"
             results_text += "=" * 50 + "\n"
-            
+
             gen_patterns = report["generalization_analysis"]
             for origin, targets in gen_patterns.items():
                 origin_time = report["best_specialists"][origin]["avg_time"]
@@ -268,7 +238,7 @@ class ComparisonTab:
                     delta = (metrics["avg_time"] - origin_time) / origin_time * 100
                     results_text += f"  • {target}: {metrics['avg_time']:.2f}s "
                     results_text += f"({metrics['success_rate']*100:.1f}%, Δ={delta:+.1f}%)\n"
-            
+
             # 3. Transferências Direcionais (RF-11)
             results_text += "\n3. TRANSFERÊNCIAS DIRECIONAIS (RF-11)\n"
             results_text += "=" * 50 + "\n"
@@ -277,7 +247,7 @@ class ComparisonTab:
             results_text += f"• Transferências Descendentes: {directional['descendente_count']}\n"
             results_text += f"• Sucesso Médio Ascendente: {directional['ascendente_avg_success']*100:.1f}%\n"
             results_text += f"• Sucesso Médio Descendente: {directional['descendente_avg_success']*100:.1f}%\n"
-            
+
             # 4. Gaps de Especificidade (RF-10)
             results_text += "\n4. GAPS DE ESPECIFICIDADE (RF-10)\n"
             results_text += "=" * 50 + "\n"
@@ -287,28 +257,28 @@ class ComparisonTab:
                 results_text += f"• {circuit} (AE: {ae_time:.2f}s): "
                 results_text += f"ΔTm = {gap_stats['mean_gap']:+.2f}s "
                 results_text += f"(±{gap_stats['std_gap']:.2f}s)\n"
-            
+
             results_text += f"\nRelatório completo salvo em:\n{report_path}"
-            
+
             self.results_text.insert(1.0, results_text)
             self.results_text.config(state=tk.DISABLED)
-            
+
             # Atualizar gráficos
             self._update_cross_plots(report)
-            
+
             # Habilitar botões de exportação
             self.export_report_btn.config(state=tk.NORMAL)
-            
+
             messagebox.showinfo(
-                "Avaliação Cruzada Concluída", 
+                "Avaliação Cruzada Concluída",
                 f"Todos os requisitos atendidos:\n"
                 f"• RF-08 (Complexidade): ✓\n"
-                f"• RF-09 (Generalização): ✓\n" 
+                f"• RF-09 (Generalização): ✓\n"
                 f"• RF-10 (Especificidade): ✓\n"
                 f"• RF-11 (Direcionalidade): ✓\n\n"
-                f"Total: {report['metadata']['total_evaluations']} avaliações"
+                f"Total: {report['metadata']['total_evaluations']} avaliações",
             )
-            
+
         except Exception as e:
             self.logger.exception("Erro ao exibir resultados")
             messagebox.showerror("Erro", f"Erro ao exibir resultados: {e}")
@@ -323,23 +293,22 @@ class ComparisonTab:
             # 1. Ranking de Complexidade
             circuits = [item["circuit"] for item in report["complexity_ranking"]]
             times = [item["avg_time"] for item in report["complexity_ranking"]]
-            
-            bars = self.axs_cross[0, 0].bar(circuits, times, color='skyblue', alpha=0.7)
+
+            bars = self.axs_cross[0, 0].bar(circuits, times, color="skyblue", alpha=0.7)
             self.axs_cross[0, 0].set_title("Ranking de Complexidade (RF-08)")
             self.axs_cross[0, 0].set_ylabel("Tempo Médio (s)")
-            self.axs_cross[0, 0].tick_params(axis='x', rotation=45)
-            
+            self.axs_cross[0, 0].tick_params(axis="x", rotation=45)
+
             # Adicionar valores nas barras
             for bar, time_val in zip(bars, times):
                 height = bar.get_height()
-                self.axs_cross[0, 0].text(bar.get_x() + bar.get_width()/2., height,
-                                         f'{time_val:.2f}s', ha='center', va='bottom')
+                self.axs_cross[0, 0].text(bar.get_x() + bar.get_width() / 2.0, height, f"{time_val:.2f}s", ha="center", va="bottom")
 
             # 2. Performance de Generalização (heatmap simplificado)
             gen_data = report["generalization_analysis"]
             circuits_ordered = [item["circuit"] for item in report["complexity_ranking"]]
             success_rates = []
-            
+
             for origin in circuits_ordered:
                 row = []
                 for target in circuits_ordered:
@@ -348,8 +317,8 @@ class ComparisonTab:
                     else:
                         row.append(gen_data.get(origin, {}).get(target, {}).get("success_rate", 0) * 100)
                 success_rates.append(row)
-            
-            im = self.axs_cross[0, 1].imshow(success_rates, cmap='RdYlGn', aspect='auto', vmin=0, vmax=100)
+
+            im = self.axs_cross[0, 1].imshow(success_rates, cmap="RdYlGn", aspect="auto", vmin=0, vmax=100)
             self.axs_cross[0, 1].set_title("Taxa de Sucesso por Transferência (RF-09)")
             self.axs_cross[0, 1].set_xticks(range(len(circuits_ordered)))
             self.axs_cross[0, 1].set_yticks(range(len(circuits_ordered)))
@@ -357,41 +326,39 @@ class ComparisonTab:
             self.axs_cross[0, 1].set_yticklabels(circuits_ordered)
             self.axs_cross[0, 1].set_xlabel("Circuito Alvo")
             self.axs_cross[0, 1].set_ylabel("Circuito Origem")
-            
+
             # Adicionar barra de cores
             plt.colorbar(im, ax=self.axs_cross[0, 1], label="Taxa de Sucesso (%)")
 
             # 3. Transferências Direcionais
             directional = report["directional_insights"]
-            directions = ['Ascendente', 'Descendente']
-            counts = [directional['ascendente_count'], directional['descendente_count']]
-            colors = ['lightcoral', 'lightblue']
-            
+            directions = ["Ascendente", "Descendente"]
+            counts = [directional["ascendente_count"], directional["descendente_count"]]
+            colors = ["lightcoral", "lightblue"]
+
             bars = self.axs_cross[1, 0].bar(directions, counts, color=colors, alpha=0.7)
             self.axs_cross[1, 0].set_title("Transferências Direcionais (RF-11)")
             self.axs_cross[1, 0].set_ylabel("Quantidade")
-            
+
             for bar, count in zip(bars, counts):
                 height = bar.get_height()
-                self.axs_cross[1, 0].text(bar.get_x() + bar.get_width()/2., height,
-                                         f'{count}', ha='center', va='bottom')
+                self.axs_cross[1, 0].text(bar.get_x() + bar.get_width() / 2.0, height, f"{count}", ha="center", va="bottom")
 
             # 4. Gaps de Especificidade
             gaps = report["specificity_gaps"]
             circuits_gap = list(gaps.keys())
             mean_gaps = [gaps[circuit]["mean_gap"] for circuit in circuits_gap]
-            
-            colors_gap = ['red' if gap > 0 else 'green' for gap in mean_gaps]
+
+            colors_gap = ["red" if gap > 0 else "green" for gap in mean_gaps]
             bars = self.axs_cross[1, 1].bar(circuits_gap, mean_gaps, color=colors_gap, alpha=0.7)
             self.axs_cross[1, 1].set_title("Gaps de Especificidade (RF-10)")
             self.axs_cross[1, 1].set_ylabel("ΔTm (s)")
-            self.axs_cross[1, 1].axhline(y=0, color='black', linestyle='-', alpha=0.3)
-            self.axs_cross[1, 1].tick_params(axis='x', rotation=45)
-            
+            self.axs_cross[1, 1].axhline(y=0, color="black", linestyle="-", alpha=0.3)
+            self.axs_cross[1, 1].tick_params(axis="x", rotation=45)
+
             for bar, gap in zip(bars, mean_gaps):
                 height = bar.get_height()
-                self.axs_cross[1, 1].text(bar.get_x() + bar.get_width()/2., height,
-                                         f'{gap:+.2f}s', ha='center', va='bottom' if gap >= 0 else 'top')
+                self.axs_cross[1, 1].text(bar.get_x() + bar.get_width() / 2.0, height, f"{gap:+.2f}s", ha="center", va="bottom" if gap >= 0 else "top")
 
             self.fig_cross.tight_layout()
             self.canvas_cross.draw_idle()
@@ -404,22 +371,22 @@ class ComparisonTab:
         if not self.cross_evaluation_results:
             messagebox.showwarning("Aviso", "Nenhum resultado de avaliação cruzada para exportar.")
             return
-        
+
         try:
             filename = filedialog.asksaveasfilename(
                 title="Salvar Relatório de Avaliação Cruzada",
                 defaultextension=".json",
                 filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
-                initialfile=f"cross_evaluation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                initialfile=f"cross_evaluation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
             )
-            
+
             if filename:
-                with open(filename, 'w', encoding='utf-8') as f:
+                with open(filename, "w", encoding="utf-8") as f:
                     json.dump(self.cross_evaluation_results, f, indent=2, ensure_ascii=False)
-                
+
                 messagebox.showinfo("Sucesso", f"Relatório exportado para:\n{filename}")
                 self.logger.info(f"Relatório de avaliação cruzada exportado: {filename}")
-                
+
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao exportar relatório: {e}")
 
@@ -435,14 +402,10 @@ class ComparisonTab:
                 return
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            
+
             # Salvar gráfico combinado
-            self.fig_cross.savefig(
-                os.path.join(directory, f"cross_evaluation_plots_{timestamp}.png"), 
-                dpi=300, 
-                bbox_inches="tight"
-            )
-            
+            self.fig_cross.savefig(os.path.join(directory, f"cross_evaluation_plots_{timestamp}.png"), dpi=300, bbox_inches="tight")
+
             messagebox.showinfo("Sucesso", f"Gráficos exportados para:\n{directory}")
             self.logger.info(f"Gráficos de avaliação cruzada exportados: {directory}")
 
