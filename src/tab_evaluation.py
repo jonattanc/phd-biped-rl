@@ -411,6 +411,7 @@ Análise:
             self._display_evaluation_results(evaluation["metrics"])
             messagebox.showinfo("Sucesso", "Avaliação histórica carregada!")
         except Exception as e:
+            self.logger.exception("Erro ao carregar avaliação histórica")
             messagebox.showerror("Erro", f"Erro ao carregar avaliação: {e}")
 
     def clear_history(self):

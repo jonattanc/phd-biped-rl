@@ -280,7 +280,7 @@ class Simulation(gym.Env):
                         vec_env = DummyVecEnv([lambda: self])
                         self.agent.model.set_env(vec_env)
                 except Exception as e:
-                    self.logger.warning(f"Não foi possível reconfigurar ambiente no reset: {e}")
+                    self.logger.exception("Não foi possível reconfigurar ambiente no reset")
 
         # Obter posição inicial
         robot_position, robot_orientation = self.robot.get_imu_position_and_orientation()
@@ -345,10 +345,11 @@ class Simulation(gym.Env):
                 # Enviar contagem de steps para a GUI
                 try:
                     self.ipc_queue.put_nowait({"type": "step_count", "steps": self.episode_steps})
-                except:
+                except Exception as e:
                     pass
-            except:
-                pass  # Ignorar erros de queue durante avaliação
+            except Exception as e:
+                self.logger.exception("Erro ao transmitir dados do episódio")
+                # Ignorar erros de queue durante avaliação
 
         if actual_episode_number % 10 == 0:
             self.logger.info(f"Episódio {actual_episode_number} concluído")

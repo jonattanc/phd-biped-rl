@@ -82,7 +82,7 @@ class Robot:
             joint_velocities = [s[1] for s in joint_states]
             return joint_positions, joint_velocities
         except Exception as e:
-            self.logger.warning(f"Erro ao obter estados das juntas: {e}")
+            self.logger.exception("Erro ao obter estados das juntas")
             return [], []  # Sempre retorna listas vazias
 
     def get_observation(self):
@@ -111,7 +111,7 @@ class Robot:
             orientation = p.getEulerFromQuaternion(link_state[1])
             return position, orientation
         except Exception as e:
-            self.logger.warning(f"Erro ao obter dados do IMU: {e}")
+            self.logger.exception("Erro ao obter dados do IMU")
             return [0, 0, 0], [0, 0, 0]
 
     def get_base_position_and_orientation(self):

@@ -68,7 +68,7 @@ def evaluate_and_save(model_path, circuit_name="PR", avatar_name="robot_stage1",
         return metrics
 
     except Exception as e:
-        logging.exception(f"Erro crítico na avaliação: {e}")
+        logging.exception("Erro crítico na avaliação")
         return None
     finally:
         if env is not None:

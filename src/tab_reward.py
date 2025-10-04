@@ -240,7 +240,7 @@ class RewardTab:
             return True
 
         except Exception as e:
-            self.logger.error(f"Erro ao carregar configuração ativa: {e}")
+            self.logger.exception("Erro ao carregar configuração ativa")
             return False
 
     def update_quick_editors(self):
@@ -293,6 +293,7 @@ class RewardTab:
                 messagebox.showerror("Erro", f"Configuração não encontrada: {config_path}")
 
         except Exception as e:
+            self.logger.exception("Erro ao carregar configuração selecionada")
             messagebox.showerror("Erro", f"Falha ao carregar configuração: {e}")
 
     def activate_selected_config(self):
@@ -339,6 +340,7 @@ class RewardTab:
                 return False
 
         except Exception as e:
+            self.logger.exception("Erro ao ativar configuração")
             messagebox.showerror("Erro", f"Falha ao ativar configuração: {e}")
             return False
 
@@ -372,6 +374,7 @@ class RewardTab:
                 messagebox.showinfo("Sucesso", f"Configuração '{name}' criada!")
 
             except Exception as e:
+                self.logger.exception("Erro ao criar nova configuração")
                 messagebox.showerror("Erro", f"Falha ao criar configuração: {e}")
 
     def save_config_as(self):
@@ -410,6 +413,7 @@ class RewardTab:
             messagebox.showinfo("Sucesso", f"Configuração salva como '{name}'")
 
         except Exception as e:
+            self.logger.exception("Erro ao salvar configuração")
             messagebox.showerror("Erro", f"Falha ao salvar configuração: {e}")
 
     def load_config(self):
@@ -440,6 +444,7 @@ class RewardTab:
                 messagebox.showinfo("Sucesso", f"Configuração '{filename}' carregada!")
 
             except Exception as e:
+                self.logger.exception("Erro ao carregar configuração")
                 messagebox.showerror("Erro", f"Falha ao carregar configuração: {e}")
 
     def on_scale_change(self, component_id, label_widget, var, entry_widget):

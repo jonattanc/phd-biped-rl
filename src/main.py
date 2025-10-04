@@ -131,5 +131,5 @@ if __name__ == "__main__":
         app.start()
         logger.info("Programa finalizado com sucesso.")
     except Exception as e:
-        logger.exception(f"Erro ao executar aplicação")
+        logger.exception("Erro ao executar aplicação")
         raise

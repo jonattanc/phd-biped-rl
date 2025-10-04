@@ -53,7 +53,6 @@ class TrainingCallback(BaseCallback):
         except Exception as e:
             # Em caso de erro, continuar o treinamento
             self.custom_logger.exception("Erro no callback de treinamento")
-            pass
 
         return True
 
@@ -144,14 +143,14 @@ class Agent:
             if hasattr(self.model, "action_space") and self.model.action_space is not None:
                 self.action_dim = self.model.action_space.shape[0]
             self.logger.info(f"Modelo PPO carregado: {model_path}")
-        except:
+        except Exception as e:
             try:
                 self.model = TD3.load(model_path)
                 self.algorithm = "TD3"
                 if hasattr(self.model, "action_space") and self.model.action_space is not None:
                     self.action_dim = self.model.action_space.shape[0]
                 self.logger.info(f"Modelo TD3 carregado: {model_path}")
-            except:
+            except Exception as e:
                 # Tentar carregar como FastTD3
                 self.model = FastTD3.load(model_path)
                 self.algorithm = "FastTD3"
@@ -318,10 +317,8 @@ class Agent:
                 self.logger.info(f"Episódio {episode + 1} finalizado: {episode_time:.2f}s, {steps} steps, sucesso: {episode_success}")
 
             except Exception as e:
-                self.logger.error(f"Erro no episódio {episode + 1}: {e}")
-                import traceback
+                self.logger.exception(f"Erro no episódio {episode + 1}: {e}")
 
-                self.logger.error(traceback.format_exc())
                 # Continuar para o próximo episódio
                 total_times.append(0.0)
                 total_rewards.append(0.0)

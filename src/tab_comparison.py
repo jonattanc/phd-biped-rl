@@ -387,6 +387,7 @@ class ComparisonTab:
                 self.logger.info(f"Relatório de avaliação cruzada exportado: {filename}")
 
         except Exception as e:
+            self.logger.exception("Erro ao exportar relatório de avaliação cruzada")
             messagebox.showerror("Erro", f"Erro ao exportar relatório: {e}")
 
     def export_cross_plots(self):
@@ -409,6 +410,7 @@ class ComparisonTab:
             self.logger.info(f"Gráficos de avaliação cruzada exportados: {directory}")
 
         except Exception as e:
+            self.logger.exception("Erro ao exportar gráficos de avaliação cruzada")
             messagebox.showerror("Erro", f"Erro ao exportar gráficos: {e}")
 
     def start(self):

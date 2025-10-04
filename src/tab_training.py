@@ -339,7 +339,7 @@ class TrainingTab:
                 else:
                     self.logger.info("Configuração ativa de recompensas carregada")
             except Exception as e:
-                self.logger.warning(f"Erro ao carregar configuração de recompensas: {e}. Usando padrão.")
+                self.logger.exception("Erro ao carregar configuração de recompensas. Usando padrão.")
 
             # Iniciar processo com config
             p = multiprocessing.Process(
@@ -633,7 +633,7 @@ class TrainingTab:
                         if os.path.exists(control_path):
                             os.remove(control_path)
                             self.logger.info("Arquivo de controle removido")
-                    except:
+                    except Exception as e:
                         pass
 
                     return True
@@ -643,7 +643,7 @@ class TrainingTab:
             return False
 
         except Exception as e:
-            self.logger.exception(f"Erro no sistema de controle de salvamento")
+            self.logger.exception("Erro no sistema de controle de salvamento")
             return False
 
     def _save_additional_data(self, session_dir):
@@ -660,7 +660,7 @@ class TrainingTab:
             self.save_plots_to_directory(plots_dir)
 
         except Exception as e:
-            self.logger.exception(f"Erro ao salvar dados adicionais")
+            self.logger.exception("Erro ao salvar dados adicionais")
 
     def load_training_data(self):
         """Carrega dados de treinamento salvos e prepara para retomada"""
@@ -766,7 +766,7 @@ class TrainingTab:
                 self.logger.info(f"Informações de treino carregadas: recompensa={self.tracker.best_reward}, steps={self.total_steps}")
 
             except Exception as e:
-                self.logger.warning(f"Erro ao carregar informações de treino: {e}")
+                self.logger.exception("Erro ao carregar informações de treino")
 
         # Configurar sistema básico se não existir
         if not hasattr(self, "best_models_dir"):
@@ -832,6 +832,7 @@ class TrainingTab:
             dimension_window.bind("<Escape>", lambda e: cancel_export())
 
         except Exception as e:
+            self.logger.exception("Erro ao exportar gráficos")
             messagebox.showerror("Erro", f"Erro ao exportar gráficos: {e}")
 
     def save_plots_to_directory(self, directory, width=10, height=8, dpi=300):
@@ -977,7 +978,7 @@ class TrainingTab:
             self.canvas.draw()
 
         except Exception as e:
-            self.logger.exception(f"Plot error")
+            self.logger.exception("Plot error")
 
         after_id = self.root.after(500, self._refresh_plots)
         self.after_ids["_refresh_plots"] = after_id
@@ -1067,7 +1068,7 @@ class TrainingTab:
                 self.tracker_status_label.config(foreground="black")
 
         except Exception as e:
-            self.logger.warning(f"Erro ao atualizar status do tracker: {e}")
+            self.logger.exception("Erro ao atualizar status do tracker")
             self.tracker_status_label.config(text="Status: Erro no tracker")
 
     def _setup_auto_save_system(self):
@@ -1265,7 +1266,7 @@ class TrainingTab:
         for after_id in self.after_ids.values():
             try:
                 self.root.after_cancel(after_id)
-            except:
+            except Exception as e:
                 pass
 
         # Limpar o dicionário de after_ids

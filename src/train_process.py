@@ -70,8 +70,9 @@ def process_runner(
                                 # Enviar confirmação via IPC
                                 try:
                                     ipc_queue.put({"type": "model_saved", "model_path": model_path})
-                                except:
-                                    pass
+                                except Exception as e:
+                                    logger.exception("Erro ao enviar confirmação de salvamento via IPC")
+
                             else:
                                 logger.error(f"FALHA: Arquivo não criado: {model_path}")
 
@@ -79,11 +80,11 @@ def process_runner(
                             try:
                                 os.remove(control_path)
                                 logger.info(f"Arquivo de controle removido: {control_file}")
-                            except:
+                            except Exception as e:
                                 logger.warning(f"Não foi possível remover: {control_file}")
 
                     except Exception as e:
-                        logger.exception(f"Erro ao processar arquivo de controle {control_file}: {e}")
+                        logger.exception(f"Erro ao processar arquivo de controle {control_file}")
 
             except Exception as e:
                 logger.exception("Erro ao verificar arquivos de controle")
@@ -110,12 +111,12 @@ def process_runner(
                                 if os.path.exists(model_path):
                                     try:
                                         ipc_queue.put({"type": "model_saved", "model_path": model_path})
-                                    except:
+                                    except Exception as e:
                                         pass
 
                                 try:
                                     os.remove(control_path)
-                                except:
+                                except Exception as e:
                                     pass
 
                         except Exception as e:
@@ -140,8 +141,8 @@ def process_runner(
                 # Enviar progresso para GUI
                 try:
                     ipc_queue.put_nowait({"type": "training_progress", "steps_completed": timesteps_completed, "total_steps": total_timesteps})
-                except:
-                    pass
+                except Exception as e:
+                    logger.exception("Erro ao enviar progresso via IPC")
 
                 if timesteps_completed % 10000 == 0:
                     logger.info(f"Progresso: {timesteps_completed}/{total_timesteps} timesteps")
@@ -226,8 +227,8 @@ def process_runner_resume(selected_environment, selected_robot, algorithm, ipc_q
 
                                 try:
                                     ipc_queue.put({"type": "model_saved", "model_path": save_model_path})
-                                except:
-                                    pass
+                                except Exception as e:
+                                    logger.exception("Erro ao enviar confirmação de salvamento via IPC")
                             else:
                                 logger.error(f"FALHA: Arquivo não criado: {save_model_path}")
 
@@ -235,7 +236,7 @@ def process_runner_resume(selected_environment, selected_robot, algorithm, ipc_q
                             try:
                                 os.remove(control_path)
                                 logger.info(f"Arquivo de controle removido: {control_file}")
-                            except:
+                            except Exception as e:
                                 logger.warning(f"Não foi possível remover: {control_file}")
 
                     except Exception as e:
@@ -265,12 +266,12 @@ def process_runner_resume(selected_environment, selected_robot, algorithm, ipc_q
                                 if os.path.exists(save_model_path):
                                     try:
                                         ipc_queue.put({"type": "model_saved", "model_path": save_model_path})
-                                    except:
-                                        pass
+                                    except Exception as e:
+                                        logger.exception("Erro ao enviar confirmação de salvamento via IPC")
 
                                 try:
                                     os.remove(control_path)
-                                except:
+                                except Exception as e:
                                     pass
 
                         except Exception as e:

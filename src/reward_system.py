@@ -196,7 +196,7 @@ class RewardSystem:
             self._record_step_data(reward_breakdown, total_reward, simulation.episode_steps)
 
         except Exception as e:
-            self.logger.error(f"Erro no cálculo de recompensa: {e}")
+            self.logger.exception("Erro no cálculo de recompensa")
             # Fallback para recompensa básica
             total_reward = (simulation.episode_distance - simulation.episode_last_distance) * 10.0
 
@@ -232,7 +232,7 @@ class RewardSystem:
             return True
 
         except Exception as e:
-            self.logger.error(f"Erro ao carregar configuração: {e}")
+            self.logger.exception("Erro ao carregar configuração")
             return False
 
     def load_configuration_file(self, filepath):
@@ -242,7 +242,7 @@ class RewardSystem:
                 config = json.load(f)
             return self.load_configuration(config)
         except Exception as e:
-            self.logger.error(f"Erro ao carregar arquivo de configuração: {e}")
+            self.logger.exception("Erro ao carregar arquivo de configuração")
             return False
 
     def save_configuration(self, filepath, config_data=None):
@@ -268,7 +268,7 @@ class RewardSystem:
             return True
 
         except Exception as e:
-            self.logger.error(f"Erro ao salvar configuração: {e}")
+            self.logger.exception("Erro ao salvar configuração")
             return False
 
     def update_component(self, name, weight=None, enabled=None):
@@ -338,7 +338,7 @@ class RewardSystem:
                 return False
 
         except Exception as e:
-            self.logger.error(f"Falha ao ativar configuração: {e}")
+            self.logger.exception("Falha ao ativar configuração")
             return False
 
     def load_active_configuration(self):
@@ -396,7 +396,7 @@ class RewardSystem:
                 return False
 
         except Exception as e:
-            self.logger.error(f"Erro ao carregar configuração ativa: {e}")
+            self.logger.exception("Erro ao carregar configuração ativa")
             # Em caso de erro, usar configuração padrão interna
             self.logger.info("Usando configuração padrão interna devido a erro")
             return False
@@ -411,7 +411,8 @@ class RewardSystem:
             # Normalizar para 0-1 (menor variância = mais regular)
             regularity = 1.0 / (1.0 + variance)
             return regularity
-        except:
+        except Exception as e:
+            self.logger.exception("Erro. Retornando valor padrão para regularidade da marcha")
             return 0.5
 
     def _calculate_symmetry(self, joint_velocities):
@@ -430,7 +431,8 @@ class RewardSystem:
 
             symmetry = 1.0 - abs(left_effort - right_effort) / (left_effort + right_effort)
             return symmetry
-        except:
+        except Exception as e:
+            self.logger.exception("Erro. Retornando valor padrão para simetria")
             return 0.5
 
     def _estimate_foot_clearance(self, joint_positions):
@@ -442,7 +444,8 @@ class RewardSystem:
             # Verificar se alguma junta está em posição extrema (proxy para pé no chão)
             extreme_positions = sum(1 for pos in joint_positions if abs(pos) > 0.8)
             return extreme_positions < len(joint_positions) * 0.5
-        except:
+        except Exception as e:
+            self.logger.exception("Erro. Retornando valor padrão para clearance do pé")
             return True
 
     def _record_step_data(self, reward_breakdown, total_reward, step):
