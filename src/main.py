@@ -10,6 +10,8 @@ import utils
 from tab_training import TrainingTab
 from tab_evaluation import EvaluationTab
 from tab_comparison import ComparisonTab
+from tab_reward import RewardTab
+from reward_system import RewardSystem
 
 
 class TrainingGUI:
@@ -20,6 +22,7 @@ class TrainingGUI:
 
         self.device = device
         self.logger = utils.get_logger()
+        self.reward_system = RewardSystem(self.logger)
 
         self.setup_ui()
 
@@ -32,6 +35,7 @@ class TrainingGUI:
         notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
         # Criar abas
+        self.reward_tab = RewardTab(notebook, self.device, self.logger, self.reward_system)
         self.training_tab = TrainingTab(notebook, self.device, self.logger)
         self.evaluation_tab = EvaluationTab(notebook, self.device, self.logger)
         self.comparison_tab = ComparisonTab(notebook, self.device, self.logger)
@@ -40,6 +44,7 @@ class TrainingGUI:
         notebook.add(self.training_tab.frame, text="Treinamento")
         notebook.add(self.evaluation_tab.frame, text="Avaliação Individual")
         notebook.add(self.comparison_tab.frame, text="Avaliação Cruzada")
+        notebook.add(self.reward_tab.frame, text="Configuração de Recompensas")
 
     def on_closing(self):
         """Fecha todas as abas adequadamente"""
@@ -63,6 +68,8 @@ class TrainingGUI:
 
     def start(self):
         # Iniciar componentes das abas
+        self.reward_tab.start()
+        self.training_tab.reward_system = self.reward_system
         self.training_tab.start()
         self.evaluation_tab.start()
         self.comparison_tab.start()

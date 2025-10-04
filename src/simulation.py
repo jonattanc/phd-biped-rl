@@ -1,11 +1,11 @@
 # simulation.py
-
 import pybullet as p
 import gymnasium as gym
 import time
 import numpy as np
 import random
 from stable_baselines3.common.vec_env import DummyVecEnv
+from reward_system import RewardSystem
 
 
 class Simulation(gym.Env):
@@ -27,7 +27,8 @@ class Simulation(gym.Env):
         self.logger = logger
         self.agent = None
         self.physics_client = None
-
+        self.reward_system = RewardSystem(logger)
+        
         # Configurações de simulação
         self.fall_threshold = 0.5  # m
         self.yaw_threshold = 0.5  # rad
@@ -282,6 +283,7 @@ class Simulation(gym.Env):
         self.episode_last_action = np.zeros(self.action_dim, dtype=float)
         self.episode_steps = 0
         self.episode_info = {}
+        self.last_joint_velocities = None
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -290,6 +292,7 @@ class Simulation(gym.Env):
         """
         # Reiniciar variáveis do episódio
         self.reset_episode_vars()
+        self.reward_system.start_episode(self.episode_count)
 
         # Resetar ambiente de simulação
         if self.is_visualization_enabled != self.enable_visualization_value.value:
@@ -344,6 +347,7 @@ class Simulation(gym.Env):
     def on_episode_end(self):
         """Processa o final do episódio apenas se ipc_queue estiver disponível"""
         self.episode_count += 1
+        self.reward_system.end_episode()
 
         # Obter posição e orientação final da IMU
         imu_position, imu_orientation = self.robot.get_imu_position_and_orientation()
@@ -410,178 +414,9 @@ class Simulation(gym.Env):
 
     def get_reward(self, action, robot_state, env_conditions=None):
         """
-        Calcula a recompensa com parâmetro opcional para compatibilidade
+        Calcula a recompensa usando o sistema de recompensas
         """
-        reward = 0.0
-
-        # Se env_conditions não for fornecido, criar um padrão
-        if env_conditions is None:
-            env_conditions = {
-                "foot_slip": 0.0,
-                "ramp_speed": 0.0,
-                "com_drop": 0.0,
-                "joint_failure": False
-            }
-    
-        # Definir limites da plataforma
-        PLATFORM_WIDTH = 1.0   # Largura total da plataforma
-        PLATFORM_CENTER = 0.0  # Centro da plataforma
-        SAFE_ZONE = 0.2       # Zona segura central
-        WARNING_ZONE = 0.4    # Zona de aviso
-    
-        # Calcular distância do centro
-        robot_position, robot_orientation = self.robot.get_imu_position_and_orientation()
-        pos_y = robot_position[1]      # Posição lateral (eixo Y)
-        distance_from_center = abs(pos_y - PLATFORM_CENTER)
-        normalized_distance = distance_from_center / (PLATFORM_WIDTH / 2)
-                
-        # ===== FASE 1: RECOMPENSAS CRÍTICAS =====
-        # 1. Avanço no percurso
-        progress = self.episode_distance - self.episode_last_distance
-        reward += progress * 9.0
-        reward += self.episode_distance * 2.0  # incentivo de longo prazo
-
-        # 2. Margem de Estabilidade Dinâmica (MOS)
-        # Se robot_state for apenas orientação (tupla), converter para dict
-        if isinstance(robot_state, (tuple, list)) and len(robot_state) == 3:
-            # Assumindo que é (roll, pitch, yaw)
-            roll, pitch, yaw = robot_state
-            robot_state = {
-                "mos": 0.1,  # valor padrão
-                "orientation": (roll, pitch, yaw),
-                "joint_torques": [0] * self.action_dim,
-                "jerk": 0.0,
-                "joint_velocities": [0] * self.action_dim,
-                "step_time_left": 0.5,
-                "step_time_right": 0.5,
-                "foot_impact": 0.5,
-                "foot_angle": 0.0,
-                "foot_clearance": 0.1,
-                "ankle_torque": 0.0,
-                "com_gain": 1.0,
-                "ds_left": 0.3,
-                "ds_right": 0.3,
-                "support_ratio": 0.6
-            }
-
-        mos = robot_state.get("mos", 0.1)
-        if mos > 0:
-            reward += mos * 3.0
-        else:
-            reward -= 100  # queda
-            self.episode_terminated = True
-
-        # 3. Orientação do torso
-        orientation = robot_state.get("orientation", (0, 0, 0))
-        roll, pitch, yaw = orientation
-        reward += -0.01 * roll*2 - 0.04 * pitch*2
-        if abs(yaw) > 20:  
-            reward -= 2.0
-
-        # ===== FASE 2: EFICIÊNCIA E ADAPTAÇÃO =====
-        # 4. Economia de torque
-        torque_sum = sum(abs(t) for t in robot_state.get("joint_torques", [0] * self.action_dim))
-        reward += -0.001 * torque_sum
-
-        # 5. Suavidade (jerk e velocidades articulares)
-        jerk = robot_state.get("jerk", 0.0)
-        reward += -0.05 * jerk
-        for v in robot_state.get("joint_velocities", [0] * self.action_dim):
-            if 60 <= abs(v) <= 120:
-                reward += 0.1
-            else:
-                reward -= 0.05
-
-        # 6. Ajuste ao atrito (escorregamento do pé)
-        slip = env_conditions.get("foot_slip", 0.0)
-        if slip < 0.01:
-            reward += 1.0
-        else:
-            reward -= 5.0
-
-        # 7. Eficiência em rampas
-        ramp_speed = env_conditions.get("ramp_speed", 0.0)
-        if ramp_speed > 0:
-            reward += ramp_speed * 2.0
-        else:
-            reward -= 10.0
-
-        # 8. Penetração controlada em piso granular
-        com_drop = env_conditions.get("com_drop", 0.0)
-        if com_drop < 0.05:
-            reward += 2.0
-        else:
-            reward -= com_drop * 20.0
-
-        # 9. Compensação articular para falhas
-        if env_conditions.get("joint_failure", False):
-            if progress > 0 and mos > 0:
-                reward += 10.0
-
-        # ===== FASE 3: REFINAMENTO =====
-        # 10. Regularidade da marcha
-        step_time_left = robot_state.get("step_time_left", 0.5)
-        step_time_right = robot_state.get("step_time_right", 0.5)
-        step_diff = abs(step_time_left - step_time_right)
-        if step_diff / max(step_time_left, 1e-6) < 0.1:
-            reward += 2.0
-        else:
-            reward -= 1.0
-
-        # 11. Contato inicial adequado
-        foot_impact = robot_state.get("foot_impact", 0.5)
-        foot_angle = robot_state.get("foot_angle", 0.0)
-        reward += -0.1 * abs(foot_impact - 0.5)
-        if abs(foot_angle) < 10:
-            reward += 1.0
-
-        # 12. Clearance do pé
-        clearance = robot_state.get("foot_clearance", 0.1)
-        if 0.05 <= clearance <= 0.15:
-            reward += 1.5
-        else:
-            reward -= 0.5
-
-        # 13. Propulsão eficiente no pré-balanço
-        ankle_torque = robot_state.get("ankle_torque", 0.0)
-        com_gain = robot_state.get("com_gain", 1.0)
-        reward += 0.1 * (ankle_torque * com_gain)
-
-        # 14. Simetria de duplo apoio
-        ds_left = robot_state.get("ds_left", 0.3)
-        ds_right = robot_state.get("ds_right", 0.3)
-        double_support_diff = abs(ds_left - ds_right)
-        if double_support_diff < 0.05:
-            reward += 1.0
-        else:
-            reward -= 1.0
-
-        # 15. Tempo relativo apoio/balanço
-        support_ratio = robot_state.get("support_ratio", 0.6)
-        if 0.5 <= support_ratio <= 0.7:  # próximo de 60/40
-            reward += 1.0
-
-        # 16. Manutenção no centro da plataforma
-        if distance_from_center <= SAFE_ZONE:
-            # Zona segura: recompensa máxima no centro, decaindo suavemente
-            safe_factor = 1.0 - (distance_from_center / SAFE_ZONE)
-            center_reward = safe_factor * 5.0 
-            reward += center_reward
-
-        elif distance_from_center <= WARNING_ZONE:
-            # Zona de aviso: penalidade leve que aumenta com a distância
-            warning_factor = (distance_from_center - SAFE_ZONE) / (WARNING_ZONE - SAFE_ZONE)
-            warning_penalty = -3.0 * warning_factor  
-            reward += warning_penalty
-
-        # ===== SUCESSO OU FALHA =====
-        if self.episode_terminated:
-            if self.episode_success:
-                reward += 100
-            else:
-                reward -= 250
-
-        return reward
+        return self.reward_system.calculate_reward(self, action, robot_state, env_conditions)
 
     def step(self, action):
         """

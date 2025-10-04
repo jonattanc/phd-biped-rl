@@ -72,10 +72,18 @@ class Robot:
         return len(self.revolute_indices)
 
     def get_joint_states(self):
-        joint_states = p.getJointStates(self.id, self.revolute_indices)
-        joint_positions = [s[0] for s in joint_states]
-        joint_velocities = [s[1] for s in joint_states]
-        return joint_positions, joint_velocities
+        """Retorna posições e velocidades das juntas COM VERIFICAÇÃO"""
+        try:
+            if self.id is None or self.revolute_indices is None:
+                return [], []  # Retorna listas vazias em vez de None
+            
+            joint_states = p.getJointStates(self.id, self.revolute_indices)
+            joint_positions = [s[0] for s in joint_states]
+            joint_velocities = [s[1] for s in joint_states]
+            return joint_positions, joint_velocities
+        except Exception as e:
+            self.logger.warning(f"Erro ao obter estados das juntas: {e}")
+            return [], []  # Sempre retorna listas vazias
 
     def get_observation(self):
         """Retorna observação"""
@@ -93,10 +101,18 @@ class Robot:
         return obs
 
     def get_imu_position_and_orientation(self):
-        link_state = p.getLinkState(self.id, self.imu_link_index, computeLinkVelocity=1)
-        position = link_state[0]
-        orientation = p.getEulerFromQuaternion(link_state[1])
-        return position, orientation
+        """Retorna posição e orientação do IMU COM VERIFICAÇÃO"""
+        try:
+            if self.id is None:
+                return [0, 0, 0], [0, 0, 0]  # Valores padrão
+            
+            link_state = p.getLinkState(self.id, self.imu_link_index, computeLinkVelocity=1)
+            position = link_state[0]
+            orientation = p.getEulerFromQuaternion(link_state[1])
+            return position, orientation
+        except Exception as e:
+            self.logger.warning(f"Erro ao obter dados do IMU: {e}")
+            return [0, 0, 0], [0, 0, 0]
 
     def get_base_position_and_orientation(self):
         """Retorna a posição e orientação atual da base do robô"""

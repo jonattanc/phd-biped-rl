@@ -26,6 +26,7 @@ class TrainingTab:
         self.frame = ttk.Frame(parent, padding="10")
         self.device = device
         self.logger = logger
+        self.reward_system = None
 
         # Dados de treinamento
         self.current_env = ""
@@ -332,9 +333,22 @@ class TrainingTab:
             self.enable_visualization_values.append(enable_visualization_val)
             self.enable_real_time_values.append(realtime_val)
 
+            # CARREGAR CONFIGURAÇÃO ATIVA DE RECOMPENSAS AUTOMATICAMENTE
+            try:
+                reward_config = self.reward_system.load_active_configuration()
+                if not reward_config:
+                    self.logger.info("Usando configuração padrão de recompensas")
+                else:
+                    self.logger.info("Configuração ativa de recompensas carregada")
+            except Exception as e:
+                self.logger.warning(f"Erro ao carregar configuração de recompensas: {e}. Usando padrão.")
+            
+            # Iniciar processo com config
             p = multiprocessing.Process(
                 target=train_process.process_runner,
-                args=(self.current_env, self.current_robot, self.current_algorithm, self.ipc_queue, pause_val, exit_val, enable_visualization_val, realtime_val, self.device),
+                args=(self.current_env, self.current_robot, self.current_algorithm, 
+                      self.ipc_queue, pause_val, exit_val, enable_visualization_val, 
+                      realtime_val, self.device, reward_config),
             )
             p.start()
             self.processes.append(p)

@@ -22,6 +22,8 @@ class FormattedQueueHandler(logging.Handler):
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TMP_PATH = os.path.join(PROJECT_ROOT, "tmp")
 LOGS_PATH = os.path.join(PROJECT_ROOT, "logs")
+ESPECIALISTAS_PATH = os.path.join(PROJECT_ROOT, "especialistas")
+REWARD_CONFIGS_PATH = os.path.join(PROJECT_ROOT, "reward_configs")
 ENVIRONMENT_PATH = os.path.join(PROJECT_ROOT, "environments")
 ROBOTS_PATH = os.path.join(PROJECT_ROOT, "robots")
 TRAINING_DATA_PATH = os.path.join(PROJECT_ROOT, "training_data")

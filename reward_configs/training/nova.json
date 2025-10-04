@@ -1,0 +1,102 @@
+{
+  "metadata": {
+    "name": "nova",
+    "version": "1.0",
+    "description": "nova",
+    "created": "2025-10-04T01:35:11.646106",
+    "based_on": "training/completo"
+  },
+  "global_settings": {
+    "fall_threshold": 0.5,
+    "success_distance": 10.0,
+    "platform_width": 1.0,
+    "safe_zone": 0.2,
+    "warning_zone": 0.4
+  },
+  "components": {
+    "progress": {
+      "weight": 166.33922724296005,
+      "enabled": true,
+      "min_value": -Infinity,
+      "max_value": Infinity
+    },
+    "distance_bonus": {
+      "weight": 2.0,
+      "enabled": true,
+      "min_value": -Infinity,
+      "max_value": Infinity
+    },
+    "stability_roll": {
+      "weight": -0.1,
+      "enabled": true,
+      "min_value": -Infinity,
+      "max_value": Infinity
+    },
+    "stability_pitch": {
+      "weight": -0.4,
+      "enabled": true,
+      "min_value": -Infinity,
+      "max_value": Infinity
+    },
+    "yaw_penalty": {
+      "weight": -2.0,
+      "enabled": true,
+      "min_value": -Infinity,
+      "max_value": Infinity
+    },
+    "fall_penalty": {
+      "weight": -100.0,
+      "enabled": true,
+      "min_value": -Infinity,
+      "max_value": Infinity
+    },
+    "success_bonus": {
+      "weight": 200.0,
+      "enabled": true,
+      "min_value": -Infinity,
+      "max_value": Infinity
+    },
+    "effort_penalty": {
+      "weight": -0.001,
+      "enabled": true,
+      "min_value": -Infinity,
+      "max_value": Infinity
+    },
+    "jerk_penalty": {
+      "weight": -0.05,
+      "enabled": true,
+      "min_value": -Infinity,
+      "max_value": Infinity
+    },
+    "center_bonus": {
+      "weight": 5.0,
+      "enabled": true,
+      "min_value": -Infinity,
+      "max_value": Infinity
+    },
+    "warning_penalty": {
+      "weight": -3.0,
+      "enabled": true,
+      "min_value": -Infinity,
+      "max_value": Infinity
+    },
+    "gait_regularity": {
+      "weight": 4.223968565815324,
+      "enabled": true,
+      "min_value": -Infinity,
+      "max_value": Infinity
+    },
+    "symmetry_bonus": {
+      "weight": 1.0,
+      "enabled": true,
+      "min_value": -Infinity,
+      "max_value": Infinity
+    },
+    "clearance_bonus": {
+      "weight": 1.5,
+      "enabled": true,
+      "min_value": -Infinity,
+      "max_value": Infinity
+    }
+  }
+}

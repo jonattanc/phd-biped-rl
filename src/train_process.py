@@ -1,5 +1,6 @@
 # train_process.py
 import multiprocessing
+import reward_system
 from robot import Robot
 from simulation import Simulation
 from environment import Environment
@@ -10,7 +11,8 @@ import os
 import json
 
 
-def process_runner(selected_environment, selected_robot, algorithm, ipc_queue, pause_value, exit_value, enable_visualization_value, enable_real_time_value, device="cpu", initial_episode=0):
+def process_runner(selected_environment, selected_robot, algorithm, ipc_queue, pause_value, exit_value, enable_visualization_value, enable_real_time_value, device="cpu", initial_episode=0,
+                  reward_config=None):
     """Função executada no processo separado para treinamento real"""
 
     logger = utils.get_logger([selected_environment, selected_robot, algorithm], ipc_queue)
@@ -151,6 +153,15 @@ def process_runner(selected_environment, selected_robot, algorithm, ipc_queue, p
 
     except Exception as e:
         logger.exception("Erro em process_runner")
+
+    # CONFIGURAR SISTEMA DE RECOMPENSAS
+    if reward_config is not None:
+        sim.reward_system.load_configuration(reward_config)
+        logger.info("Configuração de recompensas carregada")
+    else:
+        # Fallback para padrão
+        sim.reward_system.load_active_configuration()
+        logger.info("Usando configuração padrão de recompensas")
 
     ipc_queue.put({"type": "done"})
 
