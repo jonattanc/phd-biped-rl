@@ -2,11 +2,11 @@
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="descending_ramp_with_sections">
   <!-- Plane properties -->
   <xacro:property name="initial_section_length" value="1.0" />
-  <xacro:property name="middle_section_length" value="8.0" />
+  <xacro:property name="middle_section_length" value="7.9156005496" /> <!-- cos(ramp_angle) * hypotenuse = cos(8.33 deg) * 8.0 -->
   <xacro:property name="final_section_length" value="1.0" />
   <xacro:property name="plane_width" value="1.5" />
   <xacro:property name="plane_height" value="0.1" />
-  <xacro:property name="ramp_height" value="2.14359353945" /> <!-- tan(ramp_angle) * ramp_length = tan(15 deg) * 8.0 -->
+  <xacro:property name="ramp_height" value="1.15899436545" /> <!-- sin(ramp_angle) * hypotenuse = sin(8.33 deg) * 8.0 -->
   <xacro:property name="section_mass" value="10000" />
   <xacro:property name="section_ixx" value="1000" />
   <xacro:property name="section_iyy" value="1000" />

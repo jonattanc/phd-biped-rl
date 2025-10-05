@@ -8,10 +8,11 @@ import numpy as np
 
 
 def create_ramp_stl(filename, ascending=True):
-    length = 8.0
+    hypotenuse = 8.0
     width = 1.5
-    angle_deg = 15
-    height = np.tan(np.radians(angle_deg)) * length
+    angle_deg = 8.33
+    height = np.sin(np.radians(angle_deg)) * hypotenuse
+    length = np.cos(np.radians(angle_deg)) * hypotenuse
 
     vertices = np.array(
         [
