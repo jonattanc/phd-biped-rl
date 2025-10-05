@@ -168,7 +168,9 @@ def process_runner(
     ipc_queue.put({"type": "done"})
 
 
-def process_runner_resume(selected_environment, selected_robot, algorithm, ipc_queue, pause_value, exit_value, enable_real_time_value, device="cpu", model_path=None, initial_episode=0):
+def process_runner_resume(
+    selected_environment, selected_robot, algorithm, ipc_queue, pause_value, exit_value, enable_visualization_value, enable_real_time_value, device="cpu", model_path=None, initial_episode=0
+):
     """Função executada no processo separado para retomar treinamento"""
 
     logger = utils.get_logger([selected_environment, selected_robot, algorithm], ipc_queue)
@@ -181,7 +183,6 @@ def process_runner_resume(selected_environment, selected_robot, algorithm, ipc_q
         # Criar componentes
         environment = Environment(logger, name=selected_environment)
         robot = Robot(logger, name=selected_robot)
-        enable_visualization_value = multiprocessing.Value("b", False)
         sim = Simulation(logger, robot, environment, ipc_queue, pause_value, exit_value, enable_visualization_value, enable_real_time_value)
 
         agent = Agent(logger, model_path=model_path, device=device, initial_episode=initial_episode)

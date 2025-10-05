@@ -368,6 +368,7 @@ class TrainingTab:
 
             self.pause_values.append(pause_val)
             self.exit_values.append(exit_val)
+            enable_visualization_val = multiprocessing.Value("b", self.enable_visualization_var.get())
             realtime_val = multiprocessing.Value("b", self.real_time_var.get())
 
             self.logger.info(f"Retomando treinamento - episódio: {self.current_episode}")
@@ -381,7 +382,19 @@ class TrainingTab:
 
             p = multiprocessing.Process(
                 target=train_process.process_runner_resume,
-                args=(self.current_env, self.current_robot, self.current_algorithm, self.ipc_queue, pause_val, exit_val, realtime_val, self.device, model_path, self.current_episode),
+                args=(
+                    self.current_env,
+                    self.current_robot,
+                    self.current_algorithm,
+                    self.ipc_queue,
+                    pause_val,
+                    exit_val,
+                    enable_visualization_val,
+                    realtime_val,
+                    self.device,
+                    model_path,
+                    self.current_episode,
+                ),
             )
             p.start()
             self.processes.append(p)
