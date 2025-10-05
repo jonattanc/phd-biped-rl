@@ -18,7 +18,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from best_model_tracker import BestModelTracker
 import train_process
 import utils
-from utils import ensure_directory, setup_ipc_logging, ENVIRONMENT_PATH, ROBOTS_PATH
+from utils import ensure_directory, ENVIRONMENT_PATH, ROBOTS_PATH
 
 
 class TrainingTab:
@@ -92,7 +92,7 @@ class TrainingTab:
         self.plot_data_keys = ["rewards", "times", "distances", "imu_xyz", "rpy"]
 
         # Configurar IPC logging
-        setup_ipc_logging(self.logger, self.ipc_queue)
+        utils.add_queue_handler_to_logger(self.logger, self.ipc_queue)
 
         self.setup_ui()
         self.setup_ipc()

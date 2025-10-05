@@ -30,7 +30,7 @@ class ComparisonTab:
         self.cross_evaluator = None
 
         # Configurar IPC logging
-        utils.setup_ipc_logging(self.logger, self.ipc_queue)
+        utils.add_queue_handler_to_logger(self.logger, self.ipc_queue)
 
         self.setup_ui()
 

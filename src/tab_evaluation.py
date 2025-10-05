@@ -13,7 +13,7 @@ import pandas as pd
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import utils
-from utils import setup_ipc_logging, validate_episodes_count, ensure_directory
+from utils import validate_episodes_count, ensure_directory
 
 
 class EvaluationTab:
@@ -41,7 +41,7 @@ class EvaluationTab:
         self.canvas_evaluation = None
 
         # Configurar IPC logging
-        setup_ipc_logging(self.logger, self.ipc_queue)
+        utils.add_queue_handler_to_logger(self.logger, self.ipc_queue)
 
         self.setup_ui()
 

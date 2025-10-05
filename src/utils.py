@@ -61,7 +61,7 @@ def get_logger(description=["main"], ipc_queue=None):
 
 
 # Funções de Logging e IPC
-def setup_ipc_logging(logger, ipc_queue):
+def add_queue_handler_to_logger(logger, ipc_queue):
     """Configura logging para IPC entre processos"""
     if ipc_queue is not None:
         # Verificar se o logger já tem um handler de queue para evitar duplicação
