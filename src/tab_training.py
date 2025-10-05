@@ -48,25 +48,6 @@ class TrainingTab:
         self.after_ids = {}
         self.new_plot_data = False
 
-        # Componentes da UI
-        self.algorithm_var = None
-        self.env_var = None
-        self.robot_var = None
-        self.start_btn = None
-        self.pause_btn = None
-        self.stop_btn = None
-        self.save_training_btn = None
-        self.load_training_btn = None
-        self.export_plots_btn = None
-        self.real_time_var = None
-        self.steps_label = None
-        self.log_text = None
-
-        # Gráficos
-        self.fig = None
-        self.axs = None
-        self.canvas = None
-
         # Configurações de treinamento
         self.total_steps = None
         self.steps_per_second = 0
