@@ -82,23 +82,8 @@ class Simulation(gym.Env):
         # Carregar ambiente primeiro
         self.environment.load_in_simulation(use_fixed_base=True)
 
-        # Carregar robô diretamente na posição correta usando o método original
-        start_position = [0.2, 0, 0.06]  # x=0.2m (centro da primeira seção), y=0, z=0.06m
-        start_orientation = p.getQuaternionFromEuler([0, 0, 0])
-
-        # Carregar URDF diretamente com posição/orientação
-        self.robot.id = p.loadURDF(self.robot.urdf_path, start_position, start_orientation)
-
-        # Configurar o robô após carregamento
-        self.robot.imu_link_index = self.robot.get_link_index("imu_link")
-        num_joints = p.getNumJoints(self.robot.id)
-        self.robot.revolute_indices = [i for i in range(num_joints) if p.getJointInfo(self.robot.id, i)[2] == p.JOINT_REVOLUTE]
-        self.robot.initial_position, self.robot.initial_orientation = p.getBasePositionAndOrientation(self.robot.id)
-
-        self.robot.initial_joint_states = []
-        for j in range(p.getNumJoints(self.robot.id)):
-            joint_info = p.getJointState(self.robot.id, j)
-            self.robot.initial_joint_states.append(joint_info[0])
+        # Carregar robô após o ambiente
+        self.robot.load_in_simulation()
 
     def set_agent(self, agent):
         self.agent = agent
@@ -220,23 +205,8 @@ class Simulation(gym.Env):
         # Recarregar ambiente
         self.environment.load_in_simulation(use_fixed_base=True)
 
-        # Recarregar robô diretamente na posição correta
-
-        start_position = [0.2, 0, 0.06]  # x=0.2m, y=0, z=0.06m
-        start_orientation = p.getQuaternionFromEuler([0, 0, 0])
-
-        self.robot.id = p.loadURDF(self.robot.urdf_path, start_position, start_orientation)
-
-        # Reconfigurar o robô após carregamento
-        self.robot.imu_link_index = self.robot.get_link_index("imu_link")
-        num_joints = p.getNumJoints(self.robot.id)
-        self.robot.revolute_indices = [i for i in range(num_joints) if p.getJointInfo(self.robot.id, i)[2] == p.JOINT_REVOLUTE]
-        self.robot.initial_position, self.robot.initial_orientation = p.getBasePositionAndOrientation(self.robot.id)
-
-        self.robot.initial_joint_states = []
-        for j in range(p.getNumJoints(self.robot.id)):
-            joint_info = p.getJointState(self.robot.id, j)
-            self.robot.initial_joint_states.append(joint_info[0])
+        # Recarregar robô após o ambiente
+        self.robot.load_in_simulation()
 
     def reset_episode_vars(self):
         self.episode_reward = 0.0
@@ -515,10 +485,8 @@ class Simulation(gym.Env):
 
         self.environment.load_in_simulation(use_fixed_base=True)
 
-        # Carregar robô na posição correta
-        start_position = [0.5, 0, 0.7]
-        start_orientation = p.getQuaternionFromEuler([0, 0, 0])
-        self.robot.id = p.loadURDF(self.robot.urdf_path, start_position, start_orientation)
+        # Carregar robô após o ambiente
+        self.robot.load_in_simulation()
 
         # Configuração inicial
         pos, _ = p.getBasePositionAndOrientation(self.robot.id)

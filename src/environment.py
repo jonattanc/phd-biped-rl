@@ -3,6 +3,50 @@ import utils
 import os
 import pybullet as p
 from xacrodoc import XacroDoc
+import trimesh
+import numpy as np
+
+
+def create_ramp_stl(filename, ascending=True):
+    length = 8.0
+    width = 1.5
+    angle_deg = 15
+    height = np.tan(np.radians(angle_deg)) * length
+
+    vertices = np.array(
+        [
+            [length, width, height],  # topo traseiro direito
+            [0, width, 0],  # base traseiro direito
+            [length, 0, height],  # topo frente direito
+            [0, 0, 0],  # base frente direito
+            [length, width, 0],  # base traseiro esquerdo
+            [length, 0, 0],  # base frente esquerdo
+        ]
+    )
+
+    faces = np.array(
+        [
+            [0, 1, 2],
+            [1, 3, 2],  # base inferior
+            [0, 4, 1],  # lado frontal inclinado
+            [2, 3, 5],  # lado traseiro inclinado
+            [0, 2, 4],
+            [2, 5, 4],  # parede esquerda
+            [1, 4, 3],
+            [3, 4, 5],  # parede direita
+        ]
+    )
+
+    mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
+
+    if not ascending:
+        mesh.apply_transform(trimesh.transformations.rotation_matrix(angle=np.radians(180), direction=[0, 0, 1], point=[0, 0, 0]))
+
+    output_folder = os.path.join(utils.TMP_PATH, "environments")
+    os.makedirs(output_folder, exist_ok=True)
+    output_path = os.path.join(output_folder, filename)
+
+    mesh.export(output_path)
 
 
 class Environment:

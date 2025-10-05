@@ -1,109 +1,123 @@
 <?xml version="1.0"?>
-<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="ascending_ramp_with_pr_sections">
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="ascending_ramp_with_sections">
+  <!-- Plane properties -->
+  <xacro:property name="initial_section_length" value="1.0" />
+  <xacro:property name="middle_section_length" value="8.0" />
+  <xacro:property name="final_section_length" value="1.0" />
+  <xacro:property name="plane_width" value="1.5" />
+  <xacro:property name="plane_height" value="0.1" />
+  <xacro:property name="ramp_height" value="2.14359353945" /> <!-- tan(ramp_angle) * ramp_length = tan(15 deg) * 8.0 -->
+  <xacro:property name="section_mass" value="10000" />
+  <xacro:property name="section_ixx" value="1000" />
+  <xacro:property name="section_iyy" value="1000" />
+  <xacro:property name="section_izz" value="1000" />
+  <xacro:property name="pr_lateral_friction" value="0.8" />
+  <xacro:property name="pr_rolling_friction" value="0.0" />
+  <xacro:property name="pr_spinning_friction" value="0.0" />
+
+  <!-- Materials -->
+  <material name="initial_section_material">
+    <color rgba="0.8 0.8 0.8 1"/>
+  </material>
+  <material name="middle_section_material">
+    <color rgba="0.6 0.6 0.6 1"/>
+  </material>
+  <material name="final_section_material">
+    <color rgba="0.8 0.8 0.8 1"/>
+  </material>
   
-  <!-- Base Link - PR Initial Section (plano) -->
-  <link name="pr_initial_link">
+  <!-- Base Link - Initial Section -->
+  <link name="initial_link">
     <contact>
-      <lateral_friction value="0.8"/>
-      <rolling_friction value="0.0"/>
-      <spinning_friction value="0.0"/>
+      <lateral_friction value="${pr_lateral_friction}"/>
+      <rolling_friction value="${pr_rolling_friction}"/>
+      <spinning_friction value="${pr_spinning_friction}"/>
     </contact>
     <inertial>
-      <origin xyz="0 0 0"/>
-      <mass value="10000"/>
-      <inertia ixx="1000" ixy="0" ixz="0" iyy="1000" iyz="0" izz="1000"/>
+      <origin xyz="0 0 -${plane_height/2}"/>
+      <mass value="${section_mass}"/>
+      <inertia ixx="${section_ixx}" ixy="0" ixz="0" iyy="${section_iyy}" iyz="0" izz="${section_izz}"/>
     </inertial>
     <visual>
-      <origin xyz="0.5 0 0"/>
+      <origin xyz="0 0 -${plane_height/2}"/>
       <geometry>
-        <box size="1.0 1.5 0.1"/>
+        <box size="${initial_section_length} ${plane_width} ${plane_height}"/>
       </geometry>
-      <material name="grey">
-        <color rgba="0.8 0.8 0.8 1"/>
-      </material>
+      <material name="initial_section_material"/>
     </visual>
     <collision>
-      <origin xyz="0.5 0 0"/>
+      <origin xyz="0 0 -${plane_height/2}"/>
       <geometry>
-        <box size="1.0 1.5 0.1"/>
+        <box size="${initial_section_length} ${plane_width} ${plane_height}"/>
       </geometry>
     </collision>
   </link>
 
-  <!-- Ramp Section - INCLINADA mas conectada suavemente -->
-  <link name="ramp_link">
+  <!-- Middle Section -->
+  <link name="middle_link">
     <contact>
-      <lateral_friction value="0.5"/>
-      <rolling_friction value="0.0"/>
-      <spinning_friction value="0.0"/>
+      <lateral_friction value="${pr_lateral_friction}"/>
+      <rolling_friction value="${pr_rolling_friction}"/>
+      <spinning_friction value="${pr_spinning_friction}"/>
     </contact>
     <inertial>
       <origin xyz="0 0 0"/>
-      <mass value="10000"/>
-      <inertia ixx="1000" ixy="0" ixz="0" iyy="1000" iyz="0" izz="1000"/>
+      <mass value="${section_mass}"/>
+      <inertia ixx="${section_ixx}" ixy="0" ixz="0" iyy="${section_iyy}" iyz="0" izz="${section_izz}"/>
     </inertial>
     <visual>
-      <!-- Centro em x=4.0, altura Z=0 (como no PR) mas INCLINADA -->
-      <origin xyz="4.0 0 0" rpy="0 0.145 0"/>
+      <origin xyz="0 0 0"/>
       <geometry>
-        <box size="8.0 1.5 0.1"/>
+        <mesh filename="ramp_up.stl" scale="1 1 1"/>
       </geometry>
-      <material name="grey_ramp">
-        <color rgba="0.6 0.6 0.6 1"/>
-      </material>
+      <material name="middle_section_material"/>
     </visual>
     <collision>
-      <origin xyz="4.0 0 0" rpy="0 0.145 0"/>
+      <origin xyz="0 0 0"/>
       <geometry>
-        <box size="8.0 1.5 0.1"/>
+        <mesh filename="ramp_up.stl" scale="1 1 1"/>
       </geometry>
     </collision>
   </link>
 
-  <!-- PR Final Section - CONECTADA na altura correta da rampa -->
-  <link name="pr_final_link">
+  <!-- Final Section -->
+  <link name="final_link">
     <contact>
-      <lateral_friction value="0.8"/>
-      <rolling_friction value="0.0"/>
-      <spinning_friction value="0.0"/>
+      <lateral_friction value="${pr_lateral_friction}"/>
+      <rolling_friction value="${pr_rolling_friction}"/>
+      <spinning_friction value="${pr_spinning_friction}"/>
     </contact>
     <inertial>
-      <origin xyz="0 0 0"/>
-      <mass value="10000"/>
-      <inertia ixx="1000" ixy="0" ixz="0" iyy="1000" iyz="0" izz="1000"/>
+      <origin xyz="0 0 -${plane_height/2}"/>
+      <mass value="${section_mass}"/>
+      <inertia ixx="${section_ixx}" ixy="0" ixz="0" iyy="${section_iyy}" iyz="0" izz="${section_izz}"/>
     </inertial>
     <visual>
-      <!-- Altura = 8.0 * sin(0.145) = 1.156m -->
-      <origin xyz="0.5 0 1.156"/>
+      <origin xyz="0 0 -${plane_height/2}"/>
       <geometry>
-        <box size="1.0 1.5 0.1"/>
+        <box size="${final_section_length} ${plane_width} ${plane_height}"/>
       </geometry>
-      <material name="grey">
-        <color rgba="0.8 0.8 0.8 1"/>
-      </material>
+      <material name="final_section_material"/>
     </visual>
     <collision>
-      <origin xyz="0.5 0 1.156"/>
+      <origin xyz="0 0 -${plane_height/2}"/>
       <geometry>
-        <box size="1.0 1.5 0.1"/>
+        <box size="${final_section_length} ${plane_width} ${plane_height}"/>
       </geometry>
     </collision>
   </link>
 
-  <!-- Joints - CONEXÕES SUAVES seguindo padrão PR -->
-  <joint name="initial_to_ramp_joint" type="fixed">
-    <parent link="pr_initial_link"/>
-    <child link="ramp_link"/>
-    <!-- Conecta final da inicial (x=1.0) ao início da rampa (x=0) - mesma altura z=0 -->
-    <origin xyz="1.0 0 0" rpy="0 0 0"/>
+  <!-- Joints to connect all sections -->
+  <joint name="initial_to_middle_joint" type="fixed">
+    <parent link="initial_link"/>
+    <child link="middle_link"/>
+    <origin xyz="${initial_section_length/2} ${-plane_width/2} 0" rpy="0 0 0"/>
   </joint>
 
-  <joint name="ramp_to_final_joint" type="fixed">
-    <parent link="ramp_link"/>
-    <child link="pr_final_link"/>
-    <!-- CORREÇÃO CRÍTICA: Conecta final da rampa (x=8.0) ao início da final (x=0) -->
-    <!-- MAS ajusta a altura para coincidir com o final da rampa inclinada -->
-    <origin xyz="8.0 0 1.156" rpy="0 0 0"/>
+  <joint name="middle_to_final_joint" type="fixed">
+    <parent link="middle_link"/>
+    <child link="final_link"/>
+    <origin xyz="${middle_section_length + final_section_length/2} ${plane_width/2} ${ramp_height}" rpy="0 0 0"/>
   </joint>
 
 </robot>

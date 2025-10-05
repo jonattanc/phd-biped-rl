@@ -1,104 +1,122 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="high_friction_plane_with_sections">
+  <!-- Plane properties -->
+  <xacro:property name="initial_section_length" value="1.0" />
+  <xacro:property name="middle_section_length" value="8.0" />
+  <xacro:property name="final_section_length" value="1.0" />
+  <xacro:property name="plane_width" value="1.5" />
+  <xacro:property name="plane_height" value="0.1" />
+  <xacro:property name="section_mass" value="10000" />
+  <xacro:property name="section_ixx" value="1000" />
+  <xacro:property name="section_iyy" value="1000" />
+  <xacro:property name="section_izz" value="1000" />
+  <xacro:property name="lateral_friction" value="0.8" />
+  <xacro:property name="rolling_friction" value="0.0" />
+  <xacro:property name="spinning_friction" value="0.0" />
+
+  <!-- Materials -->
+  <material name="initial_section_material">
+    <color rgba="0.8 0.8 0.8 1"/>
+  </material>
+  <material name="middle_section_material">
+    <color rgba="0.7 0.7 0.7 1"/>
+  </material>
+  <material name="final_section_material">
+    <color rgba="0.8 0.8 0.8 1"/>
+  </material>
   
-  <!-- Base Link - PR Initial Section -->
-  <link name="pr_initial_link">
+  <!-- Base Link - Initial Section -->
+  <link name="initial_link">
     <contact>
-      <lateral_friction value="0.8"/>
-      <rolling_friction value="0.0"/>
-      <spinning_friction value="0.0"/>
+      <lateral_friction value="${lateral_friction}"/>
+      <rolling_friction value="${rolling_friction}"/>
+      <spinning_friction value="${spinning_friction}"/>
     </contact>
     <inertial>
-      <origin xyz="0 0 0"/>
-      <mass value="10000"/>
-      <inertia ixx="1000" ixy="0" ixz="0" iyy="1000" iyz="0" izz="1000"/>
+      <origin xyz="0 0 -${plane_height/2}"/>
+      <mass value="${section_mass}"/>
+      <inertia ixx="${section_ixx}" ixy="0" ixz="0" iyy="${section_iyy}" iyz="0" izz="${section_izz}"/>
     </inertial>
     <visual>
-      <origin xyz="0.5 0 0"/>
+      <origin xyz="0 0 -${plane_height/2}"/>
       <geometry>
-        <box size="1.0 1.5 0.1"/>
+        <box size="${initial_section_length} ${plane_width} ${plane_height}"/>
       </geometry>
-      <material name="grey">
-        <color rgba="0.8 0.8 0.8 1"/>
-      </material>
+      <material name="initial_section_material"/>
     </visual>
     <collision>
-      <origin xyz="0.5 0 0"/>
+      <origin xyz="0 0 -${plane_height/2}"/>
       <geometry>
-        <box size="1.0 1.5 0.1"/>
+        <box size="${initial_section_length} ${plane_width} ${plane_height}"/>
       </geometry>
     </collision>
   </link>
 
-  <!-- Middle PR Section -->
-  <link name="middle_pr_link">
+  <!-- Middle Section -->
+  <link name="middle_link">
     <contact>
-      <lateral_friction value="0.8"/>
-      <rolling_friction value="0.0"/>
-      <spinning_friction value="0.0"/>
+      <lateral_friction value="${lateral_friction}"/>
+      <rolling_friction value="${rolling_friction}"/>
+      <spinning_friction value="${spinning_friction}"/>
     </contact>
     <inertial>
-      <origin xyz="0 0 0"/>
-      <mass value="10000"/>
-      <inertia ixx="1000" ixy="0" ixz="0" iyy="1000" iyz="0" izz="1000"/>
+      <origin xyz="0 0 -${plane_height/2}"/>
+      <mass value="${section_mass}"/>
+      <inertia ixx="${section_ixx}" ixy="0" ixz="0" iyy="${section_iyy}" iyz="0" izz="${section_izz}"/>
     </inertial>
     <visual>
-      <origin xyz="4.0 0 0"/>
+      <origin xyz="0 0 -${plane_height/2}"/>
       <geometry>
-        <box size="8.0 1.5 0.1"/>
+        <box size="${middle_section_length} ${plane_width} ${plane_height}"/>
       </geometry>
-      <material name="grey">
-        <color rgba="0.8 0.8 0.8 1"/>
-      </material>
+      <material name="middle_section_material"/>
     </visual>
     <collision>
-      <origin xyz="4.0 0 0"/>
+      <origin xyz="0 0 -${plane_height/2}"/>
       <geometry>
-        <box size="8.0 1.5 0.1"/>
+        <box size="${middle_section_length} ${plane_width} ${plane_height}"/>
       </geometry>
     </collision>
   </link>
 
-  <!-- PR Final Section -->
-  <link name="pr_final_link">
+  <!-- Final Section -->
+  <link name="final_link">
     <contact>
-      <lateral_friction value="0.8"/>
-      <rolling_friction value="0.0"/>
-      <spinning_friction value="0.0"/>
+      <lateral_friction value="${lateral_friction}"/>
+      <rolling_friction value="${rolling_friction}"/>
+      <spinning_friction value="${spinning_friction}"/>
     </contact>
     <inertial>
-      <origin xyz="0 0 0"/>
-      <mass value="10000"/>
-      <inertia ixx="1000" ixy="0" ixz="0" iyy="1000" iyz="0" izz="1000"/>
+      <origin xyz="0 0 -${plane_height/2}"/>
+      <mass value="${section_mass}"/>
+      <inertia ixx="${section_ixx}" ixy="0" ixz="0" iyy="${section_iyy}" iyz="0" izz="${section_izz}"/>
     </inertial>
     <visual>
-      <origin xyz="0.5 0 0"/>
+      <origin xyz="0 0 -${plane_height/2}"/>
       <geometry>
-        <box size="1.0 1.5 0.1"/>
+        <box size="${final_section_length} ${plane_width} ${plane_height}"/>
       </geometry>
-      <material name="grey">
-        <color rgba="0.8 0.8 0.8 1"/>
-      </material>
+      <material name="final_section_material"/>
     </visual>
     <collision>
-      <origin xyz="0.5 0 0"/>
+      <origin xyz="0 0 -${plane_height/2}"/>
       <geometry>
-        <box size="1.0 1.5 0.1"/>
+        <box size="${final_section_length} ${plane_width} ${plane_height}"/>
       </geometry>
     </collision>
   </link>
 
   <!-- Joints to connect all sections -->
   <joint name="initial_to_middle_joint" type="fixed">
-    <parent link="pr_initial_link"/>
-    <child link="middle_pr_link"/>
-    <origin xyz="1.0 0 0" rpy="0 0 0"/>
+    <parent link="initial_link"/>
+    <child link="middle_link"/>
+    <origin xyz="${initial_section_length/2 + middle_section_length/2} 0 0" rpy="0 0 0"/>
   </joint>
 
   <joint name="middle_to_final_joint" type="fixed">
-    <parent link="middle_pr_link"/>
-    <child link="pr_final_link"/>
-    <origin xyz="8.0 0 0" rpy="0 0 0"/>
+    <parent link="middle_link"/>
+    <child link="final_link"/>
+    <origin xyz="${middle_section_length/2 + final_section_length/2} 0 0" rpy="0 0 0"/>
   </joint>
 
 </robot>
