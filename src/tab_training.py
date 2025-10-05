@@ -59,7 +59,6 @@ class TrainingTab:
         self.load_training_btn = None
         self.export_plots_btn = None
         self.real_time_var = None
-        self.real_time_check = None
         self.steps_label = None
         self.log_text = None
 
@@ -164,11 +163,11 @@ class TrainingTab:
         self.export_plots_btn.grid(row=0, column=2, padx=1)
 
         self.enable_visualization_var = tk.BooleanVar(value=False)
-        self.enable_visualization_check = ttk.Checkbutton(row2_frame, text="Visualizar Robô", variable=self.enable_visualization_var, command=self.toggle_visualization, state=tk.DISABLED, width=15)
+        self.enable_visualization_check = ttk.Checkbutton(row2_frame, text="Visualizar Robô", variable=self.enable_visualization_var, command=self.toggle_visualization, width=15)
         self.enable_visualization_check.grid(row=0, column=3, padx=1)
 
         self.real_time_var = tk.BooleanVar(value=False)
-        self.real_time_check = ttk.Checkbutton(row2_frame, text="Tempo Real", variable=self.real_time_var, command=self.toggle_real_time, state=tk.DISABLED, width=15)
+        self.real_time_check = ttk.Checkbutton(row2_frame, text="Tempo Real", variable=self.real_time_var, command=self.toggle_real_time, width=15)
         self.real_time_check.grid(row=0, column=4, padx=5)
 
         # Gráficos
@@ -300,8 +299,6 @@ class TrainingTab:
             self.start_btn.config(state=tk.DISABLED)
             self.pause_btn.config(state=tk.NORMAL)
             self.stop_btn.config(state=tk.NORMAL)
-            self.enable_visualization_check.config(state=tk.NORMAL)
-            self.real_time_check.config(state=tk.NORMAL)
 
             # Sistema tracker para novo treinamento
             if not hasattr(self, "tracker"):
@@ -383,7 +380,6 @@ class TrainingTab:
             self.start_btn.config(state=tk.DISABLED, text="Retomando...")
             self.pause_btn.config(state=tk.NORMAL)
             self.stop_btn.config(state=tk.NORMAL)
-            self.real_time_check.config(state=tk.NORMAL)
 
             # Iniciar processo de retomada
             pause_val = multiprocessing.Value("b", 0)
@@ -504,8 +500,6 @@ class TrainingTab:
         self.start_btn.config(state=tk.NORMAL)
         self.pause_btn.config(state=tk.DISABLED)
         self.stop_btn.config(state=tk.DISABLED)
-        self.enable_visualization_check.config(state=tk.DISABLED)
-        self.real_time_check.config(state=tk.DISABLED)
         self.save_training_btn.config(state=tk.DISABLED)
         self.export_plots_btn.config(state=tk.DISABLED)
 
@@ -894,31 +888,33 @@ class TrainingTab:
 
     def toggle_visualization(self):
         """Alterna entre visualizar ou não o robô durante o treinamento"""
-        if not self.enable_visualization_values:
-            self.logger.warning("toggle_visualization: Nenhum processo de treinamento ativo.")
-            return
-
         new_value = self.enable_visualization_var.get()
-        self.enable_visualization_values[-1].value = new_value
 
         if new_value:
             self.logger.info("Visualização do robô ativada")
         else:
             self.logger.info("Visualização do robô desativada")
 
+        if self.enable_visualization_values:
+            self.enable_visualization_values[-1].value = new_value
+
+        else:
+            self.logger.info("toggle_visualization: Nenhum processo de treinamento ativo.")
+
     def toggle_real_time(self):
         """Alterna o modo tempo real da simulação"""
-        if not self.enable_real_time_values:
-            self.logger.warning("toggle_real_time: Nenhum processo de treinamento ativo.")
-            return
-
         new_value = self.real_time_var.get()
-        self.enable_real_time_values[-1].value = new_value
 
         if new_value:
             self.logger.info("Modo tempo real ativado")
         else:
             self.logger.info("Modo tempo real desativado")
+
+        if self.enable_real_time_values:
+            self.enable_real_time_values[-1].value = new_value
+
+        else:
+            self.logger.info("toggle_real_time: Nenhum processo de treinamento ativo.")
 
     def build_steps_label_text(self, total_steps, steps_per_second):
         return f"Total Steps: {total_steps} | Steps/s: {steps_per_second:.1f}"
@@ -1233,7 +1229,6 @@ class TrainingTab:
                         self.start_btn.config(state=tk.NORMAL)
                         self.pause_btn.config(state=tk.DISABLED)
                         self.stop_btn.config(state=tk.DISABLED)
-                        self.enable_visualization_check.config(state=tk.DISABLED)
                         self.save_training_btn.config(state=tk.DISABLED)
                         self.export_plots_btn.config(state=tk.DISABLED)
                         self.is_resuming = False
