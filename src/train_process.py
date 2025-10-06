@@ -34,14 +34,13 @@ def process_runner(
         logger.info(f"Iniciando treinamento {algorithm}...")
 
         # Loop principal do treinamento
-        total_timesteps = 50_000_000
         timesteps_completed = 0
 
         # Diretório para controle de salvamento
         control_dir = utils.TRAINING_CONTROL_PATH
         os.makedirs(control_dir, exist_ok=True)
 
-        while timesteps_completed < total_timesteps and not exit_value.value:
+        while not exit_value.value:
             # VERIFICAÇÃO DE COMANDOS VIA ARQUIVO
             try:
                 # Verificar se há arquivos de controle de salvamento
@@ -139,12 +138,12 @@ def process_runner(
 
                 # Enviar progresso para GUI
                 try:
-                    ipc_queue.put_nowait({"type": "training_progress", "steps_completed": timesteps_completed, "total_steps": total_timesteps})
+                    ipc_queue.put_nowait({"type": "training_progress", "steps_completed": timesteps_completed})
                 except Exception as e:
                     logger.exception("Erro ao enviar progresso via IPC")
 
                 if timesteps_completed % 10000 == 0:
-                    logger.info(f"Progresso: {timesteps_completed}/{total_timesteps} timesteps")
+                    logger.info(f"Progresso: {timesteps_completed} timesteps")
 
             except Exception as e:
                 logger.exception("Erro durante aprendizado")
@@ -192,14 +191,13 @@ def process_runner_resume(
         logger.info(f"Retomando treinamento {algorithm} do episódio {initial_episode}...")
 
         # Loop principal do treinamento
-        total_timesteps = 50_000_000
         timesteps_completed = 0
 
         # Diretório para controle de salvamento
         control_dir = utils.TRAINING_CONTROL_PATH
         os.makedirs(control_dir, exist_ok=True)
 
-        while timesteps_completed < total_timesteps and not exit_value.value:
+        while not exit_value.value:
             # VERIFICAÇÃO DE COMANDOS - PROCESSAR IMEDIATAMENTE
             try:
                 control_files = [f for f in os.listdir(control_dir) if f.startswith("save_model_") and f.endswith(".json")]
@@ -291,7 +289,7 @@ def process_runner_resume(
                 agent.model.learn(total_timesteps=1000, reset_num_timesteps=False, callback=callback)
                 timesteps_completed += 1000
                 if timesteps_completed % 10000 == 0:
-                    logger.info(f"Progresso: {timesteps_completed}/{total_timesteps} timesteps")
+                    logger.info(f"Progresso: {timesteps_completed} timesteps")
             except Exception as e:
                 logger.exception("Erro durante aprendizado")
                 break
