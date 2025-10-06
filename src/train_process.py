@@ -1,6 +1,4 @@
 # train_process.py
-import multiprocessing
-import reward_system
 from robot import Robot
 from simulation import Simulation
 from environment import Environment
