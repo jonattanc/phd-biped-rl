@@ -27,7 +27,7 @@ REWARD_CONFIGS_PATH = os.path.join(PROJECT_ROOT, "reward_configs")
 ENVIRONMENT_PATH = os.path.join(PROJECT_ROOT, "environments")
 ROBOTS_PATH = os.path.join(PROJECT_ROOT, "robots")
 TRAINING_DATA_PATH = os.path.join(PROJECT_ROOT, "training_data")
-TRAINING_CONTROL_PATH = os.path.join(PROJECT_ROOT, "training_control")
+TRAINING_CONTROL_PATH = os.path.join(TMP_PATH, "training_control")
 
 
 def get_logger(description=["main"], ipc_queue=None):

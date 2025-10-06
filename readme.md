@@ -201,7 +201,7 @@ phd-biped-rl/
 ├── reward_configs/         # Modelos de configurações (defaul.json)
 ├── robots/                 # Modelos .xacro dos robôs
 ├── training_data/          # Modelos treinados e sessões
-├── tmp/                    # Arquivos temporários (URDFs)
+├── tmp/                    # Arquivos temporários
 └── logs/                   # Logs de execução e dados
     ├── cross_evaluation/   # Relatórios de avaliação cruzada
     └── data/               # CSV com métricas detalhadas
