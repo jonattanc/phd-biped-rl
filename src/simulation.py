@@ -37,7 +37,7 @@ class Simulation(gym.Env):
         self.physics_step_s = 1 / 240.0  # 240 Hz, ~4.16 ms
         self.physics_step_multiplier = 5
         self.time_step_s = self.physics_step_s * self.physics_step_multiplier  # 240/5 = 48 Hz, ~20.83 ms
-        self.success_distance = 10.0  # m
+        self.success_distance = 9.0  # m
         self.max_motor_velocity = 2.0  # rad/s
         self.max_motor_torque = 130.0  # Nm
         self.apply_action = self.apply_position_action  # Escolher entre apply_velocity_action ou apply_position_action
