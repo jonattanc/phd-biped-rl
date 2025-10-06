@@ -11,6 +11,47 @@ import os
 import json
 
 
+def verify_control_files(control_dir, logger, agent, ipc_queue, context):
+    """Verifica arquivos de controle e para cada um: salva o modelo, confirma via IPC e remove o arquivo de controle"""
+    try:
+        control_files = [f for f in os.listdir(control_dir) if f.startswith("save_model_") and f.endswith(".json")]
+        control_files.sort()  # Processar em ordem
+
+        for control_file in control_files:
+            control_path = os.path.join(control_dir, control_file)
+            with open(control_path, "r") as f:
+                control_data = json.load(f)
+
+            model_path = control_data.get("model_path")
+            if model_path:
+                logger.info(f"COMANDO DE SALVAMENTO {context}: {model_path}")
+
+                # SALVAR MODELO
+                agent.save_model(model_path)
+                logger.info(f"MODELO SALVO {context}: {model_path}")
+
+                # Verificar se foi salvo
+                if os.path.exists(model_path):
+                    file_size = os.path.getsize(model_path)
+                    logger.info(f"ARQUIVO CONFIRMADO: {model_path} ({file_size} bytes)")
+
+                    # Enviar confirmação via IPC
+                    ipc_queue.put({"type": "model_saved", "model_path": model_path})
+
+                else:
+                    logger.error(f"FALHA: Arquivo não criado: {model_path}")
+
+                # Remover arquivo de controle processado
+                try:
+                    os.remove(control_path)
+                    logger.info(f"Arquivo de controle removido: {control_file}")
+                except Exception as e:
+                    logger.warning(f"Não foi possível remover: {control_file}")
+
+    except Exception as e:
+        logger.exception("Erro ao verificar arquivos de controle")
+
+
 def process_runner(
     selected_environment, selected_robot, algorithm, ipc_queue, pause_value, exit_value, enable_visualization_value, enable_real_time_value, device="cpu", initial_episode=0, reward_config=None
 ):
@@ -41,86 +82,11 @@ def process_runner(
         os.makedirs(control_dir, exist_ok=True)
 
         while not exit_value.value:
-            # VERIFICAÇÃO DE COMANDOS VIA ARQUIVO
-            try:
-                # Verificar se há arquivos de controle de salvamento
-                control_files = [f for f in os.listdir(control_dir) if f.startswith("save_model_") and f.endswith(".json")]
+            verify_control_files(control_dir, logger, agent, ipc_queue, "VIA ARQUIVO")
 
-                for control_file in control_files:
-                    control_path = os.path.join(control_dir, control_file)
-                    try:
-                        with open(control_path, "r") as f:
-                            control_data = json.load(f)
-
-                        model_path = control_data.get("model_path")
-                        if model_path:
-                            logger.info(f"COMANDO DE SALVAMENTO VIA ARQUIVO: {model_path}")
-
-                            # SALVAR MODELO
-                            agent.save_model(model_path)
-                            logger.info(f"MODELO SALVO: {model_path}")
-
-                            # Verificar se foi salvo
-                            if os.path.exists(model_path):
-                                file_size = os.path.getsize(model_path)
-                                logger.info(f"ARQUIVO CONFIRMADO: {model_path} ({file_size} bytes)")
-
-                                # Enviar confirmação via IPC
-                                try:
-                                    ipc_queue.put({"type": "model_saved", "model_path": model_path})
-                                except Exception as e:
-                                    logger.exception("Erro ao enviar confirmação de salvamento via IPC")
-
-                            else:
-                                logger.error(f"FALHA: Arquivo não criado: {model_path}")
-
-                            # Remover arquivo de controle processado
-                            try:
-                                os.remove(control_path)
-                                logger.info(f"Arquivo de controle removido: {control_file}")
-                            except Exception as e:
-                                logger.warning(f"Não foi possível remover: {control_file}")
-
-                    except Exception as e:
-                        logger.exception(f"Erro ao processar arquivo de controle {control_file}")
-
-            except Exception as e:
-                logger.exception("Erro ao verificar arquivos de controle")
-
-            # Verificar pausa
             while pause_value.value and not exit_value.value:
                 time.sleep(0.5)  # Verificar menos frequentemente durante pausa
-
-                # Verificar arquivos de controle durante pausa também
-                try:
-                    control_files = [f for f in os.listdir(control_dir) if f.startswith("save_model_") and f.endswith(".json")]
-                    for control_file in control_files:
-                        control_path = os.path.join(control_dir, control_file)
-                        try:
-                            with open(control_path, "r") as f:
-                                control_data = json.load(f)
-
-                            model_path = control_data.get("model_path")
-                            if model_path:
-                                logger.info(f"COMANDO DE SALVAMENTO DURANTE PAUSA: {model_path}")
-                                agent.save_model(model_path)
-                                logger.info(f"MODELO SALVO DURANTE PAUSA: {model_path}")
-
-                                if os.path.exists(model_path):
-                                    try:
-                                        ipc_queue.put({"type": "model_saved", "model_path": model_path})
-                                    except Exception as e:
-                                        pass
-
-                                try:
-                                    os.remove(control_path)
-                                except Exception as e:
-                                    pass
-
-                        except Exception as e:
-                            logger.exception("Erro ao processar arquivo durante pausa")
-                except Exception as e:
-                    logger.exception("Erro ao verificar controles durante pausa")
+                verify_control_files(control_dir, logger, agent, ipc_queue, "DURANTE PAUSA")
 
             if exit_value.value:
                 break
@@ -199,81 +165,12 @@ def process_runner_resume(
 
         while not exit_value.value:
             # VERIFICAÇÃO DE COMANDOS - PROCESSAR IMEDIATAMENTE
-            try:
-                control_files = [f for f in os.listdir(control_dir) if f.startswith("save_model_") and f.endswith(".json")]
-                control_files.sort()  # Processar em ordem
-
-                for control_file in control_files:
-                    control_path = os.path.join(control_dir, control_file)
-                    try:
-                        with open(control_path, "r") as f:
-                            control_data = json.load(f)
-
-                        save_model_path = control_data.get("model_path")
-                        if save_model_path:
-                            logger.info(f"COMANDO DE SALVAMENTO: {save_model_path}")
-
-                            # SALVAR IMEDIATAMENTE - SEMPRE processar
-                            agent.save_model(save_model_path)
-                            logger.info(f"MODELO SALVO: {save_model_path}")
-
-                            if os.path.exists(save_model_path):
-                                file_size = os.path.getsize(save_model_path)
-                                logger.info(f"ARQUIVO CONFIRMADO: {save_model_path} ({file_size} bytes)")
-
-                                try:
-                                    ipc_queue.put({"type": "model_saved", "model_path": save_model_path})
-                                except Exception as e:
-                                    logger.exception("Erro ao enviar confirmação de salvamento via IPC")
-                            else:
-                                logger.error(f"FALHA: Arquivo não criado: {save_model_path}")
-
-                            # REMOVER ARQUIVO DE CONTROLE SEMPRE
-                            try:
-                                os.remove(control_path)
-                                logger.info(f"Arquivo de controle removido: {control_file}")
-                            except Exception as e:
-                                logger.warning(f"Não foi possível remover: {control_file}")
-
-                    except Exception as e:
-                        logger.exception(f"Erro ao processar arquivo de controle {control_file}")
-
-            except Exception as e:
-                logger.exception("Erro ao verificar arquivos de controle")
+            verify_control_files(control_dir, logger, agent, ipc_queue, "VIA ARQUIVO EM RESUME")
 
             # Verificar pausa
             while pause_value.value and not exit_value.value:
                 time.sleep(0.5)
-
-                try:
-                    control_files = [f for f in os.listdir(control_dir) if f.startswith("save_model_") and f.endswith(".json")]
-                    for control_file in control_files:
-                        control_path = os.path.join(control_dir, control_file)
-                        try:
-                            with open(control_path, "r") as f:
-                                control_data = json.load(f)
-
-                            save_model_path = control_data.get("model_path")
-                            if save_model_path:
-                                logger.info(f"COMANDO DE SALVAMENTO DURANTE PAUSA: {save_model_path}")
-                                agent.save_model(save_model_path)
-                                logger.info(f"MODELO SALVO DURANTE PAUSA: {save_model_path}")
-
-                                if os.path.exists(save_model_path):
-                                    try:
-                                        ipc_queue.put({"type": "model_saved", "model_path": save_model_path})
-                                    except Exception as e:
-                                        logger.exception("Erro ao enviar confirmação de salvamento via IPC")
-
-                                try:
-                                    os.remove(control_path)
-                                except Exception as e:
-                                    pass
-
-                        except Exception as e:
-                            logger.exception("Erro ao processar arquivo durante pausa")
-                except Exception as e:
-                    logger.exception("Erro ao verificar controles durante pausa")
+                verify_control_files(control_dir, logger, agent, ipc_queue, "DURANTE PAUSA EM RESUME")
 
             if exit_value.value:
                 break
