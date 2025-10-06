@@ -271,9 +271,7 @@ class TrainingTab:
 
             # Limpar dados anteriores
             self.episode_data = {key: [] for key in self.episode_data.keys()}
-            self.total_steps = None
             self.steps_per_second = 0
-            self.training_start_time = time.time()
             self._initialize_plots()
 
             # Configurar botões
@@ -284,7 +282,6 @@ class TrainingTab:
             # Sistema tracker para novo treinamento
             if not hasattr(self, "tracker"):
                 self.tracker = BestModelTracker()
-                self.total_steps = 0
 
             if not hasattr(self, "best_models_dir"):
                 self.best_models_dir = utils.ensure_directory(os.path.join(utils.TRAINING_DATA_PATH, "best_models_temp"))
@@ -325,6 +322,7 @@ class TrainingTab:
                 args=(self.current_env, self.current_robot, self.current_algorithm, self.ipc_queue, pause_val, exit_val, enable_visualization_val, realtime_val, self.device, reward_config),
             )
             p.start()
+            self.training_start_time = time.time()
             self.processes.append(p)
 
             self.logger.info(f"Processo de treinamento iniciado: {self.current_env} + {self.current_robot} + {self.current_algorithm}")
