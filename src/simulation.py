@@ -9,7 +9,7 @@ from reward_system import RewardSystem
 
 
 class Simulation(gym.Env):
-    def __init__(self, logger, robot, environment, ipc_queue, pause_value, exit_value, enable_visualization_value, enable_real_time_value, num_episodes=1, seed=42):
+    def __init__(self, logger, robot, environment, ipc_queue, pause_value, exit_value, enable_visualization_value, enable_real_time_value, num_episodes=1, seed=42, initial_episode=0):
         super(Simulation, self).__init__()
         np.random.seed(seed)
         random.seed(seed)
@@ -40,7 +40,7 @@ class Simulation(gym.Env):
         self.success_distance = 10.0  # m
         self.max_motor_velocity = 2.0  # rad/s
         self.max_motor_torque = 130.0  # Nm
-        self.apply_action = self.apply_position_action
+        self.apply_action = self.apply_position_action  # Escolher entre apply_velocity_action ou apply_position_action
         self.max_steps = int(self.episode_timeout_s / self.time_step_s)
 
         # Configurar ambiente de simulação PRIMEIRO
@@ -63,7 +63,7 @@ class Simulation(gym.Env):
 
         # Variáveis para coleta de dados
         self.reset_episode_vars()
-        self.episode_count = 0
+        self.set_initial_episode(initial_episode)
 
     def setup_sim_env(self):
         """Conecta ao PyBullet e carrega ambiente e robô"""

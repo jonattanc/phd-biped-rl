@@ -47,20 +47,8 @@ class Robot:
 
         num_joints = p.getNumJoints(self.id)
         self.revolute_indices = [i for i in range(num_joints) if p.getJointInfo(self.id, i)[2] == p.JOINT_REVOLUTE]
-        self.initial_position, self.initial_orientation = p.getBasePositionAndOrientation(self.id)
-        self.initial_joint_states = []
-
-        for j in range(p.getNumJoints(self.id)):
-            joint_info = p.getJointState(self.id, j)
-            self.initial_joint_states.append(joint_info[0])
 
         return self.id
-
-    def reset_base_position_and_orientation(self):
-        p.resetBasePositionAndOrientation(self.id, self.initial_position, self.initial_orientation)
-
-        for j, angle in enumerate(self.initial_joint_states):
-            p.resetJointState(self.id, j, angle)
 
     def get_num_joints(self):
         return p.getNumJoints(self.id)

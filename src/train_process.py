@@ -29,7 +29,6 @@ def process_runner(
         sim = Simulation(logger, robot, environment, ipc_queue, pause_value, exit_value, enable_visualization_value, enable_real_time_value)
         agent = Agent(logger, env=sim, algorithm=algorithm, device=device)
         sim.set_agent(agent)
-        sim.set_initial_episode(initial_episode)
 
         # Iniciar treinamento
         logger.info(f"Iniciando treinamento {algorithm}...")
@@ -183,14 +182,12 @@ def process_runner_resume(
         # Criar componentes
         environment = Environment(logger, name=selected_environment)
         robot = Robot(logger, name=selected_robot)
-        sim = Simulation(logger, robot, environment, ipc_queue, pause_value, exit_value, enable_visualization_value, enable_real_time_value)
-
+        sim = Simulation(logger, robot, environment, ipc_queue, pause_value, exit_value, enable_visualization_value, enable_real_time_value, initial_episode=initial_episode)
         agent = Agent(logger, model_path=model_path, device=device, initial_episode=initial_episode)
 
         # CONFIGURAR O AMBIENTE NO MODELO CARREGADO
         logger.info("Configurando ambiente no modelo carregado...")
         agent.set_env(sim)
-        sim.set_initial_episode(initial_episode)
         sim.set_agent(agent)
         logger.info(f"Retomando treinamento {algorithm} do episódio {initial_episode}...")
 
