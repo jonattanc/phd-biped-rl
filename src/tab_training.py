@@ -379,7 +379,7 @@ class TrainingTab:
                 self.logger.info(f"Estado do tracker carregado: {self.tracker.get_status()}")
 
             p = multiprocessing.Process(
-                target=train_process.process_runner_resume,
+                target=train_process.process_runner,
                 args=(
                     self.current_env,
                     self.current_robot,
@@ -390,8 +390,9 @@ class TrainingTab:
                     enable_visualization_val,
                     realtime_val,
                     self.device,
-                    model_path,
                     self.current_episode,
+                    None,
+                    model_path,
                 ),
             )
             p.start()

@@ -66,14 +66,15 @@ class Agent:
         self.action_dim = 0
         self.initial_episode = initial_episode
 
-        if env is not None:
+        if model_path is None:
             # Criar ambiente vetorizado
             self.env = DummyVecEnv([lambda: env])
             self.action_dim = env.action_dim
             self.model = self._create_model(algorithm, device)
 
-        elif model_path is not None:
+        else:
             self._load_model(model_path)
+            self.set_env(env)
 
     def _create_model(self, algorithm, device="cpu"):
         # Criar modelo baseado no algoritmo selecionado

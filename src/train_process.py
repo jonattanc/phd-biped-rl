@@ -51,26 +51,37 @@ def verify_control_files(control_dir, logger, agent, ipc_queue, context):
 
 
 def process_runner(
-    selected_environment, selected_robot, algorithm, ipc_queue, pause_value, exit_value, enable_visualization_value, enable_real_time_value, device="cpu", initial_episode=0, reward_config=None
+    selected_environment,
+    selected_robot,
+    algorithm,
+    ipc_queue,
+    pause_value,
+    exit_value,
+    enable_visualization_value,
+    enable_real_time_value,
+    device="cpu",
+    initial_episode=0,
+    reward_config=None,
+    model_path=None,
 ):
-    """Função executada no processo separado para treinamento real"""
-
     logger = utils.get_logger([selected_environment, selected_robot, algorithm], ipc_queue)
-    logger.info(f"Iniciando treinamento real: {selected_environment} + {selected_robot} + {algorithm}")
+    logger.info(f"Iniciando treinamento: {selected_environment} + {selected_robot} + {algorithm}")
     logger.info(f"Visualização: {enable_visualization_value.value}")
     logger.info(f"Tempo Real: {enable_real_time_value.value}")
     logger.info(f"Episódio inicial: {initial_episode}")
+    logger.info(f"Modelo carregado: {model_path}")
 
     try:
         # Criar componentes
         environment = Environment(logger, name=selected_environment)
         robot = Robot(logger, name=selected_robot)
-        sim = Simulation(logger, robot, environment, ipc_queue, pause_value, exit_value, enable_visualization_value, enable_real_time_value)
-        agent = Agent(logger, env=sim, algorithm=algorithm, device=device)
+        sim = Simulation(logger, robot, environment, ipc_queue, pause_value, exit_value, enable_visualization_value, enable_real_time_value, initial_episode=initial_episode)
+        agent = Agent(logger, env=sim, model_path=model_path, algorithm=algorithm, device=device, initial_episode=initial_episode)
         sim.set_agent(agent)
+        callback = TrainingCallback(logger)
 
         # Iniciar treinamento
-        logger.info(f"Iniciando treinamento {algorithm}...")
+        logger.info(f"Iniciando treinamento {algorithm} no episódio {initial_episode}...")
 
         # Loop principal do treinamento
         timesteps_completed = 0
@@ -89,29 +100,17 @@ def process_runner(
             if exit_value.value:
                 break
 
+            agent.model.learn(total_timesteps=1000, reset_num_timesteps=False, callback=callback)
+            timesteps_completed += 1000  # TODO: ajustar para o número real de timesteps feitos
+
+            # Enviar progresso para GUI
             try:
-                # Verificar se o ambiente está configurado
-                if agent.model.get_env() is None:
-                    logger.error("Ambiente não configurado! Configurando...")
-                    agent.set_env(sim)
-
-                # Usar agent.model.learn diretamente com parâmetros corretos
-                callback = TrainingCallback(logger)
-                agent.model.learn(total_timesteps=1000, reset_num_timesteps=False, callback=callback)
-                timesteps_completed = agent.model.num_timesteps
-
-                # Enviar progresso para GUI
-                try:
-                    ipc_queue.put_nowait({"type": "training_progress", "steps_completed": timesteps_completed})
-                except Exception as e:
-                    logger.exception("Erro ao enviar progresso via IPC")
-
-                if timesteps_completed % 10000 == 0:
-                    logger.info(f"Progresso: {timesteps_completed} timesteps")
-
+                ipc_queue.put_nowait({"type": "training_progress", "steps_completed": timesteps_completed})
             except Exception as e:
-                logger.exception("Erro durante aprendizado")
-                break
+                logger.exception("Erro ao enviar progresso via IPC")
+
+            if timesteps_completed % 10000 == 0:
+                logger.info(f"Progresso: {timesteps_completed} timesteps")
 
         logger.info("Treinamento concluído!")
 
@@ -126,72 +125,5 @@ def process_runner(
         # Fallback para padrão
         sim.reward_system.load_active_configuration()
         logger.info("Usando configuração padrão de recompensas")
-
-    ipc_queue.put({"type": "done"})
-
-
-def process_runner_resume(
-    selected_environment, selected_robot, algorithm, ipc_queue, pause_value, exit_value, enable_visualization_value, enable_real_time_value, device="cpu", model_path=None, initial_episode=0
-):
-    """Função executada no processo separado para retomar treinamento"""
-
-    logger = utils.get_logger([selected_environment, selected_robot, algorithm], ipc_queue)
-    logger.info(f"Retomando treinamento: {selected_environment} + {selected_robot} + {algorithm}")
-    logger.info(f"Modelo carregado: {model_path}")
-    logger.info(f"Episódio inicial recebido do GUI: {initial_episode}")
-    logger.info(f"Tempo Real: {enable_real_time_value.value}")
-
-    try:
-        # Criar componentes
-        environment = Environment(logger, name=selected_environment)
-        robot = Robot(logger, name=selected_robot)
-        sim = Simulation(logger, robot, environment, ipc_queue, pause_value, exit_value, enable_visualization_value, enable_real_time_value, initial_episode=initial_episode)
-        agent = Agent(logger, model_path=model_path, device=device, initial_episode=initial_episode)
-
-        # CONFIGURAR O AMBIENTE NO MODELO CARREGADO
-        logger.info("Configurando ambiente no modelo carregado...")
-        agent.set_env(sim)
-        sim.set_agent(agent)
-        logger.info(f"Retomando treinamento {algorithm} do episódio {initial_episode}...")
-
-        # Loop principal do treinamento
-        timesteps_completed = 0
-
-        # Diretório para controle de salvamento
-        control_dir = utils.TRAINING_CONTROL_PATH
-        os.makedirs(control_dir, exist_ok=True)
-
-        while not exit_value.value:
-            # VERIFICAÇÃO DE COMANDOS - PROCESSAR IMEDIATAMENTE
-            verify_control_files(control_dir, logger, agent, ipc_queue, "VIA ARQUIVO EM RESUME")
-
-            # Verificar pausa
-            while pause_value.value and not exit_value.value:
-                time.sleep(0.5)
-                verify_control_files(control_dir, logger, agent, ipc_queue, "DURANTE PAUSA EM RESUME")
-
-            if exit_value.value:
-                break
-
-            try:
-                # Verificar se o ambiente está configurado
-                if agent.model.get_env() is None:
-                    logger.error("Ambiente não configurado na retomada! Configurando...")
-                    agent.set_env(sim)
-
-                # Usar agent.model.learn diretamente
-                callback = TrainingCallback(logger)
-                agent.model.learn(total_timesteps=1000, reset_num_timesteps=False, callback=callback)
-                timesteps_completed += 1000
-                if timesteps_completed % 10000 == 0:
-                    logger.info(f"Progresso: {timesteps_completed} timesteps")
-            except Exception as e:
-                logger.exception("Erro durante aprendizado")
-                break
-
-        logger.info("Treinamento concluído!")
-
-    except Exception as e:
-        logger.exception("Erro em process_runner_resume")
 
     ipc_queue.put({"type": "done"})
