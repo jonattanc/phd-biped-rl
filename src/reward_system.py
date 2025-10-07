@@ -251,34 +251,6 @@ class RewardSystem:
             self.logger.exception("Erro ao carregar arquivo de configuração")
             return False
 
-    def save_configuration(self, filepath, config_data=None):
-        """Salva configuração em arquivo JSON"""
-        self.logger.info(f" RewardSystem.save_configuration called with {filepath}")
-
-        try:
-            if config_data is None:
-                config_data = {
-                    "metadata": {"name": os.path.basename(filepath).replace(".json", ""), "version": "1.0", "created": datetime.now().isoformat(), "description": "Configuração salva automaticamente"},
-                    "global_settings": {
-                        "fall_threshold": self.fall_threshold,
-                        "success_distance": self.success_distance,
-                        "platform_width": self.platform_width,
-                        "safe_zone": self.safe_zone,
-                        "warning_zone": self.warning_zone,
-                    },
-                    "components": self.get_configuration(),
-                }
-
-            with open(filepath, "w") as f:
-                json.dump(config_data, f, indent=2)
-
-            self.logger.info(f"Configuração salva em: {filepath}")
-            return True
-
-        except Exception as e:
-            self.logger.exception("Erro ao salvar configuração")
-            return False
-
     def update_component(self, name, weight=None, enabled=None):
         """Atualiza um componente - MANTIDO (já existe)"""
         self.logger.info(f" RewardSystem.update_component called for {name}")
@@ -290,70 +262,6 @@ class RewardSystem:
                 self.components[name].enabled = enabled
             return True
         return False
-
-    def get_available_configurations(self):
-        """Lista configurações disponíveis"""
-        self.logger.info(" RewardSystem.get_available_configurations called")
-
-        configs = []
-        base_dir = "reward_configs"
-
-        if not os.path.exists(base_dir):
-            return configs
-
-        # Configurações na raiz
-        for file in os.listdir(base_dir):
-            if file.endswith(".json") and file != "active.json":
-                configs.append(file.replace(".json", ""))
-
-        # Configurações em subdiretórios
-        for category in ["training", "experiments"]:
-            category_dir = os.path.join(base_dir, category)
-            if os.path.exists(category_dir):
-                for file in os.listdir(category_dir):
-                    if file.endswith(".json"):
-                        configs.append(f"{category}/{file.replace('.json', '')}")
-
-        return configs
-
-    def activate_configuration(self, config_name):
-        """Ativa uma configuração específica"""
-        self.logger.info(f" RewardSystem.activate_configuration called with {config_name}")
-
-        try:
-            # CORREÇÃO: Remover .json se já estiver presente
-            if config_name.endswith(".json"):
-                config_name = config_name[:-5]
-
-            # Determinar caminho completo
-            if "/" in config_name:
-                category, name = config_name.split("/")
-                config_path = f"{category}/{name}.json"
-            else:
-                config_path = f"{config_name}.json"
-
-            full_path = os.path.join("reward_configs", config_path)
-
-            if os.path.exists(full_path):
-                # Criar arquivo de configuração ativa
-                active_info = {"active_config": config_path, "activated_at": datetime.now().isoformat(), "name": config_name}
-
-                active_config_path = os.path.join("reward_configs", "active.json")
-                with open(active_config_path, "w") as f:
-                    json.dump(active_info, f, indent=2)
-
-                # Carregar a configuração
-                success = self.load_configuration_file(full_path)
-                if success:
-                    self.logger.info(f"Configuração ativada: {config_name}")
-                    return True
-            else:
-                self.logger.error(f"Arquivo de configuração não encontrado: {full_path}")
-                return False
-
-        except Exception as e:
-            self.logger.exception("Falha ao ativar configuração")
-            return False
 
     def load_active_configuration(self):
         """Carrega automaticamente a configuração ativa com verificações robustas"""
