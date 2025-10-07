@@ -38,7 +38,11 @@ def get_logger(description=["main"], ipc_queue=None):
     logger = logging.getLogger(log_name)
 
     if not logger.handlers:
-        log_filename = os.path.join(PROJECT_ROOT, "logs", f"log__{log_name}__proc{proc_num}.txt")
+        if log_name == "main":
+            log_filename = os.path.join(PROJECT_ROOT, "logs", "log__main.txt")
+
+        else:
+            log_filename = os.path.join(PROJECT_ROOT, "logs", f"log__{log_name}__proc{proc_num}.txt")
 
         logger.setLevel(logging.INFO)
 
