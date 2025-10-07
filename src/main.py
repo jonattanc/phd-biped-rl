@@ -37,7 +37,7 @@ class TrainingGUI:
 
         # Criar abas
         self.reward_tab = RewardTab(notebook, self.device, self.logger, self.reward_system)
-        self.training_tab = TrainingTab(notebook, self.device, self.logger)
+        self.training_tab = TrainingTab(notebook, self.device, self.logger, self.reward_system)
         self.evaluation_tab = EvaluationTab(notebook, self.device, self.logger)
         self.comparison_tab = ComparisonTab(notebook, self.device, self.logger)
 
@@ -70,7 +70,6 @@ class TrainingGUI:
     def start(self):
         # Iniciar componentes das abas
         self.reward_tab.start()
-        self.training_tab.reward_system = self.reward_system
         self.training_tab.start()
         self.evaluation_tab.start()
         self.comparison_tab.start()

@@ -22,11 +22,11 @@ from utils import ensure_directory, ENVIRONMENT_PATH, ROBOTS_PATH
 
 
 class TrainingTab:
-    def __init__(self, parent, device, logger):
+    def __init__(self, parent, device, logger, reward_system):
         self.frame = ttk.Frame(parent, padding="10")
         self.device = device
         self.logger = logger
-        self.reward_system = None
+        self.reward_system = reward_system
 
         # Dados de treinamento
         self.current_env = ""
