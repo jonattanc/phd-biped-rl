@@ -271,16 +271,6 @@ class RewardTab:
                 editor["entry"].delete(0, tk.END)
                 editor["entry"].insert(0, f"{weight:.3f}")
 
-    def on_scale_change(self, component_id, label_widget, var, entry_widget):
-        """Callback quando slider é movido"""
-        value = var.get()
-        label_widget.config(text=f"{value:.3f}")
-        entry_widget.delete(0, tk.END)
-        entry_widget.insert(0, f"{value:.3f}")
-
-        # Atualizar no sistema imediatamente
-        self.reward_system.update_component(component_id, weight=value)
-
     def on_config_selected(self, event):
         """Quando uma configuração é selecionada no combobox"""
         self.logger.info(" RewardTab.on_config_selected called")
