@@ -28,11 +28,12 @@ class RewardSystem:
         self.episode_data = []
 
         # Configurações padrão
-        self.fall_threshold = 0.5
-        self.success_distance = 10.0
-        self.platform_width = 1.0
-        self.safe_zone = 0.2
-        self.warning_zone = 0.4
+        self.fall_threshold = 0.5  # m
+        self.success_distance = 9.0  # m
+        self.platform_width = 1.0  # m
+        self.safe_zone = 0.2  # m
+        self.warning_zone = 0.4  # m
+        self.yaw_threshold = 0.5  # rad
 
         # Inicializar componentes padrão
         self._initialize_default_components()

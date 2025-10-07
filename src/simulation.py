@@ -31,13 +31,10 @@ class Simulation(gym.Env):
         self.reward_system = RewardSystem(logger)
 
         # Configurações de simulação
-        self.fall_threshold = 0.5  # m
-        self.yaw_threshold = 0.5  # rad
         self.episode_timeout_s = 20  # s
         self.physics_step_s = 1 / 240.0  # 240 Hz, ~4.16 ms
         self.physics_step_multiplier = 5
         self.time_step_s = self.physics_step_s * self.physics_step_multiplier  # 240/5 = 48 Hz, ~20.83 ms
-        self.success_distance = 9.0  # m
         self.max_motor_velocity = 2.0  # rad/s
         self.max_motor_torque = 130.0  # Nm
         self.apply_action = self.apply_position_action  # Escolher entre apply_velocity_action ou apply_position_action
@@ -149,7 +146,7 @@ class Simulation(gym.Env):
         # Forçar a referência de distância para 0.0
         episode_robot_x_initial_position = 0.0
 
-        while steps < self.max_steps:
+        while steps < self.reward_system.max_steps:
             action = np.random.uniform(-1, 1, size=self.action_dim)
             # Obter observação
             pos, _ = p.getBasePositionAndOrientation(self.robot.id)
@@ -166,13 +163,13 @@ class Simulation(gym.Env):
             prev_x_pos = distance_traveled
 
             # Verificar queda
-            if pos[2] < self.fall_threshold:
+            if pos[2] < self.reward_system.fall_threshold:
                 reward -= 100
                 self.logger.info(f"Robô caiu após {steps} passos. Distância: {distance_traveled:.2f}m")
                 break
 
             # Verificar sucesso
-            if distance_traveled >= self.success_distance:
+            if distance_traveled >= self.reward_system.success_distance:
                 reward += 50
                 success = True
                 self.logger.info(f"Sucesso! Percurso concluído em {steps} passos ({distance_traveled:.2f}m)")
@@ -399,17 +396,17 @@ class Simulation(gym.Env):
         info = {"distance": self.episode_distance, "termination": "none"}
 
         # Queda
-        if robot_z_position < self.fall_threshold:
+        if robot_z_position < self.reward_system.fall_threshold:
             self.episode_terminated = True
             info["termination"] = "fell"
 
         # Desvio do caminho
-        if abs(robot_yaw) >= self.yaw_threshold:
+        if abs(robot_yaw) >= self.reward_system.yaw_threshold:
             self.episode_terminated = True
             info["termination"] = "yaw_deviated"
 
         # Sucesso
-        elif self.episode_distance >= self.success_distance:
+        elif self.episode_distance >= self.reward_system.success_distance:
             self.episode_terminated = True
             self.episode_success = True
             info["termination"] = "success"
@@ -498,7 +495,7 @@ class Simulation(gym.Env):
         success = False
         reward = 0.0
 
-        while steps < self.max_steps:
+        while steps < self.reward_system.max_steps:
             # Ação aleatória para teste
             action = np.random.uniform(-1, 1, size=self.action_dim)
 
@@ -515,11 +512,11 @@ class Simulation(gym.Env):
             distance_traveled = current_x_pos - episode_robot_x_initial_position
 
             # Verificar condições de término
-            if pos[2] < self.fall_threshold:
+            if pos[2] < self.reward_system.fall_threshold:
                 reward -= 100
                 break
 
-            if distance_traveled >= self.success_distance:
+            if distance_traveled >= self.reward_system.success_distance:
                 reward += 50
                 success = True
                 break
