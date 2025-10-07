@@ -22,6 +22,8 @@ class RewardTab:
 
     def setup_directories(self):
         """Cria diretórios de configuração"""
+        self.logger.info(" RewardTab.setup_directories called")
+
         os.makedirs(self.config_dir, exist_ok=True)
         os.makedirs(os.path.join(self.config_dir, "training"), exist_ok=True)
         os.makedirs(os.path.join(self.config_dir, "experiments"), exist_ok=True)
@@ -33,6 +35,8 @@ class RewardTab:
 
     def create_default_config(self):
         """Cria configuração padrão"""
+        self.logger.info(" RewardTab.create_default_config called")
+
         default_config = {
             "metadata": {"name": "default", "version": "1.0", "description": "Configuração balanceada para locomoção básica", "created": datetime.now().isoformat(), "author": "system"},
             "global_settings": {"fall_threshold": 0.5, "success_distance": 10.0, "platform_width": 1.0, "safe_zone": 0.2, "warning_zone": 0.4},
@@ -186,6 +190,8 @@ class RewardTab:
 
     def refresh_config_list(self):
         """Atualiza lista de configurações disponíveis"""
+        self.logger.info(" RewardTab.refresh_config_list called")
+
         configs = []
 
         # Configurações de treino
@@ -209,6 +215,8 @@ class RewardTab:
 
     def load_active_config(self):
         """Carrega configuração ativa"""
+        self.logger.info(" RewardTab.load_active_config called")
+
         try:
             if os.path.exists(self.active_config_path):
                 with open(self.active_config_path, "r") as f:
@@ -245,6 +253,8 @@ class RewardTab:
 
     def update_quick_editors(self):
         """Atualiza todos os controles com valores atuais"""
+        self.logger.info(" RewardTab.update_quick_editors called")
+
         config = self.reward_system.get_configuration()
 
         for comp_id, editor in self.quick_editors.items():
@@ -273,11 +283,15 @@ class RewardTab:
 
     def on_config_selected(self, event):
         """Quando uma configuração é selecionada no combobox"""
+        self.logger.info(" RewardTab.on_config_selected called")
+
         config_name = self.config_var.get()
         self.load_config_by_name(config_name)
 
     def load_config_by_name(self, config_name):
         """Carrega configuração pelo nome"""
+        self.logger.info(" RewardTab.load_config_by_name called")
+
         try:
             if "/" in config_name:
                 category, name = config_name.split("/")
@@ -298,6 +312,8 @@ class RewardTab:
 
     def activate_selected_config(self):
         """Ativa a configuração selecionada"""
+        self.logger.info(" RewardTab.activate_selected_config called")
+
         config_name = self.config_var.get()
         if config_name:
             success = self.activate_configuration(config_name)
@@ -306,6 +322,8 @@ class RewardTab:
 
     def activate_configuration(self, config_name):
         """Ativa uma configuração específica"""
+        self.logger.info(" RewardTab.activate_configuration called")
+
         try:
             # Remover .json se já estiver presente
             if config_name.endswith(".json"):
@@ -346,6 +364,8 @@ class RewardTab:
 
     def create_new_config(self):
         """Cria nova configuração baseada na atual"""
+        self.logger.info(" RewardTab.create_new_config called")
+
         name = tk.simpledialog.askstring("Nova Configuração", "Nome da configuração:")
         if name:
             description = tk.simpledialog.askstring("Descrição", "Descrição da configuração:")
@@ -379,12 +399,16 @@ class RewardTab:
 
     def save_config_as(self):
         """Salva configuração atual com novo nome"""
+        self.logger.info(" RewardTab.save_config_as called")
+
         name = tk.simpledialog.askstring("Salvar Como", "Nome da configuração:")
         if name:
             self.create_new_config_with_name(name)
 
     def create_new_config_with_name(self, name):
         """Cria configuração com nome específico"""
+        self.logger.info(" RewardTab.create_new_config_with_name called")
+
         config_data = {
             "metadata": {
                 "name": name,
@@ -418,6 +442,8 @@ class RewardTab:
 
     def load_config(self):
         """Carrega configuração de arquivo"""
+        self.logger.info(" RewardTab.load_config called")
+
         filepath = filedialog.askopenfilename(title="Carregar Configuração", initialdir=self.config_dir, filetypes=[("JSON files", "*.json"), ("All files", "*.*")])
 
         if filepath:
@@ -475,6 +501,8 @@ class RewardTab:
 
     def reset_to_default(self):
         """Restaura configuração padrão"""
+        self.logger.info(" RewardTab.reset_to_default called")
+
         # Passar apenas o nome sem .json
         self.activate_configuration("default")
         messagebox.showinfo("Sucesso", "Configuração restaurada para padrão")
