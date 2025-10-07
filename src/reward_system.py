@@ -19,6 +19,8 @@ class RewardComponent:
 
 class RewardSystem:
     def __init__(self, logger):
+        logger.info("Inicializando RewardSystem...")
+
         self.logger = logger
         self.components = {}
         self.history = []
@@ -202,6 +204,8 @@ class RewardSystem:
 
     def get_configuration(self):
         """Retorna configuração atual em formato dicionário"""
+        self.logger.info(" RewardSystem.get_configuration called")
+
         config = {}
         for name, component in self.components.items():
             config[name] = {"weight": component.weight, "enabled": component.enabled, "min_value": component.min_value, "max_value": component.max_value}
@@ -209,6 +213,8 @@ class RewardSystem:
 
     def load_configuration(self, config_dict):
         """Carrega configuração de um dicionário"""
+        self.logger.info(" RewardSystem.load_configuration called")
+
         try:
             # Carregar componentes
             if "components" in config_dict:
@@ -235,6 +241,8 @@ class RewardSystem:
 
     def load_configuration_file(self, filepath):
         """Carrega configuração de arquivo JSON"""
+        self.logger.info(f" RewardSystem.load_configuration_file called with {filepath}")
+
         try:
             with open(filepath, "r") as f:
                 config = json.load(f)
@@ -245,6 +253,8 @@ class RewardSystem:
 
     def save_configuration(self, filepath, config_data=None):
         """Salva configuração em arquivo JSON"""
+        self.logger.info(f" RewardSystem.save_configuration called with {filepath}")
+
         try:
             if config_data is None:
                 config_data = {
@@ -271,6 +281,8 @@ class RewardSystem:
 
     def update_component(self, name, weight=None, enabled=None):
         """Atualiza um componente - MANTIDO (já existe)"""
+        self.logger.info(f" RewardSystem.update_component called for {name}")
+
         if name in self.components:
             if weight is not None:
                 self.components[name].weight = weight
@@ -281,6 +293,8 @@ class RewardSystem:
 
     def get_available_configurations(self):
         """Lista configurações disponíveis"""
+        self.logger.info(" RewardSystem.get_available_configurations called")
+
         configs = []
         base_dir = "reward_configs"
 
@@ -304,6 +318,8 @@ class RewardSystem:
 
     def activate_configuration(self, config_name):
         """Ativa uma configuração específica"""
+        self.logger.info(f" RewardSystem.activate_configuration called with {config_name}")
+
         try:
             # CORREÇÃO: Remover .json se já estiver presente
             if config_name.endswith(".json"):
@@ -341,6 +357,8 @@ class RewardSystem:
 
     def load_active_configuration(self):
         """Carrega automaticamente a configuração ativa com verificações robustas"""
+        self.logger.info(" RewardSystem.load_active_configuration called")
+
         try:
             # Primeiro verificar se o diretório existe
             configs_dir = "reward_configs"
