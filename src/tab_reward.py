@@ -1,6 +1,6 @@
 # tab_reward.py
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+from tkinter import ttk, messagebox
 import json
 import os
 from datetime import datetime
@@ -78,16 +78,11 @@ class RewardTab:
         self.config_combo.grid(row=0, column=1, padx=5, pady=5, sticky=(tk.W, tk.E))
         self.config_combo.bind("<<ComboboxSelected>>", self.on_config_selected)
 
-        ttk.Button(control_frame, text="Ativar", command=self.activate_selected_config).grid(row=0, column=2, padx=5)
+        ttk.Button(control_frame, text="Criar Nova Configuração", command=self.create_new_config).grid(row=0, column=2, padx=5)
 
         # Botões de ação
         button_frame = ttk.Frame(control_frame)
         button_frame.grid(row=1, column=0, columnspan=3, pady=10)
-
-        ttk.Button(button_frame, text="Salvar Nova", command=self.create_new_config).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="Salvar Como...", command=self.save_config_as).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="Carregar", command=self.load_config).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="Configuração Padrão", command=self.reset_to_default).pack(side=tk.LEFT, padx=5)
 
         # EDITOR COMPLETO COM TODAS AS CATEGORIAS
         editor_frame = ttk.LabelFrame(main_frame, text="Editor de Componentes de Recompensa", padding="10")
@@ -277,6 +272,7 @@ class RewardTab:
 
         config_name = self.config_var.get()
         self.load_config_by_name(config_name)
+        self.activate_selected_config()
 
     def load_config_by_name(self, config_name):
         """Carrega configuração pelo nome"""
@@ -304,11 +300,15 @@ class RewardTab:
         """Ativa a configuração selecionada"""
         self.logger.info(" RewardTab.activate_selected_config called")
 
-        config_name = self.config_var.get()
-        if config_name:
+        try:
+            config_name = self.config_var.get()
             success = self.activate_configuration(config_name)
-            if success:
-                messagebox.showinfo("Sucesso", f"Configuração '{config_name}' ativada!")
+            if not success:
+                raise Exception("Ativação falhou")
+
+        except Exception as e:
+            self.logger.exception("Erro ao ativar configuração selecionada")
+            messagebox.showinfo("Erro", f"Falha ao ativar configuração: {e}")
 
     def activate_configuration(self, config_name):
         """Ativa uma configuração específica"""
@@ -387,82 +387,6 @@ class RewardTab:
                 self.logger.exception("Erro ao criar nova configuração")
                 messagebox.showerror("Erro", f"Falha ao criar configuração: {e}")
 
-    def save_config_as(self):
-        """Salva configuração atual com novo nome"""
-        self.logger.info(" RewardTab.save_config_as called")
-
-        name = tk.simpledialog.askstring("Salvar Como", "Nome da configuração:")
-        if name:
-            self.create_new_config_with_name(name)
-
-    def create_new_config_with_name(self, name):
-        """Cria configuração com nome específico"""
-        self.logger.info(" RewardTab.create_new_config_with_name called")
-
-        config_data = {
-            "metadata": {
-                "name": name,
-                "version": "1.0",
-                "description": f"Configuração salva em {datetime.now().isoformat()}",
-                "created": datetime.now().isoformat(),
-                "based_on": self.config_var.get() or "default",
-            },
-            "global_settings": {
-                "fall_threshold": self.reward_system.fall_threshold,
-                "success_distance": self.reward_system.success_distance,
-                "platform_width": self.reward_system.platform_width,
-                "safe_zone": self.reward_system.safe_zone,
-                "warning_zone": self.reward_system.warning_zone,
-            },
-            "components": self.reward_system.get_configuration(),
-        }
-
-        config_path = os.path.join(self.config_dir, "training", f"{name}.json")
-
-        try:
-            with open(config_path, "w") as f:
-                json.dump(config_data, f, indent=2)
-
-            self.refresh_config_list()
-            messagebox.showinfo("Sucesso", f"Configuração salva como '{name}'")
-
-        except Exception as e:
-            self.logger.exception("Erro ao salvar configuração")
-            messagebox.showerror("Erro", f"Falha ao salvar configuração: {e}")
-
-    def load_config(self):
-        """Carrega configuração de arquivo"""
-        self.logger.info(" RewardTab.load_config called")
-
-        filepath = filedialog.askopenfilename(title="Carregar Configuração", initialdir=self.config_dir, filetypes=[("JSON files", "*.json"), ("All files", "*.*")])
-
-        if filepath:
-            try:
-                # Copiar para diretório de configurações
-                filename = os.path.basename(filepath)
-                dest_path = os.path.join(self.config_dir, "training", filename)
-
-                # Evitar sobrescrever
-                if os.path.exists(dest_path):
-                    overwrite = messagebox.askyesno("Confirmar", f"Configuração '{filename}' já existe. Sobrescrever?")
-                    if not overwrite:
-                        return
-
-                import shutil
-
-                shutil.copy2(filepath, dest_path)
-
-                self.refresh_config_list()
-                config_name = f"training/{filename[:-5]}"
-                self.config_var.set(config_name)
-                self.load_config_by_name(config_name)
-
-                messagebox.showinfo("Sucesso", f"Configuração '{filename}' carregada!")
-
-            except Exception as e:
-                self.logger.exception("Erro ao carregar configuração")
-                messagebox.showerror("Erro", f"Falha ao carregar configuração: {e}")
-
     def on_scale_change(self, component_id, label_widget, var, entry_widget):
         """Callback quando slider é movido"""
         value = var.get()
@@ -488,14 +412,6 @@ class RewardTab:
         """Callback quando checkbox é alterado"""
         enabled = enabled_var.get()
         self.reward_system.update_component(component_id, enabled=enabled)
-
-    def reset_to_default(self):
-        """Restaura configuração padrão"""
-        self.logger.info(" RewardTab.reset_to_default called")
-
-        # Passar apenas o nome sem .json
-        self.activate_configuration("default")
-        messagebox.showinfo("Sucesso", "Configuração restaurada para padrão")
 
     def start(self):
         """Inicia a aba"""
