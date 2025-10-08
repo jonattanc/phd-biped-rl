@@ -4,6 +4,7 @@ from tkinter import ttk, messagebox
 import json
 import os
 from datetime import datetime
+import utils
 
 
 class RewardTab:
@@ -14,52 +15,8 @@ class RewardTab:
         self.reward_system = reward_system
 
         # Configurações
-        self.config_dir = "reward_configs"
-        self.active_config_path = os.path.join(self.config_dir, "active.json")
-        self.setup_directories()
-
+        self.config_dir = utils.REWARD_CONFIGS_PATH
         self.setup_ui()
-
-    def setup_directories(self):
-        """Cria diretórios de configuração"""
-        self.logger.info(" RewardTab.setup_directories called")
-
-        os.makedirs(self.config_dir, exist_ok=True)
-        os.makedirs(os.path.join(self.config_dir, "training"), exist_ok=True)
-        os.makedirs(os.path.join(self.config_dir, "experiments"), exist_ok=True)
-
-        # Criar config padrão se não existir
-        default_config = os.path.join(self.config_dir, "default.json")
-        if not os.path.exists(default_config):
-            self.create_default_config()
-
-    def create_default_config(self):
-        """Cria configuração padrão"""
-        self.logger.info(" RewardTab.create_default_config called")
-
-        default_config = {
-            "metadata": {"name": "default", "version": "1.0", "description": "Configuração balanceada para locomoção básica", "created": datetime.now().isoformat(), "author": "system"},
-            "global_settings": {"fall_threshold": 0.5, "success_distance": 10.0, "platform_width": 1.0, "safe_zone": 0.2, "warning_zone": 0.4},
-            "components": {
-                "progress": {"weight": 15.0, "enabled": True},
-                "distance_bonus": {"weight": 2.0, "enabled": True},
-                "stability_roll": {"weight": -0.1, "enabled": True},
-                "stability_pitch": {"weight": -0.4, "enabled": True},
-                "yaw_penalty": {"weight": -2.0, "enabled": True},
-                "fall_penalty": {"weight": -100.0, "enabled": True},
-                "success_bonus": {"weight": 200.0, "enabled": True},
-                "effort_penalty": {"weight": -0.001, "enabled": True},
-                "jerk_penalty": {"weight": -0.05, "enabled": True},
-                "center_bonus": {"weight": 5.0, "enabled": True},
-                "warning_penalty": {"weight": -3.0, "enabled": True},
-            },
-        }
-
-        with open(os.path.join(self.config_dir, "default.json"), "w") as f:
-            json.dump(default_config, f, indent=2)
-
-        # Tornar default a configuração ativa
-        self.activate_configuration("default.json")
 
     def setup_ui(self):
         """Configura interface simplificada"""
@@ -74,68 +31,23 @@ class RewardTab:
         ttk.Label(control_frame, text="Configuração Ativa:").grid(row=0, column=0, sticky=tk.W, pady=5)
 
         self.config_var = tk.StringVar()
+        self.config_var.set("default")
         self.config_combo = ttk.Combobox(control_frame, textvariable=self.config_var, width=40, state="readonly")
         self.config_combo.grid(row=0, column=1, padx=5, pady=5, sticky=(tk.W, tk.E))
         self.config_combo.bind("<<ComboboxSelected>>", self.on_config_selected)
 
         ttk.Button(control_frame, text="Criar Nova Configuração", command=self.create_new_config).grid(row=0, column=2, padx=5)
 
-        # Botões de ação
-        button_frame = ttk.Frame(control_frame)
-        button_frame.grid(row=1, column=0, columnspan=3, pady=10)
-
         # EDITOR COMPLETO COM TODAS AS CATEGORIAS
         editor_frame = ttk.LabelFrame(main_frame, text="Editor de Componentes de Recompensa", padding="10")
         editor_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
 
         self.quick_editors = {}
-
-        # CRÍTICOS (SOBREVIVÊNCIA)
-        ttk.Label(editor_frame, text="Críticos (Sobrevivência)", font=("Arial", 10, "bold")).grid(row=0, column=0, columnspan=5, sticky=tk.W, pady=(10, 5), padx=5)
-
-        critical_components = [
-            ("progress", "Progresso", 0, 250),
-            ("distance_bonus", "Bônus de Distância", 0, 250),
-            ("stability_roll", "Estabilidade Lateral", -50, 0),
-            ("stability_pitch", "Estabilidade Frontal", -50, 0),
-            ("yaw_penalty", "Rotação Horizontal", -50, 0),
-            ("fall_penalty", "Penalidade por queda", -500, 0),
-            ("success_bonus", "Bônus de Sucesso", 0, 500),
-        ]
-
+        components = self.reward_system.get_configuration_as_dict()
         row_idx = 1
-        for comp_id, label, min_val, max_val in critical_components:
-            self._create_component_row(editor_frame, comp_id, label, min_val, max_val, row_idx)
-            row_idx += 1
 
-        # EFICIÊNCIA
-        ttk.Label(editor_frame, text="Eficiência", font=("Arial", 10, "bold")).grid(row=row_idx, column=0, columnspan=5, sticky=tk.W, pady=(15, 5), padx=5)
-        row_idx += 1
-
-        efficiency_components = [("effort_penalty", "Penalidade Esforço", -5, 0), ("jerk_penalty", "Penalidade Agito", -5, 0)]
-
-        for comp_id, label, min_val, max_val in efficiency_components:
-            self._create_component_row(editor_frame, comp_id, label, min_val, max_val, row_idx)
-            row_idx += 1
-
-        # NAVEGAÇÃO
-        ttk.Label(editor_frame, text="Navegação", font=("Arial", 10, "bold")).grid(row=row_idx, column=0, columnspan=5, sticky=tk.W, pady=(15, 5), padx=5)
-        row_idx += 1
-
-        navigation_components = [("center_bonus", "Bônus Centro", 0, 200), ("warning_penalty", "Penalidade por Zona", -100, 0)]
-
-        for comp_id, label, min_val, max_val in navigation_components:
-            self._create_component_row(editor_frame, comp_id, label, min_val, max_val, row_idx)
-            row_idx += 1
-
-        # AVANÇADOS
-        ttk.Label(editor_frame, text="Avançados", font=("Arial", 10, "bold")).grid(row=row_idx, column=0, columnspan=5, sticky=tk.W, pady=(15, 5), padx=5)
-        row_idx += 1
-
-        advanced_components = [("gait_regularity", "Regularidade da Marcha", 0, 50), ("symmetry_bonus", "Bônus de Simetria", 0, 50), ("clearance_bonus", "Bônus Elevação Pé", 0, 50)]
-
-        for comp_id, label, min_val, max_val in advanced_components:
-            self._create_component_row(editor_frame, comp_id, label, min_val, max_val, row_idx, default_enabled=False)
+        for key, value in components.items():
+            self._create_component_row(editor_frame, key, value, row_idx)
             row_idx += 1
 
         # Status
@@ -155,102 +67,52 @@ class RewardTab:
 
         # Carregar estado inicial
         self.refresh_config_list()
-        self.load_active_config()
 
-    def _create_component_row(self, parent, comp_id, label, min_val, max_val, row, default_enabled=True):
+    def _create_component_row(self, parent, component_name, component_content, row, default_enabled=True):
         """Cria uma linha de controle para um componente"""
-        ttk.Label(parent, text=label).grid(row=row, column=0, sticky=tk.W, padx=5, pady=2)
+        ttk.Label(parent, text=component_name).grid(row=row, column=0, sticky=tk.W, padx=5, pady=2)
 
         var = tk.DoubleVar()
-        scale = ttk.Scale(parent, from_=min_val, to=max_val, variable=var, orient=tk.HORIZONTAL, length=200)
+        scale = ttk.Scale(parent, from_=component_content["min_value"], to=component_content["max_value"], variable=var, orient=tk.HORIZONTAL, length=200)
         scale.grid(row=row, column=1, padx=5, pady=2, sticky=(tk.W, tk.E))
 
-        value_label = ttk.Label(parent, text="0.0", width=8)
+        value_label = ttk.Label(parent, text=component_content["weight"], width=8)
         value_label.grid(row=row, column=2, padx=5, pady=2)
 
         value_entry = ttk.Entry(parent, width=8)
         value_entry.grid(row=row, column=3, padx=5, pady=2)
-        value_entry.insert(0, "0.0")
+        value_entry.insert(0, component_content["weight"])
 
         enabled_var = tk.BooleanVar(value=default_enabled)
         check_btn = ttk.Checkbutton(parent, variable=enabled_var)
         check_btn.grid(row=row, column=4, padx=5, pady=2)
 
         # Bind events
-        var.trace("w", lambda *args, cid=comp_id, lbl=value_label, v=var, ent=value_entry: self.on_scale_change(cid, lbl, v, ent))
-        value_entry.bind("<Return>", lambda e, cid=comp_id, v=var, ent=value_entry: self.on_entry_change(cid, v, ent))
-        enabled_var.trace("w", lambda *args, cid=comp_id, ev=enabled_var: self.on_enabled_change(cid, ev))
+        var.trace("w", lambda *args, cid=component_name, lbl=value_label, v=var, ent=value_entry: self.on_scale_change(cid, lbl, v, ent))
+        value_entry.bind("<Return>", lambda e, cid=component_name, v=var, ent=value_entry: self.on_entry_change(cid, v, ent))
+        enabled_var.trace("w", lambda *args, cid=component_name, ev=enabled_var: self.on_enabled_change(cid, ev))
 
-        self.quick_editors[comp_id] = {"var": var, "scale": scale, "label": value_label, "entry": value_entry, "enabled_var": enabled_var, "check_btn": check_btn}
+        self.quick_editors[component_name] = {"var": var, "scale": scale, "label": value_label, "entry": value_entry, "enabled_var": enabled_var, "check_btn": check_btn}
 
     def refresh_config_list(self):
         """Atualiza lista de configurações disponíveis"""
         self.logger.info(" RewardTab.refresh_config_list called")
 
-        configs = []
+        config_files = []
 
-        # Configurações de treino
-        training_dir = os.path.join(self.config_dir, "training")
-        for config_file in os.listdir(training_dir):
-            if config_file.endswith(".json"):
-                configs.append(f"training/{config_file[:-5]}")
+        for root, _, files in os.walk(self.config_dir):
+            for file in files:
+                full_path = os.path.join(root, file)
+                rel_path = os.path.relpath(full_path, self.config_dir).rstrip(".json")
+                config_files.append(rel_path.replace("\\", "/"))
 
-        # Configurações experimentais
-        experiments_dir = os.path.join(self.config_dir, "experiments")
-        for config_file in os.listdir(experiments_dir):
-            if config_file.endswith(".json"):
-                configs.append(f"experiments/{config_file[:-5]}")
-
-        # Configurações na raiz
-        for config_file in os.listdir(self.config_dir):
-            if config_file.endswith(".json") and config_file != "active.json":
-                configs.append(config_file[:-5])
-
-        self.config_combo["values"] = configs
-
-    def load_active_config(self):
-        """Carrega configuração ativa"""
-        self.logger.info(" RewardTab.load_active_config called")
-
-        try:
-            if os.path.exists(self.active_config_path):
-                with open(self.active_config_path, "r") as f:
-                    active_info = json.load(f)
-
-                config_path = active_info.get("active_config", "default.json")
-
-                if config_path.endswith(".json"):
-                    config_name = config_path[:-5]
-                else:
-                    config_name = config_path
-
-                full_path = os.path.join(self.config_dir, config_path)
-
-                if os.path.exists(full_path):
-                    # Carregar no sistema de recompensas
-                    self.reward_system.load_configuration_file(full_path)
-
-                    # Atualizar UI
-                    self.config_var.set(config_name)
-                    self.status_label.config(text=f"Configuração ativa: {config_name}")
-
-                    # Atualizar sliders
-                    self.update_quick_editors()
-                    return True
-
-            # Fallback para default
-            self.activate_configuration("default")
-            return True
-
-        except Exception as e:
-            self.logger.exception("Erro ao carregar configuração ativa")
-            return False
+        self.config_combo["values"] = config_files
 
     def update_quick_editors(self):
         """Atualiza todos os controles com valores atuais"""
         self.logger.info(" RewardTab.update_quick_editors called")
 
-        config = self.reward_system.get_configuration()
+        config = self.reward_system.get_configuration_as_dict()
 
         for comp_id, editor in self.quick_editors.items():
             if comp_id in config:
@@ -369,7 +231,7 @@ class RewardTab:
                     "safe_zone": self.reward_system.safe_zone,
                     "warning_zone": self.reward_system.warning_zone,
                 },
-                "components": self.reward_system.get_configuration(),
+                "components": self.reward_system.get_configuration_as_dict(),
             }
 
             # Salvar em training por padrão
@@ -416,7 +278,6 @@ class RewardTab:
     def start(self):
         """Inicia a aba"""
         self.logger.info("Aba de recompensas simplificada inicializada")
-        self.load_active_config()
 
     def on_closing(self):
         """Limpeza ao fechar"""

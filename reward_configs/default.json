@@ -1,62 +1,82 @@
 {
-  "metadata": {
-    "name": "default",
-    "version": "1.0",
-    "description": "Configura\u00e7\u00e3o balanceada para locomo\u00e7\u00e3o b\u00e1sica",
-    "created": "2025-10-04T00:36:41.713533",
-    "author": "system"
-  },
-  "global_settings": {
-    "fall_threshold": 0.5,
-    "success_distance": 10.0,
-    "platform_width": 1.0,
-    "safe_zone": 0.2,
-    "warning_zone": 0.4
-  },
   "components": {
     "progress": {
       "weight": 15.0,
-      "enabled": true
+      "enabled": true,
+      "min_value": -500.0,
+      "max_value": 500.0
     },
     "distance_bonus": {
       "weight": 2.0,
-      "enabled": true
+      "enabled": true,
+      "min_value": -500.0,
+      "max_value": 500.0
     },
     "stability_roll": {
       "weight": -0.1,
-      "enabled": true
+      "enabled": true,
+      "min_value": -500.0,
+      "max_value": 500.0
     },
     "stability_pitch": {
       "weight": -0.4,
-      "enabled": true
+      "enabled": true,
+      "min_value": -500.0,
+      "max_value": 500.0
     },
     "yaw_penalty": {
       "weight": -2.0,
-      "enabled": true
+      "enabled": true,
+      "min_value": -500.0,
+      "max_value": 500.0
     },
     "fall_penalty": {
       "weight": -100.0,
-      "enabled": true
+      "enabled": true,
+      "min_value": -500.0,
+      "max_value": 500.0
     },
     "success_bonus": {
       "weight": 200.0,
-      "enabled": true
+      "enabled": true,
+      "min_value": -500.0,
+      "max_value": 500.0
     },
     "effort_penalty": {
       "weight": -0.001,
-      "enabled": true
+      "enabled": true,
+      "min_value": -500.0,
+      "max_value": 500.0
     },
     "jerk_penalty": {
       "weight": -0.05,
-      "enabled": true
+      "enabled": true,
+      "min_value": -500.0,
+      "max_value": 500.0
     },
     "center_bonus": {
       "weight": 5.0,
-      "enabled": true
+      "enabled": true,
+      "min_value": -500.0,
+      "max_value": 500.0
     },
     "warning_penalty": {
       "weight": -3.0,
-      "enabled": true
+      "enabled": true,
+      "min_value": -500.0,
+      "max_value": 500.0
+    },
+    "safe_zone": {
+      "weight": 0.2,
+      "enabled": true,
+      "min_value": -500.0,
+      "max_value": 500.0
+    },
+    "warning_zone": {
+      "weight": 0.4,
+      "enabled": true,
+      "min_value": -500.0,
+      "max_value": 500.0
     }
   }
 }

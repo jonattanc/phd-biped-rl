@@ -306,20 +306,10 @@ class TrainingTab:
             self.enable_visualization_values.append(enable_visualization_val)
             self.enable_real_time_values.append(realtime_val)
 
-            # CARREGAR CONFIGURAÇÃO ATIVA DE RECOMPENSAS AUTOMATICAMENTE
-            try:
-                reward_config = self.reward_system.load_active_configuration()
-                if not reward_config:
-                    self.logger.info("Usando configuração padrão de recompensas")
-                else:
-                    self.logger.info("Configuração ativa de recompensas carregada")
-            except Exception as e:
-                self.logger.exception("Erro ao carregar configuração de recompensas. Usando padrão.")
-
             # Iniciar processo com config
             p = multiprocessing.Process(
                 target=train_process.process_runner,
-                args=(self.current_env, self.current_robot, self.current_algorithm, self.ipc_queue, pause_val, exit_val, enable_visualization_val, realtime_val, self.device, 0, reward_config),
+                args=(self.current_env, self.current_robot, self.current_algorithm, self.ipc_queue, pause_val, exit_val, enable_visualization_val, realtime_val, self.device, 0),
             )
             p.start()
             self.training_start_time = time.time()
@@ -391,7 +381,6 @@ class TrainingTab:
                     realtime_val,
                     self.device,
                     self.current_episode,
-                    None,
                     model_path,
                 ),
             )

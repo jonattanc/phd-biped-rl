@@ -61,7 +61,6 @@ def process_runner(
     enable_real_time_value,
     device="cpu",
     initial_episode=0,
-    reward_config=None,
     model_path=None,
 ):
     logger = utils.get_logger([selected_environment, selected_robot, algorithm], ipc_queue)
@@ -116,14 +115,5 @@ def process_runner(
 
     except Exception as e:
         logger.exception("Erro em process_runner")
-
-    # CONFIGURAR SISTEMA DE RECOMPENSAS
-    if reward_config is not None:
-        sim.reward_system.load_configuration(reward_config)
-        logger.info("Configuração de recompensas carregada")
-    else:
-        # Fallback para padrão
-        sim.reward_system.load_active_configuration()
-        logger.info("Usando configuração padrão de recompensas")
 
     ipc_queue.put({"type": "done"})

@@ -4,6 +4,7 @@ import numpy as np
 import json
 import time
 from dataclasses import dataclass
+import utils
 
 
 @dataclass
@@ -25,6 +26,7 @@ class RewardSystem:
         self.history = []
         self.current_episode = 0
         self.episode_data = []
+        self.components = {}
 
         # Configurações padrão
         self.fall_threshold = 0.5  # m
@@ -34,34 +36,9 @@ class RewardSystem:
         self.warning_zone = 0.4  # m
         self.yaw_threshold = 0.5  # rad
 
-        # Inicializar componentes padrão
-        self._initialize_default_components()
-
-    def _initialize_default_components(self):
-        """Inicializa os componentes de recompensa padrão"""
-        default_components = [
-            # Componentes Críticos (Sobrevivência)
-            RewardComponent("progress", 15.0, enabled=True),
-            RewardComponent("distance_bonus", 2.0, enabled=True),
-            RewardComponent("stability_roll", -0.1, enabled=True),
-            RewardComponent("stability_pitch", -0.4, enabled=True),
-            RewardComponent("yaw_penalty", -2.0, enabled=True),
-            RewardComponent("fall_penalty", -100.0, enabled=True),
-            RewardComponent("success_bonus", 200.0, enabled=True),
-            # Eficiência
-            RewardComponent("effort_penalty", -0.001, enabled=True),
-            RewardComponent("jerk_penalty", -0.05, enabled=True),
-            # Navegação
-            RewardComponent("center_bonus", 5.0, enabled=True),
-            RewardComponent("warning_penalty", -3.0, enabled=True),
-            # Componentes Avançados (inicialmente desabilitados)
-            RewardComponent("gait_regularity", 2.0, enabled=False),
-            RewardComponent("symmetry_bonus", 1.0, enabled=False),
-            RewardComponent("clearance_bonus", 1.5, enabled=False),
-        ]
-
-        for component in default_components:
-            self.components[component.name] = component
+        default_config_path = os.path.join(utils.REWARD_CONFIGS_PATH, "default.json")
+        self.load_configuration_file(default_config_path, is_default_file=True)
+        self.default_components = self.get_configuration_as_dict()
 
     def calculate_reward(self, simulation, action, robot_state, env_conditions=None):
         """Calcula a recompensa total baseada nos componentes ativos"""
@@ -202,35 +179,57 @@ class RewardSystem:
 
         return total_reward
 
-    def get_configuration(self):
+    def get_configuration_as_dict(self):
         """Retorna configuração atual em formato dicionário"""
-        self.logger.info(" RewardSystem.get_configuration called")
+        self.logger.info(" RewardSystem.get_configuration_as_dict called")
 
         config = {}
         for name, component in self.components.items():
             config[name] = {"weight": component.weight, "enabled": component.enabled, "min_value": component.min_value, "max_value": component.max_value}
         return config
 
-    def load_configuration(self, config_dict):
+    def load_configuration(self, config_dict, is_default_file=False):
         """Carrega configuração de um dicionário"""
         self.logger.info(" RewardSystem.load_configuration called")
 
         try:
             # Carregar componentes
-            if "components" in config_dict:
-                components_config = config_dict["components"]
-                for name, settings in components_config.items():
-                    if name in self.components:
-                        self.update_component(name, settings.get("weight"), settings.get("enabled"))
+            if "components" not in config_dict:
+                raise ValueError("Configuração inválida: 'components' ausente")
 
-            # Carregar configurações globais
-            if "global_settings" in config_dict:
-                globals_config = config_dict["global_settings"]
-                self.fall_threshold = globals_config.get("fall_threshold", self.fall_threshold)
-                self.success_distance = globals_config.get("success_distance", self.success_distance)
-                self.platform_width = globals_config.get("platform_width", self.platform_width)
-                self.safe_zone = globals_config.get("safe_zone", self.safe_zone)
-                self.warning_zone = globals_config.get("warning_zone", self.warning_zone)
+            components_config = config_dict["components"]
+
+            if not is_default_file:
+                warning_msg = ""
+                missing_components = set(self.default_components.keys()) - set(components_config.keys())
+                extra_components = set(components_config.keys()) - set(self.default_components.keys())
+
+                if extra_components:
+                    warning_msg += "Componentes extras na configuração carregada, ignorando:\n"
+
+                    for comp in extra_components:
+                        warning_msg += f" - {comp}\n"
+                        del components_config[comp]
+
+                if missing_components:
+                    warning_msg += "Componentes faltando na configuração carregada, usando valores default:\n"
+
+                    for comp in missing_components:
+                        warning_msg += f" - {comp}\n"
+                        components_config[comp] = self.default_components[comp]
+
+                if warning_msg:
+                    self.logger.warning(warning_msg)
+
+            self.components = {}
+
+            for name, content in components_config.items():
+                weight = content.get("weight", 0.0)
+                enabled = content.get("enabled", False)
+                min_value = content.get("min_value", -float("inf"))
+                max_value = content.get("max_value", float("inf"))
+
+                self.components[name] = RewardComponent(name=name, weight=weight, enabled=enabled, min_value=min_value, max_value=max_value)
 
             self.logger.info("Configuração carregada com sucesso")
             return True
@@ -239,91 +238,31 @@ class RewardSystem:
             self.logger.exception("Erro ao carregar configuração")
             return False
 
-    def load_configuration_file(self, filepath):
+    def load_configuration_file(self, filepath, is_default_file=False):
         """Carrega configuração de arquivo JSON"""
         self.logger.info(f" RewardSystem.load_configuration_file called with {filepath}")
 
         try:
             with open(filepath, "r") as f:
                 config = json.load(f)
-            return self.load_configuration(config)
+            return self.load_configuration(config, is_default_file)
         except Exception as e:
-            self.logger.exception("Erro ao carregar arquivo de configuração")
+            self.logger.exception(f"Erro ao carregar arquivo de configuração: {filepath}")
             return False
 
     def update_component(self, name, weight=None, enabled=None):
         """Atualiza um componente - MANTIDO (já existe)"""
         self.logger.info(f" RewardSystem.update_component called for {name}")
 
-        if name in self.components:
-            if weight is not None:
-                self.components[name].weight = weight
-            if enabled is not None:
-                self.components[name].enabled = enabled
-            return True
-        return False
-
-    def load_active_configuration(self):
-        """Carrega automaticamente a configuração ativa com verificações robustas"""
-        self.logger.info(" RewardSystem.load_active_configuration called")
-
-        try:
-            # Primeiro verificar se o diretório existe
-            configs_dir = "reward_configs"
-            if not os.path.exists(configs_dir):
-                self.logger.warning(f"Diretório de configurações não encontrado: {configs_dir}")
-                self.logger.info("Criando diretório de configurações...")
-                os.makedirs(configs_dir, exist_ok=True)
-                return False
-
-            self.logger.info(f"Diretório de configurações encontrado: {configs_dir}")
-            self.logger.info(f"Conteúdo: {os.listdir(configs_dir)}")
-
-            active_config_path = os.path.join(configs_dir, "active.json")
-
-            # Se active.json não existe, usar padrão interno
-            if not os.path.exists(active_config_path):
-                self.logger.info("Nenhuma configuração ativa encontrada (active.json não existe)")
-                return False
-
-            self.logger.info("Arquivo active.json encontrado")
-
-            # Carregar informação da configuração ativa
-            with open(active_config_path, "r") as f:
-                active_info = json.load(f)
-
-            config_path = active_info.get("active_config", "default.json")
-
-            # CORREÇÃO: Remover .json se já estiver presente para evitar duplicação
-            if config_path.endswith(".json"):
-                config_name = config_path[:-5]  # Remove .json
-            else:
-                config_name = config_path
-
-            # CORREÇÃO: Construir o caminho corretamente
-            full_path = os.path.join(configs_dir, f"{config_name}.json")
-
-            self.logger.info(f"Tentando carregar: {full_path}")
-
-            # Verificar se o arquivo de configuração existe
-            if os.path.exists(full_path):
-                success = self.load_configuration_file(full_path)
-                if success:
-                    self.logger.info(f"Configuração ativa carregada com sucesso: {config_name}")
-                    return True
-                else:
-                    self.logger.error(f"Falha ao carregar configuração: {config_name}")
-                    return False
-            else:
-                self.logger.warning(f"Arquivo de configuração não encontrado: {full_path}")
-                self.logger.info(f"Arquivos em {configs_dir}: {os.listdir(configs_dir)}")
-                return False
-
-        except Exception as e:
-            self.logger.exception("Erro ao carregar configuração ativa")
-            # Em caso de erro, usar configuração padrão interna
-            self.logger.info("Usando configuração padrão interna devido a erro")
+        if name not in self.components:
+            self.logger.error(f"Componente {name} não encontrado")
             return False
+
+        if weight is not None:
+            self.components[name].weight = weight
+        if enabled is not None:
+            self.components[name].enabled = enabled
+        return True
 
     def _calculate_gait_regularity(self, joint_velocities):
         """Calcula regularidade da marcha baseado na variância das velocidades"""
