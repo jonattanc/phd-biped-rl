@@ -22,11 +22,12 @@ from utils import ensure_directory, ENVIRONMENT_PATH, ROBOTS_PATH
 
 
 class TrainingTab:
-    def __init__(self, parent, device, logger, reward_system):
+    def __init__(self, parent, device, logger, reward_system, notebook):
         self.frame = ttk.Frame(parent, padding="10")
         self.device = device
         self.logger = logger
         self.reward_system = reward_system
+        self.notebook = notebook
 
         # Dados de treinamento
         self.current_env = ""
@@ -248,6 +249,7 @@ class TrainingTab:
     def start_training(self):
         """Inicia um novo treinamento do zero"""
         self.start_btn.config(state=tk.DISABLED, text="Iniciando...")
+        self.disable_other_tabs()
 
         if self.is_resuming:
             self.logger.info(f"Retomando treinamento - current_episode: {self.current_episode}")
@@ -273,11 +275,6 @@ class TrainingTab:
             self.episode_data = {key: [] for key in self.episode_data.keys()}
             self.steps_per_second = 0
             self._initialize_plots()
-
-            # Configurar botões
-            self.start_btn.config(state=tk.DISABLED)
-            self.pause_btn.config(state=tk.NORMAL)
-            self.stop_btn.config(state=tk.NORMAL)
 
             # Sistema tracker para novo treinamento
             if not hasattr(self, "tracker"):
@@ -330,12 +327,15 @@ class TrainingTab:
             # Habilitar botões
             self.save_training_btn.config(state=tk.DISABLED)
             self.export_plots_btn.config(state=tk.NORMAL)
+            self.pause_btn.config(state=tk.NORMAL)
+            self.stop_btn.config(state=tk.NORMAL)
             self.start_btn.config(text="Iniciar Treino")
 
         except Exception as e:
             self.logger.exception("Erro ao iniciar treinamento")
             messagebox.showerror("Erro", f"Erro ao iniciar treinamento: {e}")
             self.start_btn.config(state=tk.NORMAL, text="Iniciar Treino")
+            self.enable_other_tabs()
 
     def _resume_training(self):
         """Retoma um treinamento existente"""
@@ -344,11 +344,6 @@ class TrainingTab:
             model_path = self._find_model_for_resume()
             if not model_path:
                 return
-
-            # Configurar botões
-            self.start_btn.config(state=tk.DISABLED, text="Retomando...")
-            self.pause_btn.config(state=tk.NORMAL)
-            self.stop_btn.config(state=tk.NORMAL)
 
             # Iniciar processo de retomada
             pause_val = multiprocessing.Value("b", 0)
@@ -388,6 +383,10 @@ class TrainingTab:
             self.processes.append(p)
 
             self.logger.info(f"Processo de treinamento retomado: {self.current_env} + {self.current_robot} + {self.current_algorithm}")
+            self.save_training_btn.config(state=tk.DISABLED)
+            self.export_plots_btn.config(state=tk.NORMAL)
+            self.pause_btn.config(state=tk.NORMAL)
+            self.stop_btn.config(state=tk.NORMAL)
             self.start_btn.config(text="Iniciar Treino")
             self.is_resuming = False
 
@@ -395,6 +394,7 @@ class TrainingTab:
             self.logger.exception("Erro ao retomar treinamento")
             messagebox.showerror("Erro", f"Erro ao retomar treinamento: {e}")
             self.start_btn.config(state=tk.NORMAL, text="Iniciar Treino")
+            self.enable_other_tabs()
 
     def _find_model_for_resume(self):
         """Encontra modelo para retomada usando busca flexível"""
@@ -473,6 +473,20 @@ class TrainingTab:
         except Exception as e:
             self.logger.exception("Erro ao solicitar salvamento imediato")
 
+    def disable_other_tabs(self):
+        current = self.notebook.select()
+
+        for tab_id in self.notebook.tabs():
+            if tab_id != current:
+                self.notebook.tab(tab_id, state="disabled")
+
+    def enable_other_tabs(self):
+        current = self.notebook.select()
+
+        for tab_id in self.notebook.tabs():
+            if tab_id != current:
+                self.notebook.tab(tab_id, state="normal")
+
     def stop_training(self):
         """Finaliza o treinamento"""
         if self.exit_values:
@@ -484,6 +498,8 @@ class TrainingTab:
         self.stop_btn.config(state=tk.DISABLED)
         self.save_training_btn.config(state=tk.DISABLED)
         self.export_plots_btn.config(state=tk.DISABLED)
+
+        self.enable_other_tabs()
 
         self.logger.info("Treinamento finalizado pelo usuário")
 
@@ -1213,6 +1229,7 @@ class TrainingTab:
                         self.stop_btn.config(state=tk.DISABLED)
                         self.save_training_btn.config(state=tk.DISABLED)
                         self.export_plots_btn.config(state=tk.DISABLED)
+                        self.enable_other_tabs()
                         self.is_resuming = False
 
                     else:

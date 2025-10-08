@@ -37,7 +37,7 @@ class TrainingGUI:
 
         # Criar abas
         self.reward_tab = RewardTab(notebook, self.device, self.logger, self.reward_system)
-        self.training_tab = TrainingTab(notebook, self.device, self.logger, self.reward_system)
+        self.training_tab = TrainingTab(notebook, self.device, self.logger, self.reward_system, notebook)
         self.evaluation_tab = EvaluationTab(notebook, self.device, self.logger)
         self.comparison_tab = ComparisonTab(notebook, self.device, self.logger)
 
