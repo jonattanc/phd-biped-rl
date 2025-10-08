@@ -174,30 +174,58 @@ class RewardTab:
 
     def on_scale_change(self, component_id, label_widget, var, entry_widget):
         """Callback quando slider é movido"""
-        value = var.get()
-        label_widget.config(text=f"{value:.3f}")
-        entry_widget.delete(0, tk.END)
-        entry_widget.insert(0, f"{value:.3f}")
+        try:
+            value = var.get()
+            label_widget.config(text=f"{value:.3f}")
+            entry_widget.delete(0, tk.END)
+            entry_widget.insert(0, f"{value:.3f}")
 
-        # Atualizar no sistema imediatamente
-        self.reward_system.update_component(component_id, weight=value)
+            # Atualizar no sistema imediatamente
+            self.save_config_change(component_id, weight=value)
+
+        except Exception as e:
+            self.logger.exception(f"Erro ao atualizar valor do componente {component_id}: {e}")
+            messagebox.showerror("Erro", f"Falha ao atualizar valor: {e}")
 
     def on_entry_change(self, component_id, var, entry_widget):
         """Callback quando valor é digitado no entry"""
         try:
-            value = float(entry_widget.get())
-            var.set(value)
-            # on_scale_change será chamado automaticamente pelo trace
-        except ValueError:
-            # Se valor inválido, restaurar o anterior
-            self.logger.warning(f"Valor inválido digitado para {component_id}: {entry_widget.get()}")
-            entry_widget.delete(0, tk.END)
-            entry_widget.insert(0, f"{var.get():.3f}")
+            try:
+                value = float(entry_widget.get())
+                var.set(value)
+                # on_scale_change será chamado automaticamente pelo trace
+            except ValueError:
+                # Se valor inválido, restaurar o anterior
+                self.logger.warning(f"Valor inválido digitado para {component_id}: {entry_widget.get()}")
+                entry_widget.delete(0, tk.END)
+                entry_widget.insert(0, f"{var.get():.3f}")
+
+        except Exception as e:
+            self.logger.exception(f"Erro ao processar entrada do componente {component_id}: {e}")
+            messagebox.showerror("Erro", f"Falha ao processar entrada: {e}")
 
     def on_enabled_change(self, component_id, enabled_var):
         """Callback quando checkbox é alterado"""
-        enabled = enabled_var.get()
-        self.reward_system.update_component(component_id, enabled=enabled)
+        try:
+            enabled = enabled_var.get()
+            self.save_config_change(component_id, enabled=enabled)
+
+        except Exception as e:
+            self.logger.exception(f"Erro ao atualizar estado do componente {component_id}: {e}")
+            messagebox.showerror("Erro", f"Falha ao atualizar estado: {e}")
+
+    def save_config_change(self, component_id, weight=None, enabled=None):
+        self.reward_system.update_component(component_id, weight=weight, enabled=enabled)
+
+        config_data = {
+            "components": self.reward_system.get_configuration_as_dict(),
+        }
+
+        config_name = self.config_var.get()
+        config_path = os.path.join(self.config_dir, f"{config_name}.json")
+
+        with open(config_path, "w") as f:
+            json.dump(config_data, f, indent=2)
 
     def start(self):
         """Inicia a aba"""
