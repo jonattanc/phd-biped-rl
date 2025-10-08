@@ -190,6 +190,7 @@ class RewardTab:
             # on_scale_change será chamado automaticamente pelo trace
         except ValueError:
             # Se valor inválido, restaurar o anterior
+            self.logger.warning(f"Valor inválido digitado para {component_id}: {entry_widget.get()}")
             entry_widget.delete(0, tk.END)
             entry_widget.insert(0, f"{var.get():.3f}")
 

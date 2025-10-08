@@ -264,8 +264,12 @@ class RewardSystem:
 
         if weight is not None:
             self.components[name].weight = weight
+            self.logger.info(f"weight atualizado para {weight}")
+
         if enabled is not None:
             self.components[name].enabled = enabled
+            self.logger.info(f"enabled atualizado para {enabled}")
+
         return True
 
     def _calculate_gait_regularity(self, joint_velocities):
