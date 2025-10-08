@@ -150,36 +150,27 @@ class RewardTab:
         """Cria nova configuração baseada na atual"""
         self.logger.info(" RewardTab.create_new_config called")
 
-        name = tk.simpledialog.askstring("Nova Configuração", "Nome da configuração:")
-        if name:
-            description = tk.simpledialog.askstring("Descrição", "Descrição da configuração:")
+        try:
+            name = tk.simpledialog.askstring("Nova Configuração", "Nome da configuração:")
+
+            if not name:
+                return
 
             config_data = {
-                "metadata": {"name": name, "version": "1.0", "description": description or "", "created": datetime.now().isoformat(), "based_on": self.config_var.get() or "default"},
-                "global_settings": {
-                    "fall_threshold": self.reward_system.fall_threshold,
-                    "success_distance": self.reward_system.success_distance,
-                    "platform_width": self.reward_system.platform_width,
-                    "safe_zone": self.reward_system.safe_zone,
-                    "warning_zone": self.reward_system.warning_zone,
-                },
                 "components": self.reward_system.get_configuration_as_dict(),
             }
 
-            # Salvar em training por padrão
-            config_path = os.path.join(self.config_dir, "training", f"{name}.json")
+            config_path = os.path.join(self.config_dir, f"{name}.json")
 
-            try:
-                with open(config_path, "w") as f:
-                    json.dump(config_data, f, indent=2)
+            with open(config_path, "w") as f:
+                json.dump(config_data, f, indent=2)
 
-                self.refresh_config_list()
-                self.config_var.set(f"training/{name}")
-                messagebox.showinfo("Sucesso", f"Configuração '{name}' criada!")
+            self.refresh_config_list()
+            self.config_var.set(name)
 
-            except Exception as e:
-                self.logger.exception("Erro ao criar nova configuração")
-                messagebox.showerror("Erro", f"Falha ao criar configuração: {e}")
+        except Exception as e:
+            self.logger.exception("Erro ao criar nova configuração")
+            messagebox.showerror("Erro", f"Falha ao criar configuração: {e}")
 
     def on_scale_change(self, component_id, label_widget, var, entry_widget):
         """Callback quando slider é movido"""
