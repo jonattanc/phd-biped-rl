@@ -39,6 +39,12 @@ class RewardSystem:
         self.load_configuration_file("default.json", is_default_file=True)
         self.default_components = self.get_configuration_as_dict()
 
+    def is_component_enabled(self, name):
+        if name not in self.components:
+            return False
+
+        return self.components[name].enabled
+
     def calculate_reward(self, simulation, action, robot_state, env_conditions=None):
         """Calcula a recompensa total baseada nos componentes ativos"""
         if env_conditions is None:
@@ -69,55 +75,55 @@ class RewardSystem:
             # ===== COMPONENTES CRÍTICOS =====
 
             # 1. Progresso
-            if self.components["progress"].enabled:
+            if self.is_component_enabled("progress"):
                 progress = simulation.episode_distance - simulation.episode_last_distance
                 self.components["progress"].value = progress
                 total_reward += progress * self.components["progress"].weight
 
             # 2. Bônus de distância acumulada
-            if self.components["distance_bonus"].enabled:
+            if self.is_component_enabled("distance_bonus"):
                 self.components["distance_bonus"].value = simulation.episode_distance
                 total_reward += simulation.episode_distance * self.components["distance_bonus"].weight
 
             # 3. Estabilidade - Orientação
             roll, pitch, yaw = robot_orientation
 
-            if self.components["stability_roll"].enabled:
+            if self.is_component_enabled("stability_roll"):
                 self.components["stability_roll"].value = roll**2
                 total_reward += roll**2 * self.components["stability_roll"].weight
 
-            if self.components["stability_pitch"].enabled:
+            if self.is_component_enabled("stability_pitch"):
                 self.components["stability_pitch"].value = pitch**2
                 total_reward += pitch**2 * self.components["stability_pitch"].weight
 
             # 4. Penalidade por desvio de yaw
-            if self.components["yaw_penalty"].enabled and abs(yaw) > 0.35:  # ~20 graus
+            if self.is_component_enabled("yaw_penalty") and abs(yaw) > 0.35:  # ~20 graus
                 self.components["yaw_penalty"].value = 1
                 total_reward += self.components["yaw_penalty"].weight
 
             # 5. Queda
             if robot_position[2] < self.fall_threshold:
-                if self.components["fall_penalty"].enabled:
+                if self.is_component_enabled("fall_penalty"):
                     self.components["fall_penalty"].value = 1
                     total_reward += self.components["fall_penalty"].weight
                 simulation.episode_terminated = True
 
             # 6. Sucesso
             if simulation.episode_terminated and simulation.episode_success:
-                if self.components["success_bonus"].enabled:
+                if self.is_component_enabled("success_bonus"):
                     self.components["success_bonus"].value = 1
                     total_reward += self.components["success_bonus"].weight
 
             # ===== EFICIÊNCIA =====
 
             # 7. Penalidade por esforço
-            if self.components["effort_penalty"].enabled:
+            if self.is_component_enabled("effort_penalty"):
                 effort = sum(abs(v) for v in joint_velocities) if joint_velocities else 0.0
                 self.components["effort_penalty"].value = effort
                 total_reward += effort * self.components["effort_penalty"].weight
 
             # 8. Penalidade por jerk (estimado)
-            if self.components["jerk_penalty"].enabled:
+            if self.is_component_enabled("jerk_penalty"):
                 # Estimativa simples de jerk - diferença de velocidades
                 if hasattr(simulation, "last_joint_velocities") and simulation.last_joint_velocities is not None and joint_velocities:
                     jerk = sum(abs(v1 - v2) for v1, v2 in zip(joint_velocities, simulation.last_joint_velocities))
@@ -132,13 +138,13 @@ class RewardSystem:
             distance_from_center = abs(pos_y)
 
             if distance_from_center <= self.safe_zone:
-                if self.components["center_bonus"].enabled:
+                if self.is_component_enabled("center_bonus"):
                     safe_factor = 1.0 - (distance_from_center / self.safe_zone)
                     self.components["center_bonus"].value = safe_factor
                     total_reward += safe_factor * self.components["center_bonus"].weight
 
             elif distance_from_center <= self.warning_zone:
-                if self.components["warning_penalty"].enabled:
+                if self.is_component_enabled("warning_penalty"):
                     warning_factor = (distance_from_center - self.safe_zone) / (self.warning_zone - self.safe_zone)
                     self.components["warning_penalty"].value = warning_factor
                     total_reward += warning_factor * self.components["warning_penalty"].weight
@@ -146,19 +152,19 @@ class RewardSystem:
             # ===== COMPONENTES AVANÇADOS =====
 
             # 10. Regularidade da marcha
-            if self.components["gait_regularity"].enabled:
+            if self.is_component_enabled("gait_regularity"):
                 regularity = self._calculate_gait_regularity(joint_velocities)
                 self.components["gait_regularity"].value = regularity
                 total_reward += regularity * self.components["gait_regularity"].weight
 
             # 11. Simetria
-            if self.components["symmetry_bonus"].enabled:
+            if self.is_component_enabled("symmetry_bonus"):
                 symmetry = self._calculate_symmetry(joint_velocities)
                 self.components["symmetry_bonus"].value = symmetry
                 total_reward += symmetry * self.components["symmetry_bonus"].weight
 
             # 12. Clearance (estimado)
-            if self.components["clearance_bonus"].enabled:
+            if self.is_component_enabled("clearance_bonus"):
                 clearance_ok = self._estimate_foot_clearance(joint_positions)
                 self.components["clearance_bonus"].value = 1 if clearance_ok else 0
                 total_reward += self.components["clearance_bonus"].weight if clearance_ok else 0
