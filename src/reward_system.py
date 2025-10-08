@@ -36,8 +36,7 @@ class RewardSystem:
         self.warning_zone = 0.4  # m
         self.yaw_threshold = 0.5  # rad
 
-        default_config_path = os.path.join(utils.REWARD_CONFIGS_PATH, "default.json")
-        self.load_configuration_file(default_config_path, is_default_file=True)
+        self.load_configuration_file("default.json", is_default_file=True)
         self.default_components = self.get_configuration_as_dict()
 
     def calculate_reward(self, simulation, action, robot_state, env_conditions=None):
@@ -241,6 +240,11 @@ class RewardSystem:
     def load_configuration_file(self, filepath, is_default_file=False):
         """Carrega configuração de arquivo JSON"""
         self.logger.info(f" RewardSystem.load_configuration_file called with {filepath}")
+
+        if not filepath.endswith(".json"):
+            filepath += ".json"
+
+        filepath = os.path.join(utils.REWARD_CONFIGS_PATH, filepath)
 
         try:
             with open(filepath, "r") as f:

@@ -67,6 +67,7 @@ class RewardTab:
 
         # Carregar estado inicial
         self.refresh_config_list()
+        self.update_quick_editors()
 
     def _create_component_row(self, parent, component_name, component_content, row, default_enabled=True):
         """Cria uma linha de controle para um componente"""
@@ -103,8 +104,12 @@ class RewardTab:
         for root, _, files in os.walk(self.config_dir):
             for file in files:
                 full_path = os.path.join(root, file)
-                rel_path = os.path.relpath(full_path, self.config_dir).rstrip(".json")
-                config_files.append(rel_path.replace("\\", "/"))
+                self.logger.info(f"Found config file: {full_path}")
+
+                rel_path = os.path.relpath(full_path, self.config_dir)
+                self.logger.info(f"Relative path: {rel_path}")
+
+                config_files.append(rel_path.replace("\\", "/").replace(".json", ""))
 
         self.config_combo["values"] = config_files
 
@@ -115,104 +120,31 @@ class RewardTab:
         config = self.reward_system.get_configuration_as_dict()
 
         for comp_id, editor in self.quick_editors.items():
-            if comp_id in config:
-                weight = config[comp_id]["weight"]
-                enabled = config[comp_id]["enabled"]
+            weight = config[comp_id]["weight"]
+            enabled = config[comp_id]["enabled"]
 
-                # Atualizar variáveis (isso dispara os callbacks)
-                editor["var"].set(weight)
-                editor["enabled_var"].set(enabled)
+            # Atualizar variáveis (isso dispara os callbacks)
+            editor["var"].set(weight)
+            editor["enabled_var"].set(enabled)
 
-                # Atualizar widgets diretamente para evitar loops
-                editor["label"].config(text=f"{weight:.3f}")
-                editor["entry"].delete(0, tk.END)
-                editor["entry"].insert(0, f"{weight:.3f}")
+            # Atualizar widgets diretamente para evitar loops
+            editor["label"].config(text=f"{weight:.3f}")
+            editor["entry"].delete(0, tk.END)
+            editor["entry"].insert(0, f"{weight:.3f}")
 
     def on_config_selected(self, event):
         """Quando uma configuração é selecionada no combobox"""
         self.logger.info(" RewardTab.on_config_selected called")
 
-        config_name = self.config_var.get()
-        self.load_config_by_name(config_name)
-        self.activate_selected_config()
-
-    def load_config_by_name(self, config_name):
-        """Carrega configuração pelo nome"""
-        self.logger.info(" RewardTab.load_config_by_name called")
-
         try:
-            if "/" in config_name:
-                category, name = config_name.split("/")
-                config_path = os.path.join(self.config_dir, category, f"{name}.json")
-            else:
-                config_path = os.path.join(self.config_dir, f"{config_name}.json")
-
-            if os.path.exists(config_path):
-                self.reward_system.load_configuration_file(config_path)
-                self.update_quick_editors()
-                self.status_label.config(text=f"Configuração carregada: {config_name}")
-            else:
-                messagebox.showerror("Erro", f"Configuração não encontrada: {config_path}")
+            config_name = self.config_var.get()
+            self.reward_system.load_configuration_file(config_name)
+            self.update_quick_editors()
+            self.status_label.config(text=f"Configuração carregada: {config_name}")
 
         except Exception as e:
             self.logger.exception("Erro ao carregar configuração selecionada")
             messagebox.showerror("Erro", f"Falha ao carregar configuração: {e}")
-
-    def activate_selected_config(self):
-        """Ativa a configuração selecionada"""
-        self.logger.info(" RewardTab.activate_selected_config called")
-
-        try:
-            config_name = self.config_var.get()
-            success = self.activate_configuration(config_name)
-            if not success:
-                raise Exception("Ativação falhou")
-
-        except Exception as e:
-            self.logger.exception("Erro ao ativar configuração selecionada")
-            messagebox.showinfo("Erro", f"Falha ao ativar configuração: {e}")
-
-    def activate_configuration(self, config_name):
-        """Ativa uma configuração específica"""
-        self.logger.info(" RewardTab.activate_configuration called")
-
-        try:
-            # Remover .json se já estiver presente
-            if config_name.endswith(".json"):
-                config_name = config_name[:-5]
-
-            # Determinar caminho completo
-            if "/" in config_name:
-                category, name = config_name.split("/")
-                config_path = f"{category}/{name}.json"
-            else:
-                config_path = f"{config_name}.json"
-
-            full_path = os.path.join(self.config_dir, config_path)
-
-            if os.path.exists(full_path):
-                # Criar arquivo de configuração ativa
-                active_info = {"active_config": config_path, "activated_at": datetime.now().isoformat(), "name": config_name}
-
-                with open(self.active_config_path, "w") as f:
-                    json.dump(active_info, f, indent=2)
-
-                # Carregar no sistema
-                self.reward_system.load_configuration_file(full_path)
-                self.config_var.set(config_name)
-                self.status_label.config(text=f"Configuração ativa: {config_name}")
-                self.update_quick_editors()
-
-                self.logger.info(f"Configuração ativada: {config_name}")
-                return True
-            else:
-                messagebox.showerror("Erro", f"Arquivo de configuração não encontrado: {full_path}")
-                return False
-
-        except Exception as e:
-            self.logger.exception("Erro ao ativar configuração")
-            messagebox.showerror("Erro", f"Falha ao ativar configuração: {e}")
-            return False
 
     def create_new_config(self):
         """Cria nova configuração baseada na atual"""

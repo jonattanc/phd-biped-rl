@@ -1,0 +1,88 @@
+{
+  "components": {
+    "progress": {
+      "weight": 17.0,
+      "enabled": true,
+      "min_value": -500.0,
+      "max_value": 500.0
+    },
+    "distance_bonus": {
+      "weight": 2.0,
+      "enabled": true,
+      "min_value": -500.0,
+      "max_value": 500.0
+    },
+    "stability_roll": {
+      "weight": -0.1,
+      "enabled": true,
+      "min_value": -500.0,
+      "max_value": 500.0
+    },
+    "stability_pitch": {
+      "weight": -0.4,
+      "enabled": true,
+      "min_value": -500.0,
+      "max_value": 500.0
+    },
+    "yaw_penalty": {
+      "weight": -2.0,
+      "enabled": true,
+      "min_value": -500.0,
+      "max_value": 500.0
+    },
+    "fall_penalty": {
+      "weight": -100.0,
+      "enabled": true,
+      "min_value": -500.0,
+      "max_value": 500.0
+    },
+    "success_bonus": {
+      "weight": 200.0,
+      "enabled": true,
+      "min_value": -500.0,
+      "max_value": 500.0
+    },
+    "effort_penalty": {
+      "weight": -0.001,
+      "enabled": true,
+      "min_value": -500.0,
+      "max_value": 500.0
+    },
+    "jerk_penalty": {
+      "weight": -0.05,
+      "enabled": true,
+      "min_value": -500.0,
+      "max_value": 500.0
+    },
+    "center_bonus": {
+      "weight": 5.0,
+      "enabled": true,
+      "min_value": -500.0,
+      "max_value": 500.0
+    },
+    "warning_penalty": {
+      "weight": -3.0,
+      "enabled": true,
+      "min_value": -500.0,
+      "max_value": 500.0
+    },
+    "gait_regularity": {
+      "weight": 4.223968565815324,
+      "enabled": true,
+      "min_value": -500.0,
+      "max_value": 500.0
+    },
+    "symmetry_bonus": {
+      "weight": 1.0,
+      "enabled": true,
+      "min_value": -500.0,
+      "max_value": 500.0
+    },
+    "clearance_bonus": {
+      "weight": 1.5,
+      "enabled": true,
+      "min_value": -500.0,
+      "max_value": 500.0
+    }
+  }
+}
