@@ -231,7 +231,6 @@ class Simulation(gym.Env):
         """
         # Reiniciar variáveis do episódio
         self.reset_episode_vars()
-        self.reward_system.start_episode(self.episode_count)
 
         # Resetar ambiente de simulação
         if self.is_visualization_enabled != self.enable_visualization_value.value:
@@ -286,7 +285,6 @@ class Simulation(gym.Env):
     def on_episode_end(self):
         """Processa o final do episódio apenas se ipc_queue estiver disponível"""
         self.episode_count += 1
-        self.reward_system.end_episode()
 
         # Obter posição e orientação final da IMU
         imu_position, imu_orientation = self.robot.get_imu_position_and_orientation()

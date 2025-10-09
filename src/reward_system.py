@@ -48,7 +48,6 @@ class RewardSystem:
             component.value = 0.0
 
         total_reward = 0.0
-        reward_breakdown = {}
 
         distance_y_from_center = abs(sim.robot_y_position)
 
@@ -129,13 +128,7 @@ class RewardSystem:
             self.components["clearance_bonus"].value = clearance_ok
             total_reward += clearance_ok * self.components["clearance_bonus"].weight
 
-        # Coletar breakdown para análise
-        for name, component in self.components.items():
-            if component.enabled:
-                reward_breakdown[name] = {"value": component.value, "weighted_contribution": component.value * component.weight, "weight": component.weight}
-
-        # Registrar para análise
-        self._record_step_data(reward_breakdown, total_reward, sim.episode_steps)
+        # self._record_step_data(sim, total_reward)
 
         return total_reward
 
@@ -261,9 +254,22 @@ class RewardSystem:
         else:
             return 0
 
-    def _record_step_data(self, reward_breakdown, total_reward, step):
+    def _record_step_data(self, sim, total_reward):
         """Registra dados do step para análise"""
-        step_data = {"episode": self.current_episode, "step": step, "total_reward": total_reward, "breakdown": reward_breakdown.copy(), "timestamp": time.time()}
+
+        if sim.episode_done:
+            self.end_episode()
+
+        if sim.episode_steps == 1:
+            self.start_episode(sim.episode_count)
+
+        reward_breakdown = {}
+
+        for name, component in self.components.items():
+            if component.enabled:
+                reward_breakdown[name] = {"value": component.value, "weighted_contribution": component.value * component.weight, "weight": component.weight}
+
+        step_data = {"episode": self.current_episode, "step": sim.episode_steps, "total_reward": total_reward, "breakdown": reward_breakdown.copy(), "timestamp": time.time()}
         self.episode_data.append(step_data)
 
     def start_episode(self, episode_number):
