@@ -23,10 +23,6 @@ class RewardSystem:
 
         self.logger = logger
         self.components = {}
-        self.history = []
-        self.current_episode = 0
-        self.episode_data = []
-        self.components = {}
 
         self.safe_zone = 0.2  # m
         self.warning_zone = 0.4  # m
@@ -127,8 +123,6 @@ class RewardSystem:
             clearance_ok = self._estimate_foot_clearance(sim.joint_positions)
             self.components["clearance_bonus"].value = clearance_ok
             total_reward += clearance_ok * self.components["clearance_bonus"].weight
-
-        # self._record_step_data(sim, total_reward)
 
         return total_reward
 
@@ -253,48 +247,3 @@ class RewardSystem:
 
         else:
             return 0
-
-    def _record_step_data(self, sim, total_reward):
-        """Registra dados do step para análise"""
-
-        if sim.episode_done:
-            self.end_episode()
-
-        if sim.episode_steps == 1:
-            self.start_episode(sim.episode_count)
-
-        reward_breakdown = {}
-
-        for name, component in self.components.items():
-            if component.enabled:
-                reward_breakdown[name] = {"value": component.value, "weighted_contribution": component.value * component.weight, "weight": component.weight}
-
-        step_data = {"episode": self.current_episode, "step": sim.episode_steps, "total_reward": total_reward, "breakdown": reward_breakdown.copy(), "timestamp": time.time()}
-        self.episode_data.append(step_data)
-
-    def start_episode(self, episode_number):
-        """Inicia um novo episódio"""
-        self.current_episode = episode_number
-        self.episode_data = []
-
-    def end_episode(self):
-        """Finaliza o episódio e salva dados"""
-        if self.episode_data:
-            episode_summary = {
-                "episode": self.current_episode,
-                "total_steps": len(self.episode_data),
-                "total_reward": sum(step["total_reward"] for step in self.episode_data),
-                "component_contributions": self._calculate_episode_contributions(),
-                "data": self.episode_data.copy(),
-            }
-            self.history.append(episode_summary)
-
-    def _calculate_episode_contributions(self):
-        """Calcula contribuição total de cada componente no episódio"""
-        contributions = {}
-        for step_data in self.episode_data:
-            for component_name, data in step_data["breakdown"].items():
-                if component_name not in contributions:
-                    contributions[component_name] = 0.0
-                contributions[component_name] += data["weighted_contribution"]
-        return contributions
