@@ -66,21 +66,15 @@
       "min_value": -500.0,
       "max_value": 500.0
     },
-    "gait_regularity": {
-      "weight": 4.223968565815324,
-      "enabled": false,
+    "warning_zone": {
+      "weight": 0.4,
+      "enabled": true,
       "min_value": -500.0,
       "max_value": 500.0
     },
-    "symmetry_bonus": {
-      "weight": 1.0,
-      "enabled": false,
-      "min_value": -500.0,
-      "max_value": 500.0
-    },
-    "clearance_bonus": {
-      "weight": 1.5,
-      "enabled": false,
+    "safe_zone": {
+      "weight": 0.2,
+      "enabled": true,
       "min_value": -500.0,
       "max_value": 500.0
     }
