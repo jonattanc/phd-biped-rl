@@ -61,17 +61,10 @@ class Robot:
 
     def get_joint_states(self):
         """Retorna posições e velocidades das juntas COM VERIFICAÇÃO"""
-        try:
-            if self.id is None or self.revolute_indices is None:
-                return [], []  # Retorna listas vazias em vez de None
-
-            joint_states = p.getJointStates(self.id, self.revolute_indices)
-            joint_positions = [s[0] for s in joint_states]
-            joint_velocities = [s[1] for s in joint_states]
-            return joint_positions, joint_velocities
-        except Exception as e:
-            self.logger.exception("Erro ao obter estados das juntas")
-            return [], []  # Sempre retorna listas vazias
+        joint_states = p.getJointStates(self.id, self.revolute_indices)
+        joint_positions = [s[0] for s in joint_states]
+        joint_velocities = [s[1] for s in joint_states]
+        return joint_positions, joint_velocities
 
     def get_observation(self):
         """Retorna observação"""

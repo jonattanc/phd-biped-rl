@@ -31,6 +31,9 @@ class Simulation(gym.Env):
         self.reward_system = RewardSystem(logger)
 
         # Configurações de simulação
+        self.fall_threshold = 0.5  # m
+        self.success_distance = 9.0  # m
+        self.yaw_threshold = 0.5  # rad
         self.episode_timeout_s = 20  # s
         self.physics_step_s = 1 / 240.0  # 240 Hz, ~4.16 ms
         self.physics_step_multiplier = 5
@@ -212,6 +215,7 @@ class Simulation(gym.Env):
         self.episode_start_time = time.time()
         self.episode_robot_x_initial_position = 0.0
         self.episode_distance = 0.0
+        self.joint_velocities = self.action_dim * [0.0]
         self.episode_success = False
         self.episode_terminated = False
         self.episode_truncated = False
@@ -219,7 +223,6 @@ class Simulation(gym.Env):
         self.episode_last_action = np.zeros(self.action_dim, dtype=float)
         self.episode_steps = 0
         self.episode_info = {}
-        self.last_joint_velocities = None
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -349,12 +352,6 @@ class Simulation(gym.Env):
             forces=forces,
         )
 
-    def get_reward(self, action, robot_state, env_conditions=None):
-        """
-        Calcula a recompensa usando o sistema de recompensas
-        """
-        return self.reward_system.calculate_reward(self, action, robot_state, env_conditions)
-
     def step(self, action):
         """
         Executa uma ação e retorna (observação, recompensa, done, info).
@@ -386,27 +383,34 @@ class Simulation(gym.Env):
         obs = self.robot.get_observation()
 
         robot_position, robot_orientation = self.robot.get_imu_position_and_orientation()
-        robot_x_position = robot_position[0]
-        robot_z_position = robot_position[2]
-        robot_yaw = robot_orientation[2]
+        self.robot_x_position = robot_position[0]
+        self.robot_y_position = robot_position[0]
+        self.robot_z_position = robot_position[2]
+        self.robot_roll = robot_orientation[0]
+        self.robot_pitch = robot_orientation[1]
+        self.robot_yaw = robot_orientation[2]
+
+        self.last_joint_velocities = self.joint_velocities
+        self.joint_positions, self.joint_velocities = self.robot.get_joint_states()
+
         self.episode_last_distance = self.episode_distance
-        self.episode_distance = robot_x_position - self.episode_robot_x_initial_position
+        self.episode_distance = self.robot_x_position - self.episode_robot_x_initial_position
 
         # Condições de Termino
         info = {"distance": self.episode_distance, "termination": "none"}
 
         # Queda
-        if robot_z_position < self.reward_system.fall_threshold:
+        if self.robot_z_position < self.fall_threshold:
             self.episode_terminated = True
             info["termination"] = "fell"
 
         # Desvio do caminho
-        if abs(robot_yaw) >= self.reward_system.yaw_threshold:
+        if abs(self.robot_yaw) >= self.yaw_threshold:
             self.episode_terminated = True
             info["termination"] = "yaw_deviated"
 
         # Sucesso
-        elif self.episode_distance >= self.reward_system.success_distance:
+        elif self.episode_distance >= self.success_distance:
             self.episode_terminated = True
             self.episode_success = True
             info["termination"] = "success"
@@ -419,32 +423,15 @@ class Simulation(gym.Env):
         info["success"] = self.episode_success
         self.episode_done = self.episode_truncated or self.episode_terminated
 
-        # Obter dados do robô para o cálculo de recompensa
-        joint_positions, joint_velocities = self.robot.get_joint_states()
-        robot_position, robot_orientation = self.robot.get_imu_position_and_orientation()
-
-        # Criar robot_state básico com orientação
-        robot_state = {
-            "orientation": robot_orientation,
-            "mos": 0.1,  # valor padrão - você pode calcular isso se tiver dados
-            "joint_torques": [0] * self.action_dim,  # placeholder
-            "jerk": 0.0,  # placeholder
-            "joint_velocities": joint_velocities,
-        }
-
-        # Criar env_conditions básico
-        env_conditions = {"foot_slip": 0.0, "ramp_speed": 0.0, "com_drop": 0.0, "joint_failure": False}
-
-        reward = self.get_reward(action, robot_state, env_conditions)
+        # Recompensa
+        reward = self.reward_system.calculate_reward(self, action, info)
         self.episode_reward += reward
 
         # Coletar info final quando o episódio terminar
         if self.episode_done:
             info["episode"] = {"r": self.episode_reward, "l": self.episode_steps, "distance": self.episode_distance, "success": self.episode_success}
 
-        # MODIFICAÇÃO: Só chamar transmit_episode_info se ipc_queue estiver disponível
-        if self.ipc_queue is not None:
-            self.transmit_episode_info()
+        self.transmit_episode_info()
 
         self.episode_last_action = action
 

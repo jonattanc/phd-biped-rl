@@ -28,13 +28,8 @@ class RewardSystem:
         self.episode_data = []
         self.components = {}
 
-        # Configurações padrão
-        self.fall_threshold = 0.5  # m
-        self.success_distance = 9.0  # m
-        self.platform_width = 1.0  # m
         self.safe_zone = 0.2  # m
         self.warning_zone = 0.4  # m
-        self.yaw_threshold = 0.5  # rad
 
         self.load_configuration_file("default.json", is_default_file=True)
         self.default_components = self.get_configuration_as_dict()
@@ -45,10 +40,8 @@ class RewardSystem:
 
         return self.components[name].enabled
 
-    def calculate_reward(self, simulation, action, robot_state, env_conditions=None):
+    def calculate_reward(self, sim, action, info):
         """Calcula a recompensa total baseada nos componentes ativos"""
-        if env_conditions is None:
-            env_conditions = {"foot_slip": 0.0, "ramp_speed": 0.0, "com_drop": 0.0, "joint_failure": False}
 
         # Resetar valores dos componentes
         for component in self.components.values():
@@ -57,130 +50,92 @@ class RewardSystem:
         total_reward = 0.0
         reward_breakdown = {}
 
-        try:
-            # Dados básicos sempre disponíveis - COM VERIFICAÇÃO DE SEGURANÇA
-            robot_position, robot_orientation = simulation.robot.get_imu_position_and_orientation()
-            joint_positions, joint_velocities = simulation.robot.get_joint_states()
+        distance_y_from_center = abs(sim.robot_y_position)
 
-            # VERIFICAÇÃO CRÍTICA: garantir que os dados não são None
-            if robot_position is None or robot_orientation is None:
-                self.logger.warning("Dados do robô não disponíveis, retornando recompensa zero")
-                return 0.0
+        # Componentes de recompensa
+        if self.is_component_enabled("progress"):
+            progress = sim.episode_distance - sim.episode_last_distance
+            self.components["progress"].value = progress
+            total_reward += progress * self.components["progress"].weight
 
-            if joint_positions is None:
-                joint_positions = []
-            if joint_velocities is None:
-                joint_velocities = []
+        if self.is_component_enabled("distance_bonus"):
+            self.components["distance_bonus"].value = sim.episode_distance
+            total_reward += sim.episode_distance * self.components["distance_bonus"].weight
 
-            # ===== COMPONENTES CRÍTICOS =====
+        if self.is_component_enabled("stability_roll"):
+            self.components["stability_roll"].value = sim.robot_roll**2
+            total_reward += sim.robot_roll**2 * self.components["stability_roll"].weight
 
-            # 1. Progresso
-            if self.is_component_enabled("progress"):
-                progress = simulation.episode_distance - simulation.episode_last_distance
-                self.components["progress"].value = progress
-                total_reward += progress * self.components["progress"].weight
+        if self.is_component_enabled("stability_pitch"):
+            self.components["stability_pitch"].value = sim.robot_pitch**2
+            total_reward += sim.robot_pitch**2 * self.components["stability_pitch"].weight
 
-            # 2. Bônus de distância acumulada
-            if self.is_component_enabled("distance_bonus"):
-                self.components["distance_bonus"].value = simulation.episode_distance
-                total_reward += simulation.episode_distance * self.components["distance_bonus"].weight
+        if self.is_component_enabled("stability_yaw"):
+            self.components["stability_yaw"].value = sim.robot_yaw**2
+            total_reward += sim.robot_yaw**2 * self.components["stability_yaw"].weight
 
-            # 3. Estabilidade - Orientação
-            roll, pitch, yaw = robot_orientation
-
-            if self.is_component_enabled("stability_roll"):
-                self.components["stability_roll"].value = roll**2
-                total_reward += roll**2 * self.components["stability_roll"].weight
-
-            if self.is_component_enabled("stability_pitch"):
-                self.components["stability_pitch"].value = pitch**2
-                total_reward += pitch**2 * self.components["stability_pitch"].weight
-
-            # 4. Penalidade por desvio de yaw
-            if self.is_component_enabled("yaw_penalty") and abs(yaw) > 0.35:  # ~20 graus
+        if self.is_component_enabled("yaw_penalty"):
+            if info["termination"] == "yaw_deviated":
                 self.components["yaw_penalty"].value = 1
                 total_reward += self.components["yaw_penalty"].weight
 
-            # 5. Queda
-            if robot_position[2] < self.fall_threshold:
-                if self.is_component_enabled("fall_penalty"):
-                    self.components["fall_penalty"].value = 1
-                    total_reward += self.components["fall_penalty"].weight
-                simulation.episode_terminated = True
+        if self.is_component_enabled("fall_penalty"):
+            if info["termination"] == "fell":
+                self.components["fall_penalty"].value = 1
+                total_reward += self.components["fall_penalty"].weight
 
-            # 6. Sucesso
-            if simulation.episode_terminated and simulation.episode_success:
-                if self.is_component_enabled("success_bonus"):
-                    self.components["success_bonus"].value = 1
-                    total_reward += self.components["success_bonus"].weight
+        if self.is_component_enabled("success_bonus"):
+            if info["termination"] == "success":
+                self.components["success_bonus"].value = 1
+                total_reward += self.components["success_bonus"].weight
 
-            # ===== EFICIÊNCIA =====
+        if self.is_component_enabled("effort_penalty"):
+            effort = sum(abs(v) for v in sim.joint_velocities)
+            self.components["effort_penalty"].value = effort
+            total_reward += effort * self.components["effort_penalty"].weight
 
-            # 7. Penalidade por esforço
-            if self.is_component_enabled("effort_penalty"):
-                effort = sum(abs(v) for v in joint_velocities) if joint_velocities else 0.0
-                self.components["effort_penalty"].value = effort
-                total_reward += effort * self.components["effort_penalty"].weight
+        if self.is_component_enabled("jerk_penalty"):
+            jerk = sum(abs(v1 - v2) for v1, v2 in zip(sim.joint_velocities, sim.last_joint_velocities))
+            self.components["jerk_penalty"].value = jerk
+            total_reward += jerk * self.components["jerk_penalty"].weight
 
-            # 8. Penalidade por jerk (estimado)
-            if self.is_component_enabled("jerk_penalty"):
-                # Estimativa simples de jerk - diferença de velocidades
-                if hasattr(simulation, "last_joint_velocities") and simulation.last_joint_velocities is not None and joint_velocities:
-                    jerk = sum(abs(v1 - v2) for v1, v2 in zip(joint_velocities, simulation.last_joint_velocities))
-                    self.components["jerk_penalty"].value = jerk
-                    total_reward += jerk * self.components["jerk_penalty"].weight
-                simulation.last_joint_velocities = joint_velocities.copy() if joint_velocities else []
+        if self.is_component_enabled("center_bonus"):
+            if distance_y_from_center <= self.safe_zone:
+                safe_factor = 1.0 - (distance_y_from_center / self.safe_zone)
+                self.components["center_bonus"].value = safe_factor
+                total_reward += safe_factor * self.components["center_bonus"].weight
 
-            # ===== NAVEGAÇÃO =====
+        if self.is_component_enabled("warning_penalty"):
+            if distance_y_from_center > self.safe_zone and distance_y_from_center <= self.warning_zone:
+                warning_factor = (distance_y_from_center - self.safe_zone) / (self.warning_zone - self.safe_zone)
+                self.components["warning_penalty"].value = warning_factor
+                total_reward += warning_factor * self.components["warning_penalty"].weight
 
-            # 9. Manutenção no centro
-            pos_y = robot_position[1]
-            distance_from_center = abs(pos_y)
+        if self.is_component_enabled("gait_regularity"):
+            raise NotImplementedError("gait_regularity component is not implemented.")
+            regularity = self._calculate_gait_regularity(sim.joint_velocities)
+            self.components["gait_regularity"].value = regularity
+            total_reward += regularity * self.components["gait_regularity"].weight
 
-            if distance_from_center <= self.safe_zone:
-                if self.is_component_enabled("center_bonus"):
-                    safe_factor = 1.0 - (distance_from_center / self.safe_zone)
-                    self.components["center_bonus"].value = safe_factor
-                    total_reward += safe_factor * self.components["center_bonus"].weight
+        if self.is_component_enabled("symmetry_bonus"):
+            raise NotImplementedError("symmetry_bonus component is not implemented.")
+            symmetry = self._calculate_symmetry(sim.joint_velocities)
+            self.components["symmetry_bonus"].value = symmetry
+            total_reward += symmetry * self.components["symmetry_bonus"].weight
 
-            elif distance_from_center <= self.warning_zone:
-                if self.is_component_enabled("warning_penalty"):
-                    warning_factor = (distance_from_center - self.safe_zone) / (self.warning_zone - self.safe_zone)
-                    self.components["warning_penalty"].value = warning_factor
-                    total_reward += warning_factor * self.components["warning_penalty"].weight
+        if self.is_component_enabled("clearance_bonus"):
+            raise NotImplementedError("clearance_bonus component is not implemented.")
+            clearance_ok = self._estimate_foot_clearance(sim.joint_positions)
+            self.components["clearance_bonus"].value = clearance_ok
+            total_reward += clearance_ok * self.components["clearance_bonus"].weight
 
-            # ===== COMPONENTES AVANÇADOS =====
+        # Coletar breakdown para análise
+        for name, component in self.components.items():
+            if component.enabled:
+                reward_breakdown[name] = {"value": component.value, "weighted_contribution": component.value * component.weight, "weight": component.weight}
 
-            # 10. Regularidade da marcha
-            if self.is_component_enabled("gait_regularity"):
-                regularity = self._calculate_gait_regularity(joint_velocities)
-                self.components["gait_regularity"].value = regularity
-                total_reward += regularity * self.components["gait_regularity"].weight
-
-            # 11. Simetria
-            if self.is_component_enabled("symmetry_bonus"):
-                symmetry = self._calculate_symmetry(joint_velocities)
-                self.components["symmetry_bonus"].value = symmetry
-                total_reward += symmetry * self.components["symmetry_bonus"].weight
-
-            # 12. Clearance (estimado)
-            if self.is_component_enabled("clearance_bonus"):
-                clearance_ok = self._estimate_foot_clearance(joint_positions)
-                self.components["clearance_bonus"].value = 1 if clearance_ok else 0
-                total_reward += self.components["clearance_bonus"].weight if clearance_ok else 0
-
-            # Coletar breakdown para análise
-            for name, component in self.components.items():
-                if component.enabled:
-                    reward_breakdown[name] = {"value": component.value, "weighted_contribution": component.value * component.weight, "weight": component.weight}
-
-            # Registrar para análise
-            self._record_step_data(reward_breakdown, total_reward, simulation.episode_steps)
-
-        except Exception as e:
-            self.logger.exception("Erro no cálculo de recompensa")
-            # Fallback para recompensa básica
-            total_reward = (simulation.episode_distance - simulation.episode_last_distance) * 10.0
+        # Registrar para análise
+        self._record_step_data(reward_breakdown, total_reward, sim.episode_steps)
 
         return total_reward
 
@@ -278,52 +233,33 @@ class RewardSystem:
 
         return True
 
-    def _calculate_gait_regularity(self, joint_velocities):
-        """Calcula regularidade da marcha baseado na variância das velocidades"""
-        if not joint_velocities:  # Verifica se está vazio ou None
-            return 0.5
-
-        try:
-            variance = np.var(joint_velocities)
-            # Normalizar para 0-1 (menor variância = mais regular)
-            regularity = 1.0 / (1.0 + variance)
-            return regularity
-        except Exception as e:
-            self.logger.exception("Erro. Retornando valor padrão para regularidade da marcha")
-            return 0.5
-
     def _calculate_symmetry(self, joint_velocities):
         """Calcula simetria entre lados do robô"""
         if not joint_velocities or len(joint_velocities) < 4:  # Precisa de pelo menos 2 juntas por lado
             return 0.5
 
-        try:
-            # Assumindo que as primeiras juntas são de um lado e as seguintes do outro
-            mid = len(joint_velocities) // 2
-            left_effort = np.sqrt(sum(v**2 for v in joint_velocities[:mid]))
-            right_effort = np.sqrt(sum(v**2 for v in joint_velocities[mid : mid * 2]))
+        # Assumindo que as primeiras juntas são de um lado e as seguintes do outro
+        mid = len(joint_velocities) // 2
+        left_effort = np.sqrt(sum(v**2 for v in joint_velocities[:mid]))
+        right_effort = np.sqrt(sum(v**2 for v in joint_velocities[mid : mid * 2]))
 
-            if left_effort + right_effort == 0:
-                return 0.5
-
-            symmetry = 1.0 - abs(left_effort - right_effort) / (left_effort + right_effort)
-            return symmetry
-        except Exception as e:
-            self.logger.exception("Erro. Retornando valor padrão para simetria")
+        if left_effort + right_effort == 0:
             return 0.5
+
+        symmetry = 1.0 - abs(left_effort - right_effort) / (left_effort + right_effort)
+        return symmetry
 
     def _estimate_foot_clearance(self, joint_positions):
         """Estima se o clearance do pé está adequado (simplificado)"""
-        if not joint_positions:
-            return True
 
-        try:
-            # Verificar se alguma junta está em posição extrema (proxy para pé no chão)
-            extreme_positions = sum(1 for pos in joint_positions if abs(pos) > 0.8)
-            return extreme_positions < len(joint_positions) * 0.5
-        except Exception as e:
-            self.logger.exception("Erro. Retornando valor padrão para clearance do pé")
-            return True
+        # Verificar se alguma junta está em posição extrema (proxy para pé no chão)
+        extreme_positions = sum(1 for pos in joint_positions if abs(pos) > 0.8)
+
+        if extreme_positions < len(joint_positions) * 0.5:
+            return 1
+
+        else:
+            return 0
 
     def _record_step_data(self, reward_breakdown, total_reward, step):
         """Registra dados do step para análise"""
