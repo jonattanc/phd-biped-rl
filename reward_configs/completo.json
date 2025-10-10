@@ -66,17 +66,23 @@
       "min_value": -500.0,
       "max_value": 500.0
     },
-    "warning_zone": {
-      "weight": 0.4,
-      "enabled": true,
-      "min_value": -500.0,
-      "max_value": 500.0
-    },
     "safe_zone": {
       "weight": 0.2,
       "enabled": true,
       "min_value": -500.0,
       "max_value": 500.0
+    },
+    "effort_square_penalty": {
+      "weight": -0.001,
+      "enabled": true,
+      "min_value": -10,
+      "max_value": 0
+    },
+    "direction_change_penalty": {
+      "weight": -0.2,
+      "enabled": true,
+      "min_value": -10,
+      "max_value": 0
     }
   }
 }
