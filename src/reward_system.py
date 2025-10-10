@@ -88,6 +88,17 @@ class RewardSystem:
             self.components["effort_penalty"].value = effort
             total_reward += effort * self.components["effort_penalty"].weight
 
+        if self.is_component_enabled("effort_square_penalty"):
+            effort = sum(v**2 for v in sim.joint_velocities)
+            self.components["effort_square_penalty"].value = effort
+            total_reward += effort * self.components["effort_square_penalty"].weight
+
+        if self.is_component_enabled("direction_change_penalty"):
+            action_products = action * sim.episode_last_action  # Números positivos indicam que a direção é a mesma
+            direction_changes = np.sum(action_products < 0)  # Conta mudanças de direção
+            self.components["direction_change_penalty"].value = direction_changes
+            total_reward += direction_changes * self.components["direction_change_penalty"].weight
+
         if self.is_component_enabled("jerk_penalty"):
             jerk = sum(abs(v1 - v2) for v1, v2 in zip(sim.joint_velocities, sim.last_joint_velocities))
             self.components["jerk_penalty"].value = jerk
