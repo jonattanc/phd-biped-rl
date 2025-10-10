@@ -104,6 +104,16 @@ class RewardSystem:
             self.components["jerk_penalty"].value = jerk
             total_reward += jerk * self.components["jerk_penalty"].weight
 
+        if self.is_component_enabled("y_axis_deviation_penalty"):
+            penalty = distance_y_from_center
+            self.components["y_axis_deviation_penalty"].value = penalty
+            total_reward += penalty * self.components["y_axis_deviation_penalty"].weight
+
+        if self.is_component_enabled("y_axis_deviation_square_penalty"):
+            penalty = distance_y_from_center**2
+            self.components["y_axis_deviation_square_penalty"].value = penalty
+            total_reward += penalty * self.components["y_axis_deviation_square_penalty"].weight
+
         if self.is_component_enabled("center_bonus"):
             if distance_y_from_center <= self.safe_zone:
                 safe_factor = 1.0 - (distance_y_from_center / self.safe_zone)
