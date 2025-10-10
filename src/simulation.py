@@ -239,20 +239,6 @@ class Simulation(gym.Env):
         else:
             self.soft_env_reset()
 
-        # IMPORTANTE: Reconfigurar o agente no ambiente após o reset
-        if self.agent is not None:
-            # Garantir que o agente ainda está configurado
-            self.agent.env = self
-            if hasattr(self.agent, "model") and self.agent.model is not None:
-                # Reconfigurar o ambiente no modelo se necessário
-                try:
-                    if self.agent.model.get_env() is None:
-                        # USAR DummyVecEnv CORRETAMENTE
-                        vec_env = DummyVecEnv([lambda: self])
-                        self.agent.model.set_env(vec_env)
-                except Exception as e:
-                    self.logger.exception("Não foi possível reconfigurar ambiente no reset")
-
         # Obter posição inicial
         robot_position, robot_orientation = self.robot.get_imu_position_and_orientation()
         self.episode_robot_x_initial_position = robot_position[0]
