@@ -36,8 +36,8 @@ class Simulation(gym.Env):
         self.yaw_threshold = 0.5  # rad
         self.episode_timeout_s = 20  # s
         self.physics_step_s = 1 / 240.0  # 240 Hz, ~4.16 ms
-        self.physics_step_multiplier = 5
-        self.time_step_s = self.physics_step_s * self.physics_step_multiplier  # 240/5 = 48 Hz, ~20.83 ms
+        self.physics_step_multiplier = 10
+        self.time_step_s = self.physics_step_s * self.physics_step_multiplier  # 240/5 = 48 Hz, ~20.83 ms # 240/8 = 30 Hz, ~33.33 ms # 240/10 = 24 Hz, ~41.66 ms
         self.max_motor_velocity = 2.0  # rad/s
         self.max_motor_torque = 130.0  # Nm
         self.apply_action = self.apply_position_action  # Escolher entre apply_velocity_action ou apply_position_action

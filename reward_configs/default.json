@@ -31,7 +31,7 @@
       "max_value": 0
     },
     "fall_penalty": {
-      "weight": -250.0,
+      "weight": -350.0,
       "enabled": true,
       "min_value": -1000,
       "max_value": 0
