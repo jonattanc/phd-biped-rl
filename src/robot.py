@@ -75,10 +75,13 @@ class Robot:
         position, orientation = link_state[0], link_state[1]
         linear_velocity, angular_velocity = link_state[6], link_state[7]
         roll, pitch, yaw = p.getEulerFromQuaternion(orientation)
+        x_velocity = linear_velocity[0]
+        roll_velocity = angular_velocity[0]
+        pitch_velocity = angular_velocity[1]
 
         joint_positions, joint_velocities = self.get_joint_states()
 
-        obs = np.array([roll, pitch, yaw] + list(angular_velocity) + joint_positions, dtype=np.float32)
+        obs = np.array([roll, pitch, yaw, x_velocity, roll_velocity, pitch_velocity] + joint_positions, dtype=np.float32)
         return obs
 
     def get_imu_position_and_orientation(self):
