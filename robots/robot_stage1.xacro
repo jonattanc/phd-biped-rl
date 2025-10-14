@@ -157,8 +157,8 @@
     <!-- Thigh -->
     <link name="${prefix}_thigh_link">
       <visual>
-        <!-- Z: thigh_length/2 desloca a posicao Z do centro do cilindro para a sua base inferior -->
-        <!-- Z: hip_radius desloca a coxa para fora do quadril -->
+        <!-- Z: hip_radius desloca o centro da coxa para fora da esfera/articulacao do quadril -->
+        <!-- Z: thigh_length/2 desloca a coxa para baixo, para que seu topo encoste na esfera/articulacao do quadril -->
         <origin rpy="0 0 0" xyz="0 0 ${-thigh_length/2 - hip_radius}"/>
         <geometry>
           <cylinder length="${thigh_length}" radius="${thigh_radius}"/>
@@ -181,11 +181,11 @@
     <joint name="base_to_${prefix}_thigh" type="revolute">
       <parent link="base_link"/>
       <child link="${prefix}_thigh_link"/>
-      <!-- Z: Como o corpo principal e posicionado em 0 0 0, body_offset move a joint para o centro do corpo -->
-      <!-- Z: body_length/2 move a joint para a base inferior do corpo -->
-      <!-- Z: hip_radius faz a base inferior do quadrilcoincidir com a base inferior do corpo -->
-      <!-- Y: body_radius posiciona a joint na borda do corpo -->
-      <!-- Y: hip_radius tira o quadrilde dentro do corpo, caso contrario metade do quadrilficaria dentro do corpo -->
+      <!-- Z: Como o corpo principal e posicionado em 0 0 0, body_offset move o centro da esfera/articulacao para o centro do corpo -->
+      <!-- Z: Diminuir body_length/2 move o centro da esfera/articulacao para a base inferior do corpo -->
+      <!-- Z: Somar hip_radius faz a base inferior da esfera/articulacao do quadril coincidir com a base inferior do corpo -->
+      <!-- Y: body_radius posiciona o centro da esfera/articulacao do quadril na borda do corpo -->
+      <!-- Y: hip_radius tira a esfera/articulacao de dentro do corpo, caso contrario metade da esfera/articulacao ficaria dentro do corpo -->
       <origin xyz="0 ${(body_radius + hip_radius) * reflect} ${body_offset - body_length/2 + hip_radius}"/>
       <axis xyz="0 1 0"/>
       <limit lower="-1.57" upper="1.57" effort="50" velocity="5"/>
@@ -194,8 +194,8 @@
     <!-- Shin -->
     <link name="${prefix}_shin_link">
       <visual>
-        <!-- Z: shin_length/2 desloca a posicao Z do centro da coxa para a sua base inferior -->
-        <!-- Z: knee_radius tira a coxa de dentro do quadril-->
+        <!-- Z: knee_radius desloca o centro da canela para fora da esfera/articulacao do joelho -->
+        <!-- Z: shin_length/2 desloca a canela para baixo, para que seu topo encoste na esfera/articulacao do joelho -->
         <origin rpy="0 0 0" xyz="0 0 ${-shin_length/2 - knee_radius}"/>
         <geometry>
           <cylinder length="${shin_length}" radius="${shin_radius}"/>
@@ -218,10 +218,11 @@
     <joint name="${prefix}_knee" type="revolute">
       <parent link="${prefix}_thigh_link"/>
       <child link="${prefix}_shin_link"/>
-      <!-- Z: hip_radius + thigh_length faz o centro da cenela coincidir com a base inferior da coxa -->
-      <!-- Z: knee_radius faz a base inferior da cenela coincidir com a base inferior da coxa -->
-      <!-- Y: thigh_radius posiciona o centro da cenela na borda da coxa -->
-      <!-- Y: knee_radius coloca a cenela para fora da coxa -->
+      <!-- Z: Como o parent e a coxa, o centro da esfera/articulacao do joelho e o centro da esfera/articulacao do quadril -->
+      <!-- Z: Diminuir hip_radius + thigh_length faz o centro da esfera/articulacao do joelho coincidir com a base inferior da coxa -->
+      <!-- Z: Somar knee_radius faz a base inferior da esfera/articulacao do joelho coincidir com a base inferior da coxa -->
+      <!-- Y: thigh_radius posiciona o centro esfera/articulacao do joelho na borda da coxa -->
+      <!-- Y: knee_radius tira a esfera/articulacao de dentro da coxa, caso contrario metade da esfera/articulacao ficaria dentro da coxa -->
       <origin xyz="0 ${(-thigh_radius + -knee_radius) * reflect} ${-hip_radius - thigh_length + knee_radius}"/>
       <axis xyz="0 1 0"/>
       <limit lower="0" upper="2.36" effort="40" velocity="5"/>
@@ -230,7 +231,7 @@
     <!-- Foot -->
     <link name="${prefix}_foot_link">
       <visual>
-        <!-- Z: foot_height/2 desloca a posicao Z do centro do pe para o seu topo -->
+        <!-- Z: foot_height/2 faz o pe sair da articulacao do tornozelo, coincidindo seu topo com a articulação/canela -->
         <!-- X: foot_offset_front desloca o pe um pouco para frente, para parecer um pe normal em que ele fica mais para frente do que para tras -->
         <origin rpy="0 0 0" xyz="${foot_offset_front} 0 ${-foot_height/2}"/>
         <geometry>
@@ -254,7 +255,8 @@
     <joint name="${prefix}_foot_joint" type="fixed">
       <parent link="${prefix}_shin_link"/>
       <child link="${prefix}_foot_link"/>
-      <!-- Z: knee_radius + shin_length faz o centro do pe coincidir com o centro da cenela -->
+      <!-- Z: Como o parent e a canela, o centro da esfera/articulacao do tornozelo e o centro da esfera/articulacao do joelho -->
+      <!-- Z: Diminuir knee_radius + shin_length faz o centro da esfera/articulacao do tornozelo coincidir com a base inferior da canela -->
       <origin xyz="0 0 ${-knee_radius - shin_length}"/>
     </joint>
 
