@@ -218,7 +218,7 @@
     <joint name="${prefix}_knee" type="revolute">
       <parent link="${prefix}_thigh_link"/>
       <child link="${prefix}_shin_link"/>
-      <!-- Z: Como o parent e a coxa, o centro da esfera/articulacao do joelho e o centro da esfera/articulacao do quadril -->
+      <!-- Z: Como o parent e a coxa, o centro da esfera/articulacao do joelho coincide inicialmente com o centro da esfera/articulacao do quadril -->
       <!-- Z: Diminuir hip_radius + thigh_length faz o centro da esfera/articulacao do joelho coincidir com a base inferior da coxa -->
       <!-- Z: Somar knee_radius faz a base inferior da esfera/articulacao do joelho coincidir com a base inferior da coxa -->
       <!-- Y: thigh_radius posiciona o centro esfera/articulacao do joelho na borda da coxa -->
@@ -255,7 +255,7 @@
     <joint name="${prefix}_foot_joint" type="fixed">
       <parent link="${prefix}_shin_link"/>
       <child link="${prefix}_foot_link"/>
-      <!-- Z: Como o parent e a canela, o centro da esfera/articulacao do tornozelo e o centro da esfera/articulacao do joelho -->
+      <!-- Z: Como o parent e a canela, o centro da esfera/articulacao do tornozelo coincide inicialmente com o centro da esfera/articulacao do joelho -->
       <!-- Z: Diminuir knee_radius + shin_length faz o centro da esfera/articulacao do tornozelo coincidir com a base inferior da canela -->
       <origin xyz="0 0 ${-knee_radius - shin_length}"/>
     </joint>

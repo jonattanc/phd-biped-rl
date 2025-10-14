@@ -24,11 +24,14 @@
 
   <!-- Shin properties -->
   <xacro:property name="shin_radius" value="0.035" />
-  <xacro:property name="shin_length" value="0.33" />
+  <xacro:property name="shin_length" value="0.30" />
   <xacro:property name="shin_mass" value="1.0" />
   <xacro:property name="shin_ixx" value="0.015" />
   <xacro:property name="shin_iyy" value="0.015" />
   <xacro:property name="shin_izz" value="0.008" />
+
+  <!-- Ankle properties -->
+  <xacro:property name="ankle_radius" value="0.03" />
 
   <!-- Foot properties -->
   <xacro:property name="foot_length" value="0.2" />
@@ -65,7 +68,9 @@
   </material>
 
   <!-- altura total -->
-  <xacro:property name="leg_total_length" value="${thigh_length + shin_length + foot_height}" />
+  <xacro:property name="leg_total_length" value="${thigh_length + shin_length + 2 * ankle_radius + foot_height}" />
+  <!-- body_offset: body_length/2 desloca o posicao Z do centro do cilindro (corpo do robo) para a sua base inferior, assim nao fica metade do corpo enterrado no chao -->
+  <!-- body_offset: leg_total_length da espaco para as pernas, para elas nao ficarem enterradas no chao -->
   <xacro:property name="body_offset" value="${body_length/2 + leg_total_length}" />
    
   <!-- Body (main cylinder) -->
@@ -114,12 +119,15 @@
   <joint name="base_to_imu" type="fixed">
     <parent link="base_link"/>
     <child link="imu_link"/>
+    <!-- Z: Como o corpo principal e posicionado em 0 0 0, body_offset move a IMU para o centro do corpo -->
+    <!-- Z: body_length/4 move a IMU um pouco para baixo, como se estivesse posicionado ela na cintura -->
     <origin xyz="${body_radius} 0 ${body_offset - body_length/4}" rpy="0 0 0"/>
   </joint>
   
   <!-- Head (sphere) -->
   <link name="head_link">
     <visual>
+      <!-- Z: head_radius shifts the Z plane from the heads's center to its base -->
       <origin rpy="0 0 0" xyz="0 0 ${head_radius}"/>
       <geometry>
         <sphere radius="${head_radius}"/>
@@ -142,7 +150,9 @@
   <joint name="base_to_head" type="fixed">
     <parent link="base_link"/>
     <child link="head_link"/>
-    <origin xyz="0 0 ${body_offset + body_length/2}"/>
+    <!-- Z: Como o corpo principal e posicionado em 0 0 0, body_offset move a joint para o centro do corpo -->
+    <!-- Z: body_length/2 move a joint para o topo do corpo -->
+	  <origin xyz="0 0 ${body_offset + body_length/2}"/>
   </joint>
 
   <!-- Leg macro (creates left/right leg: thigh, shin, foot) -->
@@ -150,6 +160,8 @@
     <!-- Thigh -->
     <link name="${prefix}_thigh_link">
       <visual>
+        <!-- Z: hip_radius desloca o centro da coxa para fora da esfera/articulacao do quadril -->
+        <!-- Z: thigh_length/2 desloca a coxa para baixo, para que seu topo encoste na esfera/articulacao do quadril -->
         <origin rpy="0 0 0" xyz="0 0 ${-thigh_length/2 - hip_radius}"/>
         <geometry>
           <cylinder length="${thigh_length}" radius="${thigh_radius}"/>
@@ -168,19 +180,25 @@
       </inertial>
     </link>
 
-    <!-- Hip joint: base_link to thigh - EVOLUÇÃO: Limites do Stage2 -->
+    <!-- Hip joint: base_link to thigh -->
     <joint name="base_to_${prefix}_thigh" type="revolute">
       <parent link="base_link"/>
       <child link="${prefix}_thigh_link"/>
+      <!-- Z: Como o corpo principal e posicionado em 0 0 0, body_offset move o centro da esfera/articulacao para o centro do corpo -->
+      <!-- Z: Diminuir body_length/2 move o centro da esfera/articulacao para a base inferior do corpo -->
+      <!-- Z: Somar hip_radius faz a base inferior da esfera/articulacao do quadril coincidir com a base inferior do corpo -->
+      <!-- Y: body_radius posiciona o centro da esfera/articulacao do quadril na borda do corpo -->
+      <!-- Y: hip_radius tira a esfera/articulacao de dentro do corpo, caso contrario metade da esfera/articulacao ficaria dentro do corpo -->
       <origin xyz="0 ${(body_radius + hip_radius) * reflect} ${body_offset - body_length/2 + hip_radius}"/>
       <axis xyz="0 1 0"/>
-      <!-- EVOLUÇÃO: Limites do Stage2 (-30° a 120°) -->
-      <limit lower="-0.52" upper="2.09" effort="150" velocity="10"/>
+      <limit lower="-1.57" upper="1.57" effort="50" velocity="5"/>
     </joint>
 
     <!-- Shin -->
     <link name="${prefix}_shin_link">
       <visual>
+        <!-- Z: knee_radius desloca o centro da canela para fora da esfera/articulacao do joelho -->
+        <!-- Z: shin_length/2 desloca a canela para baixo, para que seu topo encoste na esfera/articulacao do joelho -->
         <origin rpy="0 0 0" xyz="0 0 ${-shin_length/2 - knee_radius}"/>
         <geometry>
           <cylinder length="${shin_length}" radius="${shin_radius}"/>
@@ -199,27 +217,34 @@
       </inertial>
     </link>
 
-    <!-- Knee joint: thigh to shin - EVOLUÇÃO: Limites do Stage2 -->
+    <!-- Knee joint: thigh to shin -->
     <joint name="${prefix}_knee" type="revolute">
       <parent link="${prefix}_thigh_link"/>
       <child link="${prefix}_shin_link"/>
+      <!-- Z: Como o parent e a coxa, o centro da esfera/articulacao do joelho coincide inicialmente com o centro da esfera/articulacao do quadril -->
+      <!-- Z: Diminuir hip_radius + thigh_length faz o centro da esfera/articulacao do joelho coincidir com a base inferior da coxa -->
+      <!-- Z: Somar knee_radius faz a base inferior da esfera/articulacao do joelho coincidir com a base inferior da coxa -->
+      <!-- Y: thigh_radius posiciona o centro esfera/articulacao do joelho na borda da coxa -->
+      <!-- Y: knee_radius tira a esfera/articulacao de dentro da coxa, caso contrario metade da esfera/articulacao ficaria dentro da coxa -->
       <origin xyz="0 ${(-thigh_radius + -knee_radius) * reflect} ${-hip_radius - thigh_length + knee_radius}"/>
       <axis xyz="0 1 0"/>
-      <!-- EVOLUÇÃO: Limites do Stage2 (0° a 135°) -->
-      <limit lower="0" upper="2.36" effort="100" velocity="10"/>
+      <limit lower="0" upper="2.36" effort="40" velocity="5"/>
     </joint>
 
     <!-- Foot -->
     <link name="${prefix}_foot_link">
       <visual>
-        <origin rpy="0 0 0" xyz="${foot_offset_front} 0 ${-foot_height/2}"/>
+        <!-- Z: ankle_radius desloca o centro do pe para fora da esfera/articulacao do tornozelo -->
+        <!-- Z: foot_height/2 faz o pe sair da articulacao do tornozelo, coincidindo seu topo com o raio da esfera/articulacao -->
+        <!-- X: foot_offset_front desloca o pe um pouco para frente, para parecer um pe normal em que ele fica mais para frente do que para tras -->
+        <origin rpy="0 0 0" xyz="${foot_offset_front} 0 ${-ankle_radius - foot_height/2}"/>
         <geometry>
           <box size="${foot_length} ${foot_width} ${foot_height}"/>
         </geometry>
         <material name="robot_material_2"/>
       </visual>
       <collision>
-        <origin rpy="0 0 0" xyz="0 0 ${-foot_height/2}"/>
+        <origin rpy="0 0 0" xyz="${foot_offset_front} 0 ${-ankle_radius - foot_height/2}"/>
         <geometry>
           <box size="${foot_length} ${foot_width} ${foot_height}"/>
         </geometry>
@@ -230,15 +255,18 @@
       </inertial>
     </link>
 
-    <!-- Foot joint: shin to foot - EVOLUÇÃO: Agora é revoluta com limites do Stage2 -->
-    <joint name="${prefix}_foot_joint" type="revolute">
+    <!-- Ankle joint: shin to foot -->
+    <joint name="${prefix}_ankle_joint" type="revolute">
       <parent link="${prefix}_shin_link"/>
       <child link="${prefix}_foot_link"/>
-      <origin xyz="0 0 ${-knee_radius - shin_length}"/>
+      <!-- Z: Como o parent e a canela, o centro da esfera/articulacao do tornozelo coincide inicialmente com o centro da esfera/articulacao do joelho -->
+      <!-- Z: Diminuir knee_radius + shin_length faz o centro da esfera/articulacao do tornozelo coincidir com a base inferior da canela -->
+      <!-- Z: Diminuir ankle_radius faz a base superior da esfera/articulacao do tornozelo coincidir com a base inferior da canela -->
+      <origin xyz="0 0 ${-knee_radius - shin_length - ankle_radius}"/>
       <axis xyz="0 1 0"/>
-      <!-- EVOLUÇÃO: Tornozelo com flexão plantar/dorsiflexão (-30° a 30°) -->
-      <limit lower="-0.52" upper="0.52" effort="80" velocity="10"/>
+      <limit lower="0" upper="2.36" effort="40" velocity="5"/>
     </joint>
+
   </xacro:macro>
 
   <!-- Instantiate right and left legs -->
