@@ -240,7 +240,7 @@
         <material name="robot_material_2"/>
       </visual>
       <collision>
-        <origin rpy="0 0 0" xyz="0 0 ${-foot_height/2}"/>
+        <origin rpy="0 0 0" xyz="${foot_offset_front} 0 ${-foot_height/2}"/>
         <geometry>
           <box size="${foot_length} ${foot_width} ${foot_height}"/>
         </geometry>
