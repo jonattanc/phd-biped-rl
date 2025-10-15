@@ -167,7 +167,7 @@ class TrainingTab:
         log_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=1)
 
         status_frame = ttk.Frame(log_frame)
-        status_frame.grid(row=3, column=0, columnspan=12, sticky=(tk.W, tk.E), pady=1)
+        status_frame.grid(row=0, column=0, columnspan=12, sticky=(tk.W, tk.E), pady=1)
 
         self.steps_label = ttk.Label(status_frame, text=self.build_steps_label_text(0, 0))
         self.steps_label.grid(row=0, column=0, sticky=tk.W, padx=5)
@@ -176,13 +176,13 @@ class TrainingTab:
 
         # Configurar o grid dentro do log_frame para que o texto expanda
         log_frame.columnconfigure(0, weight=1)
-        log_frame.rowconfigure(0, weight=1)
+        log_frame.rowconfigure(1, weight=1)
 
         self.log_text = tk.Text(log_frame, height=12, state=tk.DISABLED)
         scrollbar = ttk.Scrollbar(log_frame, orient="vertical", command=self.log_text.yview)
         self.log_text.configure(yscrollcommand=scrollbar.set)
-        self.log_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-        scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
+        self.log_text.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        scrollbar.grid(row=1, column=1, sticky=(tk.N, tk.S))
 
         # Configurar grid
         self.frame.columnconfigure(0, weight=1)
