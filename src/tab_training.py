@@ -84,7 +84,7 @@ class TrainingTab:
         # Configurações de plot
         self.plot_titles = ["Recompensa por Episódio", "Duração do Episódio", "Distância Percorrida (X)", "Posição IMU (Y, Z)", "Orientação (Roll, Pitch, Yaw)"]
         self.plot_ylabels = ["Recompensa", "Tempo (s)", "Distância (m)", "Posição (m)", "Ângulo (°)"]
-        self.plot_colors = ["blue", "orange", "green", "red", "purple", "brown"]
+        self.plot_colors = ["blue", "orange", "red", "green", "purple", "brown"]
         self.plot_data_keys = ["rewards", "times", "distances", "imu_xyz", "rpy"]
 
         # Configurar IPC logging
