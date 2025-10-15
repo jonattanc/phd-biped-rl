@@ -62,7 +62,7 @@ class RewardTab:
         self.frame.rowconfigure(1, weight=1)
         main_frame.columnconfigure(0, weight=1)
         main_frame.rowconfigure(1, weight=1)
-        editor_frame.columnconfigure(1, weight=1)
+        editor_frame.columnconfigure(4, weight=1)
 
         # Carregar estado inicial
         self.refresh_config_list()
@@ -70,22 +70,22 @@ class RewardTab:
 
     def _create_component_row(self, parent, component_name, component_content, row, default_enabled=True):
         """Cria uma linha de controle para um componente"""
-        ttk.Label(parent, text=component_name).grid(row=row, column=0, sticky=tk.W, padx=5, pady=2)
+        ttk.Label(parent, text=component_name).grid(row=row, column=3, sticky=tk.W, padx=5, pady=2)
 
         var = tk.DoubleVar()
         scale = ttk.Scale(parent, from_=component_content["min_value"], to=component_content["max_value"], variable=var, orient=tk.HORIZONTAL, length=200)
-        scale.grid(row=row, column=1, padx=5, pady=2, sticky=(tk.W, tk.E))
+        scale.grid(row=row, column=4, padx=5, pady=2, sticky=(tk.W, tk.E))
 
         value_label = ttk.Label(parent, text=component_content["weight"], width=8)
-        value_label.grid(row=row, column=2, padx=5, pady=2)
+        value_label.grid(row=row, column=1, padx=5, pady=2)
 
         value_entry = ttk.Entry(parent, width=8)
-        value_entry.grid(row=row, column=3, padx=5, pady=2)
+        value_entry.grid(row=row, column=2, padx=5, pady=2)
         value_entry.insert(0, component_content["weight"])
 
         enabled_var = tk.BooleanVar(value=default_enabled)
         check_btn = ttk.Checkbutton(parent, variable=enabled_var)
-        check_btn.grid(row=row, column=4, padx=5, pady=2)
+        check_btn.grid(row=row, column=0, padx=5, pady=2)
 
         # Bind events
         var.trace("w", lambda *args, cid=component_name, lbl=value_label, v=var, ent=value_entry: self.on_scale_change(cid, lbl, v, ent))
