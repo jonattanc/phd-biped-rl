@@ -12,6 +12,7 @@ import json
 import shutil
 from datetime import datetime
 import sys
+import math
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -33,7 +34,21 @@ class TrainingTab:
         self.current_env = ""
         self.current_robot = ""
         self.current_algorithm = ""
-        self.episode_data = {"episodes": [], "rewards": [], "times": [], "distances": [], "imu_x": [], "imu_y": [], "imu_z": [], "roll": [], "pitch": [], "yaw": []}
+        self.episode_data = {
+            "episodes": [],
+            "rewards": [],
+            "times": [],
+            "distances": [],
+            "imu_x": [],
+            "imu_y": [],
+            "imu_z": [],
+            "roll": [],
+            "pitch": [],
+            "yaw": [],
+            "roll_deg": [],
+            "pitch_deg": [],
+            "yaw_deg": [],
+        }
 
         # Controle de processos
         self.processes = []
@@ -68,7 +83,7 @@ class TrainingTab:
 
         # Configurações de plot
         self.plot_titles = ["Recompensa por Episódio", "Duração do Episódio", "Distância Percorrida (X)", "Posição IMU (Y, Z)", "Orientação (Roll, Pitch, Yaw)"]
-        self.plot_ylabels = ["Recompensa", "Tempo (s)", "Distância (m)", "Posição (m)", "Ângulo (rad)"]
+        self.plot_ylabels = ["Recompensa", "Tempo (s)", "Distância (m)", "Posição (m)", "Ângulo (°)"]
         self.plot_colors = ["blue", "orange", "green", "red", "purple", "brown"]
         self.plot_data_keys = ["rewards", "times", "distances", "imu_xyz", "rpy"]
 
@@ -844,9 +859,9 @@ class TrainingTab:
                     ax.plot(self.episode_data["episodes"], self.episode_data["imu_y"], label="Y", color="green")
                     ax.plot(self.episode_data["episodes"], self.episode_data["imu_z"], label="Z", color="blue")
                 elif i == 4:  # Gráfico de orientação
-                    ax.plot(self.episode_data["episodes"], self.episode_data["roll"], label="Roll", color="red")
-                    ax.plot(self.episode_data["episodes"], self.episode_data["pitch"], label="Pitch", color="green")
-                    ax.plot(self.episode_data["episodes"], self.episode_data["yaw"], label="Yaw", color="blue")
+                    ax.plot(self.episode_data["episodes"], self.episode_data["roll_deg"], label="Roll", color="red")
+                    ax.plot(self.episode_data["episodes"], self.episode_data["pitch_deg"], label="Pitch", color="green")
+                    ax.plot(self.episode_data["episodes"], self.episode_data["yaw_deg"], label="Yaw", color="blue")
                 else:
                     ax.plot(self.episode_data["episodes"], self.episode_data[data_key], label=ylabel, color=color)
 
@@ -871,9 +886,9 @@ class TrainingTab:
                 axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_y"], label="Y", color="green")
                 axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_z"], label="Z", color="blue")
             elif i == 4:  # Gráfico de orientação
-                axs[i].plot(self.episode_data["episodes"], self.episode_data["roll"], label="Roll", color="red")
-                axs[i].plot(self.episode_data["episodes"], self.episode_data["pitch"], label="Pitch", color="green")
-                axs[i].plot(self.episode_data["episodes"], self.episode_data["yaw"], label="Yaw", color="blue")
+                axs[i].plot(self.episode_data["episodes"], self.episode_data["roll_deg"], label="Roll", color="red")
+                axs[i].plot(self.episode_data["episodes"], self.episode_data["pitch_deg"], label="Pitch", color="green")
+                axs[i].plot(self.episode_data["episodes"], self.episode_data["yaw_deg"], label="Yaw", color="blue")
             else:
                 axs[i].plot(self.episode_data["episodes"], self.episode_data[data_key], label=ylabel, color=color)
 
@@ -956,9 +971,9 @@ class TrainingTab:
                         self.axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_y"], label="Y", color="green", linestyle="-", markersize=3)
                         self.axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_z"], label="Z", color="blue", linestyle="-", markersize=3)
                     elif i == 4:  # Gráfico de orientação
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["roll"], label="Roll", color="red", linestyle="-", markersize=3)
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["pitch"], label="Pitch", color="green", linestyle="-", markersize=3)
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["yaw"], label="Yaw", color="blue", linestyle="-", markersize=3)
+                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["roll_deg"], label="Roll", color="red", linestyle="-", markersize=3)
+                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["pitch_deg"], label="Pitch", color="green", linestyle="-", markersize=3)
+                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["yaw_deg"], label="Yaw", color="blue", linestyle="-", markersize=3)
                     else:  # Gráficos normais
                         self.axs[i].plot(self.episode_data["episodes"], self.episode_data[data_key], label=ylabel, color=color, linestyle="-", markersize=3)
 
@@ -1184,17 +1199,25 @@ class TrainingTab:
 
                     if data_type == "episode_data":
                         with self.plot_data_lock:
-                            episode_num = msg["episode"]
-                            self.episode_data["episodes"].append(episode_num)
+                            self.episode_data["episodes"].append(msg["episode"])
                             self.episode_data["rewards"].append(msg["reward"])
                             self.episode_data["times"].append(msg["time"])
                             self.episode_data["distances"].append(msg["distance"])
                             self.episode_data["imu_x"].append(msg.get("imu_x", 0))
                             self.episode_data["imu_y"].append(msg.get("imu_y", 0))
                             self.episode_data["imu_z"].append(msg.get("imu_z", 0))
-                            self.episode_data["roll"].append(msg.get("roll", 0))
-                            self.episode_data["pitch"].append(msg.get("pitch", 0))
-                            self.episode_data["yaw"].append(msg.get("yaw", 0))
+                            roll = msg.get("roll", 0)
+                            pitch = msg.get("pitch", 0)
+                            yaw = msg.get("yaw", 0)
+                            roll_deg = math.degrees(roll)
+                            pitch_deg = math.degrees(pitch)
+                            yaw_deg = math.degrees(yaw)
+                            self.episode_data["roll"].append(roll)
+                            self.episode_data["pitch"].append(pitch)
+                            self.episode_data["yaw"].append(yaw)
+                            self.episode_data["roll_deg"].append(roll_deg)
+                            self.episode_data["pitch_deg"].append(pitch_deg)
+                            self.episode_data["yaw_deg"].append(yaw_deg)
 
                         self.new_plot_data = True
                         self._handle_episode_data(msg)
