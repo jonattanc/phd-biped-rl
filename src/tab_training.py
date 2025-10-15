@@ -117,7 +117,7 @@ class TrainingTab:
             return
 
         ttk.Label(row1_frame, text="Robô:").grid(row=0, column=4, sticky=tk.W, padx=1)
-        self.robot_var = tk.StringVar(value=xacro_robot_files[0])
+        self.robot_var = tk.StringVar(value=xacro_robot_files[1])
         robot_combo = ttk.Combobox(row1_frame, textvariable=self.robot_var, values=xacro_robot_files, width=12)
         robot_combo.grid(row=0, column=5, padx=5)
 
