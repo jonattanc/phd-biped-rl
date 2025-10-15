@@ -50,7 +50,7 @@
     },
     "success_bonus": {
       "weight": 100.0,
-      "enabled": true,
+      "enabled": false,
       "min_value": 0,
       "max_value": 1000
     },

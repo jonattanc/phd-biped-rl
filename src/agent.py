@@ -101,7 +101,7 @@ class Agent:
                 "MlpPolicy",
                 self.env,
                 verbose=1,
-                learning_rate=1.5e-4,
+                learning_rate=1.0e-4,
                 buffer_size=int(1e6),
                 learning_starts=1e4,
                 batch_size=256,
