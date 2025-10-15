@@ -102,7 +102,7 @@ class Agent:
                 "MlpPolicy",
                 self.env,
                 # policy_kwargs=policy_kwargs,
-                verbose=1,
+                # verbose=1,
                 learning_rate=1.0e-4,
                 buffer_size=int(1e6),
                 learning_starts=1e4,
