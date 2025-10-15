@@ -97,9 +97,11 @@ class Agent:
                 device="cpu",
             )
         elif algorithm.upper() == "TD3":
+            # policy_kwargs = dict(net_arch=[256, 256, 256])
             return TD3(
                 "MlpPolicy",
                 self.env,
+                # policy_kwargs=policy_kwargs,
                 verbose=1,
                 learning_rate=1.0e-4,
                 buffer_size=int(1e6),
