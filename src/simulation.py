@@ -4,7 +4,7 @@ import gymnasium as gym
 import time
 import numpy as np
 import random
-from stable_baselines3.common.vec_env import DummyVecEnv
+import math
 from reward_system import RewardSystem
 
 
@@ -31,6 +31,7 @@ class Simulation(gym.Env):
         self.reward_system = RewardSystem(logger)
 
         # Configurações de simulação
+        self.target_pitch_rad = math.radians(1)  # rad
         self.fall_threshold = 0.5  # m
         self.success_distance = 9.0  # m
         self.yaw_threshold = 0.5  # rad

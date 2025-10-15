@@ -61,8 +61,8 @@ class RewardSystem:
             total_reward += sim.robot_roll**2 * self.components["stability_roll"].weight
 
         if self.is_component_enabled("stability_pitch"):
-            self.components["stability_pitch"].value = sim.robot_pitch**2
-            total_reward += sim.robot_pitch**2 * self.components["stability_pitch"].weight
+            self.components["stability_pitch"].value = (sim.robot_pitch - sim.target_pitch_rad) ** 2
+            total_reward += self.components["stability_pitch"].value * self.components["stability_pitch"].weight
 
         if self.is_component_enabled("stability_yaw"):
             self.components["stability_yaw"].value = sim.robot_yaw**2
