@@ -48,7 +48,7 @@ class RewardSystem:
 
         # Componentes de recompensa
         if self.is_component_enabled("progress"):
-            progress = sim.episode_distance - sim.episode_last_distance
+            progress = sim.robot_x_velocity
             self.components["progress"].value = progress
             total_reward += progress * self.components["progress"].weight
 

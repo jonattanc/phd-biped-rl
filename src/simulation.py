@@ -241,7 +241,7 @@ class Simulation(gym.Env):
             self.soft_env_reset()
 
         # Obter posição inicial
-        robot_position, robot_orientation = self.robot.get_imu_position_and_orientation()
+        robot_position, robot_velocity, robot_orientation = self.robot.get_imu_position_velocity_orientation()
         self.episode_robot_x_initial_position = robot_position[0]
 
         # Configurar parâmetros físicos para estabilidade
@@ -274,7 +274,7 @@ class Simulation(gym.Env):
         self.episode_count += 1
 
         # Obter posição e orientação final da IMU
-        imu_position, imu_orientation = self.robot.get_imu_position_and_orientation()
+        imu_position, robot_velocity, imu_orientation = self.robot.get_imu_position_velocity_orientation()
 
         actual_episode_number = self.current_episode + self.episode_count
 
@@ -367,10 +367,11 @@ class Simulation(gym.Env):
         # Obter observação
         obs = self.robot.get_observation()
 
-        robot_position, robot_orientation = self.robot.get_imu_position_and_orientation()
+        robot_position, robot_velocity, robot_orientation = self.robot.get_imu_position_velocity_orientation()
         self.robot_x_position = robot_position[0]
         self.robot_y_position = robot_position[0]
         self.robot_z_position = robot_position[2]
+        self.robot_x_velocity = robot_velocity[0]
         self.robot_roll = robot_orientation[0]
         self.robot_pitch = robot_orientation[1]
         self.robot_yaw = robot_orientation[2]
@@ -378,7 +379,6 @@ class Simulation(gym.Env):
         self.last_joint_velocities = self.joint_velocities
         self.joint_positions, self.joint_velocities = self.robot.get_joint_states()
 
-        self.episode_last_distance = self.episode_distance
         self.episode_distance = self.robot_x_position - self.episode_robot_x_initial_position
 
         # Condições de Termino

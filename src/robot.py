@@ -84,23 +84,14 @@ class Robot:
         obs = np.array([roll, pitch, yaw, x_velocity, roll_velocity, pitch_velocity] + joint_positions, dtype=np.float32)
         return obs
 
-    def get_imu_position_and_orientation(self):
+    def get_imu_position_velocity_orientation(self):
         """Retorna posição e orientação do IMU COM VERIFICAÇÃO"""
-        try:
-            if self.id is None:
-                return [0, 0, 0], [0, 0, 0]  # Valores padrão
-
-            link_state = p.getLinkState(self.id, self.imu_link_index, computeLinkVelocity=1)
-            position = link_state[0]
-            orientation = p.getEulerFromQuaternion(link_state[1])
-            return position, orientation
-        except Exception as e:
-            self.logger.exception("Erro ao obter dados do IMU")
-            return [0, 0, 0], [0, 0, 0]
+        link_state = p.getLinkState(self.id, self.imu_link_index, computeLinkVelocity=1)
+        position = link_state[0]
+        orientation = p.getEulerFromQuaternion(link_state[1])
+        linear_velocity = link_state[6]
+        return position, linear_velocity, orientation
 
     def get_base_position_and_orientation(self):
         """Retorna a posição e orientação atual da base do robô"""
-        if self.id is None:
-            return [0, 0, 0], [0, 0, 0, 1]
-
         return p.getBasePositionAndOrientation(self.id)
