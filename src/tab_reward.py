@@ -127,9 +127,9 @@ class RewardTab:
             editor["enabled_var"].set(enabled)
 
             # Atualizar widgets diretamente para evitar loops
-            editor["label"].config(text=f"{weight:.3f}")
+            editor["label"].config(text=f"{weight}")
             editor["entry"].delete(0, tk.END)
-            editor["entry"].insert(0, f"{weight:.3f}")
+            editor["entry"].insert(0, f"{weight}")
 
     def on_config_selected(self, event):
         """Quando uma configuração é selecionada no combobox"""
@@ -175,9 +175,9 @@ class RewardTab:
         """Callback quando slider é movido"""
         try:
             value = var.get()
-            label_widget.config(text=f"{value:.3f}")
+            label_widget.config(text=f"{value}")
             entry_widget.delete(0, tk.END)
-            entry_widget.insert(0, f"{value:.3f}")
+            entry_widget.insert(0, f"{value}")
 
             # Atualizar no sistema imediatamente
             self.save_config_change(component_id, weight=value)
@@ -197,7 +197,7 @@ class RewardTab:
                 # Se valor inválido, restaurar o anterior
                 self.logger.warning(f"Valor inválido digitado para {component_id}: {entry_widget.get()}")
                 entry_widget.delete(0, tk.END)
-                entry_widget.insert(0, f"{var.get():.3f}")
+                entry_widget.insert(0, f"{var.get()}")
 
         except Exception as e:
             self.logger.exception(f"Erro ao processar entrada do componente {component_id}: {e}")
