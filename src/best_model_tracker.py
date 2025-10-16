@@ -3,12 +3,13 @@ import time
 
 
 class BestModelTracker:
-    def __init__(self, improvement_threshold=0.05, patience_steps=500000, checkpoint_steps=300000):
+    def __init__(self):
+        self.improvement_threshold = 0.05
+        self.patience_steps = 500e3
+        self.minimum_steps = 50e3
+
         self.best_reward = -float("inf")
         self.best_distance = 0.0
-        self.improvement_threshold = improvement_threshold
-        self.patience_steps = patience_steps
-        self.checkpoint_steps = checkpoint_steps
         self.steps_since_improvement = 0
         self.total_steps = 0
         self.last_improvement_steps = 0
@@ -27,13 +28,12 @@ class BestModelTracker:
             self.best_reward = episode_reward
             self.last_improvement_steps = current_steps
             self.steps_since_improvement = 0
-            self.auto_save_count += 1
-            return True, "first_reward"
+            return False, "first_reward"
 
         # Calcular melhoria percentual
         improvement = (episode_reward - self.best_reward) / abs(self.best_reward)
 
-        if improvement >= self.improvement_threshold:
+        if improvement >= self.improvement_threshold and self.total_steps >= self.minimum_steps:
             self.best_reward = episode_reward
             self.steps_since_improvement = 0
             self.last_improvement_steps = current_steps
@@ -45,11 +45,7 @@ class BestModelTracker:
 
     def should_pause(self):
         """Verifica se deve pausar por plateau"""
-        return self.steps_since_improvement >= self.patience_steps
-
-    def should_checkpoint(self):
-        """Verifica se deve fazer checkpoint por tempo"""
-        return (self.total_steps - self.last_improvement_steps) >= self.checkpoint_steps
+        return self.steps_since_improvement >= self.patience_steps and self.total_steps >= self.minimum_steps
 
     def get_auto_save_filename(self):
         """Gera nome de arquivo para salvamento automático"""

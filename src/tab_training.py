@@ -291,10 +291,6 @@ class TrainingTab:
             self.steps_per_second = 0
             self._initialize_plots()
 
-            # Sistema tracker para novo treinamento
-            if not hasattr(self, "tracker"):
-                self.tracker = BestModelTracker()
-
             if not hasattr(self, "best_models_dir"):
                 self.best_models_dir = utils.ensure_directory(os.path.join(utils.TRAINING_DATA_PATH, "best_models_temp"))
 
@@ -760,11 +756,6 @@ class TrainingTab:
                 with open(training_info_path, "r") as f:
                     training_info = json.load(f)
 
-                # Inicializar tracker se não existir
-                if not hasattr(self, "tracker"):
-                    self.tracker = BestModelTracker()
-                    self.total_steps = 0
-
                 # Restaurar dados básicos
                 self.tracker.best_reward = training_info.get("best_reward", -float("inf"))
                 self.tracker.best_distance = training_info.get("best_distance", 0.0)
@@ -1150,12 +1141,6 @@ class TrainingTab:
             episode_reward = episode_data.get("reward", 0)
             episode_distance = episode_data.get("distance", 0)
 
-            # Verificar se tracker existe
-            if not hasattr(self, "tracker"):
-                self.logger.warning("Tracker não inicializado, criando novo...")
-                self.tracker = BestModelTracker()
-                self.total_steps = 0
-
             # Atualizar tracker
             should_save, reason = self.tracker.update(episode_reward, episode_distance, self.total_steps)
 
@@ -1163,13 +1148,7 @@ class TrainingTab:
                 self.logger.info(f"NOVA MELHORIA! Recompensa: {episode_reward:.2f} (Motivo: {reason})")
                 self._save_best_model_automatically(reason)
 
-            # Verificar checkpoint por tempo (300k steps)
-            if self.tracker.should_checkpoint():
-                self.logger.info("Checkpoint por tempo atingido (300k steps)")
-                self._save_best_model_automatically("checkpoint")
-                self.tracker.last_improvement_steps = self.total_steps
-
-            # Verificar se deve pausar por plateau (500k steps sem melhoria)
+            # Verificar se deve pausar por plateau
             if self.tracker.should_pause():
                 self.logger.info("Pausa automática por plateau de performance")
                 self._trigger_auto_pause()
