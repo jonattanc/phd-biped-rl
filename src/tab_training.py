@@ -164,7 +164,7 @@ class TrainingTab:
         self.enable_visualization_check = ttk.Checkbutton(row2_frame, text="Visualizar Robô", variable=self.enable_visualization_var, command=self.toggle_visualization, width=15)
         self.enable_visualization_check.grid(row=0, column=3, padx=1)
 
-        self.real_time_var = tk.BooleanVar(value=False)
+        self.real_time_var = tk.BooleanVar(value=True)
         self.real_time_check = ttk.Checkbutton(row2_frame, text="Tempo Real", variable=self.real_time_var, command=self.toggle_real_time, width=15)
         self.real_time_check.grid(row=0, column=4, padx=5)
 
