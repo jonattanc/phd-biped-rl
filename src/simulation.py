@@ -390,11 +390,6 @@ class Simulation(gym.Env):
             self.logger.info("Sinal de saída recebido em step. Finalizando simulação.")
             return None, 0.0, True, False, {"exit": True}
 
-        # Atualizar configurações de visualização e tempo real se necessário
-        if self.is_visualization_enabled != self.enable_visualization_value.value:
-            self.is_visualization_enabled = self.enable_visualization_value.value
-            self.setup_sim_env()
-
         self.apply_action(action)
 
         # Avançar simulação
