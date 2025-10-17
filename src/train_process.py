@@ -59,6 +59,7 @@ def process_runner(
     exit_value,
     enable_visualization_value,
     enable_real_time_value,
+    camera_selection_value,
     device="cpu",
     initial_episode=0,
     model_path=None,
@@ -67,6 +68,7 @@ def process_runner(
     logger.info(f"Iniciando treinamento: {selected_environment} + {selected_robot} + {algorithm}")
     logger.info(f"Visualização: {enable_visualization_value.value}")
     logger.info(f"Tempo Real: {enable_real_time_value.value}")
+    logger.info(f"Câmera: {camera_selection_value.value}")
     logger.info(f"Episódio inicial: {initial_episode}")
     logger.info(f"Modelo carregado: {model_path}")
 
@@ -74,7 +76,7 @@ def process_runner(
         # Criar componentes
         environment = Environment(logger, name=selected_environment)
         robot = Robot(logger, name=selected_robot)
-        sim = Simulation(logger, robot, environment, ipc_queue, pause_value, exit_value, enable_visualization_value, enable_real_time_value, initial_episode=initial_episode)
+        sim = Simulation(logger, robot, environment, ipc_queue, pause_value, exit_value, enable_visualization_value, enable_real_time_value, camera_selection_value, initial_episode=initial_episode)
         agent = Agent(logger, env=sim, model_path=model_path, algorithm=algorithm, device=device, initial_episode=initial_episode)
         sim.set_agent(agent)
         callback = TrainingCallback(logger)

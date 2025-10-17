@@ -9,7 +9,9 @@ from reward_system import RewardSystem
 
 
 class Simulation(gym.Env):
-    def __init__(self, logger, robot, environment, ipc_queue, pause_value, exit_value, enable_visualization_value, enable_real_time_value, num_episodes=1, seed=42, initial_episode=0):
+    def __init__(
+        self, logger, robot, environment, ipc_queue, pause_value, exit_value, enable_visualization_value, enable_real_time_value, camera_selecion_value, num_episodes=1, seed=42, initial_episode=0
+    ):
         super(Simulation, self).__init__()
         np.random.seed(seed)
         random.seed(seed)
@@ -22,6 +24,8 @@ class Simulation(gym.Env):
         self.enable_visualization_value = enable_visualization_value
         self.is_visualization_enabled = enable_visualization_value.value
         self.enable_real_time_value = enable_real_time_value
+        self.camera_selection_value = camera_selecion_value
+        self.last_camera_selection = camera_selecion_value.value
         self.num_episodes = num_episodes
         self.current_episode = 0
         self.total_steps = 0
@@ -78,7 +82,21 @@ class Simulation(gym.Env):
         else:
             self.physics_client = p.connect(p.DIRECT)
 
-        p.resetDebugVisualizerCamera(cameraDistance=6.5, cameraYaw=35, cameraPitch=-45, cameraTargetPosition=[6.0, 0.0, 0.6])
+        if self.camera_selection_value.value == 1:
+            # Visão geral do ambiente
+            p.resetDebugVisualizerCamera(cameraDistance=6.5, cameraYaw=35, cameraPitch=-45, cameraTargetPosition=[6.0, 0.0, 0.6])
+
+        elif self.camera_selection_value.value == 2:
+            # Visão próxima do robô
+            p.resetDebugVisualizerCamera(cameraDistance=2.5, cameraYaw=15, cameraPitch=-25, cameraTargetPosition=[0.0, 0.0, 0.0])
+
+        elif self.camera_selection_value.value == 3:
+            # Visão lateral do robô
+            p.resetDebugVisualizerCamera(cameraDistance=2.5, cameraYaw=180, cameraPitch=-15, cameraTargetPosition=[0.0, 0.0, 0.0])
+
+        elif self.camera_selection_value.value == 4:
+            # Visão frontal do robô
+            p.resetDebugVisualizerCamera(cameraDistance=2.5, cameraYaw=90, cameraPitch=-15, cameraTargetPosition=[0.0, 0.0, 0.5])
 
         p.setGravity(0, 0, -9.807)
         p.setTimeStep(self.physics_step_s)
@@ -257,8 +275,9 @@ class Simulation(gym.Env):
         self.reset_episode_vars()
 
         # Resetar ambiente de simulação
-        if self.is_visualization_enabled != self.enable_visualization_value.value:
+        if self.is_visualization_enabled != self.enable_visualization_value.value or self.last_camera_selection != self.camera_selection_value.value:
             self.is_visualization_enabled = self.enable_visualization_value.value
+            self.last_camera_selection = self.camera_selection_value.value
             self.setup_sim_env()
         else:
             self.soft_env_reset()

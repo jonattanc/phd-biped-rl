@@ -56,6 +56,7 @@ class TrainingTab:
         self.exit_values = []
         self.enable_real_time_values = []
         self.enable_visualization_values = []
+        self.camera_selection_values = []
         self.gui_log_queue = queue.Queue()
         self.ipc_queue = multiprocessing.Queue()
         self.ipc_thread = None
@@ -166,6 +167,15 @@ class TrainingTab:
         self.real_time_var = tk.BooleanVar(value=False)
         self.real_time_check = ttk.Checkbutton(row2_frame, text="Tempo Real", variable=self.real_time_var, command=self.toggle_real_time, width=15)
         self.real_time_check.grid(row=0, column=4, padx=5)
+
+        ttk.Label(row2_frame, text="Câmera:").grid(row=0, column=5, sticky=tk.W, padx=5)
+
+        camera_options = {1: "Geral", 2: "Próxima", 3: "Lateral", 4: "Frontal"}
+        self.camera_selection_var = tk.StringVar(value=camera_options[1])
+        self.camera_selection_int = 1
+        self.camera_selection_combobox = ttk.Combobox(row2_frame, textvariable=self.camera_selection_var, values=list(camera_options.values()), state="readonly", width=15)
+        self.camera_selection_combobox.grid(row=0, column=6, padx=5)
+        self.camera_selection_combobox.bind("<<ComboboxSelected>>", lambda event: self.update_camera_selection(event, camera_options))
 
         # Gráficos
         graph_frame = ttk.LabelFrame(main_frame, text="Desempenho em Tempo Real", padding="1")
@@ -308,16 +318,18 @@ class TrainingTab:
             exit_val = multiprocessing.Value("b", 0)
             enable_visualization_val = multiprocessing.Value("b", self.enable_visualization_var.get())
             realtime_val = multiprocessing.Value("b", self.real_time_var.get())
+            camera_selection_val = multiprocessing.Value("i", self.camera_selection_int)
 
             self.pause_values.append(pause_val)
             self.exit_values.append(exit_val)
             self.enable_visualization_values.append(enable_visualization_val)
             self.enable_real_time_values.append(realtime_val)
+            self.camera_selection_values.append(camera_selection_val)
 
             # Iniciar processo com config
             p = multiprocessing.Process(
                 target=train_process.process_runner,
-                args=(self.current_env, self.current_robot, self.current_algorithm, self.ipc_queue, pause_val, exit_val, enable_visualization_val, realtime_val, self.device, 0),
+                args=(self.current_env, self.current_robot, self.current_algorithm, self.ipc_queue, pause_val, exit_val, enable_visualization_val, realtime_val, camera_selection_val, self.device, 0),
             )
             p.start()
             self.training_start_time = time.time()
@@ -364,6 +376,7 @@ class TrainingTab:
             self.exit_values.append(exit_val)
             enable_visualization_val = multiprocessing.Value("b", self.enable_visualization_var.get())
             realtime_val = multiprocessing.Value("b", self.real_time_var.get())
+            camera_selection_val = multiprocessing.Value("i", self.camera_selection_int)
 
             self.logger.info(f"Retomando treinamento - episódio: {self.current_episode}")
 
@@ -385,6 +398,7 @@ class TrainingTab:
                     exit_val,
                     enable_visualization_val,
                     realtime_val,
+                    camera_selection_val,
                     self.device,
                     self.current_episode,
                     model_path,
@@ -919,6 +933,21 @@ class TrainingTab:
 
         else:
             self.logger.info("toggle_real_time: Nenhum processo de treinamento ativo.")
+
+    def update_camera_selection(self, event, camera_options):
+        """Atualiza o valor da câmera selecionada no multiprocessing com base no nome exibido"""
+        selected_name = self.camera_selection_combobox.get()
+        self.logger.info(f"Câmera selecionada: {selected_name}")
+        selected_value = next((key for key, value in camera_options.items() if value == selected_name), None)
+
+        self.camera_selection_var.set(selected_name)
+        self.camera_selection_int = selected_value
+
+        if self.camera_selection_values:
+            self.camera_selection_values[-1].value = selected_value
+
+        else:
+            self.logger.info("update_camera_selection: Nenhum processo de treinamento ativo.")
 
     def build_steps_label_text(self, total_steps, steps_per_second):
         return f"Total Steps: {total_steps} | Steps/s: {steps_per_second:.1f}"
