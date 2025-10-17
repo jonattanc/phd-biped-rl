@@ -121,6 +121,18 @@ class Robot:
 
             action_list = [hip_right, knee_right, ankle_right, hip_left, knee_left, ankle_left]
 
+        elif num_joints == 8:
+            hip_right_front = -1.0 * np.sin(w * t + 0.0 * np.pi)  # Positivo para trás
+            hip_right_lateral = 0.0 * np.sin(w * t + 0.0 * np.pi)  # Positivo para dentro
+            knee_right = 1.0 * np.sin(w * t + 0.0 * np.pi)  # Positivo para dobrar
+            ankle_right = 0.0 * np.sin(w * t + 0.0 * np.pi)
+            hip_left_front = 0.0 * np.sin(w * t + 0.0 * np.pi)
+            hip_left_lateral = 0.0 * np.sin(w * t + 0.0 * np.pi)
+            knee_left = 0.0 * np.sin(w * t + 0.0 * np.pi)
+            ankle_left = -1.0 * np.sin(w * t + 0.0 * np.pi)  # Positivo para baixo
+
+            action_list = [hip_right_front, hip_right_lateral, knee_right, ankle_right, hip_left_front, hip_left_lateral, knee_left, ankle_left]
+
         else:
             raise ValueError(f"Número de juntas não suportado para ação de exemplo: {num_joints}")
 
