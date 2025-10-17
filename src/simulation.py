@@ -219,7 +219,7 @@ class Simulation(gym.Env):
     def pre_fill_buffer(self, timesteps=10e3):
         obs = self.reset()
 
-        while self.total_steps < timesteps:
+        while self.total_steps < timesteps and not self.exit_value.value:
             t = self.episode_steps * self.time_step_s
             action = self.robot.get_example_action(t)
 
