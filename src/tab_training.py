@@ -1100,31 +1100,6 @@ class TrainingTab:
             self.logger.exception("Erro ao atualizar status do tracker")
             self.tracker_status_label.config(text="Status: Erro no tracker")
 
-    def _setup_auto_save_system(self):
-        """Configura sistema automático de salvamento"""
-        self.best_models_dir = utils.ensure_directory(os.path.join(utils.TRAINING_DATA_PATH, "best_models_temp"))
-        self.current_best_model_path = None
-        self.auto_save_enabled = True
-
-        # Limpar modelos antigos (manter apenas os últimos 10)
-        self._cleanup_old_models()
-
-    def _cleanup_old_models(self, keep_count=10):
-        """Remove modelos antigos, mantendo apenas os mais recentes"""
-        try:
-            if os.path.exists(self.best_models_dir):
-                model_files = [f for f in os.listdir(self.best_models_dir) if f.endswith(".zip")]
-                model_files.sort(key=lambda x: os.path.getmtime(os.path.join(self.best_models_dir, x)))
-
-                # Manter apenas os mais recentes
-                if len(model_files) > keep_count:
-                    for old_file in model_files[:-keep_count]:
-                        old_path = os.path.join(self.best_models_dir, old_file)
-                        os.remove(old_path)
-                        self.logger.info(f"Modelo antigo removido: {old_file}")
-        except Exception as e:
-            self.logger.exception("Erro ao limpar modelos antigos")
-
     def _save_best_model_automatically(self, reason="improvement"):
         """Salva automaticamente o melhor modelo"""
         try:

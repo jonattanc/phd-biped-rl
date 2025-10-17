@@ -202,30 +202,6 @@ class Agent:
             self.logger.exception("Erro ao configurar ambiente")
             raise
 
-    def train(self, total_timesteps=100_000):
-        """Treina o agente."""
-        self.logger.info(f"Executando agent.train por {total_timesteps} timesteps")
-
-        if self.model is not None:
-            # Verificar se o ambiente está configurado
-            if self.model.get_env() is None:
-                self.logger.error("Ambiente não configurado para o modelo!")
-                raise ValueError("O ambiente deve ser configurado antes do treinamento. Chame set_env() primeiro.")
-
-            callback = TrainingCallback(self.logger)
-            self.model.learn(total_timesteps=total_timesteps, reset_num_timesteps=False, callback=callback)
-        else:
-            raise ValueError("Modelo não foi inicializado.")
-
-    def get_action(self, obs=None):
-        """Obtém uma ação do modelo ou, se não houver modelo, retorna uma ação aleatória. Não é usada automaticamente por stable_baselines3"""
-        if self.model is None or obs is None:
-            # Fallback para ação aleatória
-            return [random.uniform(-10, 10) for _ in range(self.action_dim)]
-
-        action, _ = self.model.predict(obs, deterministic=False)
-        return action.flatten()  # Garante que é um array 1D
-
     def set_agent(self, agent):
         """Configura o agente no ambiente"""
         self.agent = agent
