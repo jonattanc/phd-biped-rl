@@ -13,6 +13,7 @@ import shutil
 from datetime import datetime
 import sys
 import math
+import pygetwindow as gw
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -1210,6 +1211,10 @@ class TrainingTab:
                         self.total_steps = msg.get("steps_completed", 0)
                         self.logger.debug(f"Progresso: {self.total_steps} steps")
 
+                    elif data_type == "pybullet_window_ready":
+                        self.logger.info("Janela do PyBullet pronta para visualização.")
+                        self.focus_pybullet_window()
+
                     elif data_type == "step_count":
                         # Atualizar contador de steps
                         if self.total_steps is None:
@@ -1254,6 +1259,22 @@ class TrainingTab:
 
             if not self.gui_closed:
                 self.on_closing()
+
+    def focus_pybullet_window(self):
+        """Traz a janela do PyBullet para o foco"""
+        try:
+            windows = gw.getWindowsWithTitle("Bullet Physics")
+
+            if windows:
+                pybullet_window = windows[0]
+                pybullet_window.activate()
+                self.logger.info("Janela do PyBullet focada")
+
+            else:
+                self.logger.warning("Janela do PyBullet não encontrada para foco")
+
+        except Exception as e:
+            self.logger.exception("Erro ao focar a janela do PyBullet")
 
     def on_closing(self):
         """Limpeza adequada ao fechar"""

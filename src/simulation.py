@@ -107,6 +107,10 @@ class Simulation(gym.Env):
         # Carregar robô após o ambiente
         self.robot.load_in_simulation()
 
+        if self.is_visualization_enabled:
+            time.sleep(0.5)  # Aguarda a inicialização da janela do PyBullet
+            self.ipc_queue.put({"type": "pybullet_window_ready"})
+
     def set_agent(self, agent):
         self.agent = agent
 
