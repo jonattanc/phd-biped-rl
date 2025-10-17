@@ -69,7 +69,8 @@ class Simulation(gym.Env):
 
         # Variáveis para coleta de dados
         self.reset_episode_vars()
-        self.set_initial_episode(initial_episode)
+        self.current_episode = initial_episode
+        self.episode_count = initial_episode
 
     def setup_sim_env(self):
         """Conecta ao PyBullet e carrega ambiente e robô"""
@@ -113,112 +114,6 @@ class Simulation(gym.Env):
 
     def set_agent(self, agent):
         self.agent = agent
-
-    def set_initial_episode(self, initial_episode):
-        """Configura o episódio inicial para continuar de onde parou"""
-        self.current_episode = initial_episode
-        self.episode_count = initial_episode
-        self.logger.info(f"Episódio inicial configurado: {self.current_episode}")
-
-    def run(self):
-        """Executa múltiplos episódios e retorna métricas"""
-        self.logger.info("Executando simulation.run")
-        all_metrics = []
-
-        for episode in range(self.num_episodes):
-            if self.exit_value.value:
-                self.logger.info("Sinal de saída recebido em run. Finalizando simulação.")
-                break
-
-            while self.pause_value.value and not self.exit_value.value:
-                time.sleep(0.1)
-
-            episode_number = self.current_episode + episode + 1
-            self.logger.info(f"=== INICIANDO EPISÓDIO {episode_number}/{self.current_episode + self.num_episodes} ===")
-
-            episode_metrics = self.run_episode()
-            all_metrics.append(episode_metrics)
-
-            self.logger.info(f"=== EPISÓDIO {episode_number} FINALIZADO ===")
-            self.logger.info(f"Recompensa: {episode_metrics['reward']:.2f}")
-            self.logger.info(f"Distância: {episode_metrics['distance']:.2f}m")
-            self.logger.info(f"Sucesso: {episode_metrics['success']}")
-            self.logger.info(f"Passos: {episode_metrics['steps']}")
-            self.logger.info("")
-
-        return all_metrics
-
-    def run_episode(self):
-        """Executa um episódio completo e retorna métricas"""
-        start_time = time.time()
-        distance_traveled = 0.0
-        prev_x_pos = 0.0
-        steps = 0
-        success = False
-        reward = 0.0
-
-        # --- PASSO 1: REMOVER O ROBÔ E O AMBIENTE ANTIGOS ---
-        if self.robot.id is not None:
-            p.removeBody(self.robot.id)
-        if hasattr(self.environment, "id") and self.environment.id is not None:
-            p.removeBody(self.environment.id)
-
-        # --- PASSO 2: RECRIAR O AMBIENTE ---
-        self.plane.id = self.environment.load_in_simulation(use_fixed_base=True)
-
-        # --- PASSO 3: RECRIAR O ROBÔ ---
-        self.robot.id = self.robot.load_in_simulation()
-
-        # --- PASSO 4 RESETAR A POSIÇÃO INICIAL DO ROBÔ ---
-        # Forçar a referência de distância para 0.0
-        episode_robot_x_initial_position = 0.0
-
-        while steps < self.reward_system.max_steps:
-            action = np.random.uniform(-1, 1, size=self.action_dim)
-            # Obter observação
-            pos, _ = p.getBasePositionAndOrientation(self.robot.id)
-            current_x_pos = pos[0]
-            distance_traveled = current_x_pos - episode_robot_x_initial_position
-
-            # Calcular recompensa
-            progress = distance_traveled - prev_x_pos
-            if progress > 0:
-                progress_reward = progress * 10  # Recompensa menor para progresso positivo
-            else:
-                progress_reward = progress * 20  # Penalidade maior para movimento para trás
-            reward += progress_reward
-            prev_x_pos = distance_traveled
-
-            # Verificar queda
-            if pos[2] < self.reward_system.fall_threshold:
-                reward -= 100
-                self.logger.info(f"Robô caiu após {steps} passos. Distância: {distance_traveled:.2f}m")
-                break
-
-            # Verificar sucesso
-            if distance_traveled >= self.reward_system.success_distance:
-                reward += 50
-                success = True
-                self.logger.info(f"Sucesso! Percurso concluído em {steps} passos ({distance_traveled:.2f}m)")
-                break
-
-            # Aplicar ação
-            p.setJointMotorControlArray(bodyUniqueId=self.robot.id, jointIndices=self.robot.revolute_indices, controlMode=p.VELOCITY_CONTROL, targetVelocities=action, forces=[100] * len(action))
-
-            # Avançar simulação
-            p.stepSimulation()
-            steps += 1
-
-            if self.is_visualization_enabled and self.enable_real_time_value.value:
-                time.sleep(self.time_step_s)
-
-            if steps % 100 == 0:
-                self.logger.debug(f"Passo {steps} | Distância: {distance_traveled:.2f}m")
-
-        total_time = time.time() - start_time
-        self.logger.info(f"Episódio finalizado. Distância: {distance_traveled:.2f}m | Tempo: {total_time:.2f}s | Sucesso: {success}")
-
-        return {"reward": reward, "time_total": total_time, "distance": distance_traveled, "success": success, "steps": steps}
 
     def pre_fill_buffer(self, timesteps=10e3):
         obs = self.reset()
@@ -463,98 +358,6 @@ class Simulation(gym.Env):
         self.episode_last_action = action
 
         return obs, reward, self.episode_terminated, self.episode_truncated, info
-
-    def get_episode_info(self):
-        """Retorna informações do episódio atual"""
-        return self.episode_info.copy()
-
-    def evaluate(self, num_episodes=5):
-        """Método específico para avaliação, ignorando sinais de pause/exit"""
-        self.logger.info("Executando simulation.evaluate")
-        all_metrics = []
-
-        for episode in range(num_episodes):
-            # IGNORAR sinais de pause/exit durante avaliação
-            self.logger.info(f"=== INICIANDO EPISÓDIO DE AVALIAÇÃO {episode + 1}/{num_episodes} ===")
-
-            # Executar episódio sem verificar pause/exit
-            episode_metrics = self._run_evaluation_episode()
-            all_metrics.append(episode_metrics)
-
-            self.logger.info(f"=== EPISÓDIO {episode + 1} FINALIZADO ===")
-            self.logger.info(f"Recompensa: {episode_metrics['reward']:.2f}")
-            self.logger.info(f"Distância: {episode_metrics['distance']:.2f}m")
-            self.logger.info(f"Sucesso: {episode_metrics['success']}")
-
-        return self._compile_evaluation_metrics(all_metrics)
-
-    def _run_evaluation_episode(self):
-        """Executa um episódio de avaliação sem verificar sinais externos"""
-        # Reset manual do ambiente
-        if self.robot.id is not None:
-            p.removeBody(self.robot.id)
-        if hasattr(self.environment, "id") and self.environment.id is not None:
-            p.removeBody(self.environment.id)
-
-        self.environment.load_in_simulation(use_fixed_base=True)
-
-        # Carregar robô após o ambiente
-        self.robot.load_in_simulation()
-
-        # Configuração inicial
-        pos, _ = p.getBasePositionAndOrientation(self.robot.id)
-        episode_robot_x_initial_position = pos[0]
-        distance_traveled = 0.0
-        steps = 0
-        success = False
-        reward = 0.0
-
-        while steps < self.reward_system.max_steps:
-            # Ação aleatória para teste
-            action = np.random.uniform(-1, 1, size=self.action_dim)
-
-            # Aplicar ação
-            p.setJointMotorControlArray(bodyUniqueId=self.robot.id, jointIndices=self.robot.revolute_indices, controlMode=p.VELOCITY_CONTROL, targetVelocities=action, forces=[100] * len(action))
-
-            # Avançar simulação
-            p.stepSimulation()
-            steps += 1
-
-            # Calcular progresso
-            pos, _ = p.getBasePositionAndOrientation(self.robot.id)
-            current_x_pos = pos[0]
-            distance_traveled = current_x_pos - episode_robot_x_initial_position
-
-            # Verificar condições de término
-            if pos[2] < self.reward_system.fall_threshold:
-                reward -= 100
-                break
-
-            if distance_traveled >= self.reward_system.success_distance:
-                reward += 50
-                success = True
-                break
-
-        return {"reward": reward, "time_total": steps * self.time_step_s, "distance": distance_traveled, "success": success, "steps": steps}
-
-    def _compile_evaluation_metrics(self, all_metrics):
-        """Compila métricas de todos os episódios"""
-        self.logger.info("Executando simulation._compile_evaluation_metrics")
-        total_times = [m["time_total"] for m in all_metrics]
-        successes = [m["success"] for m in all_metrics]
-
-        return {
-            "avg_time": np.mean(total_times) if total_times else 0,
-            "std_time": np.std(total_times) if len(total_times) > 1 else 0,
-            "success_rate": np.mean(successes) if successes else 0,
-            "success_count": sum(successes),
-            "total_times": total_times,
-            "total_rewards": [m["reward"] for m in all_metrics],
-            "num_episodes": len(all_metrics),
-        }
-
-    def render(self, mode="human"):
-        pass
 
     def close(self):
         p.disconnect()
