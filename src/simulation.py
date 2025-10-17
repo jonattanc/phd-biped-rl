@@ -24,6 +24,7 @@ class Simulation(gym.Env):
         self.enable_real_time_value = enable_real_time_value
         self.num_episodes = num_episodes
         self.current_episode = 0
+        self.total_steps = 0
 
         self.logger = logger
         self.agent = None
@@ -197,6 +198,28 @@ class Simulation(gym.Env):
 
         return {"reward": reward, "time_total": total_time, "distance": distance_traveled, "success": success, "steps": steps}
 
+    def pre_fill_buffer(self, timesteps=10e3):
+        obs = self.reset()
+
+        while self.total_steps < timesteps:
+            t = self.episode_steps * self.time_step_s
+            action = self.robot.get_example_action(t)
+
+            next_obs, reward, episode_terminated, episode_truncated, info = self.step(action)
+            done = episode_terminated or episode_truncated
+
+            if isinstance(obs, (list, tuple)):
+                obs = np.concatenate([np.ravel(o) for o in obs if not isinstance(o, dict)])
+
+            if isinstance(next_obs, (list, tuple)):
+                next_obs = np.concatenate([np.ravel(o) for o in next_obs if not isinstance(o, dict)])
+
+            self.agent.model.replay_buffer.add(obs, next_obs, action, reward, done, infos=[info])
+            obs = next_obs
+
+            if done:
+                obs = self.reset()
+
     def soft_env_reset(self):
         # Remover corpos antigos se existirem
         if hasattr(self, "robot") and self.robot.id is not None:
@@ -262,7 +285,7 @@ class Simulation(gym.Env):
 
     def transmit_episode_info(self):
         """Transmite informações do episódio apenas se ipc_queue estiver disponível"""
-        if len(self.agent.model.ep_info_buffer) > 0 and len(self.agent.model.ep_info_buffer[0]) > 0:
+        if self.agent.model.ep_info_buffer is not None and len(self.agent.model.ep_info_buffer) > 0 and len(self.agent.model.ep_info_buffer[0]) > 0:
             if self.episode_done:
                 self.on_episode_end()
 
@@ -363,6 +386,7 @@ class Simulation(gym.Env):
             time.sleep(self.time_step_s)
 
         self.episode_steps += 1
+        self.total_steps += 1
 
         # Obter observação
         obs = self.robot.get_observation()

@@ -89,6 +89,8 @@ def process_runner(
         control_dir = utils.TRAINING_CONTROL_PATH
         os.makedirs(control_dir, exist_ok=True)
 
+        sim.pre_fill_buffer()
+
         while not exit_value.value:
             verify_control_files(control_dir, logger, agent, ipc_queue, "VIA ARQUIVO")
 

@@ -95,3 +95,33 @@ class Robot:
     def get_base_position_and_orientation(self):
         """Retorna a posição e orientação atual da base do robô"""
         return p.getBasePositionAndOrientation(self.id)
+
+    def get_example_action(self, t):
+        """Gera uma ação de exemplo baseada no tempo"""
+        num_joints = self.get_num_revolute_joints()
+
+        f = 0.8  # Frequência do movimento
+        w = 2 * np.pi * f  # Velocidade angular
+
+        if num_joints == 4:
+            hip_right = 0
+            knee_right = 0
+            hip_left = 0
+            knee_left = 0
+
+            action_list = [hip_right, knee_right, hip_left, knee_left]
+
+        elif num_joints == 6:
+            hip_right = -1.0 * np.sin(w * t + 0.0 * np.pi)
+            knee_right = 1.0 * np.sin(w * t + 0.0 * np.pi)
+            ankle_right = 0.0 * np.sin(w * t + 0.0 * np.pi)
+            hip_left = 0.0 * np.sin(w * t + 0.0 * np.pi)
+            knee_left = 0.0 * np.sin(w * t + 0.0 * np.pi)
+            ankle_left = -1.0 * np.sin(w * t + 0.0 * np.pi)
+
+            action_list = [hip_right, knee_right, ankle_right, hip_left, knee_left, ankle_left]
+
+        else:
+            raise ValueError(f"Número de juntas não suportado para ação de exemplo: {num_joints}")
+
+        return np.array(action_list, dtype=np.float32)
