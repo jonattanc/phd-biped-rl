@@ -266,7 +266,7 @@
       <!-- Z: Diminuir ankle_radius faz a base superior da esfera/articulacao do tornozelo coincidir com a base inferior da canela -->
       <origin xyz="0 0 ${-knee_radius - shin_length - ankle_radius}"/>
       <axis xyz="0 1 0"/>
-      <limit lower="${0 * deg_to_rad}" upper="${135 * deg_to_rad}" effort="40" velocity="5"/>
+      <limit lower="${-30 * deg_to_rad}" upper="${135 * deg_to_rad}" effort="40" velocity="5"/>
     </joint>
 
   </xacro:macro>
