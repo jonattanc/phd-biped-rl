@@ -40,6 +40,10 @@
 
   <!-- Ankle properties -->
   <xacro:property name="ankle_radius" value="0.03" />
+  <xacro:property name="ankle_mass" value="0.5" />
+  <xacro:property name="ankle_ixx" value="0.01" />
+  <xacro:property name="ankle_iyy" value="0.01" />
+  <xacro:property name="ankle_izz" value="0.01" />
 
   <!-- Foot properties -->
   <xacro:property name="foot_length" value="0.2" />
@@ -303,6 +307,47 @@
       </inertial>
     </link>
 
+    <!-- Ankle joint: shin to ankle ball -->
+    <joint name="${prefix}_shin_to_ankle_ball" type="fixed">
+      <parent link="${prefix}_shin_link"/>
+      <child link="${prefix}_ankle_ball_link"/>
+      <!-- Z: Como o parent e a canela, o centro da esfera/articulacao do tornozelo coincide inicialmente com sua referencia que é o knee joint -->
+      <!-- Z: Diminuir knee_radius + shin_length faz o centro da esfera/articulacao do tornozelo coincidir com a base inferior da canela -->
+      <!-- Z: Diminuir ankle_radius faz o topo da esfera/articulacao do tornozelo coincidir com a base inferior da canela -->
+      <origin xyz="0 0 ${-knee_radius - shin_length - ankle_radius}"/>
+    </joint>
+
+    <!-- Ankle Ball -->
+    <link name="${prefix}_ankle_ball_link">
+      <visual>
+        <origin rpy="0 0 0" xyz="0 0 0"/>
+        <geometry>
+          <sphere radius="${ankle_radius}"/>
+        </geometry>
+        <material name="robot_material_2"/>
+      </visual>
+      <collision>
+        <origin rpy="0 0 0" xyz="0 0 0"/>
+        <geometry>
+          <sphere radius="${ankle_radius}"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <mass value="${ankle_mass}"/>
+        <inertia ixx="${ankle_ixx}" ixy="0.0" ixz="0.0" iyy="${ankle_iyy}" iyz="0.0" izz="${ankle_izz}"/>
+      </inertial>
+    </link>
+
+    <!-- Ankle joint: ankle ball to foot -->
+    <joint name="${prefix}_ankle_ball_to_foot" type="revolute">
+      <parent link="${prefix}_ankle_ball_link"/>
+      <child link="${prefix}_foot_link"/>
+      <origin xyz="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <limit lower="${-30 * deg_to_rad}" upper="${75 * deg_to_rad}" effort="1000" velocity="5"/>
+      <dynamics damping="${joint_dumping}" friction="${joint_friction}"/>
+    </joint>
+
     <!-- Foot -->
     <link name="${prefix}_foot_link">
       <visual>
@@ -326,19 +371,6 @@
         <inertia ixx="${foot_ixx}" ixy="0.0" ixz="0.0" iyy="${foot_iyy}" iyz="0.0" izz="${foot_izz}"/>
       </inertial>
     </link>
-
-    <!-- Ankle joint: shin to foot -->
-    <joint name="${prefix}_ankle_joint" type="revolute">
-      <parent link="${prefix}_shin_link"/>
-      <child link="${prefix}_foot_link"/>
-      <!-- Z: Como o parent e a canela, o centro da esfera/articulacao do tornozelo coincide inicialmente com o centro da esfera/articulacao do joelho -->
-      <!-- Z: Diminuir knee_radius + shin_length faz o centro da esfera/articulacao do tornozelo coincidir com a base inferior da canela -->
-      <!-- Z: Diminuir ankle_radius faz a base superior da esfera/articulacao do tornozelo coincidir com a base inferior da canela -->
-      <origin xyz="0 0 ${-knee_radius - shin_length - ankle_radius}"/>
-      <axis xyz="0 1 0"/>
-      <limit lower="${-30 * deg_to_rad}" upper="${75 * deg_to_rad}" effort="1000" velocity="5"/>
-      <dynamics damping="${joint_dumping}" friction="${joint_friction}"/>
-    </joint>
 
   </xacro:macro>
 
