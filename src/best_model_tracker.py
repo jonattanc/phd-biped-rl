@@ -5,7 +5,7 @@ import time
 class BestModelTracker:
     def __init__(self):
         self.improvement_threshold = 0.05
-        self.patience_steps = 500e3
+        self.patience_steps = 3e6
         self.minimum_steps = 50e3
 
         self.best_reward = -float("inf")
