@@ -116,6 +116,7 @@ class Simulation(gym.Env):
         self.agent = agent
 
     def pre_fill_buffer(self, timesteps=10e3):
+        self.logger.info(f"Pré-preenchendo buffer de replay com {timesteps} timesteps...")
         obs = self.reset()
 
         while self.total_steps < timesteps and not self.exit_value.value:
@@ -136,6 +137,8 @@ class Simulation(gym.Env):
 
             if done:
                 obs = self.reset()
+
+        self.logger.info("Pré-preenchimento do buffer de replay concluído.")
 
     def soft_env_reset(self):
         # Remover corpos antigos se existirem
@@ -202,12 +205,11 @@ class Simulation(gym.Env):
         p.changeDynamics(self.robot.id, -1, linearDamping=0.04, angularDamping=0.04)
 
     def transmit_episode_info(self):
-        """Transmite informações do episódio apenas se ipc_queue estiver disponível"""
-        if self.agent.model.ep_info_buffer is not None and len(self.agent.model.ep_info_buffer) > 0 and len(self.agent.model.ep_info_buffer[0]) > 0:
-            if self.episode_done:
-                self.on_episode_end()
+        """Transmite informações do episódio via IPC"""
+        if self.episode_done:
+            self.on_episode_end()
 
-                # Limpar buffer após processamento
+            if self.agent.model.ep_info_buffer is not None and len(self.agent.model.ep_info_buffer) > 0 and len(self.agent.model.ep_info_buffer[0]) > 0:
                 self.agent.model.ep_info_buffer = []
 
     def on_episode_end(self):
