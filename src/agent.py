@@ -2,7 +2,7 @@
 import time
 import numpy as np
 from stable_baselines3 import PPO, TD3
-from stable_baselines3.common.vec_env import DummyVecEnv
+from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.noise import NormalActionNoise
 
@@ -67,7 +67,8 @@ class Agent:
 
         if model_path is None:
             # Criar ambiente vetorizado
-            self.env = DummyVecEnv([lambda: env])
+            dummy_env = DummyVecEnv([lambda: env])
+            self.env = VecNormalize(dummy_env, norm_obs=True, norm_reward=True)
             self.action_dim = env.action_dim
             self.model = self._create_model(algorithm, device)
 

@@ -285,10 +285,6 @@ class Simulation(gym.Env):
         while self.pause_value.value and not self.exit_value.value:
             time.sleep(0.1)
 
-        if self.exit_value.value:
-            self.logger.info("Sinal de saída recebido em step. Finalizando simulação.")
-            return None, 0.0, True, False, {"exit": True}
-
         self.apply_action(action)
 
         # Avançar simulação
@@ -356,6 +352,10 @@ class Simulation(gym.Env):
         self.transmit_episode_info()
 
         self.episode_last_action = action
+
+        if self.exit_value.value:
+            self.logger.info("Sinal de saída recebido em step. Finalizando simulação.")
+            info["exit"] = True
 
         return obs, reward, self.episode_terminated, self.episode_truncated, info
 
