@@ -115,7 +115,7 @@ class Simulation(gym.Env):
     def set_agent(self, agent):
         self.agent = agent
 
-    def pre_fill_buffer(self, timesteps=10e3):
+    def pre_fill_buffer(self, timesteps=100e3):
         self.logger.info(f"Pré-preenchendo buffer de replay com {timesteps} timesteps...")
         obs = self.reset()
 
