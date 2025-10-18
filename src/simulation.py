@@ -41,6 +41,7 @@ class Simulation(gym.Env):
         self.success_distance = 9.0  # m
         self.yaw_threshold = 0.5  # rad
         self.episode_timeout_s = 20  # s
+        self.pre_fill_timeout_s = 5  # s
         self.physics_step_s = 1 / 240.0  # 240 Hz, ~4.16 ms
         self.physics_step_multiplier = 8
         self.time_step_s = self.physics_step_s * self.physics_step_multiplier  # 240/5 = 48 Hz, ~20.83 ms # 240/8 = 30 Hz, ~33.33 ms # 240/10 = 24 Hz, ~41.66 ms
@@ -48,6 +49,7 @@ class Simulation(gym.Env):
         self.max_motor_torque = 130.0  # Nm
         self.apply_action = self.apply_position_action  # Escolher entre apply_velocity_action ou apply_position_action
         self.max_steps = int(self.episode_timeout_s / self.time_step_s)
+        self.max_pre_fill_steps = int(self.pre_fill_timeout_s / self.time_step_s)
 
         # Configurar ambiente de simulação PRIMEIRO
         self.setup_sim_env()
@@ -124,6 +126,7 @@ class Simulation(gym.Env):
             action = self.robot.get_example_action(t)
 
             next_obs, reward, episode_terminated, episode_truncated, info = self.step(action)
+            episode_truncated = episode_truncated or self.episode_steps >= self.max_pre_fill_steps
             done = episode_terminated or episode_truncated
 
             if isinstance(obs, (list, tuple)):
