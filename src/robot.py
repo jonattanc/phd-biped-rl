@@ -100,9 +100,6 @@ class Robot:
         """Gera uma ação de exemplo baseada no tempo"""
         num_joints = self.get_num_revolute_joints()
 
-        f = 0.8  # Frequência do movimento
-        w = 2 * np.pi * f  # Velocidade angular
-
         if num_joints == 4:
             hip_right = 0
             knee_right = 0
@@ -112,6 +109,9 @@ class Robot:
             action_list = [hip_right, knee_right, hip_left, knee_left]
 
         elif num_joints == 6:
+            f = 0.8  # Frequência do movimento
+            w = 2 * np.pi * f  # Velocidade angular
+
             hip_right = -1.0 * np.sin(w * t + 0.0 * np.pi)
             knee_right = 1.0 * np.sin(w * t + 0.0 * np.pi)
             ankle_right = 0.0 * np.sin(w * t + 0.0 * np.pi)
@@ -122,14 +122,38 @@ class Robot:
             action_list = [hip_right, knee_right, ankle_right, hip_left, knee_left, ankle_left]
 
         elif num_joints == 8:
-            hip_right_front = -1.0 * np.sin(w * t + 0.0 * np.pi)  # Positivo para trás
-            hip_right_lateral = 0.0 * np.sin(w * t + 0.0 * np.pi)  # Positivo para dentro
-            knee_right = 1.0 * np.sin(w * t + 0.0 * np.pi)  # Positivo para dobrar
-            ankle_right = 0.0 * np.sin(w * t + 0.0 * np.pi)
-            hip_left_front = 0.0 * np.sin(w * t + 0.0 * np.pi)
-            hip_left_lateral = 0.0 * np.sin(w * t + 0.0 * np.pi)
-            knee_left = 0.0 * np.sin(w * t + 0.0 * np.pi)
-            ankle_left = -1.0 * np.sin(w * t + 0.0 * np.pi)  # Positivo para baixo
+            t1 = 1.55
+            t2 = t1 + 0.5
+            t3 = t2 + 0.75
+            t4 = t3 + 0.2
+
+            hip_right_front = 0  # Positivo para trás
+            hip_right_lateral = 0  # Positivo para dentro
+            knee_right = 0  # Positivo para dobrar
+            ankle_right = 0  # Positivo para baixo
+            hip_left_front = 0
+            hip_left_lateral = 0  # Positivo para fora
+            knee_left = 0
+            ankle_left = 0  # Positivo para baixo
+
+            if t < t1:
+                hip_right_lateral = -0.05
+                # ankle_right = 0.05
+                hip_left_lateral = -0.05
+
+            elif t < t2:
+                ankle_right = -0.05
+                ankle_left = -0.05
+
+            elif t < t3:
+                hip_right_front = -0.5
+                knee_right = 0.5
+
+            elif t < t4:
+                hip_right_front = 0.5
+                knee_right = -0.5
+                hip_right_lateral = 0.01
+                hip_left_lateral = 0.01
 
             action_list = [hip_right_front, hip_right_lateral, knee_right, ankle_right, hip_left_front, hip_left_lateral, knee_left, ankle_left]
 
