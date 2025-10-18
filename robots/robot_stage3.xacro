@@ -33,7 +33,7 @@
   <!-- Shin properties -->
   <xacro:property name="shin_radius" value="0.035" />
   <xacro:property name="shin_length" value="0.30" />
-  <xacro:property name="shin_mass" value="1.0" />
+  <xacro:property name="shin_mass" value="1.5" />
   <xacro:property name="shin_ixx" value="0.015" />
   <xacro:property name="shin_iyy" value="0.015" />
   <xacro:property name="shin_izz" value="0.008" />
@@ -46,18 +46,18 @@
   <xacro:property name="ankle_izz" value="0.01" />
 
   <!-- Foot properties -->
-  <xacro:property name="foot_length" value="0.2" />
-  <xacro:property name="foot_width" value="0.1" />
+  <xacro:property name="foot_length" value="0.35" />
+  <xacro:property name="foot_width" value="0.15" />
   <xacro:property name="foot_height" value="0.03" />
-  <xacro:property name="foot_offset_front" value="0.05" />
-  <xacro:property name="foot_mass" value="0.3" />
+  <xacro:property name="foot_offset_front" value="0.1" />
+  <xacro:property name="foot_mass" value="0.5" />
   <xacro:property name="foot_ixx" value="0.001" />
   <xacro:property name="foot_iyy" value="0.001" />
   <xacro:property name="foot_izz" value="0.0005" />
 
   <!-- Head properties -->
   <xacro:property name="head_radius" value="0.1" />
-  <xacro:property name="head_mass" value="0.2" />
+  <xacro:property name="head_mass" value="1.0" />
   <xacro:property name="head_ixx" value="0.005" />
   <xacro:property name="head_iyy" value="0.005" />
   <xacro:property name="head_izz" value="0.005" />
@@ -108,6 +108,7 @@
       </geometry>
     </collision>
     <inertial>
+      <origin xyz="0 0 ${body_offset}"/>
       <mass value="${body_mass}"/>
       <inertia ixx="${body_ixx}" ixy="0.0" ixz="0.0" iyy="${body_iyy}" iyz="0.0" izz="${body_izz}"/>
     </inertial>
@@ -159,6 +160,7 @@
       </geometry>
     </collision>
     <inertial>
+      <origin rpy="0 0 0" xyz="0 0 ${head_radius}"/>
       <mass value="${head_mass}"/>
       <inertia ixx="${head_ixx}" ixy="0.0" ixz="0.0" iyy="${head_iyy}" iyz="0.0" izz="${head_izz}"/>
     </inertial>
@@ -238,6 +240,7 @@
         </geometry>
       </collision>
       <inertial>
+        <origin rpy="0 0 0" xyz="0 0 ${-thigh_length/2 - hip_radius}"/>
         <mass value="${thigh_mass}"/>
         <inertia ixx="${thigh_ixx}" ixy="0.0" ixz="0.0" iyy="${thigh_iyy}" iyz="0.0" izz="${thigh_izz}"/>
       </inertial>
@@ -302,6 +305,7 @@
         </geometry>
       </collision>
       <inertial>
+        <origin rpy="0 0 0" xyz="0 0 ${-shin_length/2 - knee_radius}"/>
         <mass value="${shin_mass}"/>
         <inertia ixx="${shin_ixx}" ixy="0.0" ixz="0.0" iyy="${shin_iyy}" iyz="0.0" izz="${shin_izz}"/>
       </inertial>
@@ -367,6 +371,7 @@
         </geometry>
       </collision>
       <inertial>
+        <origin rpy="0 0 0" xyz="${foot_offset_front} 0 ${-ankle_radius - foot_height/2}"/>
         <mass value="${foot_mass}"/>
         <inertia ixx="${foot_ixx}" ixy="0.0" ixz="0.0" iyy="${foot_iyy}" iyz="0.0" izz="${foot_izz}"/>
       </inertial>

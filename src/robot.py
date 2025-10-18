@@ -96,6 +96,26 @@ class Robot:
         """Retorna a posição e orientação atual da base do robô"""
         return p.getBasePositionAndOrientation(self.id)
 
+    def get_center_of_mass(self):
+        total_mass = 0.0
+        weighted_pos = np.zeros(3)
+
+        base_pos, _ = p.getBasePositionAndOrientation(self.id)
+        base_mass = p.getDynamicsInfo(self.id, -1)[0]
+        weighted_pos += base_mass * np.array(base_pos)
+        total_mass += base_mass
+
+        num_joints = p.getNumJoints(self.id)
+
+        for i in range(num_joints):
+            link_state = p.getLinkState(self.id, i, computeForwardKinematics=True)
+            link_com_pos = np.array(link_state[0])
+            link_mass = p.getDynamicsInfo(self.id, i)[0]
+            weighted_pos += link_mass * link_com_pos
+            total_mass += link_mass
+
+        return weighted_pos / total_mass if total_mass > 0 else np.zeros(3)
+
     def get_example_action(self, t):
         """Gera uma ação de exemplo baseada no tempo"""
         num_joints = self.get_num_revolute_joints()
@@ -122,23 +142,28 @@ class Robot:
             action_list = [hip_right, knee_right, ankle_right, hip_left, knee_left, ankle_left]
 
         elif num_joints == 8:
-            t1 = 1.55
-            t2 = t1 + 0.75
-            t3 = t2 + 0.75
+            t1 = 3.5
+            t2 = t1 + 1.5
+            t3 = t2 + 1.2
             t4 = t3 + 0.2
+            t5 = t4 + 0.5
+            t6 = t5 + 1.0
+            t7 = t6 + 0.5
+            t8 = t7 + 1.0
+            t9 = t8 + 1.0
 
             hip_right_front = 0  # Positivo para trás
             hip_right_lateral = 0  # Positivo para dentro
             knee_right = 0  # Positivo para dobrar
             ankle_right = 0  # Positivo para baixo
-            hip_left_front = 0
+            hip_left_front = 0  # Positivo para trás
             hip_left_lateral = 0  # Positivo para fora
-            knee_left = 0
+            knee_left = 0  # Positivo para dobrar
             ankle_left = 0  # Positivo para baixo
 
             if t < t1:
-                hip_right_lateral = -0.05
-                hip_left_lateral = -0.05
+                hip_right_lateral = -0.061
+                hip_left_lateral = -0.061
 
             elif t < t2:
                 ankle_right = -0.05
@@ -147,12 +172,34 @@ class Robot:
             elif t < t3:
                 hip_right_front = -0.5
                 knee_right = 0.5
+                ankle_right = -0.11
+                hip_left_front = -0.1
+                ankle_left = -0.01
+                hip_right_lateral = -0.09
+                hip_left_lateral = 0.10
 
-            elif t < t4:
-                hip_right_front = 0.15
-                knee_right = -0.1
-                hip_right_lateral = 0.02
-                hip_left_lateral = 0.02
+            # elif t < t4:
+            #     hip_right_front = 0.15
+            #     knee_right = -0.1
+            #     hip_right_lateral = 0.02
+            #     hip_left_lateral = 0.02
+
+            # elif t < t5:
+            #     pass
+
+            # elif t < t6:
+            #     hip_right_front = -0.12
+            #     hip_left_front = -0.12
+            #     ankle_right = -0.11
+            #     ankle_left = -0.11
+
+            # elif t < t7:
+            #     pass
+
+            # elif t < t8:
+            #     hip_left_front = -0.5
+            #     knee_left = 0.5
+            #     ankle_left = 0.2
 
             action_list = [hip_right_front, hip_right_lateral, knee_right, ankle_right, hip_left_front, hip_left_lateral, knee_left, ankle_left]
 

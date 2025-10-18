@@ -33,15 +33,16 @@ class Simulation(gym.Env):
         self.logger = logger
         self.agent = None
         self.physics_client = None
+        self.com_marker = None
         self.reward_system = RewardSystem(logger)
 
         # Configurações de simulação
         self.target_pitch_rad = math.radians(1)  # rad
         self.fall_threshold = 0.5  # m
         self.success_distance = 9.0  # m
-        self.yaw_threshold = 0.5  # rad
+        self.yaw_threshold = math.radians(60)  # rad
         self.episode_training_timeout_s = 20  # s
-        self.episode_pre_fill_timeout_s = 5  # s
+        self.episode_pre_fill_timeout_s = 10  # s
         self.episode_timeout_s = self.episode_training_timeout_s
         self.physics_step_s = 1 / 240.0  # 240 Hz, ~4.16 ms
         self.physics_step_multiplier = 8
@@ -76,10 +77,21 @@ class Simulation(gym.Env):
         self.current_episode = initial_episode
         self.episode_count = initial_episode
 
+    def create_com_marker(self):
+        com_pos = self.robot.get_center_of_mass()
+
+        visual_shape = p.createVisualShape(shapeType=p.GEOM_SPHERE, radius=0.02, rgbaColor=[1, 0, 0, 1])
+        self.com_marker = p.createMultiBody(baseMass=0, baseVisualShapeIndex=visual_shape, basePosition=com_pos)
+
+    def update_com_marker(self):
+        com_pos = self.robot.get_center_of_mass()
+        p.resetBasePositionAndOrientation(self.com_marker, com_pos, [0, 0, 0, 1])
+
     def setup_sim_env(self):
         """Conecta ao PyBullet e carrega ambiente e robô"""
         if self.physics_client is not None:
             p.disconnect()
+            self.com_marker = None
 
         # Usar visualização apenas se estiver habilitada
         if self.is_visualization_enabled:
@@ -111,6 +123,8 @@ class Simulation(gym.Env):
 
         # Carregar robô após o ambiente
         self.robot.load_in_simulation()
+
+        self.create_com_marker()
 
         if self.is_visualization_enabled:
             time.sleep(0.5)  # Aguarda a inicialização da janela do PyBullet
@@ -164,6 +178,9 @@ class Simulation(gym.Env):
         # Recarregar robô após o ambiente
         self.robot.load_in_simulation()
 
+        if self.is_visualization_enabled:
+            self.update_com_marker()
+
     def reset_episode_vars(self):
         self.episode_reward = 0.0
         self.episode_start_time = time.time()
@@ -209,7 +226,10 @@ class Simulation(gym.Env):
         """Configura parâmetros para melhorar a estabilidade inicial do robô"""
         # Aumentar o atrito dos pés
         for link_index in range(-1, self.robot.get_num_joints()):
-            p.changeDynamics(self.robot.id, link_index, lateralFriction=1.0)
+            p.changeDynamics(self.robot.id, link_index, lateralFriction=2.0)
+
+        for link_index in range(-1, self.environment.get_num_joints()):
+            p.changeDynamics(self.environment.id, link_index, lateralFriction=2.0)
 
         # Reduzir damping para menos oscilação
         p.changeDynamics(self.robot.id, -1, linearDamping=0.04, angularDamping=0.04)
@@ -303,6 +323,9 @@ class Simulation(gym.Env):
         # Avançar simulação
         for _ in range(self.physics_step_multiplier):
             p.stepSimulation()
+
+        if self.is_visualization_enabled:
+            self.update_com_marker()
 
         if self.is_visualization_enabled and self.enable_real_time_value.value:
             time.sleep(self.time_step_s)

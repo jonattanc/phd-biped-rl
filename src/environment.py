@@ -82,3 +82,6 @@ class Environment:
         self.id = p.loadURDF(self.urdf_path, useFixedBase=use_fixed_base)
 
         return self.id
+
+    def get_num_joints(self):
+        return p.getNumJoints(self.id)
