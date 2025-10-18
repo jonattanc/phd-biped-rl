@@ -25,6 +25,10 @@
 
   <!-- Knee properties -->
   <xacro:property name="knee_radius" value="0.04" />
+  <xacro:property name="knee_mass" value="0.5" />
+  <xacro:property name="knee_ixx" value="0.01" />
+  <xacro:property name="knee_iyy" value="0.01" />
+  <xacro:property name="knee_izz" value="0.01" />
 
   <!-- Shin properties -->
   <xacro:property name="shin_radius" value="0.035" />
@@ -76,7 +80,7 @@
   </material>
 
   <!-- altura total -->
-  <xacro:property name="leg_total_length" value="${hip_radius + thigh_length + shin_length + 2 * ankle_radius + foot_height}" />
+  <xacro:property name="leg_total_length" value="${hip_radius + thigh_length + 2 * knee_radius + shin_length + 2 * ankle_radius + foot_height}" />
   <!-- body_offset: body_length/2 desloca o posicao Z do centro do cilindro (corpo do robo) para a sua base inferior, assim nao fica metade do corpo enterrado no chao -->
   <!-- body_offset: leg_total_length da espaco para as pernas, para elas nao ficarem enterradas no chao -->
   <xacro:property name="body_offset" value="${body_length/2 + leg_total_length}" />
@@ -235,6 +239,47 @@
       </inertial>
     </link>
 
+    <!-- Knee joint: thigh to knee ball -->
+    <joint name="${prefix}_thigh_to_knee_ball" type="fixed">
+      <parent link="${prefix}_thigh_link"/>
+      <child link="${prefix}_knee_ball_link"/>
+      <!-- Z: Como o parent e a coxa, o centro da esfera/articulacao do joelho coincide inicialmente com sua referencia que é o hip joint posicionado na base inferior do body -->
+      <!-- Z: Diminuir hip_radius + thigh_length faz o centro da esfera/articulacao do joelho coincidir com a base inferior da coxa -->
+      <!-- Z: Diminuir knee_radius faz o topo da esfera/articulacao do joelho coincidir com a base inferior da coxa -->
+      <origin xyz="0 0 ${-hip_radius - thigh_length - knee_radius }"/>
+    </joint>
+
+    <!-- Knee Ball -->
+    <link name="${prefix}_knee_ball_link">
+      <visual>
+        <origin rpy="0 0 0" xyz="0 0 0"/>
+        <geometry>
+          <sphere radius="${knee_radius}"/>
+        </geometry>
+        <material name="robot_material_2"/>
+      </visual>
+      <collision>
+        <origin rpy="0 0 0" xyz="0 0 0"/>
+        <geometry>
+          <sphere radius="${knee_radius}"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <mass value="${knee_mass}"/>
+        <inertia ixx="${knee_ixx}" ixy="0.0" ixz="0.0" iyy="${knee_iyy}" iyz="0.0" izz="${knee_izz}"/>
+      </inertial>
+    </link>
+
+    <!-- Knee joint: knee ball to shin -->
+    <joint name="${prefix}_knee_ball_to_shin" type="revolute">
+      <parent link="${prefix}_knee_ball_link"/>
+      <child link="${prefix}_shin_link"/>
+      <origin xyz="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <limit lower="${0 * deg_to_rad}" upper="${135 * deg_to_rad}" effort="1000" velocity="5"/>
+      <dynamics damping="${joint_dumping}" friction="${joint_friction}"/>
+    </joint>
+
     <!-- Shin -->
     <link name="${prefix}_shin_link">
       <visual>
@@ -257,21 +302,6 @@
         <inertia ixx="${shin_ixx}" ixy="0.0" ixz="0.0" iyy="${shin_iyy}" iyz="0.0" izz="${shin_izz}"/>
       </inertial>
     </link>
-
-    <!-- Knee joint: thigh to shin -->
-    <joint name="${prefix}_knee" type="revolute">
-      <parent link="${prefix}_thigh_link"/>
-      <child link="${prefix}_shin_link"/>
-      <!-- Z: Como o parent e a coxa, o centro da esfera/articulacao do joelho coincide inicialmente com o centro da esfera/articulacao do quadril -->
-      <!-- Z: Diminuir hip_radius + thigh_length faz o centro da esfera/articulacao do joelho coincidir com a base inferior da coxa -->
-      <!-- Z: Somar knee_radius faz a base inferior da esfera/articulacao do joelho coincidir com a base inferior da coxa -->
-      <!-- Y: thigh_radius posiciona o centro esfera/articulacao do joelho na borda da coxa -->
-      <!-- Y: knee_radius tira a esfera/articulacao de dentro da coxa, caso contrario metade da esfera/articulacao ficaria dentro da coxa -->
-      <origin xyz="0 ${(-thigh_radius + -knee_radius) * reflect} ${-hip_radius - thigh_length + knee_radius}"/>
-      <axis xyz="0 1 0"/>
-      <limit lower="${0 * deg_to_rad}" upper="${135 * deg_to_rad}" effort="1000" velocity="5"/>
-      <dynamics damping="${joint_dumping}" friction="${joint_friction}"/>
-    </joint>
 
     <!-- Foot -->
     <link name="${prefix}_foot_link">
