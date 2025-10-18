@@ -123,7 +123,7 @@ class Robot:
 
         elif num_joints == 8:
             t1 = 1.55
-            t2 = t1 + 0.5
+            t2 = t1 + 0.75
             t3 = t2 + 0.75
             t4 = t3 + 0.2
 
@@ -138,7 +138,6 @@ class Robot:
 
             if t < t1:
                 hip_right_lateral = -0.05
-                # ankle_right = 0.05
                 hip_left_lateral = -0.05
 
             elif t < t2:
@@ -150,10 +149,10 @@ class Robot:
                 knee_right = 0.5
 
             elif t < t4:
-                hip_right_front = 0.5
-                knee_right = -0.5
-                hip_right_lateral = 0.01
-                hip_left_lateral = 0.01
+                hip_right_front = 0.15
+                knee_right = -0.1
+                hip_right_lateral = 0.02
+                hip_left_lateral = 0.02
 
             action_list = [hip_right_front, hip_right_lateral, knee_right, ankle_right, hip_left_front, hip_left_lateral, knee_left, ankle_left]
 
