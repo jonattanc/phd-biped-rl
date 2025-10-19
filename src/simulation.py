@@ -255,14 +255,10 @@ class Simulation(gym.Env):
 
     def transmit_episode_info(self):
         """Transmite informações do episódio via IPC"""
-        if self.episode_done:
-            self.on_episode_end()
 
-            if self.agent.model.ep_info_buffer is not None and len(self.agent.model.ep_info_buffer) > 0 and len(self.agent.model.ep_info_buffer[0]) > 0:
-                self.agent.model.ep_info_buffer = []
+        if self.agent.model.ep_info_buffer is not None and len(self.agent.model.ep_info_buffer) > 0 and len(self.agent.model.ep_info_buffer[0]) > 0:
+            self.agent.model.ep_info_buffer = []
 
-    def on_episode_end(self):
-        """Processa o final do episódio apenas se ipc_queue estiver disponível"""
         self.episode_count += 1
 
         # Obter posição e orientação final da IMU
@@ -270,35 +266,34 @@ class Simulation(gym.Env):
 
         actual_episode_number = self.current_episode + self.episode_count
 
-        # SÓ enviar para ipc_queue se estiver disponível
-        if self.ipc_queue is not None:
-            try:
-                self.ipc_queue.put(
-                    {
-                        "type": "episode_data",
-                        "episode": actual_episode_number,
-                        "reward": self.episode_reward,
-                        "time": self.episode_steps * self.time_step_s,
-                        "steps": self.episode_steps,
-                        "distance": self.episode_distance,
-                        "success": self.episode_success,
-                        "imu_x": imu_position[0],
-                        "imu_y": imu_position[1],
-                        "imu_z": imu_position[2],
-                        "roll": imu_orientation[0],
-                        "pitch": imu_orientation[1],
-                        "yaw": imu_orientation[2],
-                    }
-                )
+        # Enviar para ipc_queue
+        try:
+            self.ipc_queue.put_nowait(
+                {
+                    "type": "episode_data",
+                    "episode": actual_episode_number,
+                    "reward": self.episode_reward,
+                    "time": self.episode_steps * self.time_step_s,
+                    "steps": self.episode_steps,
+                    "distance": self.episode_distance,
+                    "success": self.episode_success,
+                    "imu_x": imu_position[0],
+                    "imu_y": imu_position[1],
+                    "imu_z": imu_position[2],
+                    "roll": imu_orientation[0],
+                    "pitch": imu_orientation[1],
+                    "yaw": imu_orientation[2],
+                }
+            )
 
-                # Enviar contagem de steps para a GUI
-                try:
-                    self.ipc_queue.put_nowait({"type": "step_count", "steps": self.episode_steps})
-                except Exception as e:
-                    pass
+            # Enviar contagem de steps para a GUI
+            try:
+                self.ipc_queue.put_nowait({"type": "step_count", "steps": self.episode_steps})
             except Exception as e:
-                self.logger.exception("Erro ao transmitir dados do episódio")
-                # Ignorar erros de queue durante avaliação
+                pass
+        except Exception as e:
+            self.logger.exception("Erro ao transmitir dados do episódio")
+            # Ignorar erros de queue durante avaliação
 
         if actual_episode_number % 10 == 0:
             self.logger.info(f"Episódio {actual_episode_number} concluído")
@@ -396,7 +391,7 @@ class Simulation(gym.Env):
         if self.episode_done:
             info["episode"] = {"r": self.episode_reward, "l": self.episode_steps, "distance": self.episode_distance, "success": self.episode_success}
 
-        self.transmit_episode_info()
+            self.transmit_episode_info()
 
         self.episode_last_action = action
 

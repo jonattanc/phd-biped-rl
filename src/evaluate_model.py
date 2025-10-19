@@ -26,13 +26,14 @@ def evaluate_and_save(model_path, circuit_name="PR", avatar_name="robot_stage1",
     enable_visualization_val = multiprocessing.Value("b", enable_visualization)
     camera_selection_val = multiprocessing.Value("i", 0)
     env = None
+    ipc_queue = multiprocessing.Queue()
 
     try:
         # Criar ambiente de avaliação
         logger = utils.get_logger(["evaluation", circuit_name, avatar_name])
         robot = Robot(logger, name=avatar_name)
         env_obj = Environment(logger, name=circuit_name)
-        env = Simulation(logger, robot, env_obj, None, pause_val, exit_val, enable_visualization_val, realtime_val, camera_selection_val, num_episodes, seed=seed)
+        env = Simulation(logger, robot, env_obj, ipc_queue, pause_val, exit_val, enable_visualization_val, realtime_val, camera_selection_val, num_episodes, seed=seed)
         agent = Agent(logger, env=env, model_path=model_path)  # TODO: Passar algoritmo
 
         # Configurar o agente
