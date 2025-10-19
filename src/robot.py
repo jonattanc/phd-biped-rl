@@ -40,6 +40,15 @@ class Robot:
 
         raise (f"Link index not found for {link_name}")
 
+    def get_joint_index(self, joint_name):
+        for i in range(p.getNumJoints(self.id)):
+            info = p.getJointInfo(self.id, i)
+
+            if info[1].decode("utf-8") == joint_name:
+                return i
+
+        raise (f"Joint index not found for {joint_name}")
+
     def load_in_simulation(self):
         self.id = p.loadURDF(self.urdf_path)
 
@@ -95,6 +104,34 @@ class Robot:
     def get_base_position_and_orientation(self):
         """Retorna a posição e orientação atual da base do robô"""
         return p.getBasePositionAndOrientation(self.id)
+
+    def get_joint_angle(self, joint_name):
+        """Retorna o ângulo de uma junta específica"""
+        joint_index = self.get_joint_index(joint_name)
+        joint_angle = p.getJointState(self.id, joint_index)[0]
+        return joint_angle
+
+    def get_knee_angles(self):
+        """Retorna os ângulos dos joelhos direito e esquerdo"""
+        return self.get_joint_angle("right_knee_ball_to_shin"), self.get_joint_angle("left_knee_ball_to_shin")
+
+    def get_hip_front_angles(self):
+        """Retorna os ângulos dos quadris direito e esquerdo"""
+        return self.get_joint_angle("base_to_right_hip_ball"), self.get_joint_angle("base_to_left_hip_ball")
+
+    def get_foot_contact_states(self):
+        """Retorna os estados de contato dos pés direito e esquerdo"""
+        right_foot_contacts = p.getContactPoints(bodyA=self.id, linkIndexA=self.get_link_index("right_foot_link"))
+        left_foot_contacts = p.getContactPoints(bodyA=self.id, linkIndexA=self.get_link_index("left_foot_link"))
+        return (len(right_foot_contacts) > 0), (len(left_foot_contacts) > 0)
+
+    def get_foot_heights(self):
+        """Retorna as alturas dos pés direito e esquerdo em relação ao solo"""
+        right_foot_state = p.getLinkState(self.id, self.get_link_index("right_foot_link"))
+        left_foot_state = p.getLinkState(self.id, self.get_link_index("left_foot_link"))
+        right_foot_height = right_foot_state[0][2]
+        left_foot_height = left_foot_state[0][2]
+        return right_foot_height, left_foot_height
 
     def get_center_of_mass(self):
         total_mass = 0.0

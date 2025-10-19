@@ -107,6 +107,30 @@ class RewardSystem:
             self.components["direction_change_penalty"].value = direction_changes
             total_reward += direction_changes * self.components["direction_change_penalty"].weight
 
+        if self.is_component_enabled("foot_clearance"):
+            foot_height = 0
+
+            if not sim.robot_left_foot_contact:
+                foot_height += sim.robot_left_foot_height
+
+            if not sim.robot_right_foot_contact:
+                foot_height += sim.robot_right_foot_height
+
+            self.components["foot_clearance"].value = foot_height
+            total_reward += self.components["foot_clearance"].value * self.components["foot_clearance"].weight
+
+        if self.is_component_enabled("alternating_foot_contact"):
+            self.components["alternating_foot_contact"].value = sim.robot_left_foot_contact != sim.robot_right_foot_contact
+            total_reward += self.components["alternating_foot_contact"].value * self.components["alternating_foot_contact"].weight
+
+        if self.is_component_enabled("knee_flexion"):
+            self.components["knee_flexion"].value = abs(sim.robot_right_knee_angle) + abs(sim.robot_left_knee_angle)
+            total_reward += self.components["knee_flexion"].value * self.components["knee_flexion"].weight
+
+        if self.is_component_enabled("hip_extension"):
+            self.components["hip_extension"].value = abs(sim.robot_right_hip_angle) + abs(sim.robot_left_hip_angle)
+            total_reward += self.components["hip_extension"].value * self.components["hip_extension"].weight
+
         if self.is_component_enabled("jerk_penalty"):
             jerk = sum(abs(v1 - v2) for v1, v2 in zip(sim.joint_velocities, sim.last_joint_velocities))
             self.components["jerk_penalty"].value = jerk
@@ -156,11 +180,11 @@ class RewardSystem:
 
     def get_configuration_as_dict(self):
         """Retorna configuração atual em formato dicionário"""
-        self.logger.info(" RewardSystem.get_configuration_as_dict called")
-
         config = {}
+
         for name, component in self.components.items():
             config[name] = {"weight": component.weight, "enabled": component.enabled, "min_value": component.min_value, "max_value": component.max_value}
+
         return config
 
     def load_configuration(self, config_dict, is_default_file=False):
@@ -236,16 +260,16 @@ class RewardSystem:
         self.logger.info(f" RewardSystem.update_component called for {name}")
 
         if name not in self.components:
-            self.logger.error(f"Componente {name} não encontrado")
+            self.logger.error(f"  Componente {name} não encontrado")
             return False
 
         if weight is not None:
             self.components[name].weight = weight
-            self.logger.info(f"weight atualizado para {weight}")
+            self.logger.info(f"  weight atualizado para {weight}")
 
         if enabled is not None:
             self.components[name].enabled = enabled
-            self.logger.info(f"enabled atualizado para {enabled}")
+            self.logger.info(f"  enabled atualizado para {enabled}")
 
         return True
 

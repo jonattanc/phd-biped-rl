@@ -366,6 +366,10 @@ class Simulation(gym.Env):
         self.robot_roll = robot_orientation[0]
         self.robot_pitch = robot_orientation[1]
         self.robot_yaw = robot_orientation[2]
+        self.robot_right_knee_angle, self.robot_left_knee_angle = self.robot.get_knee_angles()
+        self.robot_right_hip_angle, self.robot_left_hip_angle = self.robot.get_hip_front_angles()
+        self.robot_left_foot_contact, self.robot_right_foot_contact = self.robot.get_foot_contact_states()
+        self.robot_left_foot_height, self.robot_right_foot_height = self.robot.get_foot_heights()
 
         self.last_joint_velocities = self.joint_velocities
         self.joint_positions, self.joint_velocities = self.robot.get_joint_states()
