@@ -83,15 +83,23 @@ class Simulation(gym.Env):
         visual_shape = p.createVisualShape(shapeType=p.GEOM_SPHERE, radius=0.02, rgbaColor=[1, 0, 0, 1])
         self.com_marker = p.createMultiBody(baseMass=0, baseVisualShapeIndex=visual_shape, basePosition=com_pos)
 
+        self.add_com_line(com_pos)
+
     def update_com_marker(self):
         com_pos = self.robot.get_center_of_mass()
+
         p.resetBasePositionAndOrientation(self.com_marker, com_pos, [0, 0, 0, 1])
+
+        p.removeUserDebugItem(self.com_line_id)
+        self.add_com_line(com_pos)
+
+    def add_com_line(self, com_pos):
+        self.com_line_id = p.addUserDebugLine(lineFromXYZ=com_pos, lineToXYZ=[com_pos[0], com_pos[1], 0], lineColorRGB=[1, 0, 0], lineWidth=2.0)
 
     def setup_sim_env(self):
         """Conecta ao PyBullet e carrega ambiente e robô"""
         if self.physics_client is not None:
             p.disconnect()
-            self.com_marker = None
 
         # Usar visualização apenas se estiver habilitada
         if self.is_visualization_enabled:
