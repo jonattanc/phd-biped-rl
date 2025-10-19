@@ -54,6 +54,11 @@ class Simulation(gym.Env):
         self.max_pre_fill_steps = int(self.episode_pre_fill_timeout_s / self.time_step_s)
         self.max_steps = self.max_training_steps
 
+        self.lateral_friction = 2.0
+        self.spinning_friction = 1.0
+        self.rolling_friction = 0.001
+        self.restitution = 0.0
+
         # Configurar ambiente de simulação PRIMEIRO
         self.setup_sim_env()
 
@@ -228,12 +233,16 @@ class Simulation(gym.Env):
 
     def _configure_robot_stability(self):
         """Configura parâmetros para melhorar a estabilidade inicial do robô"""
-        # Aumentar o atrito dos pés
+
         for link_index in range(-1, self.robot.get_num_joints()):
-            p.changeDynamics(self.robot.id, link_index, lateralFriction=2.0)
+            p.changeDynamics(
+                self.robot.id, link_index, lateralFriction=self.lateral_friction, spinningFriction=self.spinning_friction, rollingFriction=self.rolling_friction, restitution=self.restitution
+            )
 
         for link_index in range(-1, self.environment.get_num_joints()):
-            p.changeDynamics(self.environment.id, link_index, lateralFriction=2.0)
+            p.changeDynamics(
+                self.environment.id, link_index, lateralFriction=self.lateral_friction, spinningFriction=self.spinning_friction, rollingFriction=self.rolling_friction, restitution=self.restitution
+            )
 
         # Reduzir damping para menos oscilação
         p.changeDynamics(self.robot.id, -1, linearDamping=0.04, angularDamping=0.04)
