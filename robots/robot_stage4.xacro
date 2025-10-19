@@ -187,7 +187,7 @@
       <!-- Y: hip_radius tira a esfera/articulacao de dentro do corpo, caso contrario metade da esfera/articulacao ficaria dentro do corpo -->
       <origin xyz="0 ${(body_radius + hip_radius) * reflect} ${body_offset - body_length/2}"/>
       <axis xyz="0 1 0"/> <!-- Movimento frontal -->
-      <limit lower="${-90 * deg_to_rad}" upper="${90 * deg_to_rad}" effort="1000" velocity="5"/>
+      <limit lower="${-75 * deg_to_rad}" upper="${60 * deg_to_rad}" effort="1000" velocity="5"/>
       <dynamics damping="${joint_dumping}" friction="${joint_friction}"/>
     </joint>
 
@@ -283,7 +283,7 @@
       <child link="${prefix}_shin_link"/>
       <origin xyz="0 0 0"/>
       <axis xyz="0 1 0"/>
-      <limit lower="${0 * deg_to_rad}" upper="${135 * deg_to_rad}" effort="1000" velocity="5"/>
+      <limit lower="${0 * deg_to_rad}" upper="${90 * deg_to_rad}" effort="1000" velocity="5"/>
       <dynamics damping="${joint_dumping}" friction="${joint_friction}"/>
     </joint>
 
