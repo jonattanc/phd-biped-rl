@@ -257,6 +257,7 @@ class TrainingTab:
         try:
             for i, (ylabel, color) in enumerate(zip(self.plot_ylabels, self.plot_colors)):
                 self.axs[i].clear()
+
                 if i == 3:  # Gráfico de posição IMU (Y, Z)
                     self.axs[i].plot([], [], label="Y", color="green", linestyle="-", markersize=3)
                     self.axs[i].plot([], [], label="Z", color="blue", linestyle="-", markersize=3)
@@ -270,6 +271,7 @@ class TrainingTab:
                 self.axs[i].set_ylabel(ylabel)
                 self.axs[i].grid(True, alpha=0.3)
                 self.axs[i].legend(loc="upper left")
+                self.axs[i].set_xlim(1, 2)
 
             self.axs[-1].set_xlabel("Episódio")
             self.canvas.draw_idle()
@@ -881,8 +883,9 @@ class TrainingTab:
                 ax.set_title(title)
                 ax.set_ylabel(ylabel)
                 ax.set_xlabel("Episódio")
-                ax.legend(loc="upper left")
                 ax.grid(True, alpha=0.3)
+                ax.legend(loc="upper left")
+                ax.set_xlim(1, None)
 
                 filename = f"plot_{data_key}.png"
                 fig.savefig(os.path.join(directory, filename), dpi=dpi, bbox_inches="tight")
@@ -895,6 +898,7 @@ class TrainingTab:
         """Plota dados nos eixos fornecidos"""
         for i, (title, ylabel, color, data_key) in enumerate(zip(self.plot_titles, self.plot_ylabels, self.plot_colors, self.plot_data_keys)):
             axs[i].clear()
+
             if i == 3:  # Gráfico de posição IMU
                 axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_y"], label="Y", color="green")
                 axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_z"], label="Z", color="blue")
@@ -907,8 +911,9 @@ class TrainingTab:
 
             axs[i].set_title(title)
             axs[i].set_ylabel(ylabel)
-            axs[i].legend(loc="upper left")
             axs[i].grid(True, alpha=0.3)
+            axs[i].legend(loc="upper left")
+            axs[i].set_xlim(1, None)
 
         axs[-1].set_xlabel("Episódio")
 
@@ -995,6 +1000,7 @@ class TrainingTab:
             with self.plot_data_lock:
                 for i, (ylabel, color, data_key) in enumerate(zip(self.plot_ylabels, self.plot_colors, self.plot_data_keys)):
                     self.axs[i].clear()
+
                     if i == 3:  # Gráfico de posição IMU
                         self.axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_y"], label="Y", color="green", linestyle="-", markersize=3)
                         self.axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_z"], label="Z", color="blue", linestyle="-", markersize=3)
@@ -1006,8 +1012,9 @@ class TrainingTab:
                         self.axs[i].plot(self.episode_data["episodes"], self.episode_data[data_key], label=ylabel, color=color, linestyle="-", markersize=3)
 
                     self.axs[i].set_ylabel(ylabel)
-                    self.axs[i].legend(loc="upper left")
                     self.axs[i].grid(True, alpha=0.3)
+                    self.axs[i].legend(loc="upper left")
+                    self.axs[i].set_xlim(1, None)
 
                 self.axs[-1].set_xlabel("Episódio")
 
