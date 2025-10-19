@@ -127,6 +127,8 @@ class Simulation(gym.Env):
         p.setGravity(0, 0, -9.807)
         p.setTimeStep(self.physics_step_s)
 
+        p.setPhysicsEngineParameter(enableConeFriction=1)
+
         # Carregar ambiente primeiro
         self.environment.load_in_simulation(use_fixed_base=True)
 
