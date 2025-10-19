@@ -1,0 +1,386 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="myrobot_st4">
+  <!-- Body properties -->
+  <xacro:property name="body_radius" value="0.15" />
+  <xacro:property name="body_length" value="0.3" />
+  <xacro:property name="body_mass" value="5.0" />
+  <xacro:property name="body_ixx" value="0.1" />
+  <xacro:property name="body_iyy" value="0.1" />
+  <xacro:property name="body_izz" value="0.05" />
+
+  <!-- Hip properties -->
+  <xacro:property name="hip_radius" value="0.05" />
+  <xacro:property name="hip_mass" value="0.5" />
+  <xacro:property name="hip_ixx" value="0.01" />
+  <xacro:property name="hip_iyy" value="0.01" />
+  <xacro:property name="hip_izz" value="0.01" />
+
+  <!-- Thigh properties -->
+  <xacro:property name="thigh_radius" value="0.04" />
+  <xacro:property name="thigh_length" value="0.35" />
+  <xacro:property name="thigh_mass" value="1.5" />
+  <xacro:property name="thigh_ixx" value="0.02" />
+  <xacro:property name="thigh_iyy" value="0.02" />
+  <xacro:property name="thigh_izz" value="0.01" />
+
+  <!-- Knee properties -->
+  <xacro:property name="knee_radius" value="0.04" />
+  <xacro:property name="knee_mass" value="0.5" />
+  <xacro:property name="knee_ixx" value="0.01" />
+  <xacro:property name="knee_iyy" value="0.01" />
+  <xacro:property name="knee_izz" value="0.01" />
+
+  <!-- Shin properties -->
+  <xacro:property name="shin_radius" value="0.035" />
+  <xacro:property name="shin_length" value="0.30" />
+  <xacro:property name="shin_mass" value="1.5" />
+  <xacro:property name="shin_ixx" value="0.015" />
+  <xacro:property name="shin_iyy" value="0.015" />
+  <xacro:property name="shin_izz" value="0.008" />
+
+  <!-- Ankle properties -->
+  <xacro:property name="ankle_radius" value="0.03" />
+  <xacro:property name="ankle_mass" value="0.5" />
+  <xacro:property name="ankle_ixx" value="0.01" />
+  <xacro:property name="ankle_iyy" value="0.01" />
+  <xacro:property name="ankle_izz" value="0.01" />
+
+  <!-- Foot properties -->
+  <xacro:property name="foot_length" value="0.35" />
+  <xacro:property name="foot_width" value="0.15" />
+  <xacro:property name="foot_height" value="0.03" />
+  <xacro:property name="foot_offset_front" value="0.1" />
+  <xacro:property name="foot_mass" value="0.5" />
+  <xacro:property name="foot_ixx" value="0.001" />
+  <xacro:property name="foot_iyy" value="0.001" />
+  <xacro:property name="foot_izz" value="0.0005" />
+
+  <!-- Head properties -->
+  <xacro:property name="head_radius" value="0.1" />
+  <xacro:property name="head_mass" value="1.0" />
+  <xacro:property name="head_ixx" value="0.005" />
+  <xacro:property name="head_iyy" value="0.005" />
+  <xacro:property name="head_izz" value="0.005" />
+
+  <!-- IMU properties -->
+  <xacro:property name="imu_length" value="0.02" />
+  <xacro:property name="imu_width" value="0.03" />
+  <xacro:property name="imu_height" value="0.01" />
+  <xacro:property name="imu_mass" value="0.01" />
+  <xacro:property name="imu_ixx" value="0.00001" />
+  <xacro:property name="imu_iyy" value="0.00001" />
+  <xacro:property name="imu_izz" value="0.00001" />
+
+  <!-- Controle -->
+  <xacro:property name="joint_dumping" value="0.2" />
+  <xacro:property name="joint_friction" value="0.01" />
+  
+  <!-- Materials -->
+  <material name="robot_material_1">
+    <color rgba="0.7 0.7 0.8 1"/>
+  </material>
+  <material name="robot_material_2">
+    <color rgba="0.9 0.9 1.0 1"/>
+  </material>
+
+  <!-- altura total -->
+  <xacro:property name="leg_total_length" value="${hip_radius + thigh_length + 2 * knee_radius + shin_length + 2 * ankle_radius + foot_height}" />
+  <!-- body_offset: body_length/2 desloca o posicao Z do centro do cilindro (corpo do robo) para a sua base inferior, assim nao fica metade do corpo enterrado no chao -->
+  <!-- body_offset: leg_total_length da espaco para as pernas, para elas nao ficarem enterradas no chao -->
+  <xacro:property name="body_offset" value="${body_length/2 + leg_total_length}" />
+  <!-- Conversao de graus para radianos -->
+  <xacro:property name="deg_to_rad" value="${3.14159 / 180}" />
+   
+  <!-- Body (main cylinder) -->
+  <link name="base_link">
+    <origin xyz="0 0 0"/>
+    <visual>
+      <origin xyz="0 0 ${body_offset}"/>
+      <geometry>
+        <cylinder length="${body_length}" radius="${body_radius}"/>
+      </geometry>
+      <material name="robot_material_1"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 ${body_offset}"/>
+      <geometry>
+        <cylinder length="${body_length}" radius="${body_radius}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <origin xyz="0 0 ${body_offset}"/>
+      <mass value="${body_mass}"/>
+      <inertia ixx="${body_ixx}" ixy="0.0" ixz="0.0" iyy="${body_iyy}" iyz="0.0" izz="${body_izz}"/>
+    </inertial>
+  </link>
+
+  <!-- IMU (simulated sensor, offset from body center) -->
+  <link name="imu_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="${imu_length} ${imu_width} ${imu_height}"/>
+      </geometry>
+      <material name="robot_material_2"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="${imu_length} ${imu_width} ${imu_height}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="${imu_mass}"/>
+      <inertia ixx="${imu_ixx}" ixy="0.0" ixz="0.0" iyy="${imu_iyy}" iyz="0.0" izz="${imu_izz}"/>
+    </inertial>
+  </link>
+
+  <joint name="base_to_imu" type="fixed">
+    <parent link="base_link"/>
+    <child link="imu_link"/>
+    <!-- Z: Como o corpo principal e posicionado em 0 0 0, body_offset move a IMU para o centro do corpo -->
+    <!-- Z: body_length/4 move a IMU um pouco para baixo, como se estivesse posicionado ela na cintura -->
+    <origin xyz="${body_radius} 0 ${body_offset - body_length/4}" rpy="0 0 0"/>
+  </joint>
+  
+  <!-- Head (sphere) -->
+  <link name="head_link">
+    <visual>
+      <!-- Z: head_radius shifts the Z plane from the heads's center to its base -->
+      <origin rpy="0 0 0" xyz="0 0 ${head_radius}"/>
+      <geometry>
+        <sphere radius="${head_radius}"/>
+      </geometry>
+      <material name="robot_material_2"/>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 ${head_radius}"/>
+      <geometry>
+        <sphere radius="${head_radius}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <origin rpy="0 0 0" xyz="0 0 ${head_radius}"/>
+      <mass value="${head_mass}"/>
+      <inertia ixx="${head_ixx}" ixy="0.0" ixz="0.0" iyy="${head_iyy}" iyz="0.0" izz="${head_izz}"/>
+    </inertial>
+  </link>
+
+  <!-- Head joint: body to head -->
+  <joint name="base_to_head" type="fixed">
+    <parent link="base_link"/>
+    <child link="head_link"/>
+    <!-- Z: Como o corpo principal e posicionado em 0 0 0, body_offset move a joint para o centro do corpo -->
+    <!-- Z: body_length/2 move a joint para o topo do corpo -->
+	  <origin xyz="0 0 ${body_offset + body_length/2}"/>
+  </joint>
+
+  <!-- Leg macro (creates left/right leg: thigh, shin, foot) -->
+  <xacro:macro name="leg" params="prefix reflect">
+    <!-- Hip joint: base_link to hip ball -->
+    <joint name="base_to_${prefix}_hip_ball" type="revolute">
+      <parent link="base_link"/>
+      <child link="${prefix}_hip_ball_link"/>
+      <!-- Z: Como o corpo principal e posicionado em 0 0 0, body_offset move o centro da esfera/articulacao para o centro do corpo -->
+      <!-- Z: Diminuir body_length/2 move o centro da esfera/articulacao para a base inferior do corpo -->
+      <!-- Y: body_radius posiciona o centro da esfera/articulacao do quadril na borda do corpo -->
+      <!-- Y: hip_radius tira a esfera/articulacao de dentro do corpo, caso contrario metade da esfera/articulacao ficaria dentro do corpo -->
+      <origin xyz="0 ${(body_radius + hip_radius) * reflect} ${body_offset - body_length/2}"/>
+      <axis xyz="0 1 0"/> <!-- Movimento frontal -->
+      <limit lower="${-90 * deg_to_rad}" upper="${90 * deg_to_rad}" effort="1000" velocity="5"/>
+      <dynamics damping="${joint_dumping}" friction="${joint_friction}"/>
+    </joint>
+
+    <!-- Hip Ball -->
+    <link name="${prefix}_hip_ball_link">
+      <visual>
+        <origin rpy="0 0 0" xyz="0 0 0"/>
+        <geometry>
+          <sphere radius="${hip_radius}"/>
+        </geometry>
+        <material name="robot_material_2"/>
+      </visual>
+      <collision>
+        <origin rpy="0 0 0" xyz="0 0 0"/>
+        <geometry>
+          <sphere radius="${hip_radius}"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <mass value="${hip_mass}"/>
+        <inertia ixx="${hip_ixx}" ixy="0.0" ixz="0.0" iyy="${hip_iyy}" iyz="0.0" izz="${hip_izz}"/>
+      </inertial>
+    </link>
+
+    <!-- Hip joint: hip_ball_link to thigh -->
+    <joint name="hip_ball_to_${prefix}_thigh" type="revolute">
+      <parent link="${prefix}_hip_ball_link"/>
+      <child link="${prefix}_thigh_link"/>
+      <origin xyz="0 0 0"/>
+      <axis xyz="1 0 0"/> <!-- Movimento lateral -->
+      <limit lower="${-30 * deg_to_rad}" upper="${30 * deg_to_rad}" effort="1000" velocity="5"/>
+      <dynamics damping="${joint_dumping}" friction="${joint_friction}"/>
+    </joint>
+
+    <!-- Thigh -->
+    <link name="${prefix}_thigh_link">
+      <visual>
+        <!-- Z: hip_radius desloca o centro da coxa para fora da esfera/articulacao do quadril -->
+        <!-- Z: thigh_length/2 desloca a coxa para baixo, para que seu topo encoste na esfera/articulacao do quadril -->
+        <origin rpy="0 0 0" xyz="0 0 ${-thigh_length/2 - hip_radius}"/>
+        <geometry>
+          <cylinder length="${thigh_length}" radius="${thigh_radius}"/>
+        </geometry>
+        <material name="robot_material_2"/>
+      </visual>
+      <collision>
+        <origin rpy="0 0 0" xyz="0 0 ${-thigh_length/2 - hip_radius}"/>
+        <geometry>
+          <cylinder length="${thigh_length}" radius="${thigh_radius}"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <origin rpy="0 0 0" xyz="0 0 ${-thigh_length/2 - hip_radius}"/>
+        <mass value="${thigh_mass}"/>
+        <inertia ixx="${thigh_ixx}" ixy="0.0" ixz="0.0" iyy="${thigh_iyy}" iyz="0.0" izz="${thigh_izz}"/>
+      </inertial>
+    </link>
+
+    <!-- Knee joint: thigh to knee ball -->
+    <joint name="${prefix}_thigh_to_knee_ball" type="fixed">
+      <parent link="${prefix}_thigh_link"/>
+      <child link="${prefix}_knee_ball_link"/>
+      <!-- Z: Como o parent e a coxa, o centro da esfera/articulacao do joelho coincide inicialmente com sua referencia que é o hip joint posicionado na base inferior do body -->
+      <!-- Z: Diminuir hip_radius + thigh_length faz o centro da esfera/articulacao do joelho coincidir com a base inferior da coxa -->
+      <!-- Z: Diminuir knee_radius faz o topo da esfera/articulacao do joelho coincidir com a base inferior da coxa -->
+      <origin xyz="0 0 ${-hip_radius - thigh_length - knee_radius }"/>
+    </joint>
+
+    <!-- Knee Ball -->
+    <link name="${prefix}_knee_ball_link">
+      <visual>
+        <origin rpy="0 0 0" xyz="0 0 0"/>
+        <geometry>
+          <sphere radius="${knee_radius}"/>
+        </geometry>
+        <material name="robot_material_2"/>
+      </visual>
+      <collision>
+        <origin rpy="0 0 0" xyz="0 0 0"/>
+        <geometry>
+          <sphere radius="${knee_radius}"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <mass value="${knee_mass}"/>
+        <inertia ixx="${knee_ixx}" ixy="0.0" ixz="0.0" iyy="${knee_iyy}" iyz="0.0" izz="${knee_izz}"/>
+      </inertial>
+    </link>
+
+    <!-- Knee joint: knee ball to shin -->
+    <joint name="${prefix}_knee_ball_to_shin" type="revolute">
+      <parent link="${prefix}_knee_ball_link"/>
+      <child link="${prefix}_shin_link"/>
+      <origin xyz="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <limit lower="${0 * deg_to_rad}" upper="${135 * deg_to_rad}" effort="1000" velocity="5"/>
+      <dynamics damping="${joint_dumping}" friction="${joint_friction}"/>
+    </joint>
+
+    <!-- Shin -->
+    <link name="${prefix}_shin_link">
+      <visual>
+        <!-- Z: knee_radius desloca o centro da canela para fora da esfera/articulacao do joelho -->
+        <!-- Z: shin_length/2 desloca a canela para baixo, para que seu topo encoste na esfera/articulacao do joelho -->
+        <origin rpy="0 0 0" xyz="0 0 ${-shin_length/2 - knee_radius}"/>
+        <geometry>
+          <cylinder length="${shin_length}" radius="${shin_radius}"/>
+        </geometry>
+        <material name="robot_material_1"/>
+      </visual>
+      <collision>
+        <origin rpy="0 0 0" xyz="0 0 ${-shin_length/2 - knee_radius}"/>
+        <geometry>
+          <cylinder length="${shin_length}" radius="${shin_radius}"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <origin rpy="0 0 0" xyz="0 0 ${-shin_length/2 - knee_radius}"/>
+        <mass value="${shin_mass}"/>
+        <inertia ixx="${shin_ixx}" ixy="0.0" ixz="0.0" iyy="${shin_iyy}" iyz="0.0" izz="${shin_izz}"/>
+      </inertial>
+    </link>
+
+    <!-- Ankle joint: shin to ankle ball -->
+    <joint name="${prefix}_shin_to_ankle_ball" type="fixed">
+      <parent link="${prefix}_shin_link"/>
+      <child link="${prefix}_ankle_ball_link"/>
+      <!-- Z: Como o parent e a canela, o centro da esfera/articulacao do tornozelo coincide inicialmente com sua referencia que é o knee joint -->
+      <!-- Z: Diminuir knee_radius + shin_length faz o centro da esfera/articulacao do tornozelo coincidir com a base inferior da canela -->
+      <!-- Z: Diminuir ankle_radius faz o topo da esfera/articulacao do tornozelo coincidir com a base inferior da canela -->
+      <origin xyz="0 0 ${-knee_radius - shin_length - ankle_radius}"/>
+    </joint>
+
+    <!-- Ankle Ball -->
+    <link name="${prefix}_ankle_ball_link">
+      <visual>
+        <origin rpy="0 0 0" xyz="0 0 0"/>
+        <geometry>
+          <sphere radius="${ankle_radius}"/>
+        </geometry>
+        <material name="robot_material_2"/>
+      </visual>
+      <collision>
+        <origin rpy="0 0 0" xyz="0 0 0"/>
+        <geometry>
+          <sphere radius="${ankle_radius}"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <mass value="${ankle_mass}"/>
+        <inertia ixx="${ankle_ixx}" ixy="0.0" ixz="0.0" iyy="${ankle_iyy}" iyz="0.0" izz="${ankle_izz}"/>
+      </inertial>
+    </link>
+
+    <!-- Ankle joint: ankle ball to foot -->
+    <joint name="${prefix}_ankle_ball_to_foot" type="revolute">
+      <parent link="${prefix}_ankle_ball_link"/>
+      <child link="${prefix}_foot_link"/>
+      <origin xyz="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <limit lower="${-30 * deg_to_rad}" upper="${75 * deg_to_rad}" effort="1000" velocity="5"/>
+      <dynamics damping="${joint_dumping}" friction="${joint_friction}"/>
+    </joint>
+
+    <!-- Foot -->
+    <link name="${prefix}_foot_link">
+      <visual>
+        <!-- Z: ankle_radius desloca o centro do pe para fora da esfera/articulacao do tornozelo -->
+        <!-- Z: foot_height/2 faz o pe sair da articulacao do tornozelo, coincidindo seu topo com o raio da esfera/articulacao -->
+        <!-- X: foot_offset_front desloca o pe um pouco para frente, para parecer um pe normal em que ele fica mais para frente do que para tras -->
+        <origin rpy="0 0 0" xyz="${foot_offset_front} 0 ${-ankle_radius - foot_height/2}"/>
+        <geometry>
+          <box size="${foot_length} ${foot_width} ${foot_height}"/>
+        </geometry>
+        <material name="robot_material_2"/>
+      </visual>
+      <collision>
+        <origin rpy="0 0 0" xyz="${foot_offset_front} 0 ${-ankle_radius - foot_height/2}"/>
+        <geometry>
+          <box size="${foot_length} ${foot_width} ${foot_height}"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <origin rpy="0 0 0" xyz="${foot_offset_front} 0 ${-ankle_radius - foot_height/2}"/>
+        <mass value="${foot_mass}"/>
+        <inertia ixx="${foot_ixx}" ixy="0.0" ixz="0.0" iyy="${foot_iyy}" iyz="0.0" izz="${foot_izz}"/>
+      </inertial>
+    </link>
+
+  </xacro:macro>
+
+  <!-- Instantiate right and left legs -->
+  <xacro:leg prefix="right" reflect="-1" />
+  <xacro:leg prefix="left" reflect="1" />
+  
+</robot>
