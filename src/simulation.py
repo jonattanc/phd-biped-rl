@@ -10,7 +10,20 @@ from reward_system import RewardSystem
 
 class Simulation(gym.Env):
     def __init__(
-        self, logger, robot, environment, ipc_queue, pause_value, exit_value, enable_visualization_value, enable_real_time_value, camera_selecion_value, num_episodes=1, seed=42, initial_episode=0
+        self,
+        logger,
+        robot,
+        environment,
+        ipc_queue,
+        pause_value,
+        exit_value,
+        enable_visualization_value,
+        enable_real_time_value,
+        camera_selecion_value,
+        config_changed_value,
+        num_episodes=1,
+        seed=42,
+        initial_episode=0,
     ):
         super(Simulation, self).__init__()
         np.random.seed(seed)
@@ -24,8 +37,10 @@ class Simulation(gym.Env):
         self.enable_visualization_value = enable_visualization_value
         self.is_visualization_enabled = enable_visualization_value.value
         self.enable_real_time_value = enable_real_time_value
+        self.is_real_time_enabled = enable_real_time_value.value
         self.camera_selection_value = camera_selecion_value
-        self.last_camera_selection = camera_selecion_value.value
+        self.last_selected_camera = self.camera_selection_value.value
+        self.config_changed_value = config_changed_value
         self.num_episodes = num_episodes
         self.current_episode = 0
         self.total_steps = 0
@@ -107,25 +122,27 @@ class Simulation(gym.Env):
         else:
             self.physics_client = p.connect(p.DIRECT)
 
-        if self.camera_selection_value.value == 1:  # Ambiente geral
+        self.last_selected_camera = self.camera_selection_value.value
+
+        if self.last_selected_camera == 1:  # Ambiente geral
             p.resetDebugVisualizerCamera(cameraDistance=6.5, cameraYaw=35, cameraPitch=-45, cameraTargetPosition=[6.0, 0.0, 0.6])
 
-        elif self.camera_selection_value.value == 2:  # Robô - Diagonal direita
+        elif self.last_selected_camera == 2:  # Robô - Diagonal direita
             p.resetDebugVisualizerCamera(cameraDistance=2.0, cameraYaw=40, cameraPitch=-25, cameraTargetPosition=[0.8, 0.0, 0.0])
 
-        elif self.camera_selection_value.value == 3:  # Robô - Diagonal esquerda
+        elif self.last_selected_camera == 3:  # Robô - Diagonal esquerda
             p.resetDebugVisualizerCamera(cameraDistance=2.0, cameraYaw=140, cameraPitch=-25, cameraTargetPosition=[0.8, 0.0, 0.0])
 
-        elif self.camera_selection_value.value == 4:  # Robô - Lateral direita
+        elif self.last_selected_camera == 4:  # Robô - Lateral direita
             p.resetDebugVisualizerCamera(cameraDistance=2.0, cameraYaw=0, cameraPitch=-5, cameraTargetPosition=[0.5, 0.0, 0.0])
 
-        elif self.camera_selection_value.value == 5:  # Robô - Lateral esquerda
+        elif self.last_selected_camera == 5:  # Robô - Lateral esquerda
             p.resetDebugVisualizerCamera(cameraDistance=2.0, cameraYaw=180, cameraPitch=-5, cameraTargetPosition=[0.5, 0.0, 0.0])
 
-        elif self.camera_selection_value.value == 6:  # Robô - Frontal
+        elif self.last_selected_camera == 6:  # Robô - Frontal
             p.resetDebugVisualizerCamera(cameraDistance=2.5, cameraYaw=90, cameraPitch=-5, cameraTargetPosition=[0.0, 0.0, 0.5])
 
-        elif self.camera_selection_value.value == 7:  # Robô - Traseira
+        elif self.last_selected_camera == 7:  # Robô - Traseira
             p.resetDebugVisualizerCamera(cameraDistance=1.5, cameraYaw=-90, cameraPitch=-5, cameraTargetPosition=[0.0, 0.0, 0.5])
 
         p.setGravity(0, 0, -9.807)
@@ -219,10 +236,10 @@ class Simulation(gym.Env):
         self.reset_episode_vars()
 
         # Resetar ambiente de simulação
-        if self.is_visualization_enabled != self.enable_visualization_value.value or self.last_camera_selection != self.camera_selection_value.value:
-            self.is_visualization_enabled = self.enable_visualization_value.value
-            self.last_camera_selection = self.camera_selection_value.value
+        if self.config_changed_value.value:
+            self.update_config_from_values()
             self.setup_sim_env()
+
         else:
             self.soft_env_reset()
 
@@ -236,6 +253,11 @@ class Simulation(gym.Env):
         # Retornar observação inicial
         obs = self.robot.get_observation()
         return obs, {}
+
+    def update_config_from_values(self):
+        self.config_changed_value.value = 0
+        self.is_visualization_enabled = self.enable_visualization_value.value
+        self.is_real_time_enabled = self.enable_real_time_value.value
 
     def _configure_robot_stability(self):
         """Configura parâmetros para melhorar a estabilidade inicial do robô"""
@@ -321,8 +343,6 @@ class Simulation(gym.Env):
         """
         Executa uma ação e retorna (observação, recompensa, done, info).
         """
-        while self.pause_value.value and not self.exit_value.value:
-            time.sleep(0.1)
 
         self.apply_action(action)
 
@@ -332,9 +352,6 @@ class Simulation(gym.Env):
 
         if self.is_visualization_enabled:
             self.update_com_marker()
-
-        if self.is_visualization_enabled and self.enable_real_time_value.value:
-            time.sleep(self.time_step_s)
 
         self.episode_steps += 1
         self.total_steps += 1
@@ -394,6 +411,20 @@ class Simulation(gym.Env):
             self.transmit_episode_info()
 
         self.episode_last_action = action
+
+        if self.config_changed_value.value:
+            if self.pause_value.value:
+                while self.pause_value.value and not self.exit_value.value:
+                    time.sleep(0.1)
+
+                self.update_config_from_values()
+
+                if self.last_selected_camera != self.camera_selection_value.value:
+                    self.config_changed_value.value = 1  # Forçar atualização da câmera
+
+        else:
+            if self.is_visualization_enabled and self.is_real_time_enabled:
+                time.sleep(self.time_step_s)
 
         if self.exit_value.value:
             self.logger.info("Sinal de saída recebido em step. Finalizando simulação.")

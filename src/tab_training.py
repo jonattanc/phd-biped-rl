@@ -58,6 +58,7 @@ class TrainingTab:
         self.enable_real_time_values = []
         self.enable_visualization_values = []
         self.camera_selection_values = []
+        self.config_changed_values = []
         self.gui_log_queue = queue.Queue()
         self.ipc_queue = multiprocessing.Queue()
         self.ipc_thread = None
@@ -329,17 +330,32 @@ class TrainingTab:
             enable_visualization_val = multiprocessing.Value("b", self.enable_visualization_var.get())
             realtime_val = multiprocessing.Value("b", self.real_time_var.get())
             camera_selection_val = multiprocessing.Value("i", self.camera_selection_int)
+            config_changed_val = multiprocessing.Value("b", 0)
 
             self.pause_values.append(pause_val)
             self.exit_values.append(exit_val)
             self.enable_visualization_values.append(enable_visualization_val)
             self.enable_real_time_values.append(realtime_val)
             self.camera_selection_values.append(camera_selection_val)
+            self.config_changed_values.append(config_changed_val)
 
             # Iniciar processo com config
             p = multiprocessing.Process(
                 target=train_process.process_runner,
-                args=(self.current_env, self.current_robot, self.current_algorithm, self.ipc_queue, pause_val, exit_val, enable_visualization_val, realtime_val, camera_selection_val, self.device, 0),
+                args=(
+                    self.current_env,
+                    self.current_robot,
+                    self.current_algorithm,
+                    self.ipc_queue,
+                    pause_val,
+                    exit_val,
+                    enable_visualization_val,
+                    realtime_val,
+                    camera_selection_val,
+                    config_changed_val,
+                    self.device,
+                    0,
+                ),
             )
             p.start()
             self.training_start_time = time.time()
@@ -387,6 +403,7 @@ class TrainingTab:
             enable_visualization_val = multiprocessing.Value("b", self.enable_visualization_var.get())
             realtime_val = multiprocessing.Value("b", self.real_time_var.get())
             camera_selection_val = multiprocessing.Value("i", self.camera_selection_int)
+            config_changed_val = multiprocessing.Value("b", 0)
 
             self.logger.info(f"Retomando treinamento - episódio: {self.current_episode}")
 
@@ -409,6 +426,7 @@ class TrainingTab:
                     enable_visualization_val,
                     realtime_val,
                     camera_selection_val,
+                    config_changed_val,
                     self.device,
                     self.current_episode,
                     model_path,
@@ -480,6 +498,8 @@ class TrainingTab:
                 self.pause_btn.config(text="Retomar")
                 self.save_training_btn.config(state=tk.NORMAL)
 
+            self.config_changed_values[-1].value = 1
+
             # Salvar modelo durante pausa/retomada
             self._save_model_immediately()
 
@@ -524,8 +544,10 @@ class TrainingTab:
 
     def stop_training(self):
         """Finaliza o treinamento"""
+
         if self.exit_values:
             self.exit_values[-1].value = 1
+            self.config_changed_values[-1].value = 1
 
         # Atualizar estado dos botões
         self.start_btn.config(state=tk.NORMAL)
@@ -928,6 +950,7 @@ class TrainingTab:
 
         if self.enable_visualization_values:
             self.enable_visualization_values[-1].value = new_value
+            self.config_changed_values[-1].value = 1
 
         else:
             self.logger.info("toggle_visualization: Nenhum processo de treinamento ativo.")
@@ -943,6 +966,7 @@ class TrainingTab:
 
         if self.enable_real_time_values:
             self.enable_real_time_values[-1].value = new_value
+            self.config_changed_values[-1].value = 1
 
         else:
             self.logger.info("toggle_real_time: Nenhum processo de treinamento ativo.")
@@ -958,6 +982,7 @@ class TrainingTab:
 
         if self.camera_selection_values:
             self.camera_selection_values[-1].value = selected_value
+            self.config_changed_values[-1].value = 1
 
         else:
             self.logger.info("update_camera_selection: Nenhum processo de treinamento ativo.")
@@ -1058,6 +1083,7 @@ class TrainingTab:
             # Pausar o treinamento
             if self.pause_values and not self.pause_values[-1].value:
                 self.pause_values[-1].value = 1
+                self.config_changed_values[-1].value = 1
                 self.pause_btn.config(text="Retomar")
                 self.save_training_btn.config(state=tk.NORMAL)
 
@@ -1311,6 +1337,9 @@ class TrainingTab:
 
         for v in self.exit_values:
             v.value = 1  # Sinaliza para os processos terminarem
+
+        for v in self.config_changed_values:
+            v.value = 1  # Necessário para processos verificarem o exit
 
         self.logger.info("Aguardando thread IPC terminar...")
         if hasattr(self, "ipc_thread") and self.ipc_thread and self.ipc_thread.is_alive():
