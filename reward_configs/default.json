@@ -36,6 +36,18 @@
       "min_value": -1000,
       "max_value": 0
     },
+    "height_deviation_penalty": {
+      "weight": -0.01,
+      "enabled": false,
+      "min_value": -1,
+      "max_value": 0
+    },
+    "height_deviation_square_penalty": {
+      "weight": -0.01,
+      "enabled": false,
+      "min_value": -1,
+      "max_value": 0
+    },
     "y_axis_deviation_penalty": {
       "weight": -0.01,
       "enabled": false,

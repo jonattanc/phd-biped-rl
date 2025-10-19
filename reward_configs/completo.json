@@ -95,6 +95,18 @@
       "enabled": false,
       "min_value": -1,
       "max_value": 0
+    },
+    "height_deviation_square_penalty": {
+      "weight": -0.01,
+      "enabled": false,
+      "min_value": -1,
+      "max_value": 0
+    },
+    "height_deviation_penalty": {
+      "weight": -0.01,
+      "enabled": false,
+      "min_value": -1,
+      "max_value": 0
     }
   }
 }

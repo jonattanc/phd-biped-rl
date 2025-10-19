@@ -78,6 +78,14 @@ class RewardSystem:
                 self.components["fall_penalty"].value = 1
                 total_reward += self.components["fall_penalty"].weight
 
+        if self.is_component_enabled("height_deviation_penalty"):
+            self.components["height_deviation_penalty"].value = abs(sim.robot_y_position - sim.episode_robot_y_initial_position)
+            total_reward += self.components["height_deviation_penalty"].value * self.components["height_deviation_penalty"].weight
+
+        if self.is_component_enabled("height_deviation_square_penalty"):
+            self.components["height_deviation_square_penalty"].value = (sim.robot_y_position - sim.episode_robot_y_initial_position) ** 2
+            total_reward += self.components["height_deviation_square_penalty"].value * self.components["height_deviation_square_penalty"].weight
+
         if self.is_component_enabled("success_bonus"):
             if info["termination"] == "success":
                 self.components["success_bonus"].value = 1
@@ -184,6 +192,7 @@ class RewardSystem:
                     for comp in missing_components:
                         warning_msg += f" - {comp}\n"
                         components_config[comp] = self.default_components[comp]
+                        components_config[comp]["enabled"] = False  # Desabilitar componentes faltantes por segurança
 
                 if warning_msg:
                     self.logger.warning(warning_msg)

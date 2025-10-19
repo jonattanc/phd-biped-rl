@@ -217,6 +217,7 @@ class Simulation(gym.Env):
         self.episode_reward = 0.0
         self.episode_start_time = time.time()
         self.episode_robot_x_initial_position = 0.0
+        self.episode_robot_y_initial_position = 0.0
         self.episode_distance = 0.0
         self.joint_velocities = self.action_dim * [0.0]
         self.episode_success = False
@@ -246,6 +247,7 @@ class Simulation(gym.Env):
         # Obter posição inicial
         robot_position, robot_velocity, robot_orientation = self.robot.get_imu_position_velocity_orientation()
         self.episode_robot_x_initial_position = robot_position[0]
+        self.episode_robot_y_initial_position = robot_position[1]
 
         # Configurar parâmetros físicos para estabilidade
         self._configure_robot_stability()
