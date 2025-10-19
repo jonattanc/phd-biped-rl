@@ -108,21 +108,26 @@ class Simulation(gym.Env):
         else:
             self.physics_client = p.connect(p.DIRECT)
 
-        if self.camera_selection_value.value == 1:
-            # Visão geral do ambiente
+        if self.camera_selection_value.value == 1:  # Ambiente geral
             p.resetDebugVisualizerCamera(cameraDistance=6.5, cameraYaw=35, cameraPitch=-45, cameraTargetPosition=[6.0, 0.0, 0.6])
 
-        elif self.camera_selection_value.value == 2:
-            # Visão próxima do robô
-            p.resetDebugVisualizerCamera(cameraDistance=2.5, cameraYaw=15, cameraPitch=-25, cameraTargetPosition=[0.0, 0.0, 0.0])
+        elif self.camera_selection_value.value == 2:  # Robô - Diagonal direita
+            p.resetDebugVisualizerCamera(cameraDistance=2.0, cameraYaw=40, cameraPitch=-25, cameraTargetPosition=[0.8, 0.0, 0.0])
 
-        elif self.camera_selection_value.value == 3:
-            # Visão lateral do robô
-            p.resetDebugVisualizerCamera(cameraDistance=2.5, cameraYaw=180, cameraPitch=-15, cameraTargetPosition=[0.0, 0.0, 0.0])
+        elif self.camera_selection_value.value == 3:  # Robô - Diagonal esquerda
+            p.resetDebugVisualizerCamera(cameraDistance=2.0, cameraYaw=140, cameraPitch=-25, cameraTargetPosition=[0.8, 0.0, 0.0])
 
-        elif self.camera_selection_value.value == 4:
-            # Visão frontal do robô
-            p.resetDebugVisualizerCamera(cameraDistance=2.5, cameraYaw=90, cameraPitch=-15, cameraTargetPosition=[0.0, 0.0, 0.5])
+        elif self.camera_selection_value.value == 4:  # Robô - Lateral direita
+            p.resetDebugVisualizerCamera(cameraDistance=2.0, cameraYaw=0, cameraPitch=-5, cameraTargetPosition=[0.5, 0.0, 0.0])
+
+        elif self.camera_selection_value.value == 5:  # Robô - Lateral esquerda
+            p.resetDebugVisualizerCamera(cameraDistance=2.0, cameraYaw=180, cameraPitch=-5, cameraTargetPosition=[0.5, 0.0, 0.0])
+
+        elif self.camera_selection_value.value == 6:  # Robô - Frontal
+            p.resetDebugVisualizerCamera(cameraDistance=2.5, cameraYaw=90, cameraPitch=-5, cameraTargetPosition=[0.0, 0.0, 0.5])
+
+        elif self.camera_selection_value.value == 7:  # Robô - Traseira
+            p.resetDebugVisualizerCamera(cameraDistance=1.5, cameraYaw=-90, cameraPitch=-5, cameraTargetPosition=[0.0, 0.0, 0.5])
 
         p.setGravity(0, 0, -9.807)
         p.setTimeStep(self.physics_step_s)

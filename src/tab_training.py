@@ -161,7 +161,7 @@ class TrainingTab:
         self.export_plots_btn = ttk.Button(row2_frame, text="Exportar Gráficos", command=self.export_plots, state=tk.DISABLED, width=15)
         self.export_plots_btn.grid(row=0, column=2, padx=1)
 
-        self.enable_visualization_var = tk.BooleanVar(value=False)
+        self.enable_visualization_var = tk.BooleanVar(value=True)
         self.enable_visualization_check = ttk.Checkbutton(row2_frame, text="Visualizar Robô", variable=self.enable_visualization_var, command=self.toggle_visualization, width=15)
         self.enable_visualization_check.grid(row=0, column=3, padx=1)
 
@@ -171,10 +171,18 @@ class TrainingTab:
 
         ttk.Label(row2_frame, text="Câmera:").grid(row=0, column=5, sticky=tk.W, padx=5)
 
-        camera_options = {1: "Geral", 2: "Próxima", 3: "Lateral", 4: "Frontal"}
-        self.camera_selection_int = 1
+        camera_options = {
+            1: "Ambiente geral",
+            2: "Robô - Diagonal direita",
+            3: "Robô - Diagonal esquerda",
+            4: "Robô - Lateral direita",
+            5: "Robô - Lateral esquerda",
+            6: "Robô - Frontal",
+            7: "Robô - Traseira",
+        }
+        self.camera_selection_int = 3
         self.camera_selection_var = tk.StringVar(value=camera_options[self.camera_selection_int])
-        self.camera_selection_combobox = ttk.Combobox(row2_frame, textvariable=self.camera_selection_var, values=list(camera_options.values()), state="readonly", width=15)
+        self.camera_selection_combobox = ttk.Combobox(row2_frame, textvariable=self.camera_selection_var, values=list(camera_options.values()), state="readonly", width=25)
         self.camera_selection_combobox.grid(row=0, column=6, padx=5)
         self.camera_selection_combobox.bind("<<ComboboxSelected>>", lambda event: self.update_camera_selection(event, camera_options))
 
