@@ -150,7 +150,6 @@ class Robot:
             t6 = t5 + 1.0
             t7 = t6 + 0.5
             t8 = t7 + 1.0
-            t9 = t8 + 1.0
 
             hip_right_front = 0  # Positivo para trás
             hip_right_lateral = 0  # Positivo para dentro
@@ -178,30 +177,75 @@ class Robot:
                 hip_right_lateral = -0.09
                 hip_left_lateral = 0.10
 
-            # elif t < t4:
-            #     hip_right_front = 0.15
-            #     knee_right = -0.1
-            #     hip_right_lateral = 0.02
-            #     hip_left_lateral = 0.02
-
-            # elif t < t5:
-            #     pass
-
-            # elif t < t6:
-            #     hip_right_front = -0.12
-            #     hip_left_front = -0.12
-            #     ankle_right = -0.11
-            #     ankle_left = -0.11
-
-            # elif t < t7:
-            #     pass
-
-            # elif t < t8:
-            #     hip_left_front = -0.5
-            #     knee_left = 0.5
-            #     ankle_left = 0.2
-
             action_list = [hip_right_front, hip_right_lateral, knee_right, ankle_right, hip_left_front, hip_left_lateral, knee_left, ankle_left]
+
+        elif num_joints == 10:
+            t1 = 1.5
+            t2 = t1 + 0.9
+            t3 = t2 + 0.5
+            t4 = t3 + 2.0
+            t5 = t4 + 0.5
+            t6 = t5 + 1.0
+            t7 = t6 + 0.5
+            t8 = t7 + 1.0
+            t9 = t8 + 1.0
+
+            hip_right_front = 0  # Positivo para trás
+            hip_right_lateral = 0  # Positivo para dentro
+            knee_right = 0  # Positivo para dobrar
+            ankle_right_front = 0  # Positivo para baixo
+            ankle_right_lateral = 0  # Positivo para dentro
+            hip_left_front = 0  # Positivo para trás
+            hip_left_lateral = 0  # Positivo para fora
+            knee_left = 0  # Positivo para dobrar
+            ankle_left_front = 0  # Positivo para baixo
+            ankle_left_lateral = 0  # Positivo para fora
+
+            if t < t1:
+                lateral_inclination = 0.12
+                frontal_inclination = 0.05
+
+                hip_right_lateral = -lateral_inclination
+                hip_left_lateral = -lateral_inclination
+                ankle_right_lateral = lateral_inclination
+                ankle_left_lateral = lateral_inclination
+
+                ankle_right_front = -frontal_inclination
+                ankle_left_front = -frontal_inclination
+
+            elif t < t2:
+                hip_right_front = -0.5  # Negativo para frente
+                hip_right_lateral = (
+                    0.05  # Positivo para dentro # TODO: Deixa o pé desalinhado com o chão, mas não posso mexer no tornozelo ao mesmo tempo que tiro o pé do chão, para não desequilibrar
+                )
+                knee_right = 0.5  # Positivo para dobrar
+                hip_left_front = -0.1  # Negativo para frente
+
+                lateral_inclination = -0.03
+                hip_left_lateral = -lateral_inclination
+                ankle_left_lateral = lateral_inclination
+
+            elif t < t3:
+                # hip_right_front = 0.5  # Positivo para trás
+                knee_right = -0.5  # Negativo para estender
+                ankle_right_front = 0.11  # Positivo para baixo
+                # hip_left_front = -0.5
+                # hip_left_lateral = -0.03  # Negativo para dentro
+                # knee_left = 0.5
+                # ankle_left_front = -0.13
+
+                lateral_inclination = -0.03
+                hip_left_lateral = -lateral_inclination
+                ankle_left_lateral = lateral_inclination
+
+            elif t < t4:
+                lateral_inclination = -0.06
+                hip_right_lateral = -lateral_inclination
+                hip_left_lateral = -lateral_inclination
+                ankle_right_lateral = lateral_inclination
+                ankle_left_lateral = lateral_inclination
+
+            action_list = [hip_right_front, hip_right_lateral, knee_right, ankle_right_front, ankle_right_lateral, hip_left_front, hip_left_lateral, knee_left, ankle_left_front, ankle_left_lateral]
 
         else:
             raise ValueError(f"Número de juntas não suportado para ação de exemplo: {num_joints}")

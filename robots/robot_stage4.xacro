@@ -312,13 +312,16 @@
     </link>
 
     <!-- Ankle joint: shin to ankle ball -->
-    <joint name="${prefix}_shin_to_ankle_ball" type="fixed">
+    <joint name="${prefix}_shin_to_ankle_ball" type="revolute">
       <parent link="${prefix}_shin_link"/>
       <child link="${prefix}_ankle_ball_link"/>
       <!-- Z: Como o parent e a canela, o centro da esfera/articulacao do tornozelo coincide inicialmente com sua referencia que é o knee joint -->
       <!-- Z: Diminuir knee_radius + shin_length faz o centro da esfera/articulacao do tornozelo coincidir com a base inferior da canela -->
       <!-- Z: Diminuir ankle_radius faz o topo da esfera/articulacao do tornozelo coincidir com a base inferior da canela -->
       <origin xyz="0 0 ${-knee_radius - shin_length - ankle_radius}"/>
+      <axis xyz="0 1 0"/> <!-- Movimento frontal -->
+      <limit lower="${-30 * deg_to_rad}" upper="${75 * deg_to_rad}" effort="1000" velocity="5"/>
+      <dynamics damping="${joint_dumping}" friction="${joint_friction}"/>
     </joint>
 
     <!-- Ankle Ball -->
@@ -347,8 +350,8 @@
       <parent link="${prefix}_ankle_ball_link"/>
       <child link="${prefix}_foot_link"/>
       <origin xyz="0 0 0"/>
-      <axis xyz="0 1 0"/>
-      <limit lower="${-30 * deg_to_rad}" upper="${75 * deg_to_rad}" effort="1000" velocity="5"/>
+      <axis xyz="1 0 0"/> <!-- Movimento lateral -->
+      <limit lower="${-30 * deg_to_rad}" upper="${30 * deg_to_rad}" effort="1000" velocity="5"/>
       <dynamics damping="${joint_dumping}" friction="${joint_friction}"/>
     </joint>
 
