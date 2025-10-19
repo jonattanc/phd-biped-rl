@@ -255,7 +255,7 @@ class TrainingTab:
     def _initialize_plots(self):
         """Inicializa os gráficos com títulos e configurações"""
         try:
-            for i, (title, ylabel, color) in enumerate(zip(self.plot_titles, self.plot_ylabels, self.plot_colors)):
+            for i, (ylabel, color) in enumerate(zip(self.plot_ylabels, self.plot_colors)):
                 self.axs[i].clear()
                 if i == 3:  # Gráfico de posição IMU (Y, Z)
                     self.axs[i].plot([], [], label="Y", color="green", linestyle="-", markersize=3)
@@ -267,7 +267,6 @@ class TrainingTab:
                 else:  # Gráficos normais
                     self.axs[i].plot([], [], label=ylabel, color=color, linestyle="-", markersize=3)
 
-                self.axs[i].set_title(title)
                 self.axs[i].set_ylabel(ylabel)
                 self.axs[i].grid(True, alpha=0.3)
                 self.axs[i].legend(loc="upper left")
@@ -994,7 +993,7 @@ class TrainingTab:
             self.new_plot_data = False
 
             with self.plot_data_lock:
-                for i, (title, ylabel, color, data_key) in enumerate(zip(self.plot_titles, self.plot_ylabels, self.plot_colors, self.plot_data_keys)):
+                for i, (ylabel, color, data_key) in enumerate(zip(self.plot_ylabels, self.plot_colors, self.plot_data_keys)):
                     self.axs[i].clear()
                     if i == 3:  # Gráfico de posição IMU
                         self.axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_y"], label="Y", color="green", linestyle="-", markersize=3)
@@ -1006,7 +1005,6 @@ class TrainingTab:
                     else:  # Gráficos normais
                         self.axs[i].plot(self.episode_data["episodes"], self.episode_data[data_key], label=ylabel, color=color, linestyle="-", markersize=3)
 
-                    self.axs[i].set_title(title)
                     self.axs[i].set_ylabel(ylabel)
                     self.axs[i].legend(loc="upper left")
                     self.axs[i].grid(True, alpha=0.3)
