@@ -10,9 +10,6 @@
   <xacro:property name="section_ixx" value="1000" />
   <xacro:property name="section_iyy" value="1000" />
   <xacro:property name="section_izz" value="1000" />
-  <xacro:property name="lateral_friction" value="0.8" />
-  <xacro:property name="rolling_friction" value="0.0" />
-  <xacro:property name="spinning_friction" value="0.0" />
 
   <!-- Materials -->
   <material name="initial_section_material">
@@ -27,11 +24,6 @@
   
   <!-- Base Link - Initial Section -->
   <link name="initial_link">
-    <contact>
-      <lateral_friction value="${lateral_friction}"/>
-      <rolling_friction value="${rolling_friction}"/>
-      <spinning_friction value="${spinning_friction}"/>
-    </contact>
     <inertial>
       <origin xyz="0 0 -${plane_height/2}"/>
       <mass value="${section_mass}"/>
@@ -54,11 +46,6 @@
 
   <!-- Middle Section -->
   <link name="middle_link">
-    <contact>
-      <lateral_friction value="${lateral_friction}"/>
-      <rolling_friction value="${rolling_friction}"/>
-      <spinning_friction value="${spinning_friction}"/>
-    </contact>
     <inertial>
       <origin xyz="0 0 -${plane_height/2}"/>
       <mass value="${section_mass}"/>
@@ -81,11 +68,6 @@
 
   <!-- Final Section -->
   <link name="final_link">
-    <contact>
-      <lateral_friction value="${lateral_friction}"/>
-      <rolling_friction value="${rolling_friction}"/>
-      <spinning_friction value="${spinning_friction}"/>
-    </contact>
     <inertial>
       <origin xyz="0 0 -${plane_height/2}"/>
       <mass value="${section_mass}"/>
