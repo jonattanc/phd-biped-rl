@@ -49,7 +49,6 @@ class Simulation(gym.Env):
         self.time_step_s = self.physics_step_s * self.physics_step_multiplier  # 240/5 = 48 Hz, ~20.83 ms # 240/8 = 30 Hz, ~33.33 ms # 240/10 = 24 Hz, ~41.66 ms
         self.max_motor_velocity = 2.0  # rad/s
         self.max_motor_torque = 130.0  # Nm
-        self.apply_action = self.apply_position_action  # Escolher entre apply_velocity_action ou apply_position_action
         self.max_training_steps = int(self.episode_training_timeout_s / self.time_step_s)
         self.max_pre_fill_steps = int(self.episode_pre_fill_timeout_s / self.time_step_s)
         self.max_steps = self.max_training_steps
@@ -304,15 +303,7 @@ class Simulation(gym.Env):
         if actual_episode_number % 10 == 0:
             self.logger.info(f"Episódio {actual_episode_number} concluído")
 
-    def apply_velocity_action(self, action):
-        action = np.clip(action, -1.0, 1.0)  # Normalizar ação para evitar valores extremos
-
-        target_velocities = action * self.max_motor_velocity
-        forces = [self.max_motor_torque] * self.action_dim
-
-        p.setJointMotorControlArray(bodyUniqueId=self.robot.id, jointIndices=self.robot.revolute_indices, controlMode=p.VELOCITY_CONTROL, targetVelocities=target_velocities, forces=forces)
-
-    def apply_position_action(self, action):
+    def apply_action(self, action):
         action = np.clip(action, -1.0, 1.0)  # Normalizar ação para evitar valores extremos
 
         joint_positions, joint_velocities = self.robot.get_joint_states()
