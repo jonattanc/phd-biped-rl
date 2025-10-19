@@ -172,8 +172,8 @@ class TrainingTab:
         ttk.Label(row2_frame, text="Câmera:").grid(row=0, column=5, sticky=tk.W, padx=5)
 
         camera_options = {1: "Geral", 2: "Próxima", 3: "Lateral", 4: "Frontal"}
-        self.camera_selection_var = tk.StringVar(value=camera_options[1])
         self.camera_selection_int = 1
+        self.camera_selection_var = tk.StringVar(value=camera_options[self.camera_selection_int])
         self.camera_selection_combobox = ttk.Combobox(row2_frame, textvariable=self.camera_selection_var, values=list(camera_options.values()), state="readonly", width=15)
         self.camera_selection_combobox.grid(row=0, column=6, padx=5)
         self.camera_selection_combobox.bind("<<ComboboxSelected>>", lambda event: self.update_camera_selection(event, camera_options))
@@ -961,7 +961,7 @@ class TrainingTab:
         current_time = time.time()
         time_diff = current_time - self.training_start_time
 
-        if self.total_steps is None:
+        if self.total_steps is None or time_diff <= 0:
             self.steps_per_second = 0
 
         else:
