@@ -238,7 +238,9 @@ class Simulation(gym.Env):
 
         # Resetar ambiente de simulação
         if self.config_changed_value.value:
-            self.update_config_from_values()
+            self.config_changed_value.value = 0
+            self.is_visualization_enabled = self.enable_visualization_value.value
+            self.is_real_time_enabled = self.enable_real_time_value.value
             self.setup_sim_env()
 
         else:
@@ -255,11 +257,6 @@ class Simulation(gym.Env):
         # Retornar observação inicial
         obs = self.robot.get_observation()
         return obs, {}
-
-    def update_config_from_values(self):
-        self.config_changed_value.value = 0
-        self.is_visualization_enabled = self.enable_visualization_value.value
-        self.is_real_time_enabled = self.enable_real_time_value.value
 
     def _configure_robot_stability(self):
         """Configura parâmetros para melhorar a estabilidade inicial do robô"""
@@ -419,10 +416,14 @@ class Simulation(gym.Env):
                 while self.pause_value.value and not self.exit_value.value:
                     time.sleep(0.1)
 
-                self.update_config_from_values()
+                self.config_changed_value.value = 0
 
-                if self.last_selected_camera != self.camera_selection_value.value:
-                    self.config_changed_value.value = 1  # Forçar atualização da câmera
+                if (
+                    self.last_selected_camera != self.camera_selection_value.value
+                    or self.is_visualization_enabled != self.enable_visualization_value.value
+                    or self.is_real_time_enabled != self.enable_real_time_value.value
+                ):
+                    self.config_changed_value.value = 1
 
         else:
             if self.is_visualization_enabled and self.is_real_time_enabled:
