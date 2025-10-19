@@ -250,4 +250,8 @@ class Robot:
         else:
             raise ValueError(f"Número de juntas não suportado para ação de exemplo: {num_joints}")
 
+        # Add noise to the actions
+        noise_amplitude = 0.05
+        action_list = [a + np.random.uniform(-noise_amplitude, noise_amplitude) for a in action_list]
+
         return np.array(action_list, dtype=np.float32)
