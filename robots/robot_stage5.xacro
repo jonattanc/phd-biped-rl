@@ -386,7 +386,7 @@
   <xacro:leg prefix="right" reflect="-1" />
   <xacro:leg prefix="left" reflect="1" />
 
-  <!-- Shoulder properties -->
+<!-- Shoulder properties -->
 <xacro:property name="shoulder_radius" value="0.04" />
 <xacro:property name="shoulder_length" value="0.1" />
 <xacro:property name="shoulder_mass" value="0.3" />
@@ -402,7 +402,7 @@
 <xacro:property name="upper_arm_iyy" value="0.005" />
 <xacro:property name="upper_arm_izz" value="0.001" />
 
-<!-- Lower arm properties -->
+<!-- Lower arm properties (mantido para cálculo de massa, mas será fixo) -->
 <xacro:property name="lower_arm_radius" value="0.03" />
 <xacro:property name="lower_arm_length" value="0.22" />
 <xacro:property name="lower_arm_mass" value="0.6" />
@@ -410,7 +410,7 @@
 <xacro:property name="lower_arm_iyy" value="0.003" />
 <xacro:property name="lower_arm_izz" value="0.001" />
 
-<!-- Hand properties -->
+<!-- Hand properties (mantido para cálculo de massa, mas será fixo) -->
 <xacro:property name="hand_length" value="0.08" />
 <xacro:property name="hand_width" value="0.06" />
 <xacro:property name="hand_height" value="0.04" />
@@ -419,7 +419,7 @@
 <xacro:property name="hand_iyy" value="0.0001" />
 <xacro:property name="hand_izz" value="0.0001" />
 
-<!-- Arm macro -->
+<!-- Arm macro simplificado -->
 <xacro:macro name="arm" params="prefix reflect">
   <!-- Shoulder joint: base_link to shoulder (frontal movement) -->
   <joint name="base_to_${prefix}_shoulder_front" type="revolute">
@@ -427,7 +427,8 @@
     <child link="${prefix}_shoulder_front_link"/>
     <origin xyz="0 ${(body_radius + shoulder_radius) * reflect} ${body_offset + body_length/4}" rpy="0 0 0"/>
     <axis xyz="0 1 0"/> <!-- Shoulder frontal movement -->
-    <limit lower="${-90 * deg_to_rad}" upper="${90 * deg_to_rad}" effort="100" velocity="3"/>
+    <!-- Limite de 45° para frente e trás -->
+    <limit lower="${-45 * deg_to_rad}" upper="${45 * deg_to_rad}" effort="100" velocity="3"/>
     <dynamics damping="${joint_dumping}" friction="${joint_friction}"/>
   </joint>
 
@@ -452,13 +453,14 @@
     </inertial>
   </link>
 
-  <!-- Shoulder joint: shoulder frontal to shoulder lateral -->
+  <!-- Shoulder joint: shoulder frontal to shoulder lateral (movimento lateral) -->
   <joint name="${prefix}_shoulder_front_to_lateral" type="revolute">
     <parent link="${prefix}_shoulder_front_link"/>
     <child link="${prefix}_shoulder_lateral_link"/>
     <origin xyz="0 0 0" rpy="0 0 0"/>
     <axis xyz="1 0 0"/> <!-- Shoulder lateral movement -->
-    <limit lower="${-45 * deg_to_rad}" upper="${180 * deg_to_rad}" effort="80" velocity="3"/>
+    <!-- Limitar movimento lateral -->
+    <limit lower="${-10 * deg_to_rad}" upper="${45 * deg_to_rad}" effort="80" velocity="3"/>
     <dynamics damping="${joint_dumping}" friction="${joint_friction}"/>
   </joint>
 
@@ -483,78 +485,71 @@
     </inertial>
   </link>
 
-  <!-- Upper arm joint: shoulder to upper arm -->
-  <joint name="${prefix}_shoulder_to_upper_arm" type="revolute">
+  <!-- Upper arm joint: FIXO (sem movimento) -->
+  <joint name="${prefix}_shoulder_to_upper_arm" type="fixed">
     <parent link="${prefix}_shoulder_lateral_link"/>
     <child link="${prefix}_upper_arm_link"/>
+    <!-- Braço a 0° (para baixo) -->
     <origin xyz="0 0 0" rpy="0 0 0"/>
-    <axis xyz="0 1 0"/> <!-- Upper arm movement -->
-    <limit lower="${-120 * deg_to_rad}" upper="${30 * deg_to_rad}" effort="80" velocity="3"/>
-    <dynamics damping="${joint_dumping}" friction="${joint_friction}"/>
   </joint>
 
   <!-- Upper arm link -->
   <link name="${prefix}_upper_arm_link">
     <visual>
-      <origin rpy="0 ${90 * deg_to_rad} 0" xyz="0 0 ${-upper_arm_length/2}"/>
+      <origin rpy="0 0 0" xyz="0 0 ${-upper_arm_length/2}"/>
       <geometry>
         <cylinder length="${upper_arm_length}" radius="${upper_arm_radius}"/>
       </geometry>
       <material name="robot_material_1"/>
     </visual>
     <collision>
-      <origin rpy="0 ${90 * deg_to_rad} 0" xyz="0 0 ${-upper_arm_length/2}"/>
+      <origin rpy="0 0 0" xyz="0 0 ${-upper_arm_length/2}"/>
       <geometry>
         <cylinder length="${upper_arm_length}" radius="${upper_arm_radius}"/>
       </geometry>
     </collision>
     <inertial>
-      <origin rpy="0 ${90 * deg_to_rad} 0" xyz="0 0 ${-upper_arm_length/2}"/>
+      <origin rpy="0 0 0" xyz="0 0 ${-upper_arm_length/2}"/>
       <mass value="${upper_arm_mass}"/>
       <inertia ixx="${upper_arm_ixx}" ixy="0.0" ixz="0.0" iyy="${upper_arm_iyy}" iyz="0.0" izz="${upper_arm_izz}"/>
     </inertial>
   </link>
 
-  <!-- Elbow joint: upper arm to lower arm -->
-  <joint name="${prefix}_upper_arm_to_lower_arm" type="revolute">
+  <!-- Elbow joint: FIXO (sem movimento) -->
+  <joint name="${prefix}_upper_arm_to_lower_arm" type="fixed">
     <parent link="${prefix}_upper_arm_link"/>
     <child link="${prefix}_lower_arm_link"/>
-    <origin xyz="0 0 ${-upper_arm_length}" rpy="0 0 0"/>
-    <axis xyz="0 1 0"/> <!-- Elbow flexion/extension -->
-    <limit lower="${0 * deg_to_rad}" upper="${150 * deg_to_rad}" effort="60" velocity="3"/>
-    <dynamics damping="${joint_dumping}" friction="${joint_friction}"/>
+    <!-- Antebraço a 90° (para frente) -->
+    <origin xyz="0 0 ${-upper_arm_length}" rpy="0 ${-90 * deg_to_rad} 0"/>
   </joint>
 
   <!-- Lower arm link -->
   <link name="${prefix}_lower_arm_link">
     <visual>
-      <origin rpy="0 ${90 * deg_to_rad} 0" xyz="0 0 ${-lower_arm_length/2}"/>
+      <origin rpy="0 0 0" xyz="0 0 ${-lower_arm_length/2}"/>
       <geometry>
         <cylinder length="${lower_arm_length}" radius="${lower_arm_radius}"/>
       </geometry>
       <material name="robot_material_1"/>
     </visual>
     <collision>
-      <origin rpy="0 ${90 * deg_to_rad} 0" xyz="0 0 ${-lower_arm_length/2}"/>
+      <origin rpy="0 0 0" xyz="0 0 ${-lower_arm_length/2}"/>
       <geometry>
         <cylinder length="${lower_arm_length}" radius="${lower_arm_radius}"/>
       </geometry>
     </collision>
     <inertial>
-      <origin rpy="0 ${90 * deg_to_rad} 0" xyz="0 0 ${-lower_arm_length/2}"/>
+      <origin rpy="0 0 0" xyz="0 0 ${-lower_arm_length/2}"/>
       <mass value="${lower_arm_mass}"/>
       <inertia ixx="${lower_arm_ixx}" ixy="0.0" ixz="0.0" iyy="${lower_arm_iyy}" iyz="0.0" izz="${lower_arm_izz}"/>
     </inertial>
   </link>
 
-  <!-- Wrist joint: lower arm to hand -->
-  <joint name="${prefix}_lower_arm_to_hand" type="revolute">
+  <!-- Wrist joint: FIXO (sem movimento) -->
+  <joint name="${prefix}_lower_arm_to_hand" type="fixed">
     <parent link="${prefix}_lower_arm_link"/>
     <child link="${prefix}_hand_link"/>
     <origin xyz="0 0 ${-lower_arm_length}" rpy="0 0 0"/>
-    <axis xyz="0 1 0"/> <!-- Wrist movement -->
-    <limit lower="${-30 * deg_to_rad}" upper="${30 * deg_to_rad}" effort="40" velocity="3"/>
-    <dynamics damping="${joint_dumping}" friction="${joint_friction}"/>
   </joint>
 
   <!-- Hand link -->
