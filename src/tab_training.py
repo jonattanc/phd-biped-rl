@@ -162,15 +162,19 @@ class TrainingTab:
         self.export_plots_btn = ttk.Button(row2_frame, text="Exportar Gráficos", command=self.export_plots, state=tk.DISABLED, width=15)
         self.export_plots_btn.grid(row=0, column=2, padx=1)
 
+        self.enable_dpg_var = tk.BooleanVar(value=True)  # Valor padrão: ativado
+        self.enable_dpg_check = ttk.Checkbutton( row2_frame, text="Dynamic Policy Gradient", variable=self.enable_dpg_var, width=20)
+        self.enable_dpg_check.grid(row=0, column=3, padx=1)
+        
         self.enable_visualization_var = tk.BooleanVar(value=True)
         self.enable_visualization_check = ttk.Checkbutton(row2_frame, text="Visualizar Robô", variable=self.enable_visualization_var, command=self.toggle_visualization, width=15)
-        self.enable_visualization_check.grid(row=0, column=3, padx=1)
+        self.enable_visualization_check.grid(row=0, column=4, padx=1)
 
         self.real_time_var = tk.BooleanVar(value=True)
         self.real_time_check = ttk.Checkbutton(row2_frame, text="Tempo Real", variable=self.real_time_var, command=self.toggle_real_time, width=15)
-        self.real_time_check.grid(row=0, column=4, padx=5)
+        self.real_time_check.grid(row=0, column=5, padx=5)
 
-        ttk.Label(row2_frame, text="Câmera:").grid(row=0, column=5, sticky=tk.W, padx=5)
+        ttk.Label(row2_frame, text="Câmera:").grid(row=0, column=6, sticky=tk.W, padx=5)
 
         camera_options = {
             1: "Ambiente geral",
@@ -184,7 +188,7 @@ class TrainingTab:
         self.camera_selection_int = 3
         self.camera_selection_var = tk.StringVar(value=camera_options[self.camera_selection_int])
         self.camera_selection_combobox = ttk.Combobox(row2_frame, textvariable=self.camera_selection_var, values=list(camera_options.values()), state="readonly", width=25)
-        self.camera_selection_combobox.grid(row=0, column=6, padx=5)
+        self.camera_selection_combobox.grid(row=0, column=7, padx=5)
         self.camera_selection_combobox.bind("<<ComboboxSelected>>", lambda event: self.update_camera_selection(event, camera_options))
 
         # Gráficos
@@ -355,6 +359,8 @@ class TrainingTab:
                     config_changed_val,
                     self.device,
                     0,
+                    None,  
+                    self.enable_dpg_var.get(),
                 ),
             )
             p.start()
@@ -430,6 +436,7 @@ class TrainingTab:
                     self.device,
                     self.current_episode,
                     model_path,
+                    self.enable_dpg_var.get(),
                 ),
             )
             p.start()

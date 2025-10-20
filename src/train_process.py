@@ -2,7 +2,7 @@
 from robot import Robot
 from simulation import Simulation
 from environment import Environment
-from agent import Agent, TrainingCallback
+from agent import Agent, EnhancedAgent, TrainingCallback
 import utils
 import time
 import os
@@ -64,6 +64,7 @@ def process_runner(
     device="cpu",
     initial_episode=0,
     model_path=None,
+    enable_dpg=True,
 ):
     logger = utils.get_logger([selected_environment, selected_robot, algorithm], ipc_queue)
     logger.info(f"Iniciando treinamento: {selected_environment} + {selected_robot} + {algorithm}")
@@ -72,6 +73,7 @@ def process_runner(
     logger.info(f"Câmera: {camera_selection_value.value}")
     logger.info(f"Episódio inicial: {initial_episode}")
     logger.info(f"Modelo carregado: {model_path}")
+    logger.info(f"Dynamic Policy Gradient: {enable_dpg}")
 
     try:
         # Criar componentes
@@ -90,7 +92,18 @@ def process_runner(
             config_changed_value,
             initial_episode=initial_episode,
         )
-        agent = Agent(logger, env=sim, model_path=model_path, algorithm=algorithm, device=device, initial_episode=initial_episode)
+        if enable_dpg:
+            agent = EnhancedAgent(logger, env=sim, model_path=model_path, 
+                                 algorithm=algorithm, device=device, 
+                                 initial_episode=initial_episode)
+            agent.enable_dpg(num_components=4)
+            logger.info("Usando EnhancedAgent com Dynamic Policy Gradient")
+        else:
+            agent = Agent(logger, env=sim, model_path=model_path, 
+                         algorithm=algorithm, device=device, 
+                         initial_episode=initial_episode)
+            logger.info("Usando Agent padrão (sem DPG)")
+
         sim.set_agent(agent)
         callback = TrainingCallback(logger)
 
@@ -116,9 +129,15 @@ def process_runner(
             if exit_value.value:
                 break
 
-            agent.model.learn(total_timesteps=1000, reset_num_timesteps=False, callback=callback)
-            timesteps_completed += 1000  # TODO: ajustar para o número real de timesteps feitos
-
+            timesteps_completed += 1000
+            agent.learn(total_timesteps=1000, reset_num_timesteps=False, callback=callback)
+        
+            # Log dos pesos DPG apenas se estiver ativado
+            if enable_dpg and timesteps_completed % 5000 == 0:
+                weights = agent.get_dpg_weights()
+                if weights is not None:
+                    logger.info(f"DPG - Pesos atuais: {weights}")
+            
             # Enviar progresso para GUI
             try:
                 ipc_queue.put_nowait({"type": "training_progress", "steps_completed": timesteps_completed})

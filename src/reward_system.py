@@ -300,3 +300,21 @@ class RewardSystem:
 
         else:
             return 0
+        
+    def calculate_reward_with_components(self, sim, action, info):
+        """
+        Calcula recompensa com componentes para DPG
+        """
+        from agent import create_hybrid_reward_vector
+        
+        # Calcular componentes da recompensa
+        weighted_reward, components = create_hybrid_reward_vector(sim, action, info)
+        
+        # Recompensa total é a soma dos componentes ponderados
+        total_reward = np.sum(weighted_reward)
+        
+        # Adicionar componentes ao info para o callback DPG
+        info['reward_components'] = components
+        
+        return total_reward
+
