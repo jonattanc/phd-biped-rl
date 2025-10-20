@@ -328,37 +328,6 @@ class Agent:
         self.logger.info(f"Desvio padrão: {std_time:.2f}s")
 
         return metrics
-    
-    def create_hybrid_reward_vector(sim, action, info, weights=None):
-        """
-        Cria vetor de recompensas para DPG - pode ser chamado do reward_system.py
-        """
-        components = np.zeros(4)  # 4 componentes principais
-        
-        # Componente 0: Progresso (velocidade forward)
-        components[0] = sim.robot_x_velocity
-        
-        # Componente 1: Estabilidade (roll, pitch, yaw)
-        stability_penalty = (sim.robot_roll**2 + 
-                            (sim.robot_pitch - sim.target_pitch_rad)**2 + 
-                            sim.robot_yaw**2)
-        components[1] = -stability_penalty
-        
-        # Componente 2: Eficiência energética
-        effort = sum(abs(v) for v in sim.joint_velocities)
-        components[2] = -effort * 0.01  # Escala menor
-        
-        # Componente 3: Postura/Altura
-        height_penalty = abs(sim.robot_z_position - 0.8)  # Altura alvo ~0.8m
-        components[3] = -height_penalty
-        
-        # Aplicar pesos se fornecidos
-        if weights is not None:
-            weighted_components = components * weights
-        else:
-            weighted_components = components
-            
-        return weighted_components, components
 
 class DynamicPolicyGradientCallback(BaseCallback):
     """Callback para Dynamic Policy Gradient com pesos adaptativos"""

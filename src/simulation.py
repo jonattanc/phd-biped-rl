@@ -304,6 +304,7 @@ class Simulation(gym.Env):
                     "roll": imu_orientation[0],
                     "pitch": imu_orientation[1],
                     "yaw": imu_orientation[2],
+                    "current_phase": self.reward_system.phase if hasattr(self.reward_system, 'phase') else 1,
                 }
             )
 

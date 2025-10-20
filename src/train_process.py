@@ -92,6 +92,7 @@ def process_runner(
             config_changed_value,
             initial_episode=initial_episode,
         )
+        sim.reward_system.enable_dpg_progression(enable_dpg)
         if enable_dpg:
             agent = EnhancedAgent(logger, env=sim, model_path=model_path, 
                                  algorithm=algorithm, device=device, 
