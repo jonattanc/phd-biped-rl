@@ -382,5 +382,157 @@
   <!-- Instantiate right and left legs -->
   <xacro:leg prefix="right" reflect="-1" />
   <xacro:leg prefix="left" reflect="1" />
+
+  <!-- Shoulder properties -->
+<xacro:property name="shoulder_radius" value="0.04" />
+<xacro:property name="shoulder_length" value="0.1" />
+<xacro:property name="shoulder_mass" value="0.3" />
+
+<!-- Upper arm properties -->
+<xacro:property name="upper_arm_radius" value="0.035" />
+<xacro:property name="upper_arm_length" value="0.25" />
+<xacro:property name="upper_arm_mass" value="0.8" />
+
+<!-- Lower arm properties -->
+<xacro:property name="lower_arm_radius" value="0.03" />
+<xacro:property name="lower_arm_length" value="0.22" />
+<xacro:property name="lower_arm_mass" value="0.6" />
+
+<!-- Hand properties -->
+<xacro:property name="hand_length" value="0.08" />
+<xacro:property name="hand_width" value="0.06" />
+<xacro:property name="hand_height" value="0.04" />
+<xacro:property name="hand_mass" value="0.2" />
+
+<!-- Arm macro -->
+<xacro:macro name="arm" params="prefix reflect">
+  <!-- Shoulder joint: base_link to shoulder -->
+  <joint name="base_to_${prefix}_shoulder" type="revolute">
+    <parent link="base_link"/>
+    <child link="${prefix}_shoulder_link"/>
+    <origin xyz="0 ${(body_radius + shoulder_radius) * reflect} ${body_offset + body_length/4}" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/> <!-- Shoulder abduction/adduction -->
+    <limit lower="${-90 * deg_to_rad}" upper="${90 * deg_to_rad}" effort="100" velocity="3"/>
+    <dynamics damping="0.1" friction="0.01"/>
+  </joint>
+
+  <!-- Shoulder link -->
+  <link name="${prefix}_shoulder_link">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <sphere radius="${shoulder_radius}"/>
+      </geometry>
+      <material name="robot_material_2"/>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <sphere radius="${shoulder_radius}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="${shoulder_mass}"/>
+      <inertia ixx="0.001" ixy="0.0" ixz="0.0" iyy="0.001" iyz="0.0" izz="0.001"/>
+    </inertial>
+  </link>
+
+  <!-- Upper arm joint: shoulder to upper arm -->
+  <joint name="${prefix}_shoulder_to_upper_arm" type="revolute">
+    <parent link="${prefix}_shoulder_link"/>
+    <child link="${prefix}_upper_arm_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/> <!-- Shoulder flexion/extension -->
+    <limit lower="${-120 * deg_to_rad}" upper="${30 * deg_to_rad}" effort="80" velocity="3"/>
+    <dynamics damping="0.1" friction="0.01"/>
+  </joint>
+
+  <!-- Upper arm link -->
+  <link name="${prefix}_upper_arm_link">
+    <visual>
+      <origin rpy="0 ${90 * deg_to_rad} 0" xyz="0 0 ${-upper_arm_length/2}"/>
+      <geometry>
+        <cylinder length="${upper_arm_length}" radius="${upper_arm_radius}"/>
+      </geometry>
+      <material name="robot_material_1"/>
+    </visual>
+    <collision>
+      <origin rpy="0 ${90 * deg_to_rad} 0" xyz="0 0 ${-upper_arm_length/2}"/>
+      <geometry>
+        <cylinder length="${upper_arm_length}" radius="${upper_arm_radius}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <origin rpy="0 ${90 * deg_to_rad} 0" xyz="0 0 ${-upper_arm_length/2}"/>
+      <mass value="${upper_arm_mass}"/>
+      <inertia ixx="0.005" ixy="0.0" ixz="0.0" iyy="0.005" iyz="0.0" izz="0.001"/>
+    </inertial>
+  </link>
+
+  <!-- Elbow joint: upper arm to lower arm -->
+  <joint name="${prefix}_upper_arm_to_lower_arm" type="revolute">
+    <parent link="${prefix}_upper_arm_link"/>
+    <child link="${prefix}_lower_arm_link"/>
+    <origin xyz="0 0 ${-upper_arm_length}" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/> <!-- Elbow flexion/extension -->
+    <limit lower="${0 * deg_to_rad}" upper="${150 * deg_to_rad}" effort="60" velocity="3"/>
+    <dynamics damping="0.1" friction="0.01"/>
+  </joint>
+
+  <!-- Lower arm link -->
+  <link name="${prefix}_lower_arm_link">
+    <visual>
+      <origin rpy="0 ${90 * deg_to_rad} 0" xyz="0 0 ${-lower_arm_length/2}"/>
+      <geometry>
+        <cylinder length="${lower_arm_length}" radius="${lower_arm_radius}"/>
+      </geometry>
+      <material name="robot_material_1"/>
+    </visual>
+    <collision>
+      <origin rpy="0 ${90 * deg_to_rad} 0" xyz="0 0 ${-lower_arm_length/2}"/>
+      <geometry>
+        <cylinder length="${lower_arm_length}" radius="${lower_arm_radius}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <origin rpy="0 ${90 * deg_to_rad} 0" xyz="0 0 ${-lower_arm_length/2}"/>
+      <mass value="${lower_arm_mass}"/>
+      <inertia ixx="0.003" ixy="0.0" ixz="0.0" iyy="0.003" iyz="0.0" izz="0.001"/>
+    </inertial>
+  </link>
+
+  <!-- Hand joint: lower arm to hand -->
+  <joint name="${prefix}_lower_arm_to_hand" type="fixed">
+    <parent link="${prefix}_lower_arm_link"/>
+    <child link="${prefix}_hand_link"/>
+    <origin xyz="0 0 ${-lower_arm_length}" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Hand link -->
+  <link name="${prefix}_hand_link">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 ${-hand_height/2}"/>
+      <geometry>
+        <box size="${hand_length} ${hand_width} ${hand_height}"/>
+      </geometry>
+      <material name="robot_material_2"/>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 ${-hand_height/2}"/>
+      <geometry>
+        <box size="${hand_length} ${hand_width} ${hand_height}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <origin rpy="0 0 0" xyz="0 0 ${-hand_height/2}"/>
+      <mass value="${hand_mass}"/>
+      <inertia ixx="0.0001" ixy="0.0" ixz="0.0" iyy="0.0001" iyz="0.0" izz="0.0001"/>
+    </inertial>
+  </link>
+</xacro:macro>
+
+<!-- Instantiate arms -->
+<xacro:arm prefix="right" reflect="-1"/>
+<xacro:arm prefix="left" reflect="1"/>
   
 </robot>
