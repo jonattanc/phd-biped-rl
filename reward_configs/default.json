@@ -1,7 +1,7 @@
 {
   "components": {
     "progress": {
-      "weight": 15.0,
+      "weight": 10.0,
       "enabled": true,
       "min_value": 0,
       "max_value": 50
