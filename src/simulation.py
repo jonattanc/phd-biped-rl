@@ -371,8 +371,7 @@ class Simulation(gym.Env):
         self.robot_right_hip_angle, self.robot_left_hip_angle = self.robot.get_hip_front_angles()
         self.robot_left_foot_contact, self.robot_right_foot_contact = self.robot.get_foot_contact_states()
         self.robot_left_foot_height, self.robot_right_foot_height = self.robot.get_foot_heights()
-        self.robot_right_shoulder_front_angle = self.robot.get_joint_angle("base_to_right_shoulder_front")
-        self.robot_left_shoulder_front_angle = self.robot.get_joint_angle("base_to_left_shoulder_front")
+        self.robot_right_shoulder_front_angle, self.robot_left_shoulder_front_angle = self.robot.get_shoulder_angles()
 
         self.last_joint_velocities = self.joint_velocities
         self.joint_positions, self.joint_velocities = self.robot.get_joint_states()
