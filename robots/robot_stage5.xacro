@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="myrobot_st4">
   <!-- Body properties -->
-  <xacro:property name="body_radius" value="0.15" />
-  <xacro:property name="body_length" value="0.3" />
+  <xacro:property name="body_radius" value="0.12" />
+  <xacro:property name="body_length" value="0.4" />
   <xacro:property name="body_mass" value="5.0" />
   <xacro:property name="body_ixx" value="0.1" />
   <xacro:property name="body_iyy" value="0.1" />
@@ -56,11 +56,44 @@
   <xacro:property name="foot_izz" value="0.0005" />
 
   <!-- Head properties -->
-  <xacro:property name="head_radius" value="0.1" />
-  <xacro:property name="head_mass" value="1.0" />
+  <xacro:property name="head_radius" value="0.08" />
+  <xacro:property name="head_mass" value="0.8" />
   <xacro:property name="head_ixx" value="0.005" />
   <xacro:property name="head_iyy" value="0.005" />
   <xacro:property name="head_izz" value="0.005" />
+
+  <!-- Shoulder properties -->
+<xacro:property name="shoulder_radius" value="0.03" />
+<xacro:property name="shoulder_length" value="0.06" />
+<xacro:property name="shoulder_mass" value="0.2" />
+<xacro:property name="shoulder_ixx" value="0.001" />
+<xacro:property name="shoulder_iyy" value="0.001" />
+<xacro:property name="shoulder_izz" value="0.001" />
+
+<!-- Upper arm properties -->
+<xacro:property name="upper_arm_radius" value="0.025" />
+<xacro:property name="upper_arm_length" value="0.18" />
+<xacro:property name="upper_arm_mass" value="0.5" />
+<xacro:property name="upper_arm_ixx" value="0.005" />
+<xacro:property name="upper_arm_iyy" value="0.005" />
+<xacro:property name="upper_arm_izz" value="0.001" />
+
+<!-- Lower arm properties (mantido para cálculo de massa, mas será fixo) -->
+<xacro:property name="lower_arm_radius" value="0.02" />
+<xacro:property name="lower_arm_length" value="0.16" />
+<xacro:property name="lower_arm_mass" value="0.4" />
+<xacro:property name="lower_arm_ixx" value="0.003" />
+<xacro:property name="lower_arm_iyy" value="0.003" />
+<xacro:property name="lower_arm_izz" value="0.001" />
+
+<!-- Hand properties (mantido para cálculo de massa, mas será fixo) -->
+<xacro:property name="hand_length" value="0.06" />
+<xacro:property name="hand_width" value="0.04" />
+<xacro:property name="hand_height" value="0.03" />
+<xacro:property name="hand_mass" value="0.1" />
+<xacro:property name="hand_ixx" value="0.0001" />
+<xacro:property name="hand_iyy" value="0.0001" />
+<xacro:property name="hand_izz" value="0.0001" />
 
   <!-- IMU properties -->
   <xacro:property name="imu_length" value="0.02" />
@@ -172,7 +205,7 @@
     <child link="head_link"/>
     <!-- Z: Como o corpo principal e posicionado em 0 0 0, body_offset move a joint para o centro do corpo -->
     <!-- Z: body_length/2 move a joint para o topo do corpo -->
-	  <origin xyz="0 0 ${body_offset + body_length/2}"/>
+	  <origin xyz="0 0 ${body_offset + body_length/2 + head_radius}"/>
   </joint>
 
   <!-- Leg macro (creates left/right leg: thigh, shin, foot) -->
@@ -386,46 +419,13 @@
   <xacro:leg prefix="right" reflect="-1" />
   <xacro:leg prefix="left" reflect="1" />
 
-<!-- Shoulder properties -->
-<xacro:property name="shoulder_radius" value="0.04" />
-<xacro:property name="shoulder_length" value="0.1" />
-<xacro:property name="shoulder_mass" value="0.3" />
-<xacro:property name="shoulder_ixx" value="0.001" />
-<xacro:property name="shoulder_iyy" value="0.001" />
-<xacro:property name="shoulder_izz" value="0.001" />
-
-<!-- Upper arm properties -->
-<xacro:property name="upper_arm_radius" value="0.035" />
-<xacro:property name="upper_arm_length" value="0.25" />
-<xacro:property name="upper_arm_mass" value="0.8" />
-<xacro:property name="upper_arm_ixx" value="0.005" />
-<xacro:property name="upper_arm_iyy" value="0.005" />
-<xacro:property name="upper_arm_izz" value="0.001" />
-
-<!-- Lower arm properties (mantido para cálculo de massa, mas será fixo) -->
-<xacro:property name="lower_arm_radius" value="0.03" />
-<xacro:property name="lower_arm_length" value="0.22" />
-<xacro:property name="lower_arm_mass" value="0.6" />
-<xacro:property name="lower_arm_ixx" value="0.003" />
-<xacro:property name="lower_arm_iyy" value="0.003" />
-<xacro:property name="lower_arm_izz" value="0.001" />
-
-<!-- Hand properties (mantido para cálculo de massa, mas será fixo) -->
-<xacro:property name="hand_length" value="0.08" />
-<xacro:property name="hand_width" value="0.06" />
-<xacro:property name="hand_height" value="0.04" />
-<xacro:property name="hand_mass" value="0.2" />
-<xacro:property name="hand_ixx" value="0.0001" />
-<xacro:property name="hand_iyy" value="0.0001" />
-<xacro:property name="hand_izz" value="0.0001" />
-
 <!-- Arm macro simplificado -->
 <xacro:macro name="arm" params="prefix reflect">
   <!-- Shoulder joint: base_link to shoulder (frontal movement) -->
   <joint name="base_to_${prefix}_shoulder_front" type="revolute">
     <parent link="base_link"/>
     <child link="${prefix}_shoulder_front_link"/>
-    <origin xyz="0 ${(body_radius + shoulder_radius) * reflect} ${body_offset + body_length/4}" rpy="0 0 0"/>
+    <origin xyz="0 ${(body_radius + shoulder_radius) * reflect} ${body_offset + body_length/2 - shoulder_radius}" rpy="0 0 0"/>
     <axis xyz="0 1 0"/> <!-- Shoulder frontal movement -->
     <!-- Limite de 45° para frente e trás -->
     <limit lower="${-45 * deg_to_rad}" upper="${45 * deg_to_rad}" effort="100" velocity="3"/>
