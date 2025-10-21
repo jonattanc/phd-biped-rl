@@ -287,33 +287,44 @@ class Robot:
         elif num_joints == 14:
             f = 0.8  # Frequência do movimento
             w = 2 * np.pi * f  # Velocidade angular
-            
+
             # Ações para pernas (10 juntas)
             hip_right_front = -0.3 * np.sin(w * t + 0.0 * np.pi)
             hip_right_lateral = 0.1 * np.sin(w * t + 0.5 * np.pi)
             knee_right = 0.4 * np.sin(w * t + 0.2 * np.pi)
             ankle_right_front = -0.2 * np.sin(w * t + 0.3 * np.pi)
             ankle_right_lateral = 0.05 * np.sin(w * t + 0.7 * np.pi)
-            
+
             hip_left_front = -0.3 * np.sin(w * t + 1.0 * np.pi)  # Fase oposta
             hip_left_lateral = 0.1 * np.sin(w * t + 1.5 * np.pi)
             knee_left = 0.4 * np.sin(w * t + 1.2 * np.pi)
             ankle_left_front = -0.2 * np.sin(w * t + 1.3 * np.pi)
             ankle_left_lateral = 0.05 * np.sin(w * t + 1.7 * np.pi)
-            
+
             # Ações para braços (4 juntas) - apenas ombros
             shoulder_right_front = 0.2 * np.sin(w * t + 0.5 * np.pi)  # Balanço frontal
             shoulder_right_lateral = 0.05  # Pequena abertura lateral fixa
             shoulder_left_front = 0.2 * np.sin(w * t + 1.5 * np.pi)  # Fase oposta
             shoulder_left_lateral = -0.05  # Pequena abertura lateral fixa
-    
+
             action_list = [
                 # Pernas direita (5 juntas)
-                hip_right_front, hip_right_lateral, knee_right, ankle_right_front, ankle_right_lateral,
-                # Pernas esquerda (5 juntas)  
-                hip_left_front, hip_left_lateral, knee_left, ankle_left_front, ankle_left_lateral,
+                hip_right_front,
+                hip_right_lateral,
+                knee_right,
+                ankle_right_front,
+                ankle_right_lateral,
+                # Pernas esquerda (5 juntas)
+                hip_left_front,
+                hip_left_lateral,
+                knee_left,
+                ankle_left_front,
+                ankle_left_lateral,
                 # Braços (4 juntas)
-                shoulder_right_front, shoulder_right_lateral, shoulder_left_front, shoulder_left_lateral
+                shoulder_right_front,
+                shoulder_right_lateral,
+                shoulder_left_front,
+                shoulder_left_lateral,
             ]
 
         else:

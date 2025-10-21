@@ -94,15 +94,11 @@ def process_runner(
         )
         sim.reward_system.enable_dpg_progression(enable_dpg)
         if enable_dpg:
-            agent = EnhancedAgent(logger, env=sim, model_path=model_path, 
-                                 algorithm=algorithm, device=device, 
-                                 initial_episode=initial_episode)
+            agent = EnhancedAgent(logger, env=sim, model_path=model_path, algorithm=algorithm, device=device, initial_episode=initial_episode)
             agent.enable_dpg(num_components=4)
             logger.info("Usando EnhancedAgent com Dynamic Policy Gradient")
         else:
-            agent = Agent(logger, env=sim, model_path=model_path, 
-                         algorithm=algorithm, device=device, 
-                         initial_episode=initial_episode)
+            agent = Agent(logger, env=sim, model_path=model_path, algorithm=algorithm, device=device, initial_episode=initial_episode)
             logger.info("Usando Agent padrão (sem DPG)")
 
         sim.set_agent(agent)
@@ -132,13 +128,13 @@ def process_runner(
 
             timesteps_completed += 1000
             agent.learn(total_timesteps=1000, reset_num_timesteps=False, callback=callback)
-        
+
             # Log dos pesos DPG apenas se estiver ativado
             if enable_dpg and timesteps_completed % 5000 == 0:
                 weights = agent.get_dpg_weights()
                 if weights is not None:
                     logger.info(f"DPG - Pesos atuais: {weights}")
-            
+
             # Enviar progresso para GUI
             try:
                 ipc_queue.put_nowait({"type": "training_progress", "steps_completed": timesteps_completed})
