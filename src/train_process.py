@@ -109,6 +109,7 @@ def process_runner(
 
         # Loop principal do treinamento
         timesteps_completed = 0
+        timesteps_batch_size = 1000
 
         # Diretório para controle de salvamento
         control_dir = utils.TRAINING_CONTROL_PATH
@@ -126,8 +127,11 @@ def process_runner(
             if exit_value.value:
                 break
 
-            timesteps_completed += 1000
-            agent.learn(total_timesteps=1000, reset_num_timesteps=False, callback=callback)
+            timesteps_completed += timesteps_batch_size
+            if enable_dpg:
+                agent.learn(total_timesteps=timesteps_batch_size, reset_num_timesteps=False, callback=callback)
+            else:
+                agent.model.learn(total_timesteps=timesteps_batch_size, reset_num_timesteps=False, callback=callback)
 
             # Log dos pesos DPG apenas se estiver ativado
             if enable_dpg and timesteps_completed % 5000 == 0:
