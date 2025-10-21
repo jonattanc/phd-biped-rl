@@ -72,7 +72,7 @@
   <xacro:property name="imu_izz" value="0.00001" />
 
   <!-- Controle -->
-  <xacro:property name="joint_dumping" value="0.2" />
+  <xacro:property name="joint_damping" value="0.2" />
   <xacro:property name="joint_friction" value="0.01" />
   
   <!-- Materials -->
@@ -188,7 +188,7 @@
       <origin xyz="0 ${(body_radius + hip_radius) * reflect} ${body_offset - body_length/2}"/>
       <axis xyz="0 1 0"/> <!-- Movimento frontal -->
       <limit lower="${-75 * deg_to_rad}" upper="${60 * deg_to_rad}" effort="1000" velocity="5"/>
-      <dynamics damping="${joint_dumping}" friction="${joint_friction}"/>
+      <dynamics damping="${joint_damping}" friction="${joint_friction}"/>
     </joint>
 
     <!-- Hip Ball -->
@@ -219,7 +219,7 @@
       <origin xyz="0 0 0"/>
       <axis xyz="1 0 0"/> <!-- Movimento lateral -->
       <limit lower="${-30 * deg_to_rad}" upper="${30 * deg_to_rad}" effort="1000" velocity="5"/>
-      <dynamics damping="${joint_dumping}" friction="${joint_friction}"/>
+      <dynamics damping="${joint_damping}" friction="${joint_friction}"/>
     </joint>
 
     <!-- Thigh -->
@@ -284,7 +284,7 @@
       <origin xyz="0 0 0"/>
       <axis xyz="0 1 0"/>
       <limit lower="${0 * deg_to_rad}" upper="${90 * deg_to_rad}" effort="1000" velocity="5"/>
-      <dynamics damping="${joint_dumping}" friction="${joint_friction}"/>
+      <dynamics damping="${joint_damping}" friction="${joint_friction}"/>
     </joint>
 
     <!-- Shin -->
@@ -321,7 +321,7 @@
       <origin xyz="0 0 ${-knee_radius - shin_length - ankle_radius}"/>
       <axis xyz="0 1 0"/> <!-- Movimento frontal -->
       <limit lower="${-30 * deg_to_rad}" upper="${75 * deg_to_rad}" effort="1000" velocity="5"/>
-      <dynamics damping="${joint_dumping}" friction="${joint_friction}"/>
+      <dynamics damping="${joint_damping}" friction="${joint_friction}"/>
     </joint>
 
     <!-- Ankle Ball -->
@@ -352,7 +352,7 @@
       <origin xyz="0 0 0"/>
       <axis xyz="1 0 0"/> <!-- Movimento lateral -->
       <limit lower="${-30 * deg_to_rad}" upper="${30 * deg_to_rad}" effort="1000" velocity="5"/>
-      <dynamics damping="${joint_dumping}" friction="${joint_friction}"/>
+      <dynamics damping="${joint_damping}" friction="${joint_friction}"/>
     </joint>
 
     <!-- Foot -->
