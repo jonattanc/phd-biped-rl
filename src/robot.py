@@ -83,6 +83,7 @@ class Robot:
         link_state = p.getLinkState(self.id, self.imu_link_index, computeLinkVelocity=1)
         position, orientation = link_state[0], link_state[1]
         linear_velocity, angular_velocity = link_state[6], link_state[7]
+        y_position = position[0]
         roll, pitch, yaw = p.getEulerFromQuaternion(orientation)
         x_velocity = linear_velocity[0]
         roll_velocity = angular_velocity[0]
@@ -90,7 +91,7 @@ class Robot:
 
         joint_positions, joint_velocities = self.get_joint_states()
 
-        obs = np.array([roll, pitch, yaw, x_velocity, roll_velocity, pitch_velocity] + joint_positions, dtype=np.float32)
+        obs = np.array([y_position, roll, pitch, yaw, x_velocity, roll_velocity, pitch_velocity] + joint_positions, dtype=np.float32)
         return obs
 
     def get_imu_position_velocity_orientation(self):
@@ -162,7 +163,7 @@ class Robot:
         except:
             # Fallback se as juntas não existirem
             return 0.0, 0.0
-    
+
     def get_example_action(self, t):
         """Gera uma ação de exemplo baseada no tempo"""
         num_joints = self.get_num_revolute_joints()
