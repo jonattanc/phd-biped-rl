@@ -126,7 +126,6 @@
    
   <!-- Body (main cylinder) -->
   <link name="base_link">
-    <origin xyz="0 0 0"/>
     <visual>
       <origin xyz="0 0 ${body_offset}"/>
       <geometry>
