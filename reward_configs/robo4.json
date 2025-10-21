@@ -120,6 +120,18 @@
       "min_value": 0,
       "max_value": 1
     },
+    "hip_openning": {
+      "weight": -0.02,
+      "enabled": false,
+      "min_value": -1,
+      "max_value": 1
+    },
+    "hip_openning_square": {
+      "weight": -0.02,
+      "enabled": true,
+      "min_value": -1,
+      "max_value": 1
+    },
     "jerk_penalty": {
       "weight": -0.05,
       "enabled": false,

@@ -162,7 +162,7 @@ class RewardSystem:
             pitch_bonus = max(0, 0.1 - pitch_error)
             self.components["pitch_forward_bonus"].value = pitch_bonus
             total_reward += pitch_bonus * self.components["pitch_forward_bonus"].weight
-    
+
         if self.is_component_enabled("stability_yaw"):
             self.components["stability_yaw"].value = sim.robot_yaw**2
             total_reward += sim.robot_yaw**2 * self.components["stability_yaw"].weight
@@ -227,8 +227,16 @@ class RewardSystem:
             total_reward += self.components["knee_flexion"].value * self.components["knee_flexion"].weight
 
         if self.is_component_enabled("hip_extension"):
-            self.components["hip_extension"].value = abs(sim.robot_right_hip_angle) + abs(sim.robot_left_hip_angle)
+            self.components["hip_extension"].value = abs(sim.robot_right_hip_frontal_angle) + abs(sim.robot_left_hip_frontal_angle)
             total_reward += self.components["hip_extension"].value * self.components["hip_extension"].weight
+
+        if self.is_component_enabled("hip_openning"):
+            self.components["hip_openning"].value = abs(sim.robot_right_hip_lateral_angle) + abs(sim.robot_left_hip_lateral_angle)
+            total_reward += self.components["hip_openning"].value * self.components["hip_openning"].weight
+
+        if self.is_component_enabled("hip_openning_square"):
+            self.components["hip_openning_square"].value = sim.robot_right_hip_lateral_angle**2 + sim.robot_left_hip_lateral_angle**2
+            total_reward += self.components["hip_openning_square"].value * self.components["hip_openning_square"].weight
 
         if self.is_component_enabled("jerk_penalty"):
             jerk = sum(abs(v1 - v2) for v1, v2 in zip(sim.joint_velocities, sim.last_joint_velocities))
@@ -389,8 +397,8 @@ class RewardSystem:
         # Ângulos dos braços (assumindo que shoulder_front controla o balanço frontal)
         try:
             # Para braço direito: ângulo positivo = para trás, negativo = para frente
-            right_arm_angle = getattr(sim, 'robot_right_shoulder_front_angle', 0)
-            left_arm_angle = getattr(sim, 'robot_left_shoulder_front_angle', 0)
+            right_arm_angle = getattr(sim, "robot_right_shoulder_front_angle", 0)
+            left_arm_angle = getattr(sim, "robot_left_shoulder_front_angle", 0)
         except:
             # Fallback se os ângulos não estiverem disponíveis
             return 0.0
@@ -405,7 +413,7 @@ class RewardSystem:
         if not right_foot_contact and left_arm_angle > 0:
             cross_gait_score += 0.5
 
-        # Perna esquerda no ar + braço direito para trás  
+        # Perna esquerda no ar + braço direito para trás
         if not left_foot_contact and right_arm_angle > 0:
             cross_gait_score += 0.5
 

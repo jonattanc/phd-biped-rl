@@ -116,9 +116,13 @@ class Robot:
         """Retorna os ângulos dos joelhos direito e esquerdo"""
         return self.get_joint_angle("right_knee_ball_to_shin"), self.get_joint_angle("left_knee_ball_to_shin")
 
-    def get_hip_front_angles(self):
+    def get_hip_frontal_angles(self):
         """Retorna os ângulos dos quadris direito e esquerdo"""
         return self.get_joint_angle("base_to_right_hip_ball"), self.get_joint_angle("base_to_left_hip_ball")
+
+    def get_hip_lateral_angles(self):
+        """Retorna os ângulos laterais dos quadris direito e esquerdo"""
+        return self.get_joint_angle("hip_ball_to_right_thigh"), self.get_joint_angle("hip_ball_to_left_thigh")
 
     def get_foot_contact_states(self):
         """Retorna os estados de contato dos pés direito e esquerdo"""
