@@ -153,6 +153,16 @@ class Robot:
 
         return weighted_pos / total_mass if total_mass > 0 else np.zeros(3)
 
+    def get_shoulder_angles(self):
+        """Retorna os ângulos dos ombros direito e esquerdo"""
+        try:
+            right_shoulder_angle = self.get_joint_angle("base_to_right_shoulder_front")
+            left_shoulder_angle = self.get_joint_angle("base_to_left_shoulder_front")
+            return right_shoulder_angle, left_shoulder_angle
+        except:
+            # Fallback se as juntas não existirem
+            return 0.0, 0.0
+    
     def get_example_action(self, t):
         """Gera uma ação de exemplo baseada no tempo"""
         num_joints = self.get_num_revolute_joints()
