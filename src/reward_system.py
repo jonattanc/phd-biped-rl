@@ -47,23 +47,23 @@ class RewardSystem:
             self.dpg_weights = np.array([0.4, 0.3, 0.2, 0.1])  # Pesos iniciais
         else:
             self.logger.info("Sistema de recompensa padrão")
-    
+
     def update_progression(self, episode_results):
         """Atualiza progressão baseada em resultados - apenas para DPG"""
         if not self.dpg_enabled:
             return
-            
+
         # Progressão por conquistas
         if episode_results["distance"] > 3.0 and self.phase == 1:
             self.phase = 2
             self.dpg_weights = np.array([0.6, 0.2, 0.1, 0.1])  # Mais foco em progresso
             self.logger.info("Fase 2 ativada: Priorizando velocidade!")
-            
+
         elif episode_results["distance"] > 6.0 and self.phase == 2:
-            self.phase = 3  
+            self.phase = 3
             self.dpg_weights = np.array([0.7, 0.15, 0.1, 0.05])  # Foco máximo em progresso
             self.logger.info("Fase 3 ativada: Foco em alta velocidade!")
-    
+
     def create_hybrid_reward_vector(self, sim, action, info, weights=None):
         """
         Cria vetor de recompensas para DPG
@@ -71,26 +71,24 @@ class RewardSystem:
         components = np.zeros(4)  # 4 componentes principais
 
         # Componente 0: Progresso (velocidade forward)
-        components[0] = getattr(sim, 'robot_x_velocity', 0)
+        components[0] = getattr(sim, "robot_x_velocity", 0)
 
         # Componente 1: Estabilidade (roll, pitch, yaw)
-        robot_roll = getattr(sim, 'robot_roll', 0)
-        robot_pitch = getattr(sim, 'robot_pitch', 0) 
-        robot_yaw = getattr(sim, 'robot_yaw', 0)
-        target_pitch = getattr(sim, 'target_pitch_rad', 0)
+        robot_roll = getattr(sim, "robot_roll", 0)
+        robot_pitch = getattr(sim, "robot_pitch", 0)
+        robot_yaw = getattr(sim, "robot_yaw", 0)
+        target_pitch = getattr(sim, "target_pitch_rad", 0)
 
-        stability_penalty = (robot_roll**2 + 
-                            (robot_pitch - target_pitch)**2 + 
-                            robot_yaw**2)
+        stability_penalty = robot_roll**2 + (robot_pitch - target_pitch) ** 2 + robot_yaw**2
         components[1] = -stability_penalty * 0.1
 
         # Componente 2: Eficiência energética
-        joint_velocities = getattr(sim, 'joint_velocities', [0])
+        joint_velocities = getattr(sim, "joint_velocities", [0])
         effort = sum(abs(v) for v in joint_velocities)
         components[2] = -effort * 0.01
 
         # Componente 3: Postura/Altura
-        robot_z = getattr(sim, 'robot_z_position', 0.8)
+        robot_z = getattr(sim, "robot_z_position", 0.8)
         height_penalty = abs(robot_z - 0.8)
         components[3] = -height_penalty * 0.5
 
@@ -105,17 +103,11 @@ class RewardSystem:
     def calculate_dpg_reward(self, sim, action, info):
         """Calcula recompensa com DPG progressivo"""
         # Atualizar progressão
-        episode_results = {
-            "distance": sim.episode_distance,
-            "success": info.get("success", False),
-            "duration": sim.episode_steps * sim.time_step_s
-        }
+        episode_results = {"distance": sim.episode_distance, "success": info.get("success", False), "duration": sim.episode_steps * sim.time_step_s}
         self.update_progression(episode_results)
 
         # Calcular recompensa com pesos progressivos do DPG
-        weighted_reward, components = self.create_hybrid_reward_vector(
-            sim, action, info, self.dpg_weights
-        )
+        weighted_reward, components = self.create_hybrid_reward_vector(sim, action, info, self.dpg_weights)
 
         total_reward = np.sum(weighted_reward)
 
@@ -125,11 +117,11 @@ class RewardSystem:
         if self.phase == 3 and sim.episode_distance > 6.0:
             total_reward += 0.5
 
-        info['reward_components'] = components
-        info['current_phase'] = self.phase
+        info["reward_components"] = components
+        info["current_phase"] = self.phase
 
         return total_reward
-    
+
     def calculate_standard_reward(self, sim, action, info):
         """Calcula recompensa padrão (sem DPG)"""
 
@@ -272,7 +264,7 @@ class RewardSystem:
             total_reward += clearance_ok * self.components["clearance_bonus"].weight
 
         return total_reward
-    
+
     def calculate_reward(self, sim, action, info):
         """Método principal - escolhe entre DPG progressivo ou padrão"""
         if self.dpg_enabled:
@@ -402,4 +394,3 @@ class RewardSystem:
 
         else:
             return 0
-
