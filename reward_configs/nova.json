@@ -107,6 +107,48 @@
       "enabled": false,
       "min_value": -1,
       "max_value": 0
+    },
+    "hip_extension": {
+      "weight": 0.02,
+      "enabled": false,
+      "min_value": 0,
+      "max_value": 1
+    },
+    "gait_pattern_cross": {
+      "weight": 0.8,
+      "enabled": false,
+      "min_value": 0.0,
+      "max_value": 5.0
+    },
+    "alternating_foot_contact": {
+      "weight": 0.01,
+      "enabled": false,
+      "min_value": 0,
+      "max_value": 1
+    },
+    "stability_yaw": {
+      "weight": -0.001,
+      "enabled": false,
+      "min_value": -1,
+      "max_value": 0
+    },
+    "pitch_forward_bonus": {
+      "weight": 1.0,
+      "enabled": false,
+      "min_value": 0,
+      "max_value": 20.0
+    },
+    "foot_clearance": {
+      "weight": 0.03,
+      "enabled": false,
+      "min_value": 0,
+      "max_value": 1
+    },
+    "knee_flexion": {
+      "weight": 0.06,
+      "enabled": false,
+      "min_value": 0,
+      "max_value": 1
     }
   }
 }

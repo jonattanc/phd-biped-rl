@@ -143,6 +143,12 @@
       "enabled": false,
       "min_value": 0,
       "max_value": 10
+    },
+    "pitch_forward_bonus": {
+      "weight": 1.0,
+      "enabled": false,
+      "min_value": 0,
+      "max_value": 20.0
     }
   }
 }
