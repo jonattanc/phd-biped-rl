@@ -156,6 +156,13 @@ class RewardSystem:
             self.components["stability_pitch"].value = (sim.robot_pitch - sim.target_pitch_rad) ** 2
             total_reward += self.components["stability_pitch"].value * self.components["stability_pitch"].weight
 
+        if self.is_component_enabled("pitch_forward_bonus"):
+            target_forward_pitch = 0.05
+            pitch_error = abs(sim.robot_pitch - target_forward_pitch)
+            pitch_bonus = max(0, 0.1 - pitch_error)
+            self.components["pitch_forward_bonus"].value = pitch_bonus
+            total_reward += pitch_bonus * self.components["pitch_forward_bonus"].weight
+    
         if self.is_component_enabled("stability_yaw"):
             self.components["stability_yaw"].value = sim.robot_yaw**2
             total_reward += sim.robot_yaw**2 * self.components["stability_yaw"].weight
@@ -374,11 +381,11 @@ class RewardSystem:
 
     def _calculate_cross_gait_pattern(self, sim):
         """Calcula recompensa por padrão de marcha cruzada (contralateral)"""
-        
+
         # Estados dos pés (True = no chão, False = no ar)
         left_foot_contact = sim.robot_left_foot_contact
         right_foot_contact = sim.robot_right_foot_contact
-        
+
         # Ângulos dos braços (assumindo que shoulder_front controla o balanço frontal)
         try:
             # Para braço direito: ângulo positivo = para trás, negativo = para frente
@@ -387,30 +394,30 @@ class RewardSystem:
         except:
             # Fallback se os ângulos não estiverem disponíveis
             return 0.0
-        
+
         # Padrão de marcha cruzada ideal:
         # - Quando perna DIREITA está no ar → braço ESQUERDO deve estar para trás (ângulo positivo)
         # - Quando perna ESQUERDA está no ar → braço DIREITO deve estar para trás (ângulo positivo)
-        
+
         cross_gait_score = 0.0
-        
+
         # Perna direita no ar + braço esquerdo para trás
         if not right_foot_contact and left_arm_angle > 0:
             cross_gait_score += 0.5
-        
+
         # Perna esquerda no ar + braço direito para trás  
         if not left_foot_contact and right_arm_angle > 0:
             cross_gait_score += 0.5
-        
+
         # Penalizar padrão incorreto (marcha homolateral)
         # Perna direita no ar + braço direito para trás (errado)
         if not right_foot_contact and right_arm_angle > 0:
             cross_gait_score -= 0.3
-        
+
         # Perna esquerda no ar + braço esquerdo para trás (errado)
         if not left_foot_contact and left_arm_angle > 0:
             cross_gait_score -= 0.3
-        
+
         return max(0.0, cross_gait_score)
 
     def _calculate_symmetry(self, joint_velocities):

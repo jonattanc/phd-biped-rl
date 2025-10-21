@@ -1118,6 +1118,9 @@ class TrainingTab:
     def _update_tracker_status(self):
         """Atualiza o label de status do tracker"""
         try:
+            if not hasattr(self, 'tracker_status_label') or not self.tracker_status_label.winfo_exists():
+                return
+        
             status = self.tracker.get_status()
 
             # Criar texto de status com emojis para melhor visualização
