@@ -385,6 +385,7 @@ class TrainingTab:
             self.pause_btn.config(state=tk.NORMAL)
             self.stop_btn.config(state=tk.NORMAL)
             self.start_btn.config(text="Iniciar Treino")
+            self.pause_btn.config(text="Pausar")
 
         except Exception as e:
             self.logger.exception("Erro ao iniciar treinamento")
@@ -1118,9 +1119,9 @@ class TrainingTab:
     def _update_tracker_status(self):
         """Atualiza o label de status do tracker"""
         try:
-            if not hasattr(self, 'tracker_status_label') or not self.tracker_status_label.winfo_exists():
+            if not hasattr(self, "tracker_status_label") or not self.tracker_status_label.winfo_exists():
                 return
-        
+
             status = self.tracker.get_status()
 
             # Criar texto de status com emojis para melhor visualização
