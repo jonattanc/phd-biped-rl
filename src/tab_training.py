@@ -163,7 +163,7 @@ class TrainingTab:
         self.export_plots_btn.grid(row=0, column=2, padx=1)
 
         self.enable_dpg_var = tk.BooleanVar(value=True)  # Valor padrão: ativado
-        self.enable_dpg_check = ttk.Checkbutton(row2_frame, text="Dynamic Policy Gradient", variable=self.enable_dpg_var, width=20)
+        self.enable_dpg_check = ttk.Checkbutton(row2_frame, text="Dynamic Policy Gradient", variable=self.enable_dpg_var, width=22)
         self.enable_dpg_check.grid(row=0, column=3, padx=1)
 
         self.enable_visualization_var = tk.BooleanVar(value=True)
