@@ -217,7 +217,7 @@
       <child link="${prefix}_thigh_link"/>
       <origin xyz="0 0 0"/>
       <axis xyz="1 0 0"/> <!-- Movimento lateral -->
-      <limit lower="${-30 * deg_to_rad}" upper="${30 * deg_to_rad}" effort="1000" velocity="5"/>
+      <limit lower="${-20 * deg_to_rad}" upper="${20 * deg_to_rad}" effort="1000" velocity="5"/>
       <dynamics damping="${joint_damping}" friction="${joint_friction}"/>
     </joint>
 
