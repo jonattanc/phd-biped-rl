@@ -159,8 +159,9 @@ class Simulation(gym.Env):
         self.create_com_marker()
 
         if self.is_visualization_enabled:
-            time.sleep(0.5)  # Aguarda a inicialização da janela do PyBullet
-            self.ipc_queue.put({"type": "pybullet_window_ready"})
+            for i in range(5):  # Realiza diversas iterações para focar a janela assim que possível
+                time.sleep(0.1)  # Aguarda a inicialização da janela do PyBullet
+                self.ipc_queue.put({"type": "pybullet_window_ready"})
 
     def set_agent(self, agent):
         self.agent = agent
