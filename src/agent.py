@@ -337,11 +337,18 @@ class DynamicPolicyGradientCallback(BaseCallback):
         super().__init__(verbose)
         self.custom_logger = logger
         self.num_components = num_components
-        self.reward_weights = np.ones(num_components)  # Pesos iniciais iguais
-        self.reward_history = []  # Histórico de recompensas por componente
-        self.episode_component_rewards = []  # Recompensas do episódio atual
-        self.update_frequency = 10  # Atualizar pesos a cada 10 episódios
+        self.reward_weights = np.ones(num_components)/ num_components
+        self.reward_history = []  
+        self.episode_component_rewards = []  
+        
+        self.update_frequency = 15  
+        self.min_variance = 1e-4    
+        self.max_variance = 5.0     
+        self.smoothing_factor = 0.85 
+        self.min_component_weight = 0.05  
+        
         self.episode_count = 0
+        self.recent_weight_history = [] 
 
     def _on_step(self) -> bool:
         try:
@@ -366,48 +373,82 @@ class DynamicPolicyGradientCallback(BaseCallback):
         """Chamado no final de cada rollout - atualiza pesos dinâmicos"""
         if not self.episode_component_rewards:
             return
-
-        # Calcular médias do episódio para cada componente
-        episode_avg = np.mean(self.episode_component_rewards, axis=0)
-        self.reward_history.append(episode_avg)
-
-        # Manter apenas histórico recente
-        if len(self.reward_history) > 50:
+            
+        # Usar mediana para reduzir influência de outliers
+        episode_median = np.median(self.episode_component_rewards, axis=0)
+        self.reward_history.append(episode_median)
+        
+        # Manter janela deslizante fixa
+        max_history = 100  # Tamanho fixo para consistência
+        if len(self.reward_history) > max_history:
             self.reward_history.pop(0)
-
+        
         self.episode_count += 1
-        self.episode_component_rewards = []  # Reset para próximo episódio
-
-        # Atualizar pesos dinamicamente a cada N episódios
-        if self.episode_count % self.update_frequency == 0 and len(self.reward_history) >= 10:
+        self.episode_component_rewards = []
+        
+        # Atualizar apenas com dados suficientes
+        min_episodes_for_update = 15
+        if (self.episode_count % self.update_frequency == 0 and 
+            len(self.reward_history) >= min_episodes_for_update):
             self._update_dynamic_weights()
 
+    def _check_convergence(self):
+        """Verifica se os pesos estão convergindo"""
+        if len(self.recent_weight_history) < 10:
+            return False
+            
+        # Calcular variação dos pesos nas últimas iterações
+        recent_weights = np.array(self.recent_weight_history[-10:])
+        weight_std = np.std(recent_weights, axis=0)
+        max_std = np.max(weight_std)
+        
+        convergence_threshold = 0.05
+        return max_std < convergence_threshold
+
+
     def _update_dynamic_weights(self):
-        """Atualiza pesos baseado na variância e média das recompensas"""
+        """Atualiza pesos com melhor tratamento de variâncias"""
+        if len(self.reward_history) < 20:  # Mínimo de amostras
+            return
+            
         rewards_array = np.array(self.reward_history)
-
-        # Calcular estatísticas
+        
+        # Calcular estatísticas robustas
         means = np.mean(rewards_array, axis=0)
-        variances = np.var(rewards_array, axis=0)
-
-        # Fórmula do paper: priorizar componentes com alta média + alta variância
-        # Componentes instáveis (alta variância) precisam de mais atenção
-        stability_scores = means + np.exp(np.clip(variances, 0, 2))  # Clip para evitar overflow
-
-        # Normalizar e aplicar suavização
-        new_weights = stability_scores / np.sum(stability_scores)
-
-        # Suavizar transição (evitar mudanças bruscas)
-        self.reward_weights = 0.7 * self.reward_weights + 0.3 * new_weights
-
-        # Garantir pesos mínimos (nenhum componente é completamente ignorado)
-        self.reward_weights = np.maximum(self.reward_weights, 0.1)
-
+        variances = np.var(rewards_array, axis=0, ddof=1)  # ddof=1 para estimador não-viesado
+        
+        # Tratamento robusto de variâncias
+        variances = np.clip(variances, self.min_variance, self.max_variance)
+        
+        # Coeficiente de variação (mais robusto que variância pura)
+        coeff_of_variation = np.sqrt(variances) / (np.abs(means) + 1e-8)
+        
+        # Fórmula melhorada: balancear média e instabilidade
+        # Componentes com alta média E alta variância relativa recebem mais atenção
+        stability_scores = means * (1 + np.tanh(coeff_of_variation))
+        
+        # Suavização exponencial
+        new_weights = stability_scores / (np.sum(stability_scores) + 1e-8)
+        new_weights = np.clip(new_weights, self.min_component_weight, 1.0)
+        
         # Renormalizar
+        new_weights = new_weights / np.sum(new_weights)
+        
+        # Suavização mais inteligente
+        alpha = self.smoothing_factor
+        self.reward_weights = alpha * self.reward_weights + (1 - alpha) * new_weights
+        
+        # Garantir pesos mínimos e renormalizar
+        self.reward_weights = np.maximum(self.reward_weights, self.min_component_weight)
         self.reward_weights = self.reward_weights / np.sum(self.reward_weights)
-
+        
+        # Armazenar para monitoramento de convergência
+        self.recent_weight_history.append(self.reward_weights.copy())
+        if len(self.recent_weight_history) > 20:
+            self.recent_weight_history.pop(0)
+        
         self.custom_logger.info(f"DPG - Pesos atualizados: {self.reward_weights}")
-        self.custom_logger.info(f"DPG - Médias: {means}, Variâncias: {variances}")
+        self.custom_logger.info(f"DPG - Médias: {means}, CV: {coeff_of_variation}")
 
     def get_current_weights(self):
         """Retorna os pesos atuais para uso externo"""
@@ -423,10 +464,13 @@ class EnhancedAgent(Agent):
         self.reward_components_enabled = False
 
     def enable_dpg(self, num_components=4):
-        """Ativa o Dynamic Policy Gradient"""
+        """Ativa DPG com configurações mais estáveis"""
         self.reward_components_enabled = True
-        self.dpg_callback = DynamicPolicyGradientCallback(self.logger, num_components)
-        self.logger.info(f"DPG ativado com {num_components} componentes")
+        self.dpg_callback = DynamicPolicyGradientCallback(
+            self.logger, 
+            num_components
+        )
+        self.logger.info(f"DPG ativado com {num_components} componentes (configuração estável)")
 
     def learn(self, total_timesteps, callback=None, reset_num_timesteps=True, progress_bar=False):
         """Aprendizado com suporte a DPG"""

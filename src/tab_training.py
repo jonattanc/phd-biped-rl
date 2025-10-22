@@ -910,14 +910,14 @@ class TrainingTab:
                 fig, ax = plt.subplots(figsize=(width, height))
 
                 if i == 3:  # Gráfico de posição IMU
-                    ax.plot(self.episode_data["episodes"], self.episode_data["imu_y"], label="Y", color="green")
-                    ax.plot(self.episode_data["episodes"], self.episode_data["imu_z"], label="Z", color="blue")
+                    ax.plot(self.episode_data["episodes"], self.episode_data["filtered_imu_y"], label="Y", color="green")
+                    ax.plot(self.episode_data["episodes"], self.episode_data["filtered_imu_z"], label="Z", color="blue")
                 elif i == 4:  # Gráfico de orientação
-                    ax.plot(self.episode_data["episodes"], self.episode_data["roll_deg"], label="Roll", color="red")
-                    ax.plot(self.episode_data["episodes"], self.episode_data["pitch_deg"], label="Pitch", color="green")
-                    ax.plot(self.episode_data["episodes"], self.episode_data["yaw_deg"], label="Yaw", color="blue")
+                    ax.plot(self.episode_data["episodes"], self.episode_data["filtered_roll_deg"], label="Roll", color="red")
+                    ax.plot(self.episode_data["episodes"], self.episode_data["filtered_pitch_deg"], label="Pitch", color="green")
+                    ax.plot(self.episode_data["episodes"], self.episode_data["filtered_yaw_deg"], label="Yaw", color="blue")
                 else:
-                    ax.plot(self.episode_data["episodes"], self.episode_data[data_key], label=ylabel, color=color)
+                    ax.plot(self.episode_data["episodes"], self.episode_data[f"filtered_{data_key}"], label=ylabel, color=color)
 
                 ax.set_title(title)
                 ax.set_ylabel(ylabel)
@@ -939,14 +939,14 @@ class TrainingTab:
             axs[i].clear()
 
             if i == 3:  # Gráfico de posição IMU
-                axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_y"], label="Y", color="green")
-                axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_z"], label="Z", color="blue")
+                axs[i].plot(self.episode_data["episodes"], self.episode_data["filtered_imu_y"], label="Y", color="green")
+                axs[i].plot(self.episode_data["episodes"], self.episode_data["filtered_imu_z"], label="Z", color="blue")
             elif i == 4:  # Gráfico de orientação
-                axs[i].plot(self.episode_data["episodes"], self.episode_data["roll_deg"], label="Roll", color="red")
-                axs[i].plot(self.episode_data["episodes"], self.episode_data["pitch_deg"], label="Pitch", color="green")
-                axs[i].plot(self.episode_data["episodes"], self.episode_data["yaw_deg"], label="Yaw", color="blue")
+                axs[i].plot(self.episode_data["episodes"], self.episode_data["filtered_roll_deg"], label="Roll", color="red")
+                axs[i].plot(self.episode_data["episodes"], self.episode_data["filtered_pitch_deg"], label="Pitch", color="green")
+                axs[i].plot(self.episode_data["episodes"], self.episode_data["filtered_yaw_deg"], label="Yaw", color="blue")
             else:
-                axs[i].plot(self.episode_data["episodes"], self.episode_data[data_key], label=ylabel, color=color)
+                axs[i].plot(self.episode_data["episodes"], self.episode_data[f"filtered_{data_key}"], label=ylabel, color=color)
 
             axs[i].set_title(title)
             axs[i].set_ylabel(ylabel)
@@ -1044,19 +1044,19 @@ class TrainingTab:
                     self.axs[i].clear()
 
                     if i == 3:  # Gráfico de posição IMU
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_y"], label="Y", color="green", linestyle="-", alpha=self.nf_alpha, linewidth=self.nf_linewidth)
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_z"], label="Z", color="blue", linestyle="-", alpha=self.nf_alpha, linewidth=self.nf_linewidth)
+                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_y"], color="green", linestyle="-", alpha=self.nf_alpha, linewidth=self.nf_linewidth)
+                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_z"], color="blue", linestyle="-", alpha=self.nf_alpha, linewidth=self.nf_linewidth)
                         self.axs[i].plot(self.episode_data["episodes"], self.episode_data["filtered_imu_y"], label="Y", color="green", linestyle="-")
                         self.axs[i].plot(self.episode_data["episodes"], self.episode_data["filtered_imu_z"], label="Z", color="blue", linestyle="-")
                     elif i == 4:  # Gráfico de orientação
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["roll_deg"], label="Roll", color="red", linestyle="-", alpha=self.nf_alpha, linewidth=self.nf_linewidth)
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["pitch_deg"], label="Pitch", color="green", linestyle="-", alpha=self.nf_alpha, linewidth=self.nf_linewidth)
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["yaw_deg"], label="Yaw", color="blue", linestyle="-", alpha=self.nf_alpha, linewidth=self.nf_linewidth)
+                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["roll_deg"], color="red", linestyle="-", alpha=self.nf_alpha, linewidth=self.nf_linewidth)
+                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["pitch_deg"], color="green", linestyle="-", alpha=self.nf_alpha, linewidth=self.nf_linewidth)
+                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["yaw_deg"], color="blue", linestyle="-", alpha=self.nf_alpha, linewidth=self.nf_linewidth)
                         self.axs[i].plot(self.episode_data["episodes"], self.episode_data["filtered_roll_deg"], label="Roll", color="red", linestyle="-")
                         self.axs[i].plot(self.episode_data["episodes"], self.episode_data["filtered_pitch_deg"], label="Pitch", color="green", linestyle="-")
                         self.axs[i].plot(self.episode_data["episodes"], self.episode_data["filtered_yaw_deg"], label="Yaw", color="blue", linestyle="-")
                     else:  # Gráficos normais
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data[data_key], label=ylabel, color=color, linestyle="-", alpha=self.nf_alpha, linewidth=self.nf_linewidth)
+                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data[data_key], color=color, linestyle="-", alpha=self.nf_alpha, linewidth=self.nf_linewidth)
                         self.axs[i].plot(self.episode_data["episodes"], self.episode_data[f"filtered_{data_key}"], label=ylabel, color=color, linestyle="-")
 
                     self.axs[i].set_ylabel(ylabel)

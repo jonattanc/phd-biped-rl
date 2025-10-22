@@ -65,39 +65,42 @@ class RewardSystem:
             self.logger.info("Fase 3 ativada: Foco em alta velocidade!")
 
     def create_hybrid_reward_vector(self, sim, action, info, weights=None):
-        """
-        Cria vetor de recompensas para DPG
-        """
-        components = np.zeros(4)  # 4 componentes principais
-
-        # Componente 0: Progresso (velocidade forward)
-        components[0] = getattr(sim, "robot_x_velocity", 0)
-
-        # Componente 1: Estabilidade (roll, pitch, yaw)
+        """Cria vetor de recompensas com normalização"""
+        components = np.zeros(4)
+        
+        # Componente 0: Progresso (normalizado)
+        max_expected_velocity = 2.0  # m/s
+        components[0] = np.clip(getattr(sim, "robot_x_velocity", 0) / max_expected_velocity, -1, 1)
+        
+        # Componente 1: Estabilidade (normalizada)
         robot_roll = getattr(sim, "robot_roll", 0)
         robot_pitch = getattr(sim, "robot_pitch", 0)
         robot_yaw = getattr(sim, "robot_yaw", 0)
         target_pitch = getattr(sim, "target_pitch_rad", 0)
-
-        stability_penalty = robot_roll**2 + (robot_pitch - target_pitch) ** 2 + robot_yaw**2
-        components[1] = -stability_penalty * 0.1
-
-        # Componente 2: Eficiência energética
+        
+        # Normalizar penalidades de estabilidade
+        max_angle_error = 0.5  # ~28 graus
+        stability_penalty = (robot_roll**2 + (robot_pitch - target_pitch)**2 + robot_yaw**2)
+        components[1] = -np.clip(stability_penalty / max_angle_error, 0, 1)
+        
+        # Componente 2: Eficiência (normalizada)
         joint_velocities = getattr(sim, "joint_velocities", [0])
-        effort = sum(abs(v) for v in joint_velocities)
-        components[2] = -effort * 0.01
-
-        # Componente 3: Postura/Altura
+        max_expected_effort = 10.0  # Valor baseado em sua simulação
+        effort = sum(abs(v) for v in joint_velocities) / len(joint_velocities) if joint_velocities else 0
+        components[2] = -np.clip(effort / max_expected_effort, 0, 1)
+        
+        # Componente 3: Postura (normalizada)
         robot_z = getattr(sim, "robot_z_position", 0.8)
+        max_height_error = 0.2  # 20cm
         height_penalty = abs(robot_z - 0.8)
-        components[3] = -height_penalty * 0.5
-
-        # Aplicar pesos se fornecidos
-        if weights is not None:
+        components[3] = -np.clip(height_penalty / max_height_error, 0, 1)
+        
+        # Aplicar pesos com verificação
+        if weights is not None and len(weights) == len(components):
             weighted_components = components * weights
         else:
             weighted_components = components
-
+        
         return weighted_components, components
 
     def calculate_dpg_reward(self, sim, action, info):
