@@ -104,25 +104,49 @@ class RewardSystem:
         return weighted_components, components
 
     def calculate_dpg_reward(self, sim, action, info):
-        """Calcula recompensa com DPG progressivo"""
-        # Atualizar progressão
-        episode_results = {"distance": sim.episode_distance, "success": info.get("success", False), "duration": sim.episode_steps * sim.time_step_s}
-        self.update_progression(episode_results)
-
-        # Calcular recompensa com pesos progressivos do DPG
+        """Calcula recompensa com DPG adaptativo"""
+        
+        # Calcular recompensa vetorial primeiro
         weighted_reward, components = self.create_hybrid_reward_vector(sim, action, info, self.dpg_weights)
-
         total_reward = np.sum(weighted_reward)
-
-        # Bônus de fase (apenas para DPG)
-        if self.phase >= 2 and sim.episode_distance > 3.0:
-            total_reward += 0.2
-        if self.phase == 3 and sim.episode_distance > 6.0:
-            total_reward += 0.5
-
+        
+        # Atualização ADAPTATIVA baseada no desempenho atual
+        episode_results = {
+            "distance": sim.episode_distance, 
+            "success": info.get("success", False), 
+            "duration": sim.episode_steps * sim.time_step_s
+        }
+        
+        # Progressão adaptativa baseada em múltiplos fatores
+        current_velocity = getattr(sim, "robot_x_velocity", 0)
+        stability = 1.0 - min(1.0, (sim.robot_roll**2 + sim.robot_pitch**2 + sim.robot_yaw**2))
+        
+        # Fase 1: Foco em estabilidade (inicial)
+        if self.phase == 1 and stability > 0.8 and episode_results["distance"] > 2.0:
+            self.phase = 2
+            self.dpg_weights = np.array([0.5, 0.3, 0.1, 0.1])  # Mais progresso, menos esforço
+            self.logger.info("Fase 2 ativada: Transição para movimento")
+        
+        # Fase 2: Foco em velocidade consistente  
+        elif self.phase == 2 and current_velocity > 0.5 and episode_results["distance"] > 4.0:
+            self.phase = 3
+            self.dpg_weights = np.array([0.6, 0.2, 0.1, 0.1])  # Foco máximo em progresso
+            self.logger.info("Fase 3 ativada: Priorizando velocidade")
+        
+        # Fase 3: Manutenção de alta performance
+        elif self.phase == 3 and current_velocity > 0.8 and episode_results["distance"] > 7.0:
+            self.dpg_weights = np.array([0.7, 0.15, 0.1, 0.05])  # Máxima eficiência
+            self.logger.info("Fase 3 otimizada: Alta velocidade")
+        
+        # Bônus adaptativo baseado no desempenho atual
+        if current_velocity > 0.3 and stability > 0.7:
+            velocity_bonus = min(0.5, current_velocity * 0.3)
+            stability_bonus = stability * 0.2
+            total_reward += velocity_bonus + stability_bonus
+    
         info["reward_components"] = components
         info["current_phase"] = self.phase
-
+    
         return total_reward
 
     def calculate_standard_reward(self, sim, action, info):
