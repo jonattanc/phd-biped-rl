@@ -101,6 +101,7 @@ class TrainingTab:
         # Configurar IPC logging
         utils.add_queue_handler_to_logger(self.logger, self.ipc_queue)
 
+        self.settings = utils.load_default_settings()
         self.setup_ui()
         self.setup_ipc()
 
@@ -143,7 +144,7 @@ class TrainingTab:
             return
 
         ttk.Label(row1_frame, text="Robô:").grid(row=0, column=4, sticky=tk.W, padx=1)
-        self.robot_var = tk.StringVar(value=xacro_robot_files[-1])
+        self.robot_var = tk.StringVar(value=self.settings.get("default_robot", xacro_robot_files[-1]))
         robot_combo = ttk.Combobox(row1_frame, textvariable=self.robot_var, values=xacro_robot_files, width=12)
         robot_combo.grid(row=0, column=5, padx=5)
 
@@ -170,15 +171,15 @@ class TrainingTab:
         self.export_plots_btn = ttk.Button(row2_frame, text="Exportar Gráficos", command=self.export_plots, state=tk.DISABLED, width=15)
         self.export_plots_btn.grid(row=0, column=2, padx=1)
 
-        self.enable_dpg_var = tk.BooleanVar(value=True)  # Valor padrão: ativado
+        self.enable_dpg_var = tk.BooleanVar(value=self.settings.get("enable_dynamic_policy_gradient", True))
         self.enable_dpg_check = ttk.Checkbutton(row2_frame, text="Dynamic Policy Gradient", variable=self.enable_dpg_var, width=22)
         self.enable_dpg_check.grid(row=0, column=3, padx=1)
 
-        self.enable_visualization_var = tk.BooleanVar(value=True)
+        self.enable_visualization_var = tk.BooleanVar(value=self.settings.get("enable_visualize_robot", False))
         self.enable_visualization_check = ttk.Checkbutton(row2_frame, text="Visualizar Robô", variable=self.enable_visualization_var, command=self.toggle_visualization, width=15)
         self.enable_visualization_check.grid(row=0, column=4, padx=1)
 
-        self.real_time_var = tk.BooleanVar(value=True)
+        self.real_time_var = tk.BooleanVar(value=self.settings.get("enable_real_time", True))
         self.real_time_check = ttk.Checkbutton(row2_frame, text="Tempo Real", variable=self.real_time_var, command=self.toggle_real_time, width=15)
         self.real_time_check.grid(row=0, column=5, padx=5)
 

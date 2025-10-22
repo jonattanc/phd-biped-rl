@@ -3,6 +3,7 @@ import os
 import logging
 import multiprocessing
 import queue
+import json
 
 
 class FormattedQueueHandler(logging.Handler):
@@ -104,3 +105,21 @@ def validate_episodes_count(episodes_str):
         return episodes
     except ValueError:
         raise ValueError("Número de episódios deve ser um inteiro positivo")
+
+
+def load_default_settings():
+    """Carrega as configurações padrão do arquivo JSON"""
+    default_settings_path = os.path.join(PROJECT_ROOT, "default_settings.json")
+
+    default_settings = {"default_robot": "robot_stage5", "reward_config_file": "default", "enable_dynamic_policy_gradient": True, "enable_visualize_robot": True, "enable_real_time": True}
+
+    if not os.path.exists(default_settings_path):
+        return default_settings
+
+    with open(default_settings_path, "r") as f:
+        loaded_settings = json.load(f)
+
+    for key, value in loaded_settings.items():
+        default_settings[key] = value
+
+    return default_settings

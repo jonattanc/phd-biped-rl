@@ -15,6 +15,7 @@ class RewardTab:
 
         # Configurações
         self.config_dir = utils.REWARD_CONFIGS_PATH
+        self.settings = utils.load_default_settings()
         self.setup_ui()
 
     def setup_ui(self):
@@ -67,6 +68,9 @@ class RewardTab:
         # Carregar estado inicial
         self.refresh_config_list()
         self.update_quick_editors()
+
+        self.config_var.set(self.settings.get("reward_config_file", "default"))
+        self.on_config_selected()
 
     def _create_component_row(self, parent, component_name, component_content, row, default_enabled=True):
         """Cria uma linha de controle para um componente"""
@@ -131,7 +135,7 @@ class RewardTab:
             editor["entry"].delete(0, tk.END)
             editor["entry"].insert(0, f"{weight}")
 
-    def on_config_selected(self, event):
+    def on_config_selected(self, event=None):
         """Quando uma configuração é selecionada no combobox"""
         self.logger.info(" RewardTab.on_config_selected called")
 
