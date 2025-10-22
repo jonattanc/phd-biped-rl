@@ -408,51 +408,47 @@ class DynamicPolicyGradientCallback(BaseCallback):
         return max_std < convergence_threshold
 
     def _update_dynamic_weights(self):
-        """Atualiza pesos com foco em componentes de melhor desempenho"""
-        if len(self.reward_history) < 10:  # Reduzido para resposta mais rápida
+        """Atualiza pesos com melhor tratamento de variâncias"""
+        if len(self.reward_history) < 20:  # Mínimo de amostras
             return
-            
+
         rewards_array = np.array(self.reward_history)
-        
-        # Calcular progresso relativo de cada componente
-        if len(self.reward_history) > 15:
-            recent = rewards_array[-10:]
-            older = rewards_array[-15:-5]
-            progress = np.mean(recent, axis=0) - np.mean(older, axis=0)
-        else:
-            progress = np.ones(self.num_components)
-        
+
+        # Calcular estatísticas robustas
         means = np.mean(rewards_array, axis=0)
-        variances = np.var(rewards_array, axis=0, ddof=1)
-        
+        variances = np.var(rewards_array, axis=0, ddof=1)  # ddof=1 para estimador não-viesado
+
         # Tratamento robusto de variâncias
         variances = np.clip(variances, self.min_variance, self.max_variance)
-        
-        # Coeficiente de variação
+
+        # Coeficiente de variação (mais robusto que variância pura)
         coeff_of_variation = np.sqrt(variances) / (np.abs(means) + 1e-8)
-        
-        # COMBINAÇÃO: priorizar componentes com alta média, em melhoria E estáveis
-        improvement_factor = (1.0 + np.tanh(progress))
-        stability_factor = (1 + np.tanh(coeff_of_variation))
-        
-        # Fórmula unificada - balancear progresso, média e estabilidade
-        combined_scores = means * improvement_factor * stability_factor
-        
-        # Suavização mais agressiva para resposta rápida
-        alpha = 0.7  # Reduzido para mudanças mais rápidas
-        new_weights = combined_scores / (np.sum(combined_scores) + 1e-8)
-        new_weights = np.clip(new_weights, self.min_component_weight, 0.8)
-        
+
+        # Fórmula melhorada: balancear média e instabilidade
+        # Componentes com alta média E alta variância relativa recebem mais atenção
+        stability_scores = means * (1 + np.tanh(coeff_of_variation))
+
+        # Suavização exponencial
+        new_weights = stability_scores / (np.sum(stability_scores) + 1e-8)
+        new_weights = np.clip(new_weights, self.min_component_weight, 1.0)
+
+        # Renormalizar
+        new_weights = new_weights / np.sum(new_weights)
+
+        # Suavização mais inteligente
+        alpha = self.smoothing_factor
         self.reward_weights = alpha * self.reward_weights + (1 - alpha) * new_weights
+
+        # Garantir pesos mínimos e renormalizar
+        self.reward_weights = np.maximum(self.reward_weights, self.min_component_weight)
         self.reward_weights = self.reward_weights / np.sum(self.reward_weights)
-        
-        # Armazenar para monitoramento
+
+        # Armazenar para monitoramento de convergência
         self.recent_weight_history.append(self.reward_weights.copy())
         if len(self.recent_weight_history) > 20:
             self.recent_weight_history.pop(0)
-        
-        self.custom_logger.info(f"DPG - Pesos dinâmicos: {self.reward_weights}")
-        self.custom_logger.info(f"DPG - Progresso: {progress}")
+
+        self.custom_logger.info(f"DPG - Pesos atualizados: {self.reward_weights}")
         self.custom_logger.info(f"DPG - Médias: {means}, CV: {coeff_of_variation}")
 
     def get_current_weights(self):
