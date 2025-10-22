@@ -1212,7 +1212,7 @@ class TrainingTab:
             episode_distance = episode_data.get("distance", 0)
 
             # Atualizar tracker
-            should_save, reason = self.tracker.update(episode_reward, episode_distance, self.total_steps)
+            should_save, reason = self.tracker.update(episode_reward, episode_distance, self.total_steps, self.minimum_steps_to_save)
 
             if should_save:
                 self.logger.info(f"NOVA MELHORIA! Recompensa: {episode_reward:.2f} (Motivo: {reason})")
@@ -1321,6 +1321,10 @@ class TrainingTab:
                         self.export_plots_btn.config(state=tk.DISABLED)
                         self.enable_other_tabs()
                         self.is_resuming = False
+
+                    elif data_type == "minimum_steps_to_save":
+                        self.minimum_steps_to_save = msg["minimum_steps_to_save"]
+                        self.logger.info(f"Minimum steps to save updated: {self.minimum_steps_to_save}")
 
                     else:
                         self.logger.error(f"Tipo de dados desconhecido: {data_type} - Conteúdo: {msg}")

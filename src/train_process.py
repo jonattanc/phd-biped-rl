@@ -103,6 +103,7 @@ def process_runner(
 
         sim.set_agent(agent)
         callback = TrainingCallback(logger)
+        ipc_queue.put_nowait({"type": "minimum_steps_to_save", "minimum_steps_to_save": agent.minimum_steps_to_save})
 
         # Iniciar treinamento
         logger.info(f"Iniciando treinamento {algorithm} no episódio {initial_episode}...")

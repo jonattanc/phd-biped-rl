@@ -6,7 +6,6 @@ class BestModelTracker:
     def __init__(self):
         self.improvement_threshold = 0.05
         self.patience_steps = 3e6
-        self.minimum_steps = 50e3
 
         self.best_reward = -float("inf")
         self.best_distance = 0.0
@@ -14,15 +13,15 @@ class BestModelTracker:
         self.total_steps = 0
         self.last_improvement_steps = 0
         self.auto_save_count = 0
-        
+
         # Adicionar flag para controle de estado
         self._active = True
 
-    def update(self, episode_reward, episode_distance, current_steps):
+    def update(self, episode_reward, episode_distance, current_steps, minimum_steps_to_save):
         """Atualiza tracker com nova recompensa e retorna se houve melhoria"""
         if not self._active:
             return False, "tracker_inactive"
-            
+
         self.total_steps = current_steps
 
         # Atualizar melhor distância se for maior
@@ -39,7 +38,7 @@ class BestModelTracker:
         # Calcular melhoria percentual
         improvement = (episode_reward - self.best_reward) / abs(self.best_reward)
 
-        if improvement >= self.improvement_threshold and self.total_steps >= self.minimum_steps:
+        if improvement >= self.improvement_threshold and self.total_steps >= minimum_steps_to_save:
             self.best_reward = episode_reward
             self.steps_since_improvement = 0
             self.last_improvement_steps = current_steps
@@ -53,7 +52,7 @@ class BestModelTracker:
         """Verifica se deve pausar por plateau"""
         if not self._active:
             return False
-        return self.steps_since_improvement >= self.patience_steps and self.total_steps >= self.minimum_steps
+        return self.steps_since_improvement >= self.patience_steps
 
     def get_auto_save_filename(self):
         """Gera nome de arquivo para salvamento automático"""
@@ -64,7 +63,7 @@ class BestModelTracker:
         """Retorna status atual para logging"""
         if not self._active:
             return {"status": "inactive"}
-            
+
         return {
             "best_reward": self.best_reward,
             "best_distance": self.best_distance,
@@ -73,13 +72,13 @@ class BestModelTracker:
             "improvement_threshold": self.improvement_threshold,
             "patience_steps": self.patience_steps,
             "auto_save_count": self.auto_save_count,
-            "status": "active"
+            "status": "active",
         }
-    
+
     def deactivate(self):
         """Desativa o tracker para evitar erros"""
         self._active = False
-    
+
     def reset(self):
         """Reseta o tracker para novo treinamento"""
         self._active = True

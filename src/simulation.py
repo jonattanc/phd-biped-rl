@@ -166,14 +166,14 @@ class Simulation(gym.Env):
     def set_agent(self, agent):
         self.agent = agent
 
-    def pre_fill_buffer(self, timesteps=100e3):
-        self.logger.info(f"Pré-preenchendo buffer de replay com {timesteps} timesteps...")
+    def pre_fill_buffer(self):
+        self.logger.info(f"Pré-preenchendo buffer de replay com {self.agent.prefill_steps} timesteps...")
         obs = self.reset()
 
         self.episode_timeout_s = self.episode_pre_fill_timeout_s
         self.max_steps = self.max_pre_fill_steps
 
-        while self.total_steps < timesteps and not self.exit_value.value:
+        while self.total_steps < self.agent.prefill_steps and not self.exit_value.value:
             t = self.episode_steps * self.time_step_s
             action = self.robot.get_example_action(t)
 
