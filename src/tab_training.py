@@ -14,6 +14,7 @@ from datetime import datetime
 import sys
 import math
 import pygetwindow as gw
+import numpy as np
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -50,6 +51,11 @@ class TrainingTab:
             "pitch_deg": [],
             "yaw_deg": [],
         }
+
+        self.keys_to_filter = ["rewards", "times", "distances", "imu_x", "imu_y", "imu_z", "roll_deg", "pitch_deg", "yaw_deg"]
+
+        for key in self.keys_to_filter:
+            self.episode_data[f"filtered_{key}"] = []
 
         # Controle de processos
         self.processes = []
@@ -89,6 +95,8 @@ class TrainingTab:
         self.plot_ylabels = ["Recompensa", "Tempo (s)", "Distância (m)", "Posição (m)", "Ângulo (°)"]
         self.plot_colors = ["blue", "orange", "red", "green", "purple", "brown"]
         self.plot_data_keys = ["rewards", "times", "distances", "imu_xyz", "rpy"]
+        self.nf_alpha = 0.5
+        self.nf_linewidth = 0.5
 
         # Configurar IPC logging
         utils.add_queue_handler_to_logger(self.logger, self.ipc_queue)
@@ -1035,14 +1043,20 @@ class TrainingTab:
                     self.axs[i].clear()
 
                     if i == 3:  # Gráfico de posição IMU
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_y"], label="Y", color="green", linestyle="-", markersize=3)
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_z"], label="Z", color="blue", linestyle="-", markersize=3)
+                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_y"], label="Y", color="green", linestyle="-", alpha=self.nf_alpha, linewidth=self.nf_linewidth)
+                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_z"], label="Z", color="blue", linestyle="-", alpha=self.nf_alpha, linewidth=self.nf_linewidth)
+                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["filtered_imu_y"], label="Y", color="green", linestyle="-")
+                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["filtered_imu_z"], label="Z", color="blue", linestyle="-")
                     elif i == 4:  # Gráfico de orientação
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["roll_deg"], label="Roll", color="red", linestyle="-", markersize=3)
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["pitch_deg"], label="Pitch", color="green", linestyle="-", markersize=3)
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["yaw_deg"], label="Yaw", color="blue", linestyle="-", markersize=3)
+                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["roll_deg"], label="Roll", color="red", linestyle="-", alpha=self.nf_alpha, linewidth=self.nf_linewidth)
+                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["pitch_deg"], label="Pitch", color="green", linestyle="-", alpha=self.nf_alpha, linewidth=self.nf_linewidth)
+                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["yaw_deg"], label="Yaw", color="blue", linestyle="-", alpha=self.nf_alpha, linewidth=self.nf_linewidth)
+                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["filtered_roll_deg"], label="Roll", color="red", linestyle="-")
+                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["filtered_pitch_deg"], label="Pitch", color="green", linestyle="-")
+                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["filtered_yaw_deg"], label="Yaw", color="blue", linestyle="-")
                     else:  # Gráficos normais
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data[data_key], label=ylabel, color=color, linestyle="-", markersize=3)
+                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data[data_key], label=ylabel, color=color, linestyle="-", alpha=self.nf_alpha, linewidth=self.nf_linewidth)
+                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data[f"filtered_{data_key}"], label=ylabel, color=color, linestyle="-")
 
                     self.axs[i].set_ylabel(ylabel)
                     self.axs[i].grid(True, alpha=0.3)
@@ -1214,6 +1228,19 @@ class TrainingTab:
         except Exception as e:
             self.logger.exception("Erro ao processar dados do episódio para tracker")
 
+    def update_filtered_data(self):
+        window_size = 20
+
+        for key in self.keys_to_filter:
+            filtered_key = "filtered_" + key
+            data = self.episode_data[key]
+
+            if len(data) < 5:
+                self.episode_data[filtered_key].append(np.mean(data))
+
+            else:
+                self.episode_data[filtered_key].append(np.mean(data[-window_size:]))
+
     def ipc_runner(self):
         """Thread para monitorar a fila IPC e atualizar logs"""
         try:
@@ -1252,6 +1279,7 @@ class TrainingTab:
                             self.episode_data["roll_deg"].append(roll_deg)
                             self.episode_data["pitch_deg"].append(pitch_deg)
                             self.episode_data["yaw_deg"].append(yaw_deg)
+                            self.update_filtered_data()
 
                         self.new_plot_data = True
                         self._handle_episode_data(msg)
