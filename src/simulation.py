@@ -358,6 +358,7 @@ class Simulation(gym.Env):
         self.total_steps += 1
 
         # Obter observação
+        self.has_gait_state_changed = self.robot.update_gait_state()
         obs = self.robot.get_observation()
 
         robot_position, robot_velocity, robot_orientation = self.robot.get_imu_position_velocity_orientation()

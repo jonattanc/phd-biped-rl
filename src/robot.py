@@ -13,6 +13,7 @@ class Robot:
 
         self.id = None
         self.revolute_indices = None
+        self.gait_state = 0
 
         self.robots_dir = os.path.join(utils.PROJECT_ROOT, "robots")
         self.robots_tmp_dir = os.path.join(utils.TMP_PATH, "robots")
@@ -50,6 +51,8 @@ class Robot:
         raise (f"Joint index not found for {joint_name}")
 
     def load_in_simulation(self):
+        self.gait_state = 0
+
         self.id = p.loadURDF(self.urdf_path)
 
         self.imu_link_index = self.get_link_index("imu_link")
@@ -91,8 +94,28 @@ class Robot:
 
         joint_positions, joint_velocities = self.get_joint_states()
 
-        obs = np.array([y_position, roll, pitch, yaw, x_velocity, roll_velocity, pitch_velocity] + joint_positions, dtype=np.float32)
+        obs = np.array([self.gait_state, y_position, roll, pitch, yaw, x_velocity, roll_velocity, pitch_velocity] + joint_positions, dtype=np.float32)
         return obs
+
+    def update_gait_state(self):
+        """Atualiza estado da marcha e retorna se houve transição de estado"""
+        right_foot_state = p.getLinkState(self.id, self.get_link_index("right_foot_link"))
+        left_foot_state = p.getLinkState(self.id, self.get_link_index("left_foot_link"))
+        right_foot_x_position = right_foot_state[0][0]
+        left_foot_x_position = left_foot_state[0][0]
+        feet_frontal_distance = right_foot_x_position - left_foot_x_position
+
+        if self.gait_state == 0:
+            if feet_frontal_distance > 0.1:
+                self.gait_state = 1
+                return True
+
+        elif self.gait_state == 1:
+            if feet_frontal_distance < -0.1:
+                self.gait_state = 0
+                return True
+
+        return False
 
     def get_imu_position_velocity_orientation(self):
         """Retorna posição e orientação do IMU COM VERIFICAÇÃO"""

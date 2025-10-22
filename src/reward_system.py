@@ -67,40 +67,40 @@ class RewardSystem:
     def create_hybrid_reward_vector(self, sim, action, info, weights=None):
         """Cria vetor de recompensas com normalização"""
         components = np.zeros(4)
-        
+
         # Componente 0: Progresso (normalizado)
         max_expected_velocity = 2.0  # m/s
         components[0] = np.clip(getattr(sim, "robot_x_velocity", 0) / max_expected_velocity, -1, 1)
-        
+
         # Componente 1: Estabilidade (normalizada)
         robot_roll = getattr(sim, "robot_roll", 0)
         robot_pitch = getattr(sim, "robot_pitch", 0)
         robot_yaw = getattr(sim, "robot_yaw", 0)
         target_pitch = getattr(sim, "target_pitch_rad", 0)
-        
+
         # Normalizar penalidades de estabilidade
         max_angle_error = 0.5  # ~28 graus
-        stability_penalty = (robot_roll**2 + (robot_pitch - target_pitch)**2 + robot_yaw**2)
+        stability_penalty = robot_roll**2 + (robot_pitch - target_pitch) ** 2 + robot_yaw**2
         components[1] = -np.clip(stability_penalty / max_angle_error, 0, 1)
-        
+
         # Componente 2: Eficiência (normalizada)
         joint_velocities = getattr(sim, "joint_velocities", [0])
         max_expected_effort = 10.0  # Valor baseado em sua simulação
         effort = sum(abs(v) for v in joint_velocities) / len(joint_velocities) if joint_velocities else 0
         components[2] = -np.clip(effort / max_expected_effort, 0, 1)
-        
+
         # Componente 3: Postura (normalizada)
         robot_z = getattr(sim, "robot_z_position", 0.8)
         max_height_error = 0.2  # 20cm
         height_penalty = abs(robot_z - 0.8)
         components[3] = -np.clip(height_penalty / max_height_error, 0, 1)
-        
+
         # Aplicar pesos com verificação
         if weights is not None and len(weights) == len(components):
             weighted_components = components * weights
         else:
             weighted_components = components
-        
+
         return weighted_components, components
 
     def calculate_dpg_reward(self, sim, action, info):
@@ -137,6 +137,10 @@ class RewardSystem:
         distance_y_from_center = abs(sim.robot_y_position)
 
         # Componentes de recompensa
+        if self.is_component_enabled("gait_state_change"):
+            self.components["gait_state_change"].value = sim.has_gait_state_changed
+            total_reward += self.components["gait_state_change"].value * self.components["gait_state_change"].weight
+
         if self.is_component_enabled("progress"):
             progress = sim.robot_x_velocity
             self.components["progress"].value = progress
