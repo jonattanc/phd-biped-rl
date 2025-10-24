@@ -74,9 +74,11 @@ class TrainingTab:
         self.new_plot_data = False
 
         # Configurações de treinamento
-        self.total_steps = None
+        self.total_steps = 0
         self.steps_per_second = 0
-        self.training_start_time = time.time()
+        self.training_start_time = None
+        self.training_time = 0
+        self.pause_time = None
         self.current_episode = 0
         self.loaded_episode_count = 0
         self.training_data_dir = utils.TRAINING_DATA_PATH
@@ -87,7 +89,6 @@ class TrainingTab:
 
         # Sistema de tracking de performance
         self.tracker = BestModelTracker()
-        self.total_steps = 0
         self.current_best_model_path = None
 
         # Configurações de plot
@@ -217,7 +218,7 @@ class TrainingTab:
         status_frame = ttk.Frame(log_frame)
         status_frame.grid(row=0, column=0, columnspan=12, sticky=(tk.W, tk.E), pady=1)
 
-        self.steps_label = ttk.Label(status_frame, text=self.build_steps_label_text(0, 0))
+        self.steps_label = ttk.Label(status_frame, text=self.build_steps_label_text(0, 0, 0))
         self.steps_label.grid(row=0, column=0, sticky=tk.W, padx=5)
         self.tracker_status_label = ttk.Label(status_frame, text="Melhor recompensa: N/A | Steps sem melhoria: 0")
         self.tracker_status_label.grid(row=0, column=1, sticky=tk.W, padx=5)
@@ -322,6 +323,7 @@ class TrainingTab:
 
             # Limpar dados anteriores
             self.episode_data = {key: [] for key in self.episode_data.keys()}
+            self.training_time = 0
             self.steps_per_second = 0
             self._initialize_plots()
 
@@ -374,6 +376,7 @@ class TrainingTab:
             )
             p.start()
             self.training_start_time = time.time()
+            self.pause_time = None
             self.processes.append(p)
 
             self.logger.info(f"Processo de treinamento iniciado: {self.current_env} + {self.current_robot} + {self.current_algorithm}")
@@ -509,11 +512,18 @@ class TrainingTab:
                 self.pause_values[-1].value = 0
                 self.pause_btn.config(text="Pausar")
                 self.save_training_btn.config(state=tk.DISABLED)
+
+                if self.pause_time is not None:
+                    paused_duration = time.time() - self.pause_time
+                    self.training_start_time += paused_duration
+                    self.pause_time = None
+
             else:
                 self.logger.info("Pausando treinamento.")
                 self.pause_values[-1].value = 1
                 self.pause_btn.config(text="Retomar")
                 self.save_training_btn.config(state=tk.NORMAL)
+                self.pause_time = time.time()
 
             self.config_changed_values[-1].value = 1
 
@@ -1004,24 +1014,25 @@ class TrainingTab:
         else:
             self.logger.info("update_camera_selection: Nenhum processo de treinamento ativo.")
 
-    def build_steps_label_text(self, total_steps, steps_per_second):
-        return f"Total Steps: {total_steps} | Steps/s: {steps_per_second:.1f}"
+    def build_steps_label_text(self, training_time, total_steps, steps_per_second):
+        return f"Training time: {training_time:.1f}s | Total Steps: {total_steps} | Steps/s: {steps_per_second:.1f}"
 
     def _update_step_counter(self):
         """Atualiza o contador de steps periodicamente"""
         if self.gui_closed:
             return
 
-        current_time = time.time()
-        time_diff = current_time - self.training_start_time
+        if self.pause_time is None and self.training_start_time is not None and self.total_steps is not None:
+            current_time = time.time()
+            self.training_time = current_time - self.training_start_time
 
-        if self.total_steps is None or time_diff <= 0:
-            self.steps_per_second = 0
+            if self.total_steps is None or self.training_time <= 0:
+                self.steps_per_second = 0
 
-        else:
-            self.steps_per_second = self.total_steps / time_diff
+            else:
+                self.steps_per_second = self.total_steps / self.training_time
 
-        self.steps_label.config(text=self.build_steps_label_text(self.total_steps, self.steps_per_second))
+            self.steps_label.config(text=self.build_steps_label_text(self.training_time, self.total_steps, self.steps_per_second))
 
         after_id = self.root.after(500, self._update_step_counter)
         self.after_ids["_update_step_counter"] = after_id
