@@ -51,7 +51,7 @@ class Robot:
         raise (f"Joint index not found for {joint_name}")
 
     def load_in_simulation(self):
-        self.gait_state = 0
+        self.gait_state = 0.5
 
         self.id = p.loadURDF(self.urdf_path)
 
@@ -105,17 +105,46 @@ class Robot:
         left_foot_x_position = left_foot_state[0][0]
         feet_frontal_distance = right_foot_x_position - left_foot_x_position
 
-        if self.gait_state == 0:
+        new_state = self.gait_state
+
+        if self.gait_state == 0.5:  # Pés paralelos
+            if feet_frontal_distance > 0.05:
+                new_state = 0.25
+
+        elif self.gait_state == 0.25:  # Pé direito um pouco avançado
             if feet_frontal_distance > 0.1:
-                self.gait_state = 1
-                return True
+                new_state = -1.0
 
-        elif self.gait_state == 1:
+        elif self.gait_state == -1.0:  # Pé direito bem avançado
+            if feet_frontal_distance < 0.05:
+                new_state = -0.75
+
+        elif self.gait_state == -0.75:  # Pé direito recuando
+            if feet_frontal_distance < 0:
+                new_state = -0.5
+
+        elif self.gait_state == -0.5:  # Pés paralelos (volta)
+            if feet_frontal_distance < -0.05:
+                new_state = -0.25
+
+        elif self.gait_state == -0.25:  # Pé direito um pouco atrás
             if feet_frontal_distance < -0.1:
-                self.gait_state = 0
-                return True
+                new_state = 1.0
 
-        return False
+        elif self.gait_state == 1.0:  # Pé direito bem atrás
+            if feet_frontal_distance > -0.05:
+                new_state = 0.75
+
+        elif self.gait_state == 0.75:  # Pé direito avançando novamente
+            if feet_frontal_distance > 0:
+                new_state = 0.5
+
+        if new_state != self.gait_state:
+            self.gait_state = new_state
+            return True
+
+        else:
+            return False
 
     def get_imu_position_velocity_orientation(self):
         """Retorna posição e orientação do IMU COM VERIFICAÇÃO"""
