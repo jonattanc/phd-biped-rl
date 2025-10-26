@@ -14,6 +14,7 @@ class Simulation(gym.Env):
         logger,
         robot,
         environment,
+        reward_system,
         ipc_queue,
         pause_value,
         exit_value,
@@ -49,7 +50,7 @@ class Simulation(gym.Env):
         self.agent = None
         self.physics_client = None
         self.com_marker = None
-        self.reward_system = RewardSystem(logger)
+        self.reward_system = reward_system
 
         # Configurações de simulação
         self.target_pitch_rad = math.radians(1)  # rad
