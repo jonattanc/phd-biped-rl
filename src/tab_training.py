@@ -1017,7 +1017,9 @@ class TrainingTab:
             self.logger.info("update_camera_selection: Nenhum processo de treinamento ativo.")
 
     def build_steps_label_text(self, training_time, total_steps, steps_per_second):
-        return f"Training time: {training_time:.1f}s | Total Steps: {total_steps} | Steps/s: {steps_per_second:.1f}"
+        time_struct = time.gmtime(training_time)
+        formatted_time = time.strftime("%H:%M:%S", time_struct)
+        return f"Training time: {formatted_time} | Total Steps: {total_steps} | Steps/s: {steps_per_second:.1f}"
 
     def _update_step_counter(self):
         """Atualiza o contador de steps periodicamente"""
