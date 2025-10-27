@@ -1026,7 +1026,7 @@ class TrainingTab:
         if self.gui_closed:
             return
 
-        if self.pause_time is None and self.training_start_time is not None and self.total_steps is not None:
+        if self.pause_time is None and self.training_start_time is not None and self.total_steps is not None and self.exit_values[-1].value == 0:
             current_time = time.time()
             self.training_time = current_time - self.training_start_time
 
