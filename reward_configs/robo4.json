@@ -22,7 +22,13 @@
       "weight": 0.8,
       "enabled": false,
       "min_value": 0.0,
-      "max_value": 1.0
+      "max_value": 5.0
+    },
+    "pitch_forward_bonus": {
+      "weight": 1.0,
+      "enabled": false,
+      "min_value": 0,
+      "max_value": 20.0
     },
     "stability_roll": {
       "weight": -0.001,
@@ -73,7 +79,7 @@
       "max_value": 0
     },
     "y_axis_deviation_square_penalty": {
-      "weight": -0.001,
+      "weight": -0.0001,
       "enabled": true,
       "min_value": -0.01,
       "max_value": 0
@@ -134,7 +140,7 @@
     },
     "hip_openning_square": {
       "weight": -0.02,
-      "enabled": true,
+      "enabled": false,
       "min_value": -1,
       "max_value": 1
     },
@@ -161,12 +167,6 @@
       "enabled": false,
       "min_value": 0,
       "max_value": 10
-    },
-    "pitch_forward_bonus": {
-      "weight": 1.0,
-      "enabled": false,
-      "min_value": 0,
-      "max_value": 20.0
     }
   }
 }
