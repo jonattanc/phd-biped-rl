@@ -364,7 +364,7 @@ class Simulation(gym.Env):
 
         robot_position, robot_velocity, robot_orientation = self.robot.get_imu_position_velocity_orientation()
         self.robot_x_position = robot_position[0]
-        self.robot_y_position = robot_position[0]
+        self.robot_y_position = robot_position[1]
         self.robot_z_position = robot_position[2]
         self.robot_x_velocity = robot_velocity[0]
         self.robot_roll = robot_orientation[0]
