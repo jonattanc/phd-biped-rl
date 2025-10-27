@@ -15,6 +15,8 @@ class Robot:
         self.revolute_indices = None
         self.gait_state = 0
 
+        self.gait_step_size = 0.2
+
         self.robots_dir = os.path.join(utils.PROJECT_ROOT, "robots")
         self.robots_tmp_dir = os.path.join(utils.TMP_PATH, "robots")
 
@@ -108,15 +110,15 @@ class Robot:
         new_state = self.gait_state
 
         if self.gait_state == 0.5:  # Pés paralelos
-            if feet_frontal_distance > 0.05:
+            if feet_frontal_distance > self.gait_step_size / 2:
                 new_state = 0.25
 
         elif self.gait_state == 0.25:  # Pé direito um pouco avançado
-            if feet_frontal_distance > 0.1:
+            if feet_frontal_distance > self.gait_step_size:
                 new_state = -1.0
 
         elif self.gait_state == -1.0:  # Pé direito bem avançado
-            if feet_frontal_distance < 0.05:
+            if feet_frontal_distance < self.gait_step_size / 2:
                 new_state = -0.75
 
         elif self.gait_state == -0.75:  # Pé direito recuando
@@ -124,15 +126,15 @@ class Robot:
                 new_state = -0.5
 
         elif self.gait_state == -0.5:  # Pés paralelos (volta)
-            if feet_frontal_distance < -0.05:
+            if feet_frontal_distance < -self.gait_step_size / 2:
                 new_state = -0.25
 
         elif self.gait_state == -0.25:  # Pé direito um pouco atrás
-            if feet_frontal_distance < -0.1:
+            if feet_frontal_distance < -self.gait_step_size:
                 new_state = 1.0
 
         elif self.gait_state == 1.0:  # Pé direito bem atrás
-            if feet_frontal_distance > -0.05:
+            if feet_frontal_distance > -self.gait_step_size / 2:
                 new_state = 0.75
 
         elif self.gait_state == 0.75:  # Pé direito avançando novamente
