@@ -331,9 +331,7 @@ class TrainingTab:
                 self.best_models_dir = utils.ensure_directory(os.path.join(utils.TRAINING_DATA_PATH, "best_models_temp"))
 
             # Reiniciar dados
-            self.tracker.best_reward = -float("inf")
-            self.tracker.total_steps = 0
-            self.tracker.steps_since_improvement = 0
+            self.tracker.reset()
             self.total_steps = 0
             self.current_best_model_path = None
 

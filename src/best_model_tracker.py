@@ -28,6 +28,9 @@ class BestModelTracker:
         if episode_distance > self.best_distance:
             self.best_distance = episode_distance
 
+        if episode_reward < self.reward_reference:
+            self.reward_reference = episode_reward
+
         # Primeira recompensa sempre é considerada melhoria
         if self.best_reward == -float("inf"):
             self.best_reward = episode_reward
@@ -36,7 +39,14 @@ class BestModelTracker:
             return False, "first_reward"
 
         # Calcular melhoria percentual
-        improvement = (episode_reward - self.best_reward) / abs(self.best_reward)
+        normalized_episode_reward = episode_reward - self.reward_reference
+        normalized_best_reward = self.best_reward - self.reward_reference
+
+        if normalized_best_reward == 0:
+            improvement = 0.0
+
+        else:
+            improvement = (normalized_episode_reward - normalized_best_reward) / abs(normalized_best_reward)
 
         if improvement >= self.improvement_threshold and self.total_steps >= minimum_steps_to_save:
             self.best_reward = episode_reward
@@ -88,3 +98,4 @@ class BestModelTracker:
         self.total_steps = 0
         self.last_improvement_steps = 0
         self.auto_save_count = 0
+        self.reward_reference = 0
