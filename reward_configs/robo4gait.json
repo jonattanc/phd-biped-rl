@@ -1,8 +1,8 @@
 {
   "components": {
     "gait_state_change": {
-      "weight": 10.0,
-      "enabled": false,
+      "weight": 15.0,
+      "enabled": true,
       "min_value": 0,
       "max_value": 200
     },
@@ -109,13 +109,13 @@
       "max_value": 0
     },
     "foot_clearance": {
-      "weight": 0.03,
+      "weight": 0.005,
       "enabled": true,
       "min_value": 0,
       "max_value": 1
     },
     "alternating_foot_contact": {
-      "weight": 0.01,
+      "weight": 0.002,
       "enabled": true,
       "min_value": 0,
       "max_value": 1
