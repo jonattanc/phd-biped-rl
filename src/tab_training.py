@@ -169,7 +169,7 @@ class TrainingTab:
         self.load_training_btn = ttk.Button(row2_frame, text="Carregar Treino", command=self.load_training_data, width=15)
         self.load_training_btn.grid(row=0, column=1, padx=1)
 
-        self.export_plots_btn = ttk.Button(row2_frame, text="Exportar Gráficos", command=self.export_plots, state=tk.DISABLED, width=15)
+        self.export_plots_btn = ttk.Button(row2_frame, text="Exportar Gráficos", command=self.export_plots, width=15)
         self.export_plots_btn.grid(row=0, column=2, padx=1)
 
         self.enable_dpg_var = tk.BooleanVar(value=self.settings.get("enable_dynamic_policy_gradient", True))
@@ -392,7 +392,6 @@ class TrainingTab:
 
             # Habilitar botões
             self.save_training_btn.config(state=tk.DISABLED)
-            self.export_plots_btn.config(state=tk.NORMAL)
             self.pause_btn.config(state=tk.NORMAL)
             self.stop_btn.config(state=tk.NORMAL)
             self.start_btn.config(text="Iniciar Treino")
@@ -457,7 +456,6 @@ class TrainingTab:
 
             self.logger.info(f"Processo de treinamento retomado: {self.current_env} + {self.current_robot} + {self.current_algorithm}")
             self.save_training_btn.config(state=tk.DISABLED)
-            self.export_plots_btn.config(state=tk.NORMAL)
             self.pause_btn.config(state=tk.NORMAL)
             self.stop_btn.config(state=tk.NORMAL)
             self.start_btn.config(text="Iniciar Treino")
@@ -581,8 +579,6 @@ class TrainingTab:
         self.pause_btn.config(state=tk.DISABLED)
         self.stop_btn.config(state=tk.DISABLED)
         self.save_training_btn.config(state=tk.DISABLED)
-        self.export_plots_btn.config(state=tk.DISABLED)
-
         self.enable_other_tabs()
 
         self.logger.info("Treinamento finalizado pelo usuário")
@@ -773,7 +769,6 @@ class TrainingTab:
 
             # Habilitar botões
             self.save_training_btn.config(state=tk.NORMAL)
-            self.export_plots_btn.config(state=tk.NORMAL)
 
             messagebox.showinfo(
                 "Sucesso", f"Treinamento carregado!\n" f"Modelo: {os.path.basename(model_path)}\n" f"Próximo episódio: {self.current_episode}\n" f"Clique em 'Retomar Treino' para continuar."
@@ -854,7 +849,7 @@ class TrainingTab:
             # Opções de dimensões
             dimension_window = tk.Toplevel(self.root)
             dimension_window.title("Configurações de Exportação")
-            dimension_window.geometry("300x200")
+            dimension_window.geometry("300x250")
             dimension_window.transient(self.root)
             dimension_window.grab_set()
 
@@ -887,7 +882,6 @@ class TrainingTab:
 
                     self.save_plots_to_directory(export_dir, width, height, dpi)
                     dimension_window.destroy()
-                    messagebox.showinfo("Sucesso", f"Gráficos exportados para: {export_dir}")
 
                 except ValueError:
                     messagebox.showerror("Erro", "Valores inválidos para dimensões ou DPI.")
@@ -1331,7 +1325,6 @@ class TrainingTab:
                         self.pause_btn.config(state=tk.DISABLED)
                         self.stop_btn.config(state=tk.DISABLED)
                         self.save_training_btn.config(state=tk.DISABLED)
-                        self.export_plots_btn.config(state=tk.DISABLED)
                         self.enable_other_tabs()
                         self.is_resuming = False
 
