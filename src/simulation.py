@@ -421,21 +421,15 @@ class Simulation(gym.Env):
 
         self.episode_last_action = action
 
-        if self.config_changed_value.value:
+        if self.config_changed_value.value:  # Se houve mudança de configuração
             if self.pause_value.value:
                 while self.pause_value.value and not self.exit_value.value:
+                    self.try_to_resolve_config_change()
                     time.sleep(0.1)
 
-                self.config_changed_value.value = 0
+            self.try_to_resolve_config_change()
 
-                if (
-                    self.last_selected_camera != self.camera_selection_value.value
-                    or self.is_visualization_enabled != self.enable_visualization_value.value
-                    or self.is_real_time_enabled != self.enable_real_time_value.value
-                ):
-                    self.config_changed_value.value = 1
-
-        else:
+        else:  # Desabilita espera real-time quando há mudança de configuração pendente
             if self.is_visualization_enabled and self.is_real_time_enabled:
                 time.sleep(self.time_step_s)
 
@@ -444,6 +438,13 @@ class Simulation(gym.Env):
             info["exit"] = True
 
         return obs, reward, self.episode_terminated, self.episode_truncated, info
+
+    def try_to_resolve_config_change(self):
+        self.config_changed_value.value = 0
+        self.is_real_time_enabled = self.enable_real_time_value.value
+
+        if self.last_selected_camera != self.camera_selection_value.value or self.is_visualization_enabled != self.enable_visualization_value.value:
+            self.config_changed_value.value = 1  # Para esta mudança de configuração, precisamos aguardar o término do episódio atual para reiniciar a simulação
 
     def close(self):
         p.disconnect()
