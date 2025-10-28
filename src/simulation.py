@@ -226,6 +226,7 @@ class Simulation(gym.Env):
         self.episode_terminated = False
         self.episode_truncated = False
         self.episode_episode_done = False
+        self.episode_termination = "none"
         self.episode_last_action = np.zeros(self.action_dim, dtype=float)
         self.episode_steps = 0
         self.episode_info = {}
@@ -382,41 +383,40 @@ class Simulation(gym.Env):
 
         self.episode_distance = self.robot_x_position - self.episode_robot_x_initial_position
 
+        info = {}
+
         # Condições de Termino
-        info = {"distance": self.episode_distance, "termination": "none"}
+        self.episode_termination = "none"
 
         # Queda
         if self.robot_z_position < self.fall_threshold:
             self.episode_terminated = True
-            info["termination"] = "fell"
+            self.episode_termination = "fell"
 
         # Desvio do caminho
         if abs(self.robot_yaw) >= self.yaw_threshold:
             self.episode_terminated = True
-            info["termination"] = "yaw_deviated"
+            self.episode_termination = "yaw_deviated"
 
         # Sucesso
         elif self.episode_distance >= self.success_distance:
             self.episode_terminated = True
             self.episode_success = True
-            info["termination"] = "success"
+            self.episode_termination = "success"
 
         # Timeout
         elif self.episode_steps * self.time_step_s >= self.episode_timeout_s:
             self.episode_truncated = True
-            info["termination"] = "timeout"
+            self.episode_termination = "timeout"
 
-        info["success"] = self.episode_success
         self.episode_done = self.episode_truncated or self.episode_terminated
 
         # Recompensa
-        reward = self.reward_system.calculate_reward(self, action, info)
+        reward = self.reward_system.calculate_reward(self, action)
         self.episode_reward += reward
 
         # Coletar info final quando o episódio terminar
         if self.episode_done:
-            info["episode"] = {"r": self.episode_reward, "l": self.episode_steps, "distance": self.episode_distance, "success": self.episode_success}
-
             self.transmit_episode_info()
 
         self.episode_last_action = action

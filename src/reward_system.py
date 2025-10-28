@@ -64,7 +64,7 @@ class RewardSystem:
             self.dpg_weights = np.array([0.7, 0.15, 0.1, 0.05])  # Foco máximo em progresso
             self.logger.info("Fase 3 ativada: Foco em alta velocidade!")
 
-    def create_hybrid_reward_vector(self, sim, action, info, weights=None):
+    def create_hybrid_reward_vector(self, sim, action, weights=None):
         """Cria vetor de recompensas com normalização"""
         components = np.zeros(4)
 
@@ -103,14 +103,14 @@ class RewardSystem:
 
         return weighted_components, components
 
-    def calculate_dpg_reward(self, sim, action, info):
+    def calculate_dpg_reward(self, sim, action):
         """Calcula recompensa com DPG progressivo"""
         # Atualizar progressão
-        episode_results = {"distance": sim.episode_distance, "success": info.get("success", False), "duration": sim.episode_steps * sim.time_step_s}
+        episode_results = {"distance": sim.episode_distance, "success": sim.episode_success, "duration": sim.episode_steps * sim.time_step_s}
         self.update_progression(episode_results)
 
         # Calcular recompensa com pesos progressivos do DPG
-        weighted_reward, components = self.create_hybrid_reward_vector(sim, action, info, self.dpg_weights)
+        weighted_reward, components = self.create_hybrid_reward_vector(sim, action, self.dpg_weights)
 
         total_reward = np.sum(weighted_reward)
 
@@ -120,12 +120,9 @@ class RewardSystem:
         if self.phase == 3 and sim.episode_distance > 6.0:
             total_reward += 0.5
 
-        info["reward_components"] = components
-        info["current_phase"] = self.phase
-
         return total_reward
 
-    def calculate_standard_reward(self, sim, action, info):
+    def calculate_standard_reward(self, sim, action):
         """Calcula recompensa padrão (sem DPG)"""
 
         # Resetar valores dos componentes
@@ -175,12 +172,12 @@ class RewardSystem:
             total_reward += sim.robot_yaw**2 * self.components["stability_yaw"].weight
 
         if self.is_component_enabled("yaw_penalty"):
-            if info["termination"] == "yaw_deviated":
+            if sim.episode_termination == "yaw_deviated":
                 self.components["yaw_penalty"].value = 1
                 total_reward += self.components["yaw_penalty"].weight
 
         if self.is_component_enabled("fall_penalty"):
-            if info["termination"] == "fell":
+            if sim.episode_termination == "fell":
                 self.components["fall_penalty"].value = 1
                 total_reward += self.components["fall_penalty"].weight
 
@@ -193,7 +190,7 @@ class RewardSystem:
             total_reward += self.components["height_deviation_square_penalty"].value * self.components["height_deviation_square_penalty"].weight
 
         if self.is_component_enabled("success_bonus"):
-            if info["termination"] == "success":
+            if sim.episode_termination == "success":
                 self.components["success_bonus"].value = 1
                 total_reward += self.components["success_bonus"].weight
 
@@ -292,12 +289,12 @@ class RewardSystem:
 
         return total_reward
 
-    def calculate_reward(self, sim, action, info):
+    def calculate_reward(self, sim, action):
         """Método principal - escolhe entre DPG progressivo ou padrão"""
         if self.dpg_enabled:
-            return self.calculate_dpg_reward(sim, action, info)
+            return self.calculate_dpg_reward(sim, action)
         else:
-            return self.calculate_standard_reward(sim, action, info)
+            return self.calculate_standard_reward(sim, action)
 
     def get_configuration_as_dict(self):
         """Retorna configuração atual em formato dicionário"""
