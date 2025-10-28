@@ -43,7 +43,7 @@
       "max_value": 0
     },
     "stability_yaw": {
-      "weight": -0.001,
+      "weight": -0.002,
       "enabled": true,
       "min_value": -1,
       "max_value": 0
@@ -115,7 +115,7 @@
       "max_value": 1
     },
     "alternating_foot_contact": {
-      "weight": 0.002,
+      "weight": 0.001,
       "enabled": true,
       "min_value": 0,
       "max_value": 1
