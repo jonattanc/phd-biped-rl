@@ -43,7 +43,7 @@ class Simulation(gym.Env):
         self.last_selected_camera = self.camera_selection_value.value
         self.config_changed_value = config_changed_value
         self.num_episodes = num_episodes
-        self.current_episode = 0
+        self.episode_count = initial_episode
         self.total_steps = 0
 
         self.logger = logger
@@ -94,8 +94,6 @@ class Simulation(gym.Env):
 
         # Variáveis para coleta de dados
         self.reset_episode_vars()
-        self.current_episode = initial_episode
-        self.episode_count = initial_episode
 
     def create_com_marker(self):
         com_pos = self.robot.get_center_of_mass()
@@ -284,14 +282,13 @@ class Simulation(gym.Env):
             self.agent.model.ep_info_buffer = []
 
         self.episode_count += 1
-        actual_episode_number = self.current_episode + self.episode_count
 
         # Enviar para ipc_queue
         try:
             self.ipc_queue.put_nowait(
                 {
                     "type": "episode_data",
-                    "episode": actual_episode_number,
+                    "episode": self.episode_count,
                     "reward": self.episode_reward,
                     "time": self.episode_steps * self.time_step_s,
                     "steps": self.episode_steps,
@@ -310,8 +307,8 @@ class Simulation(gym.Env):
             self.logger.exception("Erro ao transmitir dados do episódio")
             # Ignorar erros de queue durante avaliação
 
-        if actual_episode_number % 10 == 0:
-            self.logger.info(f"Episódio {actual_episode_number} concluído")
+        if self.episode_count % 10 == 0:
+            self.logger.info(f"Episódio {self.episode_count} concluído")
 
     def apply_action(self, action):
         action = np.clip(action, -1.0, 1.0)  # Normalizar ação para evitar valores extremos
