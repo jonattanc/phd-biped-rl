@@ -142,7 +142,7 @@ class RewardSystem:
             total_reward += self.components["gait_state_change"].value * self.components["gait_state_change"].weight
 
         if self.is_component_enabled("progress"):
-            progress = sim.robot_x_velocity
+            progress = sim.target_x_velocity - abs(sim.target_x_velocity - sim.robot_x_velocity)
             self.components["progress"].value = progress
             total_reward += progress * self.components["progress"].weight
 
