@@ -284,10 +284,6 @@ class Simulation(gym.Env):
             self.agent.model.ep_info_buffer = []
 
         self.episode_count += 1
-
-        # Obter posição e orientação final da IMU
-        imu_position, robot_velocity, imu_orientation = self.robot.get_imu_position_velocity_orientation()
-
         actual_episode_number = self.current_episode + self.episode_count
 
         # Enviar para ipc_queue
@@ -301,21 +297,15 @@ class Simulation(gym.Env):
                     "steps": self.episode_steps,
                     "distance": self.episode_distance,
                     "success": self.episode_success,
-                    "imu_x": imu_position[0],
-                    "imu_y": imu_position[1],
-                    "imu_z": imu_position[2],
-                    "roll": imu_orientation[0],
-                    "pitch": imu_orientation[1],
-                    "yaw": imu_orientation[2],
-                    "current_phase": self.reward_system.phase if hasattr(self.reward_system, "phase") else 1,
+                    "imu_x": self.robot_x_position,
+                    "imu_y": self.robot_y_position,
+                    "imu_z": self.robot_z_position,
+                    "roll": self.robot_roll,
+                    "pitch": self.robot_pitch,
+                    "yaw": self.robot_yaw,
                 }
             )
 
-            # Enviar contagem de steps para a GUI
-            try:
-                self.ipc_queue.put_nowait({"type": "step_count", "steps": self.episode_steps})
-            except Exception as e:
-                pass
         except Exception as e:
             self.logger.exception("Erro ao transmitir dados do episódio")
             # Ignorar erros de queue durante avaliação
