@@ -43,7 +43,7 @@ class Simulation(gym.Env):
         self.last_selected_camera = self.camera_selection_value.value
         self.config_changed_value = config_changed_value
         self.num_episodes = num_episodes
-        self.current_episode = 0
+        self.episode_count = initial_episode
         self.total_steps = 0
 
         self.logger = logger
@@ -95,8 +95,6 @@ class Simulation(gym.Env):
 
         # Variáveis para coleta de dados
         self.reset_episode_vars()
-        self.current_episode = initial_episode
-        self.episode_count = initial_episode
 
     def create_com_marker(self):
         com_pos = self.robot.get_center_of_mass()
@@ -227,6 +225,7 @@ class Simulation(gym.Env):
         self.episode_terminated = False
         self.episode_truncated = False
         self.episode_episode_done = False
+        self.episode_termination = "none"
         self.episode_last_action = np.zeros(self.action_dim, dtype=float)
         self.episode_steps = 0
         self.episode_info = {}
@@ -285,43 +284,32 @@ class Simulation(gym.Env):
 
         self.episode_count += 1
 
-        # Obter posição e orientação final da IMU
-        imu_position, robot_velocity, imu_orientation = self.robot.get_imu_position_velocity_orientation()
-
-        actual_episode_number = self.current_episode + self.episode_count
-
         # Enviar para ipc_queue
         try:
             self.ipc_queue.put_nowait(
                 {
                     "type": "episode_data",
-                    "episode": actual_episode_number,
+                    "episode": self.episode_count,
                     "reward": self.episode_reward,
                     "time": self.episode_steps * self.time_step_s,
                     "steps": self.episode_steps,
                     "distance": self.episode_distance,
                     "success": self.episode_success,
-                    "imu_x": imu_position[0],
-                    "imu_y": imu_position[1],
-                    "imu_z": imu_position[2],
-                    "roll": imu_orientation[0],
-                    "pitch": imu_orientation[1],
-                    "yaw": imu_orientation[2],
-                    "current_phase": self.reward_system.phase if hasattr(self.reward_system, "phase") else 1,
+                    "imu_x": self.robot_x_position,
+                    "imu_y": self.robot_y_position,
+                    "imu_z": self.robot_z_position,
+                    "roll": self.robot_roll,
+                    "pitch": self.robot_pitch,
+                    "yaw": self.robot_yaw,
                 }
             )
 
-            # Enviar contagem de steps para a GUI
-            try:
-                self.ipc_queue.put_nowait({"type": "step_count", "steps": self.episode_steps})
-            except Exception as e:
-                pass
         except Exception as e:
             self.logger.exception("Erro ao transmitir dados do episódio")
             # Ignorar erros de queue durante avaliação
 
-        if actual_episode_number % 10 == 0:
-            self.logger.info(f"Episódio {actual_episode_number} concluído")
+        if self.episode_count % 10 == 0:
+            self.logger.info(f"Episódio {self.episode_count} concluído")
 
     def apply_action(self, action):
         action = np.clip(action, -1.0, 1.0)  # Normalizar ação para evitar valores extremos
@@ -383,60 +371,53 @@ class Simulation(gym.Env):
 
         self.episode_distance = self.robot_x_position - self.episode_robot_x_initial_position
 
+        info = {}
+
         # Condições de Termino
-        info = {"distance": self.episode_distance, "termination": "none"}
+        self.episode_termination = "none"
 
         # Queda
         if self.robot_z_position < self.fall_threshold:
             self.episode_terminated = True
-            info["termination"] = "fell"
+            self.episode_termination = "fell"
 
         # Desvio do caminho
         if abs(self.robot_yaw) >= self.yaw_threshold:
             self.episode_terminated = True
-            info["termination"] = "yaw_deviated"
+            self.episode_termination = "yaw_deviated"
 
         # Sucesso
         elif self.episode_distance >= self.success_distance:
             self.episode_terminated = True
             self.episode_success = True
-            info["termination"] = "success"
+            self.episode_termination = "success"
 
         # Timeout
         elif self.episode_steps * self.time_step_s >= self.episode_timeout_s:
             self.episode_truncated = True
-            info["termination"] = "timeout"
+            self.episode_termination = "timeout"
 
-        info["success"] = self.episode_success
         self.episode_done = self.episode_truncated or self.episode_terminated
 
         # Recompensa
-        reward = self.reward_system.calculate_reward(self, action, info)
+        reward = self.reward_system.calculate_reward(self, action)
         self.episode_reward += reward
 
         # Coletar info final quando o episódio terminar
         if self.episode_done:
-            info["episode"] = {"r": self.episode_reward, "l": self.episode_steps, "distance": self.episode_distance, "success": self.episode_success}
-
             self.transmit_episode_info()
 
         self.episode_last_action = action
 
-        if self.config_changed_value.value:
+        if self.config_changed_value.value:  # Se houve mudança de configuração
             if self.pause_value.value:
                 while self.pause_value.value and not self.exit_value.value:
+                    self.try_to_resolve_config_change()
                     time.sleep(0.1)
 
-                self.config_changed_value.value = 0
+            self.try_to_resolve_config_change()
 
-                if (
-                    self.last_selected_camera != self.camera_selection_value.value
-                    or self.is_visualization_enabled != self.enable_visualization_value.value
-                    or self.is_real_time_enabled != self.enable_real_time_value.value
-                ):
-                    self.config_changed_value.value = 1
-
-        else:
+        else:  # Desabilita espera real-time quando há mudança de configuração pendente
             if self.is_visualization_enabled and self.is_real_time_enabled:
                 time.sleep(self.time_step_s)
 
@@ -445,6 +426,13 @@ class Simulation(gym.Env):
             info["exit"] = True
 
         return obs, reward, self.episode_terminated, self.episode_truncated, info
+
+    def try_to_resolve_config_change(self):
+        self.config_changed_value.value = 0
+        self.is_real_time_enabled = self.enable_real_time_value.value
+
+        if self.last_selected_camera != self.camera_selection_value.value or self.is_visualization_enabled != self.enable_visualization_value.value:
+            self.config_changed_value.value = 1  # Para esta mudança de configuração, precisamos aguardar o término do episódio atual para reiniciar a simulação
 
     def close(self):
         p.disconnect()

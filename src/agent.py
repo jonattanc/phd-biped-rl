@@ -274,14 +274,14 @@ class Agent:
                     episode_reward += reward
 
                     # Verificar sucesso
-                    if info.get("success", False):
+                    if env.episode_success:
                         episode_success = True
                         self.logger.info(f"Episódio {episode + 1} SUCESSO no step {steps}")
                         break
 
                     # Condições de término
                     if terminated or truncated:
-                        if info.get("termination") == "success":
+                        if env.episode_termination == "success":
                             episode_success = True
                             self.logger.info(f"Episódio {episode + 1} SUCESSO por término")
                         else:

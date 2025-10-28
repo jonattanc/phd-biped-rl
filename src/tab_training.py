@@ -1292,6 +1292,13 @@ class TrainingTab:
                         self.new_plot_data = True
                         self._handle_episode_data(msg)
 
+                        # Atualizar contador de steps
+                        if self.total_steps is None:
+                            self.total_steps = msg.get("steps", 0)
+
+                        else:
+                            self.total_steps += msg.get("steps", 0)
+
                     elif data_type == "training_progress":
                         # Atualizar contador de steps
                         self.total_steps = msg.get("steps_completed", 0)
@@ -1300,14 +1307,6 @@ class TrainingTab:
                     elif data_type == "pybullet_window_ready":
                         self.logger.info("Janela do PyBullet pronta para visualização.")
                         self.focus_pybullet_window()
-
-                    elif data_type == "step_count":
-                        # Atualizar contador de steps
-                        if self.total_steps is None:
-                            self.total_steps = msg.get("steps", 0)
-
-                        else:
-                            self.total_steps += msg.get("steps", 0)
 
                     elif data_type == "save_model":
                         # Comando de salvamento - apenas registrar, não processar aqui
