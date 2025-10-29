@@ -128,6 +128,18 @@ class RewardSystem:
             total_reward += alternation * self.components["alternating_foot_contact"].weight
 
         # 5. ALTURA ADEQUADA DOS PÉS (Clearance durante o balanço)
+        if self.is_component_enabled("foot_clearance_original"):
+            foot_height = 0
+
+            if not sim.robot_left_foot_contact:
+                foot_height += sim.robot_left_foot_height
+
+            if not sim.robot_right_foot_contact:
+                foot_height += sim.robot_right_foot_height
+
+            self.components["foot_clearance_original"].value = foot_height
+            total_reward += self.components["foot_clearance_original"].value * self.components["foot_clearance_original"].weight
+
         if self.is_component_enabled("foot_clearance"):
             clearance_score = self._calculate_foot_clearance_optimized(sim)
             self.components["foot_clearance"].value = clearance_score

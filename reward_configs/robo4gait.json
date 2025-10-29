@@ -108,9 +108,15 @@
       "min_value": -1,
       "max_value": 0
     },
-    "foot_clearance": {
+    "foot_clearance_original": {
       "weight": 0.005,
       "enabled": true,
+      "min_value": 0,
+      "max_value": 1
+    },
+    "foot_clearance": {
+      "weight": 0.005,
+      "enabled": false,
       "min_value": 0,
       "max_value": 1
     },
