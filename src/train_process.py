@@ -3,6 +3,7 @@ from robot import Robot
 from simulation import Simulation
 from environment import Environment
 from agent import Agent, TrainingCallback
+from dpg_manager import DPGManager
 import utils
 import time
 import os
@@ -96,24 +97,15 @@ def process_runner(
         )
         
         if enable_dpg:
-            phase_detector_configured = setup_phase_detector(sim, robot, logger)
-            if not phase_detector_configured:
-                logger.warning("Não foi possível configurar o detector de fases. DPG pode não funcionar corretamente.")
-
-        sim.reward_system.enable_dpg_progression(enable_dpg)
-        agent = Agent(logger, env=sim, model_path=model_path, algorithm=algorithm, device=device, initial_episode=initial_episode)
-        sim.set_agent(agent)
-        
-        if enable_dpg and hasattr(sim.reward_system, 'gait_phase_dpg'):
-            status = sim.reward_system.gait_phase_dpg.get_status()
-            logger.info(f"DPG Fases da Marcha - Fase atual: {status['current_phase']}, Velocidade alvo: {status['target_speed']} m/s")
-            if hasattr(sim.reward_system, 'phase_detector') and sim.reward_system.phase_detector:
-                logger.info("Detector de fases configurado e funcionando")
-            else:
-                logger.warning("Detector de fases NÃO configurado - funcionalidades limitadas")
+            dpg_manager = DPGManager(logger, robot, reward_system)
+            dpg_manager.enable(True)
+            reward_system.set_dpg_manager(dpg_manager)
+            logger.info("Sistema DPG configurado e ativado")
         else:
-            logger.info("Usando Agent padrão (sem DPG)")
-        
+            logger.info("Usando sistema de recompensa padrão (sem DPG)")
+
+        agent = Agent(logger, env=sim, model_path=model_path, algorithm=algorithm, device=device, initial_episode=initial_episode)
+        sim.set_agent(agent)    
 
         callback = TrainingCallback(logger)
         ipc_queue.put_nowait({"type": "minimum_steps_to_save", "minimum_steps_to_save": agent.minimum_steps_to_save})
@@ -142,10 +134,7 @@ def process_runner(
                 break
 
             timesteps_completed += timesteps_batch_size
-            if enable_dpg:
-                agent.learn(total_timesteps=timesteps_batch_size, reset_num_timesteps=False, callback=callback)
-            else:
-                agent.model.learn(total_timesteps=timesteps_batch_size, reset_num_timesteps=False, callback=callback)
+            agent.model.learn(total_timesteps=timesteps_batch_size, reset_num_timesteps=False, callback=callback)
 
             # Enviar progresso para GUI
             try:
@@ -166,7 +155,7 @@ def process_runner(
 def setup_phase_detector(sim, robot, logger):
     """Configura o detector de fases da marcha"""
     try:
-        from gait_phase_detector import GaitPhaseDetector
+        from dpg_gait_phase_detector import GaitPhaseDetector
         
         # Criar e configurar detector de fases
         phase_detector = GaitPhaseDetector(robot, logger)

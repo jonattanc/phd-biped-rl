@@ -1,0 +1,412 @@
+# dpg_manager.py
+import numpy as np
+import pybullet as p
+from dataclasses import dataclass
+from typing import Dict, List, Optional
+from dpg_gait_phases import GaitPhaseDPG
+from dpg_gait_phase_detector import GaitPhaseDetector
+
+
+@dataclass
+class DPGConfig:
+    """Configuração completa do DPG"""
+    enabled: bool = False
+    initial_posture: Dict = None
+    phase_targets: Dict = None
+    phase_weights: Dict = None
+    
+
+class DPGManager:
+    """
+    Gerenciador central para todo o sistema DPG
+    """
+    
+    def __init__(self, logger, robot, reward_system):
+        self.logger = logger
+        self.robot = robot
+        self.reward_system = reward_system
+        self.config = DPGConfig()
+        
+        # Componentes do DPG
+        self.phase_detector = None
+        self.gait_phase_dpg = None
+        
+        # Inicializar configurações padrão
+        self._initialize_default_config()
+    
+    def _initialize_default_config(self):
+        """Inicializa configurações padrão do DPG"""
+        # Postura inicial otimizada para DPG
+        self.config.initial_posture = {
+            "hip_frontal": 0.0,
+            "hip_lateral": 0.0, 
+            "knee": 0.4,
+            "ankle_frontal": -0.15,
+            "ankle_lateral": 0.0,
+            "body_pitch": 0.1
+        }
+        
+        # Metas articulares por fase
+        self.config.phase_targets = {
+            "IC": {"hip": +0.35, "knee": +0.10, "ankle": +0.05, "sigma": 0.10},
+            "LR": {"hip": +0.30, "knee": +0.15, "ankle": +0.05, "sigma": 0.12},
+            "MS": {"hip": +0.10, "knee": +0.05, "ankle": +0.10, "sigma": 0.12},
+            "TS": {"hip": -0.20, "knee": +0.05, "ankle": -0.30, "sigma": 0.15},
+            "PS": {"hip": 0.00, "knee": +0.40, "ankle": -0.10, "sigma": 0.15},
+            "ISw": {"hip": +0.25, "knee": +1.00, "ankle": +0.08, "sigma": 0.20},
+            "MSw": {"hip": +0.40, "knee": +0.50, "ankle": +0.05, "sigma": 0.20},
+            "TSw": {"hip": +0.30, "knee": +0.10, "ankle": +0.02, "sigma": 0.12},
+        }
+        
+        # Pesos das recompensas por fase
+        self.config.phase_weights = {
+            "velocity": 2.0,
+            "phase_angles": 1.6,
+            "propulsion": 0.6,
+            "clearance": 0.5,
+            "stability": 0.8,
+            "symmetry": 0.3,
+            "effort_torque": 1e-4,
+            "effort_power": 1e-5,
+            "action_smoothness": 1e-3,
+            "lateral_penalty": 0.2,
+            "slip_penalty": 0.5,
+        }
+    
+    def enable(self, enabled=True):
+        """Ativa/desativa o sistema DPG completo"""
+        self.config.enabled = enabled
+        
+        if enabled:
+            self._setup_dpg_components()
+            self.logger.info("Sistema DPG ativado com sucesso")
+        else:
+            self._teardown_dpg_components()
+            self.logger.info("Sistema DPG desativado")
+    
+    def _setup_dpg_components(self):
+        """Configura todos os componentes do DPG"""
+        try:
+            # 1. Configurar detector de fases
+            self.phase_detector = GaitPhaseDetector(self.robot, self.logger)
+            self.reward_system.set_phase_detector(self.phase_detector)
+            
+            # 2. Configurar DPG de fases da marcha
+            self.gait_phase_dpg = GaitPhaseDPG(self.logger, self.reward_system)
+            self.reward_system.gait_phase_dpg = self.gait_phase_dpg
+            
+            # 3. Aplicar configuração inicial de fase
+            self.gait_phase_dpg._apply_phase_config()
+            
+            self.logger.info("Todos os componentes DPG configurados")
+            
+        except Exception as e:
+            self.logger.error(f"Erro ao configurar componentes DPG: {e}")
+            raise
+    
+    def _teardown_dpg_components(self):
+        """Remove todos os componentes do DPG"""
+        self.phase_detector = None
+        self.gait_phase_dpg = None
+        self.reward_system.phase_detector = None
+        self.reward_system.gait_phase_dpg = None
+    
+    def apply_initial_posture(self):
+        """Aplica a postura inicial otimizada para DPG"""
+        if not self.config.enabled:
+            return
+        
+        try:
+            posture = self.config.initial_posture
+            
+            # Aqui você implementaria a lógica para aplicar a postura inicial
+            # ao robô. Isso depende da estrutura específica do seu robô.
+            # Exemplo genérico:
+            self.logger.info(f"Aplicando postura inicial DPG: {posture}")
+            
+            # Em uma implementação real, você setaria as juntas do robô
+            # para os valores especificados em posture
+            
+        except Exception as e:
+            self.logger.warning(f"Erro ao aplicar postura inicial DPG: {e}")
+    
+    def calculate_reward(self, sim, action):
+        """Calcula recompensa usando o sistema DPG"""
+        if not self.config.enabled:
+            return 0.0
+        
+        try:
+            return self._calculate_dpg_reward(sim, action)
+        except Exception as e:
+            self.logger.error(f"Erro no cálculo de recompensa DPG: {e}")
+            return 0.0
+    
+    def _calculate_dpg_reward(self, sim, action):
+        """
+        Calcula recompensa DGP usando o sistema completo de fases da marcha
+        """
+        if self.phase_detector is None:
+            self.logger.warning("DPG com fases ativado mas phase_detector não configurado")
+            return self.calculate_standard_reward(sim, action)
+
+        total_reward = 0.0
+        w = self.phase_specific_weights
+
+        # VERIFICAÇÃO PARA FASE INICIAL
+        if hasattr(self, 'gait_phase_dpg') and self.gait_phase_dpg and self.gait_phase_dpg.current_phase == 0:
+            # Na fase inicial, dar bônus imediato por qualquer progresso
+            if sim.episode_distance > 0.2:  # Apenas 20cm de progresso
+                progress_bonus = min(sim.episode_distance / 2.0, 1.0)  # Normalizado para máximo 1.0
+                total_reward += progress_bonus * 2.0  # Bônus significativo
+                self.logger.debug(f"Fase inicial - Progresso: {sim.episode_distance:.2f}m, Bônus: {progress_bonus:.2f}")
+
+        # 1. Componente de Velocidade (w_v * r_vel)
+        velocity_reward = self._calculate_velocity_reward(sim)
+        total_reward += w["velocity"] * velocity_reward
+
+        # 2. Componente de Fases e Ângulos Articulares (w_phase * r_ângulos)
+        phase_angle_reward = self._calculate_phase_angle_reward(sim)
+        total_reward += w["phase_angles"] * phase_angle_reward
+
+        # 3. Componente de Propulsão (w_prop * r_TS) 
+        propulsion_reward = self._calculate_propulsion_reward(sim)
+        total_reward += w["propulsion"] * propulsion_reward
+
+        # 4. Componente de Clearance (w_clr * r_clr)
+        clearance_reward = self._calculate_clearance_reward(sim)
+        total_reward += w["clearance"] * clearance_reward
+
+        # 5. Componente de Estabilidade (w_stab * r_MoS)
+        stability_reward = self._calculate_stability_reward(sim)
+        total_reward += w["stability"] * stability_reward
+
+        # 6. Componente de Simetria (w_sym * r_simetria)
+        symmetry_reward = self._calculate_symmetry_reward(sim)
+        total_reward += w["symmetry"] * symmetry_reward
+
+        # 7. Componente de Coordenação Braço-Perna
+        coordination_reward = self._calculate_arm_leg_coordination(sim)
+        total_reward += 0.4 * coordination_reward
+
+        # 8. NOVO: Recompensa por Fase de Voo Controlada
+        flight_reward = self._calculate_flight_phase_reward(sim)
+        total_reward += 0.2 * flight_reward  # Peso leve para voo
+
+        # 9. Penalidades de Eficiência
+        effort_cost = self._calculate_effort_cost(sim, action)
+        total_reward -= effort_cost
+
+        # 10. Penalidades de Estabilidade Lateral
+        lateral_cost = self._calculate_lateral_cost(sim)
+        total_reward -= lateral_cost
+
+        # 11. Penalidades por Problemas de Contato
+        foot_slap_penalty = self._calculate_anti_foot_slap_penalty(sim)
+        total_reward -= 0.8 * foot_slap_penalty  # Peso forte contra foot-slap
+
+        slip_penalty = self._calculate_slip_penalty(sim)
+        total_reward -= 0.6 * slip_penalty  # Peso moderado contra escorregamento
+
+        # 12. BÔNUS ADICIONAL PARA FASE INICIAL
+        if hasattr(self, 'gait_phase_dpg') and self.gait_phase_dpg and self.gait_phase_dpg.current_phase == 0:
+            # Bônus por manter estabilidade (evitar quedas)
+            stability_bonus = 0.0
+            if abs(sim.robot_roll) < 0.3:  # Roll estável
+                stability_bonus += 0.5
+            if abs(sim.robot_pitch) < 0.3:  # Pitch estável  
+                stability_bonus += 0.5
+            if sim.robot_z_position > 0.6:  # Não caiu
+                stability_bonus += 1.0
+
+            total_reward += stability_bonus * 0.5  # Peso moderado
+
+        # 13. Atualizar progressão DPG se disponível
+        if hasattr(self, 'gait_phase_dpg'):
+            episode_results = {
+                "distance": sim.episode_distance, 
+                "success": sim.episode_success, 
+                "duration": sim.episode_steps * sim.time_step_s,
+                "reward": total_reward,
+                "roll": abs(sim.robot_roll)  # Adicionado para cálculo de estabilidade
+            }
+            self.gait_phase_dpg.update_phase(episode_results)
+
+        return total_reward
+    
+    def _calculate_velocity_reward(self, sim):
+        """Recompensa de velocidade adaptada para DPG"""
+        vx = getattr(sim, "robot_x_velocity", 0)
+        
+        if self.gait_phase_dpg and self.gait_phase_dpg.current_phase == 0:
+            v_min, v_max = 0.1, 1.0
+            gamma = 1.0
+        else:
+            v_min, v_max = 1.2, 2.8
+            gamma = 1.4
+        
+        if v_max - v_min > 0:
+            normalized_vel = (vx - v_min) / (v_max - v_min)
+            clipped_vel = np.clip(normalized_vel, 0.0, 1.0)
+            return clipped_vel ** gamma
+        else:
+            return 0.0
+    
+    def _calculate_phase_angle_reward(self, sim):
+        """Recompensa por seguir metas articulares da fase atual"""
+        if not self.phase_detector:
+            return 0.0
+            
+        total_angle_reward = 0.0
+        current_time = sim.episode_steps * sim.time_step_s
+        
+        for foot_side in ["left", "right"]:
+            phase, _ = self.phase_detector.detect_phase_transition(foot_side, current_time)
+            phase_name = phase.name
+            
+            if phase_name in self.config.phase_targets:
+                target = self.config.phase_targets[phase_name]
+                
+                # Obter ângulos atuais
+                hip_angle = self._get_hip_angle(sim, foot_side)
+                knee_angle = self._get_knee_angle(sim, foot_side)
+                ankle_angle = self._get_ankle_angle(sim, foot_side)
+                
+                # Recompensas gaussianas
+                hip_reward = np.exp(-0.5 * (hip_angle - target["hip"])**2 / target["sigma"]**2)
+                knee_reward = np.exp(-0.5 * (knee_angle - target["knee"])**2 / target["sigma"]**2)
+                ankle_reward = np.exp(-0.5 * (ankle_angle - target["ankle"])**2 / target["sigma"]**2)
+                
+                phase_reward = (hip_reward + knee_reward + ankle_reward) / 3.0
+                total_angle_reward += phase_reward
+        
+        return total_angle_reward / 2.0
+    
+    def _calculate_propulsion_reward(self, sim):
+        """Recompensa de propulsão na fase TS"""
+        if not self.phase_detector:
+            return 0.0
+            
+        propulsion_reward = 0.0
+        current_time = sim.episode_steps * sim.time_step_s
+        
+        for foot_side in ["left", "right"]:
+            phase, in_contact = self.phase_detector.detect_phase_transition(foot_side, current_time)
+            
+            if phase.name == "TS" and in_contact:
+                ankle_velocity = self._get_ankle_velocity(sim, foot_side)
+                propulsion = max(ankle_velocity * 0.1, 0.0)
+                propulsion_reward += np.tanh(0.002 * propulsion)
+        
+        return propulsion_reward
+    
+    def _calculate_clearance_reward(self, sim):
+        """Recompensa por clearance adequado na oscilação"""
+        if not self.phase_detector:
+            return 0.0
+            
+        clearance_reward = 0.0
+        current_time = sim.episode_steps * sim.time_step_s
+        
+        for foot_side in ["left", "right"]:
+            phase, in_contact = self.phase_detector.detect_phase_transition(foot_side, current_time)
+            
+            if not in_contact:
+                foot_height = getattr(sim, f"robot_{foot_side}_foot_height")
+                clearance = 1.0 / (1.0 + np.exp(-100 * (foot_height - 0.025)))
+                clearance_reward += clearance
+        
+        return clearance_reward
+    
+    def _calculate_stability_reward(self, sim):
+        """Recompensa de estabilidade"""
+        pitch, roll = getattr(sim, "robot_pitch", 0), getattr(sim, "robot_roll", 0)
+        stability_penalty = abs(pitch) + abs(roll)
+        return np.exp(-stability_penalty / 0.35)
+    
+    def _calculate_symmetry_reward(self, sim):
+        """Recompensa por simetria temporal entre membros"""
+        left_hip = abs(getattr(sim, "robot_left_hip_frontal_angle", 0))
+        right_hip = abs(getattr(sim, "robot_right_hip_frontal_angle", 0))
+        
+        if left_hip + right_hip == 0:
+            return 1.0
+            
+        symmetry = 1.0 - abs(left_hip - right_hip) / (left_hip + right_hip)
+        return symmetry
+    
+    def _calculate_effort_cost(self, sim, action):
+        """Custo de esforço"""
+        w = self.config.phase_weights
+        
+        joint_velocities = getattr(sim, "joint_velocities", [0])
+        torque_cost = w["effort_torque"] * sum(v**2 for v in joint_velocities)
+        
+        power_cost = w["effort_power"] * sum(max(0, v)**2 for v in joint_velocities)
+        
+        last_action = getattr(sim, "episode_last_action", np.zeros_like(action))
+        action_smoothness_cost = w["action_smoothness"] * np.sum((action - last_action)**2)
+        
+        return torque_cost + power_cost + action_smoothness_cost
+    
+    def _calculate_lateral_cost(self, sim):
+        """Penalidade por deriva lateral"""
+        w = self.config.phase_weights
+        vy = abs(getattr(sim, "robot_y_velocity", 0))
+        return w["lateral_penalty"] * vy
+    
+    # Métodos auxiliares para obter ângulos articulares
+    def _get_hip_angle(self, sim, foot_side):
+        try:
+            if foot_side == "right":
+                return sim.robot_right_hip_frontal_angle
+            else:
+                return sim.robot_left_hip_frontal_angle
+        except:
+            return 0.0
+    
+    def _get_knee_angle(self, sim, foot_side):
+        try:
+            if foot_side == "right":
+                return sim.robot_right_knee_angle
+            else:
+                return sim.robot_left_knee_angle
+        except:
+            return 0.0
+    
+    def _get_ankle_angle(self, sim, foot_side):
+        try:
+            if self.phase_detector:
+                return self.phase_detector._get_ankle_angle(foot_side)
+            return 0.0
+        except:
+            return 0.0
+    
+    def _get_ankle_velocity(self, sim, foot_side):
+        try:
+            if self.phase_detector:
+                current_time = sim.episode_steps * sim.time_step_s
+                return self.phase_detector.get_ankle_velocity(foot_side, current_time)
+            return 0.0
+        except:
+            return 0.0
+    
+    def update_phase_progression(self, episode_results):
+        """Atualiza progressão de fases do DPG"""
+        if self.gait_phase_dpg:
+            self.gait_phase_dpg.update_phase(episode_results)
+    
+    def get_status(self):
+        """Retorna status atual do DPG"""
+        if not self.config.enabled:
+            return {"enabled": False}
+        
+        status = {
+            "enabled": True,
+            "phase_detector": self.phase_detector is not None,
+            "gait_phase_dpg": self.gait_phase_dpg is not None,
+        }
+        
+        if self.gait_phase_dpg:
+            status.update(self.gait_phase_dpg.get_status())
+        
+        return status

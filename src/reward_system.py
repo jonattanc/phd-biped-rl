@@ -1,11 +1,8 @@
 # reward_system.py
 import os
-import time
 import numpy as np
-import pybullet as p
 import json
 from dataclasses import dataclass
-from dpg_gait_phases import GaitPhaseDPG
 import utils
 
 
@@ -25,9 +22,12 @@ class RewardSystem:
 
         self.logger = logger
         self.components = {}
+
+        # DPG
+        self.dpg_manager = None
+        self.phase_detector = None
+        self.gait_phase_dpg = None
         self.dpg_enabled = False
-        self.phase = 1
-        self.dpg_weights = np.ones(4)
 
         self.safe_zone = 0.2  # m
         self.warning_zone = 0.4  # m
@@ -35,54 +35,41 @@ class RewardSystem:
         self.load_configuration_file("default.json", is_default_file=True)
         self.default_components = self.get_configuration_as_dict()
 
-        # Adicionar detector de fases
-        self.phase_detector = None
-        self.phase_targets = self._initialize_phase_targets()
-        self.phase_specific_weights = self._initialize_phase_weights()
+    def set_phase_detector(self, phase_detector):
+        """Configura o detector de fases (para compatibilidade com DPG)"""
+        self.phase_detector = phase_detector
+
+    def set_dpg_manager(self, dpg_manager):
+        """Configura o gerenciador DPG (opcional)"""
+        self.dpg_manager = dpg_manager
+
+    def enable_dpg_progression(self, enabled=True):
+        """Ativa/desativa progressão por fases para DPG"""
+        self.dpg_enabled = enabled
+        if enabled:
+            if not hasattr(self, "gait_phase_dpg"):
+                from dpg_gait_phases import GaitPhaseDPG
+
+                self.gait_phase_dpg = GaitPhaseDPG(self.logger, self)
+
+            self.gait_phase_dpg._apply_phase_config()  # Aplicar configuração inicial
+            self.logger.info("DPG com Fases da Marcha ativado")
+
+            if hasattr(self, "phase_detector") and self.phase_detector:
+                self.logger.info("Detector de fases da marcha inicializado")
+        else:
+            self.logger.info("Sistema de recompensa padrão")
 
     def is_component_enabled(self, name):
         if name not in self.components:
             return False
-
         return self.components[name].enabled
 
-    def _initialize_phase_targets(self):
-        """Metas articulares por fase baseadas no documento"""
-        return {
-            "IC": {"hip": +0.35, "knee": +0.10, "ankle": +0.05, "sigma": 0.10},
-            "LR": {"hip": +0.30, "knee": +0.15, "ankle": +0.05, "sigma": 0.12},
-            "MS": {"hip": +0.10, "knee": +0.05, "ankle": +0.10, "sigma": 0.12},
-            "TS": {"hip": -0.20, "knee": +0.05, "ankle": -0.30, "sigma": 0.15},
-            "PS": {"hip": 0.00, "knee": +0.40, "ankle": -0.10, "sigma": 0.15},
-            "ISw": {"hip": +0.25, "knee": +1.00, "ankle": +0.08, "sigma": 0.20},
-            "MSw": {"hip": +0.40, "knee": +0.50, "ankle": +0.05, "sigma": 0.20},
-            "TSw": {"hip": +0.30, "knee": +0.10, "ankle": +0.02, "sigma": 0.12},
-        }
-
-    def _initialize_phase_weights(self):
-        """Pesos das recompensas por fase baseados no documento"""
-        return {
-            "velocity": 2.0,  # w_v
-            "phase_angles": 1.6,  # w_phase
-            "propulsion": 0.6,  # w_prop
-            "clearance": 0.5,  # w_clr
-            "stability": 0.8,  # w_stab
-            "symmetry": 0.3,  # w_sym
-            "effort_torque": 1e-4,  # w_tau
-            "effort_power": 1e-5,  # w_P
-            "action_smoothness": 1e-3,  # w_jerk
-            "lateral_penalty": 0.2,  # w_perp
-            "slip_penalty": 0.5,  # w_slip
-        }
-
-    def set_phase_detector(self, phase_detector):
-        """Configura o detector de fases"""
-        self.phase_detector = phase_detector
-
     def calculate_reward(self, sim, action):
-        """Método principal - escolhe entre DPG com fases ou padrão"""
-        if self.dpg_enabled:
-            return self.calculate_dpg_with_phases(sim, action)
+        """Método principal - escolhe entre DPG progressivo ou padrão"""
+        # Modifique esta verificação:
+        if hasattr(self, "dpg_manager") and self.dpg_manager and self.dpg_manager.config.enabled:
+            return self.calculate_dpg_reward(sim, action)
         else:
             return self.calculate_standard_reward(sim, action)
 
@@ -94,6 +81,7 @@ class RewardSystem:
             component.value = 0.0
 
         total_reward = 0.0
+
         distance_y_from_center = abs(sim.robot_y_position)
 
         # COMPONENTES PARA MARCHA
@@ -199,16 +187,29 @@ class RewardSystem:
             self.components["stability_yaw"].value = sim.robot_yaw**2
             total_reward += sim.robot_yaw**2 * self.components["stability_yaw"].weight
 
+        if self.is_component_enabled("yaw_penalty"):
+            if sim.episode_termination == "yaw_deviated":
+                self.components["yaw_penalty"].value = 1
+                total_reward += self.components["yaw_penalty"].weight
+
+        if self.is_component_enabled("fall_penalty"):
+            if sim.episode_termination == "fell":
+                self.components["fall_penalty"].value = 1
+                total_reward += self.components["fall_penalty"].weight
+
         if self.is_component_enabled("height_deviation_penalty"):
             self.components["height_deviation_penalty"].value = abs(sim.robot_y_position - sim.episode_robot_y_initial_position)
             total_reward += self.components["height_deviation_penalty"].value * self.components["height_deviation_penalty"].weight
+
+        if self.is_component_enabled("height_deviation_square_penalty"):
+            self.components["height_deviation_square_penalty"].value = (sim.robot_y_position - sim.episode_robot_y_initial_position) ** 2
+            total_reward += self.components["height_deviation_square_penalty"].value * self.components["height_deviation_square_penalty"].weight
 
         if self.is_component_enabled("success_bonus"):
             if sim.episode_termination == "success":
                 self.components["success_bonus"].value = 1
                 total_reward += self.components["success_bonus"].weight
 
-        # Eficiência energética linear
         if self.is_component_enabled("effort_penalty"):
             effort = sum(abs(v) for v in sim.joint_velocities)
             self.components["effort_penalty"].value = effort
@@ -221,7 +222,22 @@ class RewardSystem:
             self.components["direction_change_penalty"].value = direction_changes
             total_reward += direction_changes * self.components["direction_change_penalty"].weight
 
-        # Controle de ângulos articulares
+        if self.is_component_enabled("foot_clearance"):
+            foot_height = 0
+
+            if not sim.robot_left_foot_contact:
+                foot_height += sim.robot_left_foot_height
+
+            if not sim.robot_right_foot_contact:
+                foot_height += sim.robot_right_foot_height
+
+            self.components["foot_clearance"].value = foot_height
+            total_reward += self.components["foot_clearance"].value * self.components["foot_clearance"].weight
+
+        if self.is_component_enabled("alternating_foot_contact"):
+            self.components["alternating_foot_contact"].value = sim.robot_left_foot_contact != sim.robot_right_foot_contact
+            total_reward += self.components["alternating_foot_contact"].value * self.components["alternating_foot_contact"].weight
+
         if self.is_component_enabled("knee_flexion"):
             self.components["knee_flexion"].value = abs(sim.robot_right_knee_angle) + abs(sim.robot_left_knee_angle)
             total_reward += self.components["knee_flexion"].value * self.components["knee_flexion"].weight
@@ -238,13 +254,11 @@ class RewardSystem:
             self.components["hip_openning_square"].value = sim.robot_right_hip_lateral_angle**2 + sim.robot_left_hip_lateral_angle**2
             total_reward += self.components["hip_openning_square"].value * self.components["hip_openning_square"].weight
 
-        # Penaliza mudanças na velocidade
         if self.is_component_enabled("jerk_penalty"):
             jerk = sum(abs(v1 - v2) for v1, v2 in zip(sim.joint_velocities, sim.last_joint_velocities))
             self.components["jerk_penalty"].value = jerk
             total_reward += jerk * self.components["jerk_penalty"].weight
 
-        # Mantém robô no centro
         if self.is_component_enabled("y_axis_deviation_penalty"):
             penalty = distance_y_from_center
             self.components["y_axis_deviation_penalty"].value = penalty
@@ -269,12 +283,11 @@ class RewardSystem:
 
         return total_reward
 
-    def calculate_dpg_with_phases(self, sim, action):
-        """
-        Calcula recompensa DGP usando o sistema completo de fases da marcha
-        """
-        if self.phase_detector is None:
-            self.logger.warning("DPG com fases ativado mas phase_detector não configurado")
+    def calculate_reward(self, sim, action):
+        """Método principal - escolhe entre DPG progressivo ou padrão"""
+        if self.dpg_enabled:
+            return self.calculate_dpg_reward(sim, action)
+        else:
             return self.calculate_standard_reward(sim, action)
 
         total_reward = 0.0
@@ -366,6 +379,8 @@ class RewardSystem:
         self.dpg_enabled = enabled
         if enabled:
             if not hasattr(self, "gait_phase_dpg"):
+                from dpg_gait_phases import GaitPhaseDPG
+
                 self.gait_phase_dpg = GaitPhaseDPG(self.logger, self)
 
             self.gait_phase_dpg._apply_phase_config()  # Aplicar configuração inicial
@@ -968,3 +983,25 @@ class RewardSystem:
             self.logger.info(f"  enabled atualizado para {enabled}")
 
         return True
+
+    def _calculate_cross_gait_pattern(self, sim):
+        """Calcula recompensa por padrão de marcha cruzada"""
+        # Implementação básica
+        left_foot_contact = sim.robot_left_foot_contact
+        right_foot_contact = sim.robot_right_foot_contact
+
+        try:
+            right_arm_angle = getattr(sim, "robot_right_shoulder_front_angle", 0)
+            left_arm_angle = getattr(sim, "robot_left_shoulder_front_angle", 0)
+        except:
+            return 0.0
+
+        cross_gait_score = 0.0
+
+        if not right_foot_contact and left_arm_angle > 0:
+            cross_gait_score += 0.5
+
+        if not left_foot_contact and right_arm_angle > 0:
+            cross_gait_score += 0.5
+
+        return max(0.0, cross_gait_score)

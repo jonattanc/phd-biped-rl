@@ -1230,8 +1230,10 @@ class TrainingTab:
                 self._trigger_auto_pause()
             
             # Atualizar DPG com fases da marcha
-            if hasattr(self.reward_system, 'gait_phase_dpg'):
-                self.reward_system.update_progression(episode_data)
+            if hasattr(self.reward_system, 'dpg_manager') and self.reward_system.dpg_manager:
+                self.reward_system.dpg_manager.update_phase_progression(episode_data)
+            elif hasattr(self.reward_system, 'gait_phase_dpg') and self.reward_system.gait_phase_dpg:
+                self.reward_system.gait_phase_dpg.update_phase(episode_data)
 
             # Atualizar status na interface
             self._update_tracker_status()
