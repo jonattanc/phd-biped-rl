@@ -213,6 +213,15 @@ class Simulation(gym.Env):
         # Recarregar robô após o ambiente
         self.robot.load_in_simulation()
 
+        # APLICAR POSIÇÃO INICIAL 
+        base_position, base_orientation = self.robot.get_base_position_and_orientation()
+        target_pitch_rad = math.radians(8)
+        quat_forward = p.getQuaternionFromEuler([target_pitch_rad, 0, 0])
+        new_position = [base_position[0], base_position[1], base_position[2] + 0.02]
+
+        p.resetBasePositionAndOrientation(self.robot.id, new_position, quat_forward)
+        p.resetBaseVelocity(self.robot.id, linearVelocity=[0.1, 0, 0], angularVelocity=[0, 0, 0])
+
         if self.is_visualization_enabled:
             self.update_com_marker()
 
@@ -250,17 +259,43 @@ class Simulation(gym.Env):
         else:
             self.soft_env_reset()
 
-        # Obter posição inicial
-        robot_position, robot_velocity, robot_orientation = self.robot.get_imu_position_velocity_orientation()
-        self.episode_robot_x_initial_position = robot_position[0]
-        self.episode_robot_y_initial_position = robot_position[1]
-        
-        # Inicializar/reinicializar detector de fases
-        self.phase_detector = GaitPhaseDetector(self.robot, self.logger)
-        self.reward_system.set_phase_detector(self.phase_detector)
+        try:
+            # POSIÇÃO INICIAL MELHORADA - Inclinar levemente para frente
+            base_position, base_orientation = self.robot.get_base_position_and_orientation()
 
-        # Configurar parâmetros físicos para estabilidade
-        self._configure_robot_stability()
+            # Inclinar levemente para frente (5-10 graus) para evitar cair para trás
+            target_pitch_rad = math.radians(8)  # 8 graus para frente
+            quat_forward = p.getQuaternionFromEuler([target_pitch_rad, 0, 0])
+
+            # Posicionar um pouco mais alto para evitar colisão inicial
+            new_position = [base_position[0], base_position[1], base_position[2] + 0.02]
+
+            p.resetBasePositionAndOrientation(self.robot.id, new_position, quat_forward)
+
+            # Dar um pequeno impulso inicial para frente para ajudar no início
+            p.resetBaseVelocity(self.robot.id, linearVelocity=[0.1, 0, 0], angularVelocity=[0, 0, 0])
+
+            # Obter posição inicial após ajuste
+            robot_position, robot_velocity, robot_orientation = self.robot.get_imu_position_velocity_orientation()
+            self.episode_robot_x_initial_position = robot_position[0]
+            self.episode_robot_y_initial_position = robot_position[1]
+
+            # Inicializar/reinicializar detector de fases
+            self.phase_detector = GaitPhaseDetector(self.robot, self.logger)
+            self.reward_system.set_phase_detector(self.phase_detector)
+
+            # Configurar parâmetros físicos para estabilidade
+            self._configure_robot_stability()
+
+            # Aguardar alguns passos de física para estabilizar
+            for _ in range(10):
+                p.stepSimulation()
+        
+        except Exception as e:
+            self.logger.warning(f"Erro durante reset: {e}")
+            # Fallback: reset simples
+            p.resetSimulation()
+            self.setup_sim_env()
 
         # Retornar observação inicial
         obs = self.robot.get_observation()
@@ -269,18 +304,67 @@ class Simulation(gym.Env):
     def _configure_robot_stability(self):
         """Configura parâmetros para melhorar a estabilidade inicial do robô"""
 
+        # AUMENTAR ATRITO DOS PÉS significativamente
+        self.lateral_friction = 3.0  
+        self.spinning_friction = 2.0  
+
         for link_index in range(-1, self.robot.get_num_joints()):
             p.changeDynamics(
-                self.robot.id, link_index, lateralFriction=self.lateral_friction, spinningFriction=self.spinning_friction, rollingFriction=self.rolling_friction, restitution=self.restitution
+                self.robot.id, link_index, 
+                lateralFriction=self.lateral_friction, 
+                spinningFriction=self.spinning_friction, 
+                rollingFriction=self.rolling_friction, 
+                restitution=self.restitution
             )
 
         for link_index in range(-1, self.environment.get_num_joints()):
             p.changeDynamics(
-                self.environment.id, link_index, lateralFriction=self.lateral_friction, spinningFriction=self.spinning_friction, rollingFriction=self.rolling_friction, restitution=self.restitution
+                self.environment.id, link_index, 
+                lateralFriction=self.lateral_friction, 
+                spinningFriction=self.spinning_friction, 
+                rollingFriction=self.rolling_friction, 
+                restitution=self.restitution
             )
+
+        # Configurar juntas para maior estabilidade inicial
+        joint_positions, _ = self.robot.get_joint_states()
+
+        # POSIÇÕES INICIAIS MAIS ESTÁVEIS para as juntas
+        initial_positions = []
+        num_joints = self.robot.get_num_revolute_joints()
+
+        if num_joints >= 4:
+            # Para robôs com pernas: joelhos levemente flexionados, quadris neutros
+            for i in range(num_joints):
+                if "knee" in str(self.robot.revolute_indices[i]).lower():
+                    initial_positions.append(0.3)  # Joelhos flexionados
+                elif "hip" in str(self.robot.revolute_indices[i]).lower() and "lateral" not in str(self.robot.revolute_indices[i]).lower():
+                    initial_positions.append(0.1)  # Quadris levemente estendidos
+                elif "ankle" in str(self.robot.revolute_indices[i]).lower():
+                    initial_positions.append(-0.1)  # Tornozelos levemente dorsiflexionados
+                else:
+                    initial_positions.append(0.0)
+
+        # Aplicar posições iniciais se definidas
+        if initial_positions:
+            for i, joint_index in enumerate(self.robot.revolute_indices):
+                if i < len(initial_positions):
+                    p.resetJointState(self.robot.id, joint_index, initial_positions[i])
 
         # Reduzir damping para menos oscilação
         p.changeDynamics(self.robot.id, -1, linearDamping=0.04, angularDamping=0.04)
+
+        # Configurar motores com mais força inicial
+        forces = [self.max_motor_torque] * num_joints
+        p.setJointMotorControlArray(
+            bodyIndex=self.robot.id,
+            jointIndices=self.robot.revolute_indices,
+            controlMode=p.POSITION_CONTROL,
+            targetPositions=initial_positions if initial_positions else joint_positions,
+            forces=forces,
+            positionGains=[0.8] * num_joints, 
+            velocityGains=[0.5] * num_joints
+        )
 
     def transmit_episode_info(self):
         """Transmite informações do episódio via IPC"""
