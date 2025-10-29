@@ -5,7 +5,6 @@ import time
 import numpy as np
 import random
 import math
-from reward_system import RewardSystem
 
 
 class Simulation(gym.Env):
