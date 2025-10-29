@@ -39,30 +39,27 @@ class RewardSystem:
         return self.components[name].enabled
 
     def enable_dpg_progression(self, enabled=True):
-        """Ativa/desativa progressão por fases para DPG"""
+        """Ativa/desativa progressão por fases para DPG - VERSÃO SIMPLIFICADA"""
         self.dpg_enabled = enabled
         if enabled:
-            self.logger.info("Progressão por fases ativada para DPG")
+            self.logger.info("DPG Simplificado ativado - 2 fases apenas")
             self.phase = 1
-            self.dpg_weights = np.array([0.4, 0.3, 0.2, 0.1])  # Pesos iniciais
+            # Pesos iniciais: foco em estabilidade
+            self.dpg_weights = np.array([0.3, 0.4, 0.2, 0.1])
         else:
             self.logger.info("Sistema de recompensa padrão")
 
     def update_progression(self, episode_results):
-        """Atualiza progressão baseada em resultados - apenas para DPG"""
+        """Atualiza progressão baseada em resultados - VERSÃO SIMPLIFICADA"""
         if not self.dpg_enabled:
             return
 
-        # Progressão por conquistas
-        if episode_results["distance"] > 3.0 and self.phase == 1:
+        # APENAS 2 FASES SIMPLES
+        if episode_results["distance"] > 4.0 and self.phase == 1:
             self.phase = 2
-            self.dpg_weights = np.array([0.6, 0.2, 0.1, 0.1])  # Mais foco em progresso
-            self.logger.info("Fase 2 ativada: Priorizando velocidade!")
-
-        elif episode_results["distance"] > 6.0 and self.phase == 2:
-            self.phase = 3
-            self.dpg_weights = np.array([0.7, 0.15, 0.1, 0.05])  # Foco máximo em progresso
-            self.logger.info("Fase 3 ativada: Foco em alta velocidade!")
+            # Fase 2: mais foco em velocidade
+            self.dpg_weights = np.array([0.5, 0.3, 0.1, 0.1])
+            self.logger.info("Fase 2 ativada: Priorizando velocidade")
 
     def create_hybrid_reward_vector(self, sim, action, weights=None):
         """Cria vetor de recompensas com normalização"""
@@ -104,22 +101,23 @@ class RewardSystem:
         return weighted_components, components
 
     def calculate_dpg_reward(self, sim, action):
-        """Calcula recompensa com DPG progressivo"""
+        """Calcula recompensa com DPG simplificado"""
         # Atualizar progressão
-        episode_results = {"distance": sim.episode_distance, "success": sim.episode_success, "duration": sim.episode_steps * sim.time_step_s}
+        episode_results = {
+            "distance": sim.episode_distance, 
+            "success": sim.episode_success, 
+            "duration": sim.episode_steps * sim.time_step_s
+        }
         self.update_progression(episode_results)
-
-        # Calcular recompensa com pesos progressivos do DPG
+    
+        # Calcular recompensa com pesos do DPG
         weighted_reward, components = self.create_hybrid_reward_vector(sim, action, self.dpg_weights)
-
         total_reward = np.sum(weighted_reward)
-
-        # Bônus de fase (apenas para DPG)
-        if self.phase >= 2 and sim.episode_distance > 3.0:
-            total_reward += 0.2
-        if self.phase == 3 and sim.episode_distance > 6.0:
-            total_reward += 0.5
-
+    
+        # Bônus simples de fase
+        if self.phase == 2 and sim.episode_distance > 4.0:
+            total_reward += 0.3
+    
         return total_reward
 
     def calculate_standard_reward(self, sim, action):

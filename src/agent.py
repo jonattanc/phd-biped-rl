@@ -333,127 +333,19 @@ class Agent:
         return metrics
 
 
-class DynamicPolicyGradientCallback(BaseCallback):
-    """Callback para Dynamic Policy Gradient com pesos adaptativos"""
+class SimpleDPGCallback(BaseCallback):
+    """DPG Simplificado com apenas 2 fases"""
 
-    def __init__(self, logger, num_components=4, verbose=0):
+    def __init__(self, logger, verbose=0):
         super().__init__(verbose)
         self.custom_logger = logger
-        self.num_components = num_components
-        self.reward_weights = np.ones(num_components) / num_components
-        self.reward_history = []
-        self.episode_component_rewards = []
-
-        self.update_frequency = 15
-        self.min_variance = 1e-4
-        self.max_variance = 5.0
-        self.smoothing_factor = 0.85
-        self.min_component_weight = 0.05
-
-        self.episode_count = 0
-        self.recent_weight_history = []
-
-    def _on_step(self) -> bool:
-        try:
-            # Coletar informações do ambiente para análise de componentes
-            infos = self.locals.get("infos", [])
-            if infos and isinstance(infos[0], dict):
-                # Extrair componentes de recompensa se disponíveis
-                if "reward_components" in infos[0]:
-                    component_rewards = infos[0]["reward_components"]
-                    self.episode_component_rewards.append(component_rewards)
-
-            # Verificar se há sinal de saída
-            if infos and any(isinstance(info, dict) and info.get("exit", False) for info in infos):
-                return False
-
-        except Exception as e:
-            self.custom_logger.warning(f"Erro no DPG callback: {e}")
-
-        return True
+        self.phase = 1
+        self.update_frequency = 10  # Atualizar a cada 10 episódios
 
     def _on_rollout_end(self) -> None:
-        """Chamado no final de cada rollout - atualiza pesos dinâmicos"""
-        if not self.episode_component_rewards:
-            return
-
-        # Usar mediana para reduzir influência de outliers
-        episode_median = np.median(self.episode_component_rewards, axis=0)
-        self.reward_history.append(episode_median)
-
-        # Manter janela deslizante fixa
-        max_history = 100  # Tamanho fixo para consistência
-        if len(self.reward_history) > max_history:
-            self.reward_history.pop(0)
-
-        self.episode_count += 1
-        self.episode_component_rewards = []
-
-        # Atualizar apenas com dados suficientes
-        min_episodes_for_update = 15
-        if self.episode_count % self.update_frequency == 0 and len(self.reward_history) >= min_episodes_for_update:
-            self._update_dynamic_weights()
-
-    def _check_convergence(self):
-        """Verifica se os pesos estão convergindo"""
-        if len(self.recent_weight_history) < 10:
-            return False
-
-        # Calcular variação dos pesos nas últimas iterações
-        recent_weights = np.array(self.recent_weight_history[-10:])
-        weight_std = np.std(recent_weights, axis=0)
-        max_std = np.max(weight_std)
-
-        convergence_threshold = 0.05
-        return max_std < convergence_threshold
-
-    def _update_dynamic_weights(self):
-        """Atualiza pesos com melhor tratamento de variâncias"""
-        if len(self.reward_history) < 20:  # Mínimo de amostras
-            return
-
-        rewards_array = np.array(self.reward_history)
-
-        # Calcular estatísticas robustas
-        means = np.mean(rewards_array, axis=0)
-        variances = np.var(rewards_array, axis=0, ddof=1)  # ddof=1 para estimador não-viesado
-
-        # Tratamento robusto de variâncias
-        variances = np.clip(variances, self.min_variance, self.max_variance)
-
-        # Coeficiente de variação (mais robusto que variância pura)
-        coeff_of_variation = np.sqrt(variances) / (np.abs(means) + 1e-8)
-
-        # Fórmula melhorada: balancear média e instabilidade
-        # Componentes com alta média E alta variância relativa recebem mais atenção
-        stability_scores = means * (1 + np.tanh(coeff_of_variation))
-
-        # Suavização exponencial
-        new_weights = stability_scores / (np.sum(stability_scores) + 1e-8)
-        new_weights = np.clip(new_weights, self.min_component_weight, 1.0)
-
-        # Renormalizar
-        new_weights = new_weights / np.sum(new_weights)
-
-        # Suavização mais inteligente
-        alpha = self.smoothing_factor
-        self.reward_weights = alpha * self.reward_weights + (1 - alpha) * new_weights
-
-        # Garantir pesos mínimos e renormalizar
-        self.reward_weights = np.maximum(self.reward_weights, self.min_component_weight)
-        self.reward_weights = self.reward_weights / np.sum(self.reward_weights)
-
-        # Armazenar para monitoramento de convergência
-        self.recent_weight_history.append(self.reward_weights.copy())
-        if len(self.recent_weight_history) > 20:
-            self.recent_weight_history.pop(0)
-
-        self.custom_logger.info(f"DPG - Pesos atualizados: {self.reward_weights}")
-        self.custom_logger.info(f"DPG - Médias: {means}, CV: {coeff_of_variation}")
-
-    def get_current_weights(self):
-        """Retorna os pesos atuais para uso externo"""
-        return self.reward_weights.copy()
+        """Atualização simplificada - apenas monitora progresso"""
+        if self.num_timesteps % (self.update_frequency * 1000) == 0:  # Aproximadamente a cada 10 episódios
+            self.custom_logger.info(f"DPG Simplificado - Fase {self.phase} ativa")
 
 
 class EnhancedAgent(Agent):
@@ -467,7 +359,7 @@ class EnhancedAgent(Agent):
     def enable_dpg(self, num_components=4):
         """Ativa DPG com configurações mais estáveis"""
         self.reward_components_enabled = True
-        self.dpg_callback = DynamicPolicyGradientCallback(self.logger, num_components)
+        self.dpg_callback = SimpleDPGCallback(self.logger, num_components)
         self.logger.info(f"DPG ativado com {num_components} componentes (configuração estável)")
 
     def learn(self, total_timesteps, callback=None, reset_num_timesteps=True, progress_bar=False):

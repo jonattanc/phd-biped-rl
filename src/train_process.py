@@ -97,8 +97,7 @@ def process_runner(
         sim.reward_system.enable_dpg_progression(enable_dpg)
         if enable_dpg:
             agent = EnhancedAgent(logger, env=sim, model_path=model_path, algorithm=algorithm, device=device, initial_episode=initial_episode)
-            agent.enable_dpg(num_components=4)
-            logger.info("Usando EnhancedAgent com Dynamic Policy Gradient")
+            logger.info("Usando EnhancedAgent com DPG Simplificado")
         else:
             agent = Agent(logger, env=sim, model_path=model_path, algorithm=algorithm, device=device, initial_episode=initial_episode)
             logger.info("Usando Agent padrão (sem DPG)")
