@@ -311,6 +311,150 @@ class GaitPhaseDetector:
         except Exception as e:
             self.logger.warning(f"Erro ao calcular impulso de propulsão {foot_side}: {e}")
             return 0.0
+        
+    def detect_flight_phase(self):
+        """Detecta quando ambos os pés estão sem contato (fase de voo)"""
+        try:
+            left_contact = self._check_foot_contact("left")
+            right_contact = self._check_foot_contact("right")
+
+            # Fase de voo = nenhum pé em contato
+            flight_phase = not left_contact and not right_contact
+
+            # Atualizar histórico de voo
+            if not hasattr(self, 'flight_history'):
+                self.flight_history = []
+
+            self.flight_history.append(flight_phase)
+            if len(self.flight_history) > 10:  # Manter apenas últimos 10 frames
+                self.flight_history.pop(0)
+
+            # Considerar voo estável se ocorrer por vários frames consecutivos
+            stable_flight = sum(self.flight_history) >= 3  # Pelo menos 3 frames de voo
+
+            return stable_flight
+
+        except Exception as e:
+            self.logger.warning(f"Erro ao detectar fase de voo: {e}")
+            return False
+
+    def get_flight_duration(self, current_time):
+        """Calcula duração da fase de voo atual"""
+        try:
+            if not hasattr(self, 'flight_start_time'):
+                self.flight_start_time = None
+                self.last_flight_state = False
+
+            current_flight = self.detect_flight_phase()
+
+            # Iniciar temporizador quando começar o voo
+            if current_flight and not self.last_flight_state:
+                self.flight_start_time = current_time
+            # Parar temporizador quando voo terminar
+            elif not current_flight and self.last_flight_state:
+                self.flight_start_time = None
+
+            self.last_flight_state = current_flight
+
+            # Retornar duração atual do voo
+            if current_flight and self.flight_start_time is not None:
+                return current_time - self.flight_start_time
+
+            return 0.0
+
+        except Exception as e:
+            self.logger.warning(f"Erro ao calcular duração do voo: {e}")
+            return 0.0
     
+    def detect_foot_slap(self, foot_side, current_time):
+        """Detecta 'foot-slap' - plantarflexão rápida após contato inicial"""
+        try:
+            # Só verificar nas primeiras fases de contato
+            current_phase = self.phase_state[foot_side]
+            if current_phase not in [GaitPhase.IC, GaitPhase.LR]:
+                return 0.0
+
+            # Verificar se é um contato recente (últimos 80ms)
+            if not hasattr(self, 'contact_start_times'):
+                self.contact_start_times = {"left": 0.0, "right": 0.0}
+
+            # Registrar início do contato
+            in_contact = self._check_foot_contact(foot_side)
+            if in_contact and self.contact_start_times[foot_side] == 0:
+                self.contact_start_times[foot_side] = current_time
+
+            contact_duration = current_time - self.contact_start_times[foot_side]
+
+            # Só verificar nos primeiros 80ms após contato
+            if contact_duration > 0.08:  # 80ms
+                return 0.0
+
+            # Calcular velocidade angular do tornozelo
+            ankle_velocity = self.get_ankle_velocity(foot_side, current_time)
+
+            # Foot-slap = velocidade negativa rápida (plantarflexão)
+            if ankle_velocity < -2.0:  # rad/s threshold
+                slap_intensity = min(abs(ankle_velocity) / 5.0, 1.0)  # Normalizar 0-1
+                return slap_intensity
+
+            return 0.0
+
+        except Exception as e:
+            self.logger.warning(f"Erro ao detectar foot-slap {foot_side}: {e}")
+            return 0.0
+
+    def get_ankle_plantarflexion_velocity(self, foot_side, current_time):
+        """Velocidade específica de plantarflexão (negativa)"""
+        try:
+            ankle_velocity = self.get_ankle_velocity(foot_side, current_time)
+            # Retornar apenas velocidades negativas (plantarflexão)
+            return min(ankle_velocity, 0.0)
+        except:
+            return 0.0
+    
+    def detect_foot_slip(self, foot_side, current_time):
+        """Detecta escorregamento do pé baseado em velocidade tangencial"""
+        try:
+            # Só verificar durante fases de contato
+            if not self._check_foot_contact(foot_side):
+                return 0.0
+                
+            # Obter velocidade linear do pé
+            foot_link_name = f"{foot_side}_foot_link"
+            foot_link_index = self.robot.get_link_index(foot_link_name)
+            
+            link_state = p.getLinkState(self.robot.id, foot_link_index, computeLinkVelocity=True)
+            linear_velocity = np.array(link_state[6])  # Velocidade linear [vx, vy, vz]
+            
+            # Calcular velocidade tangencial (horizontal)
+            tangential_velocity = np.sqrt(linear_velocity[0]**2 + linear_velocity[1]**2)
+            
+            # Threshold de escorregamento: > 2cm/s (0.02 m/s)
+            slip_threshold = 0.02
+            
+            if tangential_velocity > slip_threshold:
+                # Intensidade normalizada do escorregamento
+                slip_intensity = min((tangential_velocity - slip_threshold) / 0.1, 1.0)
+                return slip_intensity
+                
+            return 0.0
+            
+        except Exception as e:
+            self.logger.warning(f"Erro ao detectar escorregamento {foot_side}: {e}")
+            return 0.0
+    
+    def get_foot_tangential_velocity(self, foot_side):
+        """Retorna velocidade tangencial do pé para debug"""
+        try:
+            foot_link_name = f"{foot_side}_foot_link"
+            foot_link_index = self.robot.get_link_index(foot_link_name)
+            
+            link_state = p.getLinkState(self.robot.id, foot_link_index, computeLinkVelocity=True)
+            linear_velocity = np.array(link_state[6])
+            
+            return np.sqrt(linear_velocity[0]**2 + linear_velocity[1]**2)
+        except:
+            return 0.0
+        
     def get_current_phases(self):
         return self.phase_state.copy()

@@ -276,7 +276,7 @@ class RewardSystem:
         phase_angle_reward = self._calculate_phase_angle_reward(sim)
         total_reward += w["phase_angles"] * phase_angle_reward
 
-        # 3. Componente de Propulsão (w_prop * r_TS) - ATUALIZADO COM GRF
+        # 3. Componente de Propulsão (w_prop * r_TS) 
         propulsion_reward = self._calculate_propulsion_reward(sim)
         total_reward += w["propulsion"] * propulsion_reward
 
@@ -292,19 +292,30 @@ class RewardSystem:
         symmetry_reward = self._calculate_symmetry_reward(sim)
         total_reward += w["symmetry"] * symmetry_reward
 
-        # 7. NOVO: Componente de Coordenação Braço-Perna
+        # 7. Componente de Coordenação Braço-Perna
         coordination_reward = self._calculate_arm_leg_coordination(sim)
-        total_reward += 0.4 * coordination_reward  # Peso adicional para coordenação
+        total_reward += 0.4 * coordination_reward
 
-        # 8. Penalidades de Eficiência
+        # 8. NOVO: Recompensa por Fase de Voo Controlada
+        flight_reward = self._calculate_flight_phase_reward(sim)
+        total_reward += 0.2 * flight_reward  # Peso leve para voo
+
+        # 9. Penalidades de Eficiência
         effort_cost = self._calculate_effort_cost(sim, action)
         total_reward -= effort_cost
 
-        # 9. Penalidades de Estabilidade Lateral
+        # 10. Penalidades de Estabilidade Lateral
         lateral_cost = self._calculate_lateral_cost(sim)
         total_reward -= lateral_cost
 
-        # 10. Atualizar progressão DPG se disponível
+        # 11. Penalidades por Problemas de Contato
+        foot_slap_penalty = self._calculate_anti_foot_slap_penalty(sim)
+        total_reward -= 0.8 * foot_slap_penalty  # Peso forte contra foot-slap
+
+        slip_penalty = self._calculate_slip_penalty(sim)
+        total_reward -= 0.6 * slip_penalty  # Peso moderado contra escorregamento
+
+        # 12. Atualizar progressão DPG se disponível
         if hasattr(self, 'gait_phase_dpg'):
             episode_results = {
                 "distance": sim.episode_distance, 
@@ -527,6 +538,81 @@ class RewardSystem:
                 return getattr(sim, "robot_left_shoulder_front_angle", 0)
         except:
             return 0.0
+
+    def _calculate_flight_phase_reward(self, sim):
+        """Recompensa/Penalidade para fase de voo"""
+        if self.phase_detector is None:
+            return 0.0
+
+        current_time = sim.episode_steps * sim.time_step_s
+
+        # Detectar fase de voo
+        in_flight = self.phase_detector.detect_flight_phase()
+        flight_duration = self.phase_detector.get_flight_duration(current_time)
+
+        if not in_flight:
+            return 0.0
+
+        # Recompensa por voo controlado (durações moderadas)
+        # Voo muito curto = marcha, voo muito longo = salto excessivo
+        ideal_flight_duration = 0.1  # 100ms ideal para corrida
+
+        if flight_duration > 0:
+            duration_error = abs(flight_duration - ideal_flight_duration)
+            flight_reward = max(0, 1.0 - (duration_error / 0.05))  # Tolerância de 50ms
+
+            # Penalizar voo excessivamente longo
+            if flight_duration > 0.2:  # 200ms = muito longo
+                flight_reward *= 0.5
+
+            return flight_reward * 0.3  # Peso moderado
+
+        return 0.0
+
+    def _calculate_anti_foot_slap_penalty(self, sim):
+        """Penalidade por foot-slap (plantarflexão rápida após contato)"""
+        if self.phase_detector is None:
+            return 0.0
+
+        current_time = sim.episode_steps * sim.time_step_s
+        total_penalty = 0.0
+
+        for foot_side in ["left", "right"]:
+            slap_intensity = self.phase_detector.detect_foot_slap(foot_side, current_time)
+
+            if slap_intensity > 0:
+                # Penalidade quadrática (mais sensível a intensidades altas)
+                penalty = slap_intensity ** 2
+                total_penalty += penalty
+
+                # Debug
+                if sim.episode_steps % 100 == 0:
+                    self.logger.debug(f"Foot-slap detectado {foot_side}: intensidade={slap_intensity:.3f}")
+
+        return total_penalty
+
+    def _calculate_slip_penalty(self, sim):
+        """Penalidade por escorregamento dos pés"""
+        if self.phase_detector is None:
+            return 0.0
+
+        current_time = sim.episode_steps * sim.time_step_s
+        total_penalty = 0.0
+
+        for foot_side in ["left", "right"]:
+            slip_intensity = self.phase_detector.detect_foot_slip(foot_side, current_time)
+
+            if slip_intensity > 0:
+                # Penalidade proporcional à intensidade
+                penalty = slip_intensity * 0.5  # Peso moderado
+                total_penalty += penalty
+
+                # Debug
+                if sim.episode_steps % 100 == 0 and slip_intensity > 0.5:
+                    tangential_vel = self.phase_detector.get_foot_tangential_velocity(foot_side)
+                    self.logger.debug(f"Escorregamento {foot_side}: intensidade={slip_intensity:.3f}, vel={tangential_vel:.4f} m/s")
+
+        return total_penalty
 
     def _calculate_phase_angle_reward(self, sim):
         """Recompensa por seguir metas articulares da fase atual"""
