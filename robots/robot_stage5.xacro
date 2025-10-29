@@ -1,5 +1,19 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="myrobot_st4">
+  
+<!-- ORIENTACAO INICIAL  -->
+<xacro:property name="initial_roll" value="0.0" />
+<xacro:property name="initial_pitch" value="0.14" />  
+<xacro:property name="initial_yaw" value="0.0" />
+
+<!-- CONFIGURACOES INICIAIS PARA EQUILIBRIO E CAMINHADA -->
+<xacro:property name="initial_hip_frontal" value="0.0" />
+<xacro:property name="initial_hip_lateral" value="0.0" />
+<xacro:property name="initial_knee" value="0.5" />
+<xacro:property name="initial_ankle_frontal" value="-0.25" />
+<xacro:property name="initial_ankle_lateral" value="0.0" />
+<xacro:property name="initial_pitch" value="0.15" />
+  
   <!-- Body properties -->
   <xacro:property name="body_radius" value="0.12" />
   <xacro:property name="body_length" value="0.4" />
@@ -78,7 +92,7 @@
 <xacro:property name="upper_arm_iyy" value="0.005" />
 <xacro:property name="upper_arm_izz" value="0.001" />
 
-<!-- Lower arm properties (mantido para cálculo de massa, mas será fixo) -->
+<!-- Lower arm properties (mantido para calculo de massa, mas sera fixo) -->
 <xacro:property name="lower_arm_radius" value="0.02" />
 <xacro:property name="lower_arm_length" value="0.16" />
 <xacro:property name="lower_arm_mass" value="0.4" />
@@ -86,7 +100,7 @@
 <xacro:property name="lower_arm_iyy" value="0.003" />
 <xacro:property name="lower_arm_izz" value="0.001" />
 
-<!-- Hand properties (mantido para cálculo de massa, mas será fixo) -->
+<!-- Hand properties (mantido para calculo de massa, mas sera fixo) -->
 <xacro:property name="hand_length" value="0.06" />
 <xacro:property name="hand_width" value="0.04" />
 <xacro:property name="hand_height" value="0.03" />
@@ -211,17 +225,13 @@
   <xacro:macro name="leg" params="prefix reflect">
     <!-- Hip joint: base_link to hip ball -->
     <joint name="base_to_${prefix}_hip_ball" type="revolute">
-      <parent link="base_link"/>
-      <child link="${prefix}_hip_ball_link"/>
-      <!-- Z: Como o corpo principal e posicionado em 0 0 0, body_offset move o centro da esfera/articulacao para o centro do corpo -->
-      <!-- Z: Diminuir body_length/2 move o centro da esfera/articulacao para a base inferior do corpo -->
-      <!-- Y: body_radius posiciona o centro da esfera/articulacao do quadril na borda do corpo -->
-      <!-- Y: hip_radius tira a esfera/articulacao de dentro do corpo, caso contrario metade da esfera/articulacao ficaria dentro do corpo -->
-      <origin xyz="0 ${(body_radius + hip_radius) * reflect} ${body_offset - body_length/2}"/>
-      <axis xyz="0 1 0"/> <!-- Movimento frontal -->
-      <limit lower="${-75 * deg_to_rad}" upper="${60 * deg_to_rad}" effort="1000" velocity="5"/>
-      <dynamics damping="${joint_damping}" friction="${joint_friction}"/>
-    </joint>
+  <parent link="base_link"/>
+  <child link="${prefix}_hip_ball_link"/>
+  <origin xyz="0 ${(body_radius + hip_radius) * reflect} ${body_offset - body_length/2}"/>
+  <axis xyz="0 1 0"/>
+  <limit lower="${-75 * deg_to_rad}" upper="${60 * deg_to_rad}" effort="1000" velocity="5"/>
+  <dynamics damping="${joint_damping}" friction="${joint_friction}"/>
+</joint>
 
     <!-- Hip Ball -->
     <link name="${prefix}_hip_ball_link">
@@ -311,13 +321,13 @@
 
     <!-- Knee joint: knee ball to shin -->
     <joint name="${prefix}_knee_ball_to_shin" type="revolute">
-      <parent link="${prefix}_knee_ball_link"/>
-      <child link="${prefix}_shin_link"/>
-      <origin xyz="0 0 0"/>
-      <axis xyz="0 1 0"/>
-      <limit lower="${0 * deg_to_rad}" upper="${90 * deg_to_rad}" effort="1000" velocity="5"/>
-      <dynamics damping="${joint_damping}" friction="${joint_friction}"/>
-    </joint>
+  <parent link="${prefix}_knee_ball_link"/>
+  <child link="${prefix}_shin_link"/>
+  <origin xyz="0 0 0"/>
+  <axis xyz="0 1 0"/>
+  <limit lower="${0 * deg_to_rad}" upper="${90 * deg_to_rad}" effort="1000" velocity="5"/>
+  <dynamics damping="${joint_damping}" friction="${joint_friction}"/>
+</joint>
 
     <!-- Shin -->
     <link name="${prefix}_shin_link">
@@ -345,16 +355,13 @@
 
     <!-- Ankle joint: shin to ankle ball -->
     <joint name="${prefix}_shin_to_ankle_ball" type="revolute">
-      <parent link="${prefix}_shin_link"/>
-      <child link="${prefix}_ankle_ball_link"/>
-      <!-- Z: Como o parent e a canela, o centro da esfera/articulacao do tornozelo coincide inicialmente com sua referencia que é o knee joint -->
-      <!-- Z: Diminuir knee_radius + shin_length faz o centro da esfera/articulacao do tornozelo coincidir com a base inferior da canela -->
-      <!-- Z: Diminuir ankle_radius faz o topo da esfera/articulacao do tornozelo coincidir com a base inferior da canela -->
-      <origin xyz="0 0 ${-knee_radius - shin_length - ankle_radius}"/>
-      <axis xyz="0 1 0"/> <!-- Movimento frontal -->
-      <limit lower="${-30 * deg_to_rad}" upper="${75 * deg_to_rad}" effort="1000" velocity="5"/>
-      <dynamics damping="${joint_damping}" friction="${joint_friction}"/>
-    </joint>
+  <parent link="${prefix}_shin_link"/>
+  <child link="${prefix}_ankle_ball_link"/>
+  <origin xyz="0 0 ${-knee_radius - shin_length - ankle_radius}"/>
+  <axis xyz="0 1 0"/>
+  <limit lower="${-30 * deg_to_rad}" upper="${75 * deg_to_rad}" effort="1000" velocity="5"/>
+  <dynamics damping="${joint_damping}" friction="${joint_friction}"/>
+</joint>
 
     <!-- Ankle Ball -->
     <link name="${prefix}_ankle_ball_link">
@@ -573,6 +580,17 @@
     </inertial>
   </link>
 </xacro:macro>
+
+ <!-- Configurações iniciais das juntas para maior estabilidade -->
+<xacro:property name="initial_hip_frontal" value="0.0" />       
+<xacro:property name="initial_hip_lateral" value="0.0" />        
+<xacro:property name="initial_knee" value="0.4" />              
+<xacro:property name="initial_ankle_frontal" value="-0.15" /> 
+<xacro:property name="initial_ankle_lateral" value="0.0" />     
+
+<!-- Pequena inclinação frontal adicional do corpo -->
+<xacro:property name="initial_pitch" value="0.1" />          
+
 
 <!-- Instantiate arms -->
 <xacro:arm prefix="right" reflect="-1"/>

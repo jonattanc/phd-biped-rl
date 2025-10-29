@@ -5,7 +5,6 @@ import time
 import numpy as np
 import random
 import math
-from gait_phase_detector import GaitPhaseDetector
 from reward_system import RewardSystem
 
 
@@ -71,8 +70,8 @@ class Simulation(gym.Env):
         self.max_pre_fill_steps = int(self.episode_pre_fill_timeout_s / self.time_step_s)
         self.max_steps = self.max_training_steps
 
-        self.lateral_friction = 2.0
-        self.spinning_friction = 1.0
+        self.lateral_friction = 3.0
+        self.spinning_friction = 2.0
         self.rolling_friction = 0.001
         self.restitution = 0.0
 
@@ -82,7 +81,6 @@ class Simulation(gym.Env):
         # AGORA podemos obter as informações do robô carregado
         self.action_dim = self.robot.get_num_revolute_joints()
         self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(self.action_dim,), dtype=np.float32)
-        self.phase_detector = None
 
         self.observation_dim = len(self.robot.get_observation())
         self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(self.observation_dim,), dtype=np.float32)
@@ -213,15 +211,6 @@ class Simulation(gym.Env):
         # Recarregar robô após o ambiente
         self.robot.load_in_simulation()
 
-        # APLICAR POSIÇÃO INICIAL 
-        base_position, base_orientation = self.robot.get_base_position_and_orientation()
-        target_pitch_rad = math.radians(8)
-        quat_forward = p.getQuaternionFromEuler([target_pitch_rad, 0, 0])
-        new_position = [base_position[0], base_position[1], base_position[2] + 0.02]
-
-        p.resetBasePositionAndOrientation(self.robot.id, new_position, quat_forward)
-        p.resetBaseVelocity(self.robot.id, linearVelocity=[0.1, 0, 0], angularVelocity=[0, 0, 0])
-
         if self.is_visualization_enabled:
             self.update_com_marker()
 
@@ -259,43 +248,13 @@ class Simulation(gym.Env):
         else:
             self.soft_env_reset()
 
-        try:
-            # POSIÇÃO INICIAL MELHORADA - Inclinar levemente para frente
-            base_position, base_orientation = self.robot.get_base_position_and_orientation()
+        # Obter posição inicial
+        robot_position, robot_velocity, robot_orientation = self.robot.get_imu_position_velocity_orientation()
+        self.episode_robot_x_initial_position = robot_position[0]
+        self.episode_robot_y_initial_position = robot_position[1]
 
-            # Inclinar levemente para frente (5-10 graus) para evitar cair para trás
-            target_pitch_rad = math.radians(8)  # 8 graus para frente
-            quat_forward = p.getQuaternionFromEuler([target_pitch_rad, 0, 0])
-
-            # Posicionar um pouco mais alto para evitar colisão inicial
-            new_position = [base_position[0], base_position[1], base_position[2] + 0.02]
-
-            p.resetBasePositionAndOrientation(self.robot.id, new_position, quat_forward)
-
-            # Dar um pequeno impulso inicial para frente para ajudar no início
-            p.resetBaseVelocity(self.robot.id, linearVelocity=[0.1, 0, 0], angularVelocity=[0, 0, 0])
-
-            # Obter posição inicial após ajuste
-            robot_position, robot_velocity, robot_orientation = self.robot.get_imu_position_velocity_orientation()
-            self.episode_robot_x_initial_position = robot_position[0]
-            self.episode_robot_y_initial_position = robot_position[1]
-
-            # Inicializar/reinicializar detector de fases
-            self.phase_detector = GaitPhaseDetector(self.robot, self.logger)
-            self.reward_system.set_phase_detector(self.phase_detector)
-
-            # Configurar parâmetros físicos para estabilidade
-            self._configure_robot_stability()
-
-            # Aguardar alguns passos de física para estabilizar
-            for _ in range(10):
-                p.stepSimulation()
-        
-        except Exception as e:
-            self.logger.warning(f"Erro durante reset: {e}")
-            # Fallback: reset simples
-            p.resetSimulation()
-            self.setup_sim_env()
+        # Configurar parâmetros físicos para estabilidade
+        self._configure_robot_stability()
 
         # Retornar observação inicial
         obs = self.robot.get_observation()
@@ -304,111 +263,51 @@ class Simulation(gym.Env):
     def _configure_robot_stability(self):
         """Configura parâmetros para melhorar a estabilidade inicial do robô"""
 
-        # AUMENTAR ATRITO DOS PÉS significativamente
-        self.lateral_friction = 3.0  
-        self.spinning_friction = 2.0  
-
         for link_index in range(-1, self.robot.get_num_joints()):
             p.changeDynamics(
-                self.robot.id, link_index, 
-                lateralFriction=self.lateral_friction, 
-                spinningFriction=self.spinning_friction, 
-                rollingFriction=self.rolling_friction, 
-                restitution=self.restitution
+                self.robot.id, link_index, lateralFriction=self.lateral_friction, spinningFriction=self.spinning_friction, rollingFriction=self.rolling_friction, restitution=self.restitution
             )
 
         for link_index in range(-1, self.environment.get_num_joints()):
             p.changeDynamics(
-                self.environment.id, link_index, 
-                lateralFriction=self.lateral_friction, 
-                spinningFriction=self.spinning_friction, 
-                rollingFriction=self.rolling_friction, 
-                restitution=self.restitution
+                self.environment.id, link_index, lateralFriction=self.lateral_friction, spinningFriction=self.spinning_friction, rollingFriction=self.rolling_friction, restitution=self.restitution
             )
-
-        # Configurar juntas para maior estabilidade inicial
-        joint_positions, _ = self.robot.get_joint_states()
-
-        # POSIÇÕES INICIAIS MAIS ESTÁVEIS para as juntas
-        initial_positions = []
-        num_joints = self.robot.get_num_revolute_joints()
-
-        if num_joints >= 4:
-            # Para robôs com pernas: joelhos levemente flexionados, quadris neutros
-            for i in range(num_joints):
-                if "knee" in str(self.robot.revolute_indices[i]).lower():
-                    initial_positions.append(0.3)  # Joelhos flexionados
-                elif "hip" in str(self.robot.revolute_indices[i]).lower() and "lateral" not in str(self.robot.revolute_indices[i]).lower():
-                    initial_positions.append(0.1)  # Quadris levemente estendidos
-                elif "ankle" in str(self.robot.revolute_indices[i]).lower():
-                    initial_positions.append(-0.1)  # Tornozelos levemente dorsiflexionados
-                else:
-                    initial_positions.append(0.0)
-
-        # Aplicar posições iniciais se definidas
-        if initial_positions:
-            for i, joint_index in enumerate(self.robot.revolute_indices):
-                if i < len(initial_positions):
-                    p.resetJointState(self.robot.id, joint_index, initial_positions[i])
 
         # Reduzir damping para menos oscilação
         p.changeDynamics(self.robot.id, -1, linearDamping=0.04, angularDamping=0.04)
 
-        # Configurar motores com mais força inicial
-        forces = [self.max_motor_torque] * num_joints
-        p.setJointMotorControlArray(
-            bodyIndex=self.robot.id,
-            jointIndices=self.robot.revolute_indices,
-            controlMode=p.POSITION_CONTROL,
-            targetPositions=initial_positions if initial_positions else joint_positions,
-            forces=forces,
-            positionGains=[0.8] * num_joints, 
-            velocityGains=[0.5] * num_joints
-        )
-
     def transmit_episode_info(self):
         """Transmite informações do episódio via IPC"""
-    
-        if hasattr(self.agent, 'model') and hasattr(self.agent.model, 'ep_info_buffer'):
-            if self.agent.model.ep_info_buffer is not None and len(self.agent.model.ep_info_buffer) > 0 and len(self.agent.model.ep_info_buffer[0]) > 0:
-                self.agent.model.ep_info_buffer = []
-    
+
+        if self.agent.model.ep_info_buffer is not None and len(self.agent.model.ep_info_buffer) > 0 and len(self.agent.model.ep_info_buffer[0]) > 0:
+            self.agent.model.ep_info_buffer = []
+
         self.episode_count += 1
-    
-        # Criar dados do episódio
-        episode_data = {
-            "type": "episode_data",
-            "episode": self.episode_count,
-            "reward": self.episode_reward,
-            "time": self.episode_steps * self.time_step_s,
-            "steps": self.episode_steps,
-            "distance": self.episode_distance,
-            "success": self.episode_success,
-            "imu_x": self.robot_x_position,
-            "imu_y": self.robot_y_position,
-            "imu_z": self.robot_z_position,
-            "roll": self.robot_roll,
-            "pitch": self.robot_pitch,
-            "yaw": self.robot_yaw,
-        }
-    
-        # Adicionar informações de fase DPG se disponível
-        if hasattr(self.reward_system, 'gait_phase_dpg'):
-            dpg_status = self.reward_system.gait_phase_dpg.get_status()
-            episode_data.update({
-                "dpg_phase": dpg_status["current_phase"],
-                "dpg_phase_index": dpg_status["phase_index"],
-                "target_speed": dpg_status["target_speed"]
-            })
-    
+
         # Enviar para ipc_queue
         try:
-            self.ipc_queue.put_nowait(episode_data)
-    
+            self.ipc_queue.put_nowait(
+                {
+                    "type": "episode_data",
+                    "episode": self.episode_count,
+                    "reward": self.episode_reward,
+                    "time": self.episode_steps * self.time_step_s,
+                    "steps": self.episode_steps,
+                    "distance": self.episode_distance,
+                    "success": self.episode_success,
+                    "imu_x": self.robot_x_position,
+                    "imu_y": self.robot_y_position,
+                    "imu_z": self.robot_z_position,
+                    "roll": self.robot_roll,
+                    "pitch": self.robot_pitch,
+                    "yaw": self.robot_yaw,
+                }
+            )
+
         except Exception as e:
             self.logger.exception("Erro ao transmitir dados do episódio")
             # Ignorar erros de queue durante avaliação
-    
+
         if self.episode_count % 10 == 0:
             self.logger.info(f"Episódio {self.episode_count} concluído")
 
@@ -500,16 +399,7 @@ class Simulation(gym.Env):
 
         self.episode_done = self.episode_truncated or self.episode_terminated
 
-        # Atualizar detector de fases se existir
-        if self.phase_detector:
-            current_time = self.episode_steps * self.time_step_s
-            try:
-                self.phase_detector.detect_phase_transition("left", current_time)
-                self.phase_detector.detect_phase_transition("right", current_time)
-            except Exception as e:
-                self.logger.warning(f"Erro ao atualizar detector de fases: {e}")
-        
-        # Calcular recompensa (DPG usará fases automaticamente quando ativado)
+        # Recompensa
         reward = self.reward_system.calculate_reward(self, action)
         self.episode_reward += reward
 
