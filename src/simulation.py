@@ -5,6 +5,7 @@ import time
 import numpy as np
 import random
 import math
+from gait_phase_detector import GaitPhaseDetector
 from reward_system import RewardSystem
 
 
@@ -81,6 +82,7 @@ class Simulation(gym.Env):
         # AGORA podemos obter as informações do robô carregado
         self.action_dim = self.robot.get_num_revolute_joints()
         self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(self.action_dim,), dtype=np.float32)
+        self.phase_detector = None
 
         self.observation_dim = len(self.robot.get_observation())
         self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(self.observation_dim,), dtype=np.float32)
@@ -252,6 +254,10 @@ class Simulation(gym.Env):
         robot_position, robot_velocity, robot_orientation = self.robot.get_imu_position_velocity_orientation()
         self.episode_robot_x_initial_position = robot_position[0]
         self.episode_robot_y_initial_position = robot_position[1]
+        
+        # Inicializar/reinicializar detector de fases
+        self.phase_detector = GaitPhaseDetector(self.robot, self.logger)
+        self.reward_system.set_phase_detector(self.phase_detector)
 
         # Configurar parâmetros físicos para estabilidade
         self._configure_robot_stability()
@@ -278,36 +284,47 @@ class Simulation(gym.Env):
 
     def transmit_episode_info(self):
         """Transmite informações do episódio via IPC"""
-
-        if self.agent.model.ep_info_buffer is not None and len(self.agent.model.ep_info_buffer) > 0 and len(self.agent.model.ep_info_buffer[0]) > 0:
-            self.agent.model.ep_info_buffer = []
-
+    
+        if hasattr(self.agent, 'model') and hasattr(self.agent.model, 'ep_info_buffer'):
+            if self.agent.model.ep_info_buffer is not None and len(self.agent.model.ep_info_buffer) > 0 and len(self.agent.model.ep_info_buffer[0]) > 0:
+                self.agent.model.ep_info_buffer = []
+    
         self.episode_count += 1
-
+    
+        # Criar dados do episódio
+        episode_data = {
+            "type": "episode_data",
+            "episode": self.episode_count,
+            "reward": self.episode_reward,
+            "time": self.episode_steps * self.time_step_s,
+            "steps": self.episode_steps,
+            "distance": self.episode_distance,
+            "success": self.episode_success,
+            "imu_x": self.robot_x_position,
+            "imu_y": self.robot_y_position,
+            "imu_z": self.robot_z_position,
+            "roll": self.robot_roll,
+            "pitch": self.robot_pitch,
+            "yaw": self.robot_yaw,
+        }
+    
+        # Adicionar informações de fase DPG se disponível
+        if hasattr(self.reward_system, 'gait_phase_dpg'):
+            dpg_status = self.reward_system.gait_phase_dpg.get_status()
+            episode_data.update({
+                "dpg_phase": dpg_status["current_phase"],
+                "dpg_phase_index": dpg_status["phase_index"],
+                "target_speed": dpg_status["target_speed"]
+            })
+    
         # Enviar para ipc_queue
         try:
-            self.ipc_queue.put_nowait(
-                {
-                    "type": "episode_data",
-                    "episode": self.episode_count,
-                    "reward": self.episode_reward,
-                    "time": self.episode_steps * self.time_step_s,
-                    "steps": self.episode_steps,
-                    "distance": self.episode_distance,
-                    "success": self.episode_success,
-                    "imu_x": self.robot_x_position,
-                    "imu_y": self.robot_y_position,
-                    "imu_z": self.robot_z_position,
-                    "roll": self.robot_roll,
-                    "pitch": self.robot_pitch,
-                    "yaw": self.robot_yaw,
-                }
-            )
-
+            self.ipc_queue.put_nowait(episode_data)
+    
         except Exception as e:
             self.logger.exception("Erro ao transmitir dados do episódio")
             # Ignorar erros de queue durante avaliação
-
+    
         if self.episode_count % 10 == 0:
             self.logger.info(f"Episódio {self.episode_count} concluído")
 
@@ -399,7 +416,16 @@ class Simulation(gym.Env):
 
         self.episode_done = self.episode_truncated or self.episode_terminated
 
-        # Recompensa
+        # Atualizar detector de fases se existir
+        if self.phase_detector:
+            current_time = self.episode_steps * self.time_step_s
+            try:
+                self.phase_detector.detect_phase_transition("left", current_time)
+                self.phase_detector.detect_phase_transition("right", current_time)
+            except Exception as e:
+                self.logger.warning(f"Erro ao atualizar detector de fases: {e}")
+        
+        # Calcular recompensa (DPG usará fases automaticamente quando ativado)
         reward = self.reward_system.calculate_reward(self, action)
         self.episode_reward += reward
 

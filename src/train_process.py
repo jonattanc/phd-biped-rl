@@ -2,7 +2,7 @@
 from robot import Robot
 from simulation import Simulation
 from environment import Environment
-from agent import Agent, EnhancedAgent, TrainingCallback
+from agent import Agent, TrainingCallback
 import utils
 import time
 import os
@@ -94,13 +94,16 @@ def process_runner(
             config_changed_value,
             initial_episode=initial_episode,
         )
+        
         sim.reward_system.enable_dpg_progression(enable_dpg)
-        if enable_dpg:
-            agent = EnhancedAgent(logger, env=sim, model_path=model_path, algorithm=algorithm, device=device, initial_episode=initial_episode)
-            logger.info("Usando EnhancedAgent com DPG Simplificado")
+        
+        if enable_dpg and hasattr(sim.reward_system, 'gait_phase_dpg'):
+            status = sim.reward_system.gait_phase_dpg.get_status()
+            logger.info(f"DPG Fases da Marcha - Fase atual: {status['current_phase']}, Velocidade alvo: {status['target_speed']} m/s")
         else:
-            agent = Agent(logger, env=sim, model_path=model_path, algorithm=algorithm, device=device, initial_episode=initial_episode)
             logger.info("Usando Agent padrão (sem DPG)")
+        
+        agent = Agent(logger, env=sim, model_path=model_path, algorithm=algorithm, device=device, initial_episode=initial_episode)
 
         sim.set_agent(agent)
         callback = TrainingCallback(logger)

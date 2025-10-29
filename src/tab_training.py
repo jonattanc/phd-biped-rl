@@ -1229,6 +1229,10 @@ class TrainingTab:
             if self.tracker.should_pause():
                 self.logger.info("Pausa automática por plateau de performance")
                 self._trigger_auto_pause()
+            
+            # Atualizar DPG com fases da marcha
+            if hasattr(self.reward_system, 'gait_phase_dpg'):
+                self.reward_system.update_progression(episode_data)
 
             # Atualizar status na interface
             self._update_tracker_status()

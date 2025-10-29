@@ -331,56 +331,14 @@ class Agent:
         self.logger.info(f"Desvio padrão: {std_time:.2f}s")
 
         return metrics
-
-
-class SimpleDPGCallback(BaseCallback):
-    """DPG Simplificado com apenas 2 fases"""
-
-    def __init__(self, logger, verbose=0):
-        super().__init__(verbose)
-        self.custom_logger = logger
-        self.phase = 1
-        self.update_frequency = 10  # Atualizar a cada 10 episódios
-
-    def _on_rollout_end(self) -> None:
-        """Atualização simplificada - apenas monitora progresso"""
-        if self.num_timesteps % (self.update_frequency * 1000) == 0:  # Aproximadamente a cada 10 episódios
-            self.custom_logger.info(f"DPG Simplificado - Fase {self.phase} ativa")
-
-
-class EnhancedAgent(Agent):
-    """Agente com Dynamic Policy Gradient"""
-
-    def __init__(self, logger, env=None, model_path=None, algorithm="PPO", device="cpu", initial_episode=0):
-        super().__init__(logger, env, model_path, algorithm, device, initial_episode)
-        self.dpg_callback = None
-        self.reward_components_enabled = False
-
-    def enable_dpg(self, num_components=4):
-        """Ativa DPG com configurações mais estáveis"""
-        self.reward_components_enabled = True
-        self.dpg_callback = SimpleDPGCallback(self.logger, num_components)
-        self.logger.info(f"DPG ativado com {num_components} componentes (configuração estável)")
-
-    def learn(self, total_timesteps, callback=None, reset_num_timesteps=True, progress_bar=False):
-        """Aprendizado com suporte a DPG"""
-
-        # Combinar callbacks se DPG estiver ativo
-        if self.reward_components_enabled and self.dpg_callback:
-            callbacks = [self.dpg_callback]
-            if callback:
-                if isinstance(callback, list):
-                    callbacks.extend(callback)
-                else:
-                    callbacks.append(callback)
-        else:
-            callbacks = callback
-
-        # Chamar aprendizado original com callbacks combinados
-        return self.model.learn(total_timesteps=total_timesteps, callback=callbacks, reset_num_timesteps=reset_num_timesteps, progress_bar=progress_bar)
-
-    def get_dpg_weights(self):
-        """Retorna os pesos atuais do DPG"""
-        if self.dpg_callback:
-            return self.dpg_callback.get_current_weights()
-        return None
+    
+    def learn(self, total_timesteps, reset_num_timesteps=False, callback=None):
+        """
+        Método learn para compatibilidade com DPG
+        """
+        # Apenas delega para o modelo
+        return self.model.learn(
+            total_timesteps=total_timesteps,
+            reset_num_timesteps=reset_num_timesteps,
+            callback=callback
+        )

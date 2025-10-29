@@ -2,8 +2,10 @@
 import os
 import time
 import numpy as np
+import pybullet as p
 import json
 from dataclasses import dataclass
+from dpg_gait_phases import GaitPhaseDPG
 import utils
 
 
@@ -33,94 +35,57 @@ class RewardSystem:
         self.load_configuration_file("default.json", is_default_file=True)
         self.default_components = self.get_configuration_as_dict()
 
+        # Adicionar detector de fases
+        self.phase_detector = None
+        self.phase_targets = self._initialize_phase_targets()
+        self.phase_specific_weights = self._initialize_phase_weights()
+
     def is_component_enabled(self, name):
         if name not in self.components:
             return False
 
         return self.components[name].enabled
 
-    def enable_dpg_progression(self, enabled=True):
-        """Ativa/desativa progressão por fases para DPG - VERSÃO SIMPLIFICADA"""
-        self.dpg_enabled = enabled
-        if enabled:
-            self.logger.info("DPG Simplificado ativado - 2 fases apenas")
-            self.phase = 1
-            # Pesos iniciais: foco em estabilidade
-            self.dpg_weights = np.array([0.3, 0.4, 0.2, 0.1])
-        else:
-            self.logger.info("Sistema de recompensa padrão")
-
-    def update_progression(self, episode_results):
-        """Atualiza progressão baseada em resultados - VERSÃO SIMPLIFICADA"""
-        if not self.dpg_enabled:
-            return
-
-        # APENAS 2 FASES SIMPLES
-        if episode_results["distance"] > 4.0 and self.phase == 1:
-            self.phase = 2
-            # Fase 2: mais foco em velocidade
-            self.dpg_weights = np.array([0.5, 0.3, 0.1, 0.1])
-            self.logger.info("Fase 2 ativada: Priorizando velocidade")
-
-    def create_hybrid_reward_vector(self, sim, action, weights=None):
-        """Cria vetor de recompensas com normalização"""
-        components = np.zeros(4)
-
-        # Componente 0: Progresso (normalizado)
-        max_expected_velocity = 2.0  # m/s
-        components[0] = np.clip(getattr(sim, "robot_x_velocity", 0) / max_expected_velocity, -1, 1)
-
-        # Componente 1: Estabilidade (normalizada)
-        robot_roll = getattr(sim, "robot_roll", 0)
-        robot_pitch = getattr(sim, "robot_pitch", 0)
-        robot_yaw = getattr(sim, "robot_yaw", 0)
-        target_pitch = getattr(sim, "target_pitch_rad", 0)
-
-        # Normalizar penalidades de estabilidade
-        max_angle_error = 0.5  # ~28 graus
-        stability_penalty = robot_roll**2 + (robot_pitch - target_pitch) ** 2 + robot_yaw**2
-        components[1] = -np.clip(stability_penalty / max_angle_error, 0, 1)
-
-        # Componente 2: Eficiência (normalizada)
-        joint_velocities = getattr(sim, "joint_velocities", [0])
-        max_expected_effort = 10.0  # Valor baseado em sua simulação
-        effort = sum(abs(v) for v in joint_velocities) / len(joint_velocities) if joint_velocities else 0
-        components[2] = -np.clip(effort / max_expected_effort, 0, 1)
-
-        # Componente 3: Postura (normalizada)
-        robot_z = getattr(sim, "robot_z_position", 0.8)
-        max_height_error = 0.2  # 20cm
-        height_penalty = abs(robot_z - 0.8)
-        components[3] = -np.clip(height_penalty / max_height_error, 0, 1)
-
-        # Aplicar pesos com verificação
-        if weights is not None and len(weights) == len(components):
-            weighted_components = components * weights
-        else:
-            weighted_components = components
-
-        return weighted_components, components
-
-    def calculate_dpg_reward(self, sim, action):
-        """Calcula recompensa com DPG simplificado"""
-        # Atualizar progressão
-        episode_results = {
-            "distance": sim.episode_distance, 
-            "success": sim.episode_success, 
-            "duration": sim.episode_steps * sim.time_step_s
+    def _initialize_phase_targets(self):
+        """Metas articulares por fase baseadas no documento"""
+        return {
+            "IC": {"hip": +0.35, "knee": +0.10, "ankle": +0.05, "sigma": 0.10},
+            "LR": {"hip": +0.30, "knee": +0.15, "ankle": +0.05, "sigma": 0.12},
+            "MS": {"hip": +0.10, "knee": +0.05, "ankle": +0.10, "sigma": 0.12},
+            "TS": {"hip": -0.20, "knee": +0.05, "ankle": -0.30, "sigma": 0.15},
+            "PS": {"hip": 0.00, "knee": +0.40, "ankle": -0.10, "sigma": 0.15},
+            "ISw": {"hip": +0.25, "knee": +1.00, "ankle": +0.08, "sigma": 0.20},
+            "MSw": {"hip": +0.40, "knee": +0.50, "ankle": +0.05, "sigma": 0.20},
+            "TSw": {"hip": +0.30, "knee": +0.10, "ankle": +0.02, "sigma": 0.12},
         }
-        self.update_progression(episode_results)
     
-        # Calcular recompensa com pesos do DPG
-        weighted_reward, components = self.create_hybrid_reward_vector(sim, action, self.dpg_weights)
-        total_reward = np.sum(weighted_reward)
+    def _initialize_phase_weights(self):
+        """Pesos das recompensas por fase baseados no documento"""
+        return {
+            "velocity": 2.0,           # w_v
+            "phase_angles": 1.6,       # w_phase
+            "propulsion": 0.6,         # w_prop
+            "clearance": 0.5,          # w_clr
+            "stability": 0.8,          # w_stab
+            "symmetry": 0.3,           # w_sym
+            "effort_torque": 1e-4,     # w_tau
+            "effort_power": 1e-5,      # w_P
+            "action_smoothness": 1e-3, # w_jerk
+            "lateral_penalty": 0.2,    # w_perp
+            "slip_penalty": 0.5,       # w_slip
+        }
     
-        # Bônus simples de fase
-        if self.phase == 2 and sim.episode_distance > 4.0:
-            total_reward += 0.3
-    
-        return total_reward
+    def set_phase_detector(self, phase_detector):
+        """Configura o detector de fases"""
+        self.phase_detector = phase_detector
 
+    def calculate_reward(self, sim, action):
+        """Método principal - escolhe entre DPG com fases ou padrão"""
+        if self.dpg_enabled:
+            return self.calculate_dpg_with_phases(sim, action)
+        else:
+            return self.calculate_standard_reward(sim, action)
+        
     def calculate_standard_reward(self, sim, action):
         """Calcula recompensa padrão (sem DPG)"""
 
@@ -291,7 +256,112 @@ class RewardSystem:
                 total_reward += warning_factor * self.components["warning_penalty"].weight
 
         return total_reward
+    
+    def calculate_dpg_with_phases(self, sim, action):
+        """
+        Calcula recompensa DGP usando o sistema completo de fases da marcha
+        Baseado na fórmula do documento: R = w_v*r_vel + w_phase*r_ângulos + ...
+        """
+        if self.phase_detector is None:
+            self.logger.warning("DPG com fias ativado mas phase_detector não configurado")
+            return self.calculate_standard_reward(sim, action)
+        
+        total_reward = 0.0
+        w = self.phase_specific_weights
+        
+        # 1. Componente de Velocidade (w_v * r_vel)
+        velocity_reward = self._calculate_velocity_reward(sim)
+        total_reward += w["velocity"] * velocity_reward
+        
+        # 2. Componente de Fases e Ângulos Articulares (w_phase * r_ângulos)
+        phase_angle_reward = self._calculate_phase_angle_reward(sim)
+        total_reward += w["phase_angles"] * phase_angle_reward
+        
+        # 3. Componente de Propulsão (w_prop * r_TS)
+        propulsion_reward = self._calculate_propulsion_reward(sim)
+        total_reward += w["propulsion"] * propulsion_reward
+        
+        # 4. Componente de Clearance (w_clr * r_clr)
+        clearance_reward = self._calculate_clearance_reward(sim)
+        total_reward += w["clearance"] * clearance_reward
+        
+        # 5. Componente de Estabilidade (w_stab * r_MoS)
+        stability_reward = self._calculate_stability_reward(sim)
+        total_reward += w["stability"] * stability_reward
+        
+        # 6. Componente de Simetria (w_sym * r_simetria)
+        symmetry_reward = self._calculate_symmetry_reward(sim)
+        total_reward += w["symmetry"] * symmetry_reward
+        
+        # 7. Penalidades de Eficiência
+        effort_cost = self._calculate_effort_cost(sim, action)
+        total_reward -= effort_cost
+        
+        # 8. Penalidades de Estabilidade Lateral
+        lateral_cost = self._calculate_lateral_cost(sim)
+        total_reward -= lateral_cost
+        
+        # 9. Atualizar progressão DPG se disponível
+        if hasattr(self, 'gait_phase_dpg'):
+            episode_results = {
+                "distance": sim.episode_distance, 
+                "success": sim.episode_success, 
+                "duration": sim.episode_steps * sim.time_step_s,
+                "reward": total_reward
+            }
+            self.gait_phase_dpg.update_phase(episode_results)
+        
+        return total_reward
 
+    def enable_dpg_progression(self, enabled=True):
+        """Ativa/desativa progressão por fases para DPG"""
+        self.dpg_enabled = enabled
+        if enabled:
+            if not hasattr(self, 'gait_phase_dpg'):
+                from dpg_gait_phases import GaitPhaseDPG
+                self.gait_phase_dpg = GaitPhaseDPG(self.logger, self)
+                
+            self.gait_phase_dpg._apply_phase_config()  # Aplicar configuração inicial
+            self.logger.info("DPG com Fases da Marcha ativado")
+            
+            if hasattr(self, 'phase_detector') and self.phase_detector:
+                self.logger.info("Detector de fases da marcha inicializado")
+        else:
+            self.logger.info("Sistema de recompensa padrão")
+            
+    def _calculate_cross_gait_pattern(self, sim):
+        """Calcula recompensa por padrão de marcha cruzada (contralateral)"""
+
+        left_foot_contact = sim.robot_left_foot_contact
+        right_foot_contact = sim.robot_right_foot_contact
+
+        try:
+            # Para braço direito: ângulo positivo = para trás, negativo = para frente
+            right_arm_angle = getattr(sim, "robot_right_shoulder_front_angle", 0)
+            left_arm_angle = getattr(sim, "robot_left_shoulder_front_angle", 0)
+        except:
+            return 0.0
+
+        cross_gait_score = 0.0
+
+        # Perna direita no ar + braço esquerdo para trás
+        if not right_foot_contact and left_arm_angle > 0:
+            cross_gait_score += 0.5
+
+        # Perna esquerda no ar + braço direito para trás
+        if not left_foot_contact and right_arm_angle > 0:
+            cross_gait_score += 0.5
+
+        # Perna direita no ar + braço direito para trás (errado)
+        if not right_foot_contact and right_arm_angle > 0:
+            cross_gait_score -= 0.3
+
+        # Perna esquerda no ar + braço esquerdo para trás (errado)
+        if not left_foot_contact and left_arm_angle > 0:
+            cross_gait_score -= 0.3
+
+        return max(0.0, cross_gait_score)
+    
     def _calculate_foot_clearance_optimized(self, sim):
         """Calcula recompensa por altura adequada dos pés durante o balanço"""
         optimal_clearance = 0.05  # 5cm ideal durante balanço
@@ -348,13 +418,238 @@ class RewardSystem:
 
         return 0.5  # Valor neutro até ter dados suficientes
 
-    def calculate_reward(self, sim, action):
-        """Método principal - escolhe entre DPG progressivo ou padrão"""
-        if self.dpg_enabled:
-            return self.calculate_dpg_reward(sim, action)
-        else:
-            return self.calculate_standard_reward(sim, action)
-
+    def _calculate_velocity_reward(self, sim):
+        """Recompensa de velocidade baseada no documento"""
+        vx = getattr(sim, "robot_x_velocity", 0)
+        v_min, v_max = 1.2, 2.8
+        gamma = 1.4
+        
+        # Fórmula do documento: r_vel = clip((v_fwd - 1.2)/(2.8 - 1.2), 0, 1)^γ
+        normalized_vel = (vx - v_min) / (v_max - v_min)
+        clipped_vel = np.clip(normalized_vel, 0.0, 1.0)
+        return clipped_vel ** gamma
+    
+    def _calculate_phase_angle_reward(self, sim):
+        """Recompensa por seguir metas articulares da fase atual"""
+        if self.phase_detector is None:
+            return 0.0
+            
+        total_angle_reward = 0.0
+        current_time = sim.episode_steps * sim.time_step_s
+        
+        for foot_side in ["left", "right"]:
+            phase, _ = self.phase_detector.detect_phase_transition(foot_side, current_time)
+            phase_name = phase.name
+            
+            if phase_name in self.phase_targets:
+                target = self.phase_targets[phase_name]
+                
+                # Obter ângulos atuais
+                hip_angle = self._get_hip_angle(sim, foot_side)
+                knee_angle = self._get_knee_angle(sim, foot_side)
+                ankle_angle = self._get_ankle_angle(sim, foot_side)
+                
+                # Recompensas gaussianas para cada junta
+                hip_reward = np.exp(-0.5 * (hip_angle - target["hip"])**2 / target["sigma"]**2)
+                knee_reward = np.exp(-0.5 * (knee_angle - target["knee"])**2 / target["sigma"]**2)
+                ankle_reward = np.exp(-0.5 * (ankle_angle - target["ankle"])**2 / target["sigma"]**2)
+                
+                # Média das recompensas articulares
+                phase_reward = (hip_reward + knee_reward + ankle_reward) / 3.0
+                total_angle_reward += phase_reward
+        
+        return total_angle_reward / 2.0  # Normalizar por 2 pés
+    
+    def _calculate_propulsion_reward(self, sim):
+        """Recompensa de propulsão na fase TS"""
+        if self.phase_detector is None:
+            return 0.0
+            
+        propulsion_reward = 0.0
+        current_time = sim.episode_steps * sim.time_step_s
+        
+        for foot_side in ["left", "right"]:
+            phase, in_contact = self.phase_detector.detect_phase_transition(foot_side, current_time)
+            
+            if phase.name == "TS" and in_contact:
+                # Estimativa simplificada de propulsão
+                # Em uma implementação completa, usaria GRF real
+                ankle_velocity = self._get_ankle_velocity(sim, foot_side)
+                propulsion = max(ankle_velocity * 0.1, 0.0)  # Proxy para impulso
+                propulsion_reward += np.tanh(0.002 * propulsion)
+        
+        return propulsion_reward
+    
+    def _calculate_clearance_reward(self, sim):
+        """Recompensa por clearance adequado na oscilação"""
+        if self.phase_detector is None:
+            return 0.0
+            
+        clearance_reward = 0.0
+        current_time = sim.episode_steps * sim.time_step_s
+        
+        for foot_side in ["left", "right"]:
+            phase, in_contact = self.phase_detector.detect_phase_transition(foot_side, current_time)
+            
+            if not in_contact:  # Fase de oscilação
+                foot_height = getattr(sim, f"robot_{foot_side}_foot_height")
+                # Sigmoid para clearance ≥ 2.5cm (como no documento)
+                clearance = 1.0 / (1.0 + np.exp(-100 * (foot_height - 0.025)))
+                clearance_reward += clearance
+        
+        return clearance_reward
+    
+    def _calculate_stability_reward(self, sim):
+        """Recompensa de estabilidade (MoS-lite simplificado)"""
+        # MoS-lite simplificado: estabilidade do tronco
+        pitch, roll = getattr(sim, "robot_pitch", 0), getattr(sim, "robot_roll", 0)
+        stability_penalty = abs(pitch) + abs(roll)
+        
+        # Recompensa por baixa instabilidade
+        return np.exp(-stability_penalty / 0.35)
+    
+    def _calculate_symmetry_reward(self, sim):
+        """Recompensa por simetria temporal entre membros"""
+        # Simetria simplificada - em implementação completa usaria tempos de apoio
+        left_hip = abs(getattr(sim, "robot_left_hip_frontal_angle", 0))
+        right_hip = abs(getattr(sim, "robot_right_hip_frontal_angle", 0))
+        
+        if left_hip + right_hip == 0:
+            return 1.0
+            
+        symmetry = 1.0 - abs(left_hip - right_hip) / (left_hip + right_hip)
+        return symmetry
+    
+    def _calculate_effort_cost(self, sim, action):
+        """Custo de esforço (torque + potência + suavidade)"""
+        w = self.phase_specific_weights
+        
+        # Custo de torque (simplificado)
+        joint_velocities = getattr(sim, "joint_velocities", [0])
+        torque_cost = w["effort_torque"] * sum(v**2 for v in joint_velocities)
+        
+        # Custo de potência (simplificado)
+        power_cost = w["effort_power"] * sum(max(0, v)**2 for v in joint_velocities)
+        
+        # Custo de suavidade de ação
+        last_action = getattr(sim, "episode_last_action", np.zeros_like(action))
+        action_smoothness_cost = w["action_smoothness"] * np.sum((action - last_action)**2)
+        
+        return torque_cost + power_cost + action_smoothness_cost
+    
+    def _calculate_lateral_cost(self, sim):
+        """Penalidade por deriva lateral"""
+        w = self.phase_specific_weights
+        vy = abs(getattr(sim, "robot_y_velocity", 0))
+        return w["lateral_penalty"] * vy
+    
+    def _get_hip_angle(self, sim, foot_side):
+        """Obtém ângulo do quadril frontal"""
+        try:
+            if foot_side == "right":
+                return sim.robot_right_hip_frontal_angle
+            else:
+                return sim.robot_left_hip_frontal_angle
+        except:
+            try:
+                # Fallback usando PyBullet diretamente
+                if foot_side == "right":
+                    joint_name = "base_to_right_hip_ball"
+                else:
+                    joint_name = "base_to_left_hip_ball"
+                    
+                joint_index = self._find_joint_index(sim.robot, joint_name)
+                if joint_index is not None:
+                    joint_state = p.getJointState(sim.robot.id, joint_index)
+                    return joint_state[0]  # Posição da junta
+                return 0.0
+            except:
+                return 0.0
+    
+    def _get_knee_angle(self, sim, foot_side):
+        """Obtém ângulo do joelho"""
+        try:
+            if foot_side == "right":
+                return sim.robot_right_knee_angle
+            else:
+                return sim.robot_left_knee_angle
+        except:
+            try:
+                if foot_side == "right":
+                    return sim.robot.get_joint_angle("right_knee_ball_to_shin")
+                else:
+                    return sim.robot.get_joint_angle("left_knee_ball_to_shin")
+            except:
+                return 0.0
+    
+    def _get_ankle_angle(self, sim, foot_side):
+        """Obtém ângulo do tornozelo frontal"""
+        try:
+            # Usar o detector de fases que tem acesso ao robô
+            if hasattr(self, 'phase_detector') and self.phase_detector:
+                return self.phase_detector._get_ankle_angle(foot_side)
+            
+            # Fallback direto
+            if foot_side == "right":
+                joint_name = "right_shin_to_ankle_ball"
+            else:
+                joint_name = "left_shin_to_ankle_ball"
+                
+            return sim.robot.get_joint_angle(joint_name)
+            
+        except Exception as e:
+            self.logger.warning(f"Erro ao obter ângulo do tornozelo {foot_side}: {e}")
+            return 0.0
+    
+    def _get_ankle_velocity(self, sim, foot_side):
+        """Obtém velocidade angular do tornozelo"""
+        try:
+            if hasattr(self, 'phase_detector') and self.phase_detector:
+                current_time = sim.episode_steps * sim.time_step_s
+                return self.phase_detector.get_ankle_velocity(foot_side, current_time)
+            return 0.0
+        except:
+            return 0.0
+    
+    def _get_knee_velocity(self, sim, foot_side):
+        """Obtém velocidade angular do joelho"""
+        try:
+            if hasattr(self, 'phase_detector') and self.phase_detector:
+                current_time = sim.episode_steps * sim.time_step_s
+                return self.phase_detector.get_knee_velocity(foot_side, current_time)
+            return 0.0
+        except:
+            return 0.0
+    
+    def _estimate_propulsion(self, sim, foot_side):
+        """Estima força de propulsão baseada no movimento do tornozelo"""
+        try:
+            # Estimativa simplificada: velocidade do tornozelo * "rigidez" estimada
+            ankle_velocity = self._get_ankle_velocity(sim, foot_side)
+            ankle_angle = self._get_ankle_angle(sim, foot_side)
+            
+            # Na fase TS, ângulo negativo (plantarflexão) + velocidade negativa = propulsão
+            if ankle_angle < 0 and ankle_velocity < 0:
+                propulsion = abs(ankle_velocity * ankle_angle) * 10.0  # Fator de escala
+            else:
+                propulsion = 0.0
+                
+            return propulsion
+            
+        except:
+            return 0.0
+    
+    def _find_joint_index(self, robot, joint_name):
+        """Encontra índice da junta pelo nome"""
+        try:
+            for i in range(p.getNumJoints(robot.id)):
+                info = p.getJointInfo(robot.id, i)
+                if info[1].decode('utf-8') == joint_name:
+                    return i
+            return None
+        except:
+            return None
+    
     def get_configuration_as_dict(self):
         """Retorna configuração atual em formato dicionário"""
         config = {}
@@ -449,72 +744,3 @@ class RewardSystem:
             self.logger.info(f"  enabled atualizado para {enabled}")
 
         return True
-
-    def _calculate_cross_gait_pattern(self, sim):
-        """Calcula recompensa por padrão de marcha cruzada (contralateral)"""
-
-        # Estados dos pés (True = no chão, False = no ar)
-        left_foot_contact = sim.robot_left_foot_contact
-        right_foot_contact = sim.robot_right_foot_contact
-
-        # Ângulos dos braços (assumindo que shoulder_front controla o balanço frontal)
-        try:
-            # Para braço direito: ângulo positivo = para trás, negativo = para frente
-            right_arm_angle = getattr(sim, "robot_right_shoulder_front_angle", 0)
-            left_arm_angle = getattr(sim, "robot_left_shoulder_front_angle", 0)
-        except:
-            # Fallback se os ângulos não estiverem disponíveis
-            return 0.0
-
-        # Padrão de marcha cruzada ideal:
-        # - Quando perna DIREITA está no ar → braço ESQUERDO deve estar para trás (ângulo positivo)
-        # - Quando perna ESQUERDA está no ar → braço DIREITO deve estar para trás (ângulo positivo)
-
-        cross_gait_score = 0.0
-
-        # Perna direita no ar + braço esquerdo para trás
-        if not right_foot_contact and left_arm_angle > 0:
-            cross_gait_score += 0.5
-
-        # Perna esquerda no ar + braço direito para trás
-        if not left_foot_contact and right_arm_angle > 0:
-            cross_gait_score += 0.5
-
-        # Penalizar padrão incorreto (marcha homolateral)
-        # Perna direita no ar + braço direito para trás (errado)
-        if not right_foot_contact and right_arm_angle > 0:
-            cross_gait_score -= 0.3
-
-        # Perna esquerda no ar + braço esquerdo para trás (errado)
-        if not left_foot_contact and left_arm_angle > 0:
-            cross_gait_score -= 0.3
-
-        return max(0.0, cross_gait_score)
-
-    def _calculate_symmetry(self, joint_velocities):
-        """Calcula simetria entre lados do robô"""
-        if not joint_velocities or len(joint_velocities) < 4:  # Precisa de pelo menos 2 juntas por lado
-            return 0.5
-
-        # Assumindo que as primeiras juntas são de um lado e as seguintes do outro
-        mid = len(joint_velocities) // 2
-        left_effort = np.sqrt(sum(v**2 for v in joint_velocities[:mid]))
-        right_effort = np.sqrt(sum(v**2 for v in joint_velocities[mid : mid * 2]))
-
-        if left_effort + right_effort == 0:
-            return 0.5
-
-        symmetry = 1.0 - abs(left_effort - right_effort) / (left_effort + right_effort)
-        return symmetry
-
-    def _estimate_foot_clearance(self, joint_positions):
-        """Estima se o clearance do pé está adequado (simplificado)"""
-
-        # Verificar se alguma junta está em posição extrema (proxy para pé no chão)
-        extreme_positions = sum(1 for pos in joint_positions if abs(pos) > 0.8)
-
-        if extreme_positions < len(joint_positions) * 0.5:
-            return 1
-
-        else:
-            return 0
