@@ -239,6 +239,78 @@ class GaitPhaseDetector:
                     return self.robot.get_joint_angle("left_knee_ball_to_shin")
             except:
                 return 0.0
+            
+    def get_grf_forces(self, foot_side):
+        """Obtém as forças de reação do solo (GRF) para um pé específico"""
+        try:
+            foot_link_name = f"{foot_side}_foot_link"
+            foot_link_index = self.robot.get_link_index(foot_link_name)
+
+            contact_points = p.getContactPoints(bodyA=self.robot.id, linkIndexA=foot_link_index)
+
+            total_force = np.zeros(3)  # [Fx, Fy, Fz]
+            total_torque = np.zeros(3)  # [Tx, Ty, Tz]
+
+            for contact in contact_points:
+                # contact[9] = força normal, contact[10-11] = forças de atrito
+                # contact[12-14] = torque de atrito
+                normal_force = contact[9]
+                friction_force1 = contact[10]
+                friction_force2 = contact[11]
+
+                # Direção da força normal (do corpo B para A)
+                normal_direction = contact[7]
+
+                # Calcular componentes da força
+                Fz = normal_force * abs(normal_direction[2])  # Componente vertical
+                Fx = friction_force1
+                Fy = friction_force2
+
+                total_force[0] += Fx
+                total_force[1] += Fy
+                total_force[2] += Fz
+
+            return total_force
+
+        except Exception as e:
+            self.logger.warning(f"Erro ao calcular GRF para {foot_side}: {e}")
+            return np.zeros(3)
+
+    def get_propulsion_impulse(self, foot_side, current_time, dt=0.01):
+        """Calcula o impulso de propulsão horizontal na fase TS"""
+        try:
+            if not hasattr(self, 'last_grf_time'):
+                self.last_grf_time = current_time
+                self.last_grf_forces = {"left": np.zeros(3), "right": np.zeros(3)}
+                self.propulsion_integrals = {"left": 0.0, "right": 0.0}
+                return 0.0
+
+            # Só calcular durante a fase TS
+            current_phase = self.phase_state[foot_side]
+            if current_phase != GaitPhase.TS:
+                self.propulsion_integrals[foot_side] = 0.0  # Resetar integral
+                return 0.0
+
+            # Obter forças atuais
+            current_grf = self.get_grf_forces(foot_side)
+            Fx = current_grf[0]  # Força horizontal anterior-posterior
+
+            # Integrar impulso (F * dt)
+            time_diff = current_time - self.last_grf_time
+            if time_diff > 0:
+                impulse = Fx * time_diff
+                # Só considerar forças propulsivas (positivas)
+                if impulse > 0:
+                    self.propulsion_integrals[foot_side] += impulse
+
+            self.last_grf_time = current_time
+            self.last_grf_forces[foot_side] = current_grf
+
+            return self.propulsion_integrals[foot_side]
+
+        except Exception as e:
+            self.logger.warning(f"Erro ao calcular impulso de propulsão {foot_side}: {e}")
+            return 0.0
     
     def get_current_phases(self):
         return self.phase_state.copy()

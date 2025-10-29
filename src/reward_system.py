@@ -260,48 +260,51 @@ class RewardSystem:
     def calculate_dpg_with_phases(self, sim, action):
         """
         Calcula recompensa DGP usando o sistema completo de fases da marcha
-        Baseado na fórmula do documento: R = w_v*r_vel + w_phase*r_ângulos + ...
         """
         if self.phase_detector is None:
-            self.logger.warning("DPG com fias ativado mas phase_detector não configurado")
+            self.logger.warning("DPG com fases ativado mas phase_detector não configurado")
             return self.calculate_standard_reward(sim, action)
-        
+
         total_reward = 0.0
         w = self.phase_specific_weights
-        
+
         # 1. Componente de Velocidade (w_v * r_vel)
         velocity_reward = self._calculate_velocity_reward(sim)
         total_reward += w["velocity"] * velocity_reward
-        
+
         # 2. Componente de Fases e Ângulos Articulares (w_phase * r_ângulos)
         phase_angle_reward = self._calculate_phase_angle_reward(sim)
         total_reward += w["phase_angles"] * phase_angle_reward
-        
-        # 3. Componente de Propulsão (w_prop * r_TS)
+
+        # 3. Componente de Propulsão (w_prop * r_TS) - ATUALIZADO COM GRF
         propulsion_reward = self._calculate_propulsion_reward(sim)
         total_reward += w["propulsion"] * propulsion_reward
-        
+
         # 4. Componente de Clearance (w_clr * r_clr)
         clearance_reward = self._calculate_clearance_reward(sim)
         total_reward += w["clearance"] * clearance_reward
-        
+
         # 5. Componente de Estabilidade (w_stab * r_MoS)
         stability_reward = self._calculate_stability_reward(sim)
         total_reward += w["stability"] * stability_reward
-        
+
         # 6. Componente de Simetria (w_sym * r_simetria)
         symmetry_reward = self._calculate_symmetry_reward(sim)
         total_reward += w["symmetry"] * symmetry_reward
-        
-        # 7. Penalidades de Eficiência
+
+        # 7. NOVO: Componente de Coordenação Braço-Perna
+        coordination_reward = self._calculate_arm_leg_coordination(sim)
+        total_reward += 0.4 * coordination_reward  # Peso adicional para coordenação
+
+        # 8. Penalidades de Eficiência
         effort_cost = self._calculate_effort_cost(sim, action)
         total_reward -= effort_cost
-        
-        # 8. Penalidades de Estabilidade Lateral
+
+        # 9. Penalidades de Estabilidade Lateral
         lateral_cost = self._calculate_lateral_cost(sim)
         total_reward -= lateral_cost
-        
-        # 9. Atualizar progressão DPG se disponível
+
+        # 10. Atualizar progressão DPG se disponível
         if hasattr(self, 'gait_phase_dpg'):
             episode_results = {
                 "distance": sim.episode_distance, 
@@ -310,7 +313,7 @@ class RewardSystem:
                 "reward": total_reward
             }
             self.gait_phase_dpg.update_phase(episode_results)
-        
+
         return total_reward
 
     def enable_dpg_progression(self, enabled=True):
@@ -418,6 +421,34 @@ class RewardSystem:
 
         return 0.5  # Valor neutro até ter dados suficientes
 
+    def _calculate_propulsion_reward(self, sim):
+        """Recompensa de propulsão baseada no GRF real na fase TS"""
+        if self.phase_detector is None:
+            return 0.0
+
+        propulsion_reward = 0.0
+        current_time = sim.episode_steps * sim.time_step_s
+
+        for foot_side in ["left", "right"]:
+            phase, in_contact = self.phase_detector.detect_phase_transition(foot_side, current_time)
+
+            if phase.name == "TS" and in_contact:
+                # Calcular impulso de propulsão usando GRF real
+                impulse = self.phase_detector.get_propulsion_impulse(foot_side, current_time)
+
+                # Normalizar o impulso (valores típicos: 0-50 N·s)
+                normalized_impulse = min(impulse / 50.0, 1.0)
+
+                # Recompensa sigmóide suave
+                propulsion = 1.0 / (1.0 + np.exp(-10 * (normalized_impulse - 0.5)))
+                propulsion_reward += propulsion
+
+                # Debug opcional
+                if sim.episode_steps % 100 == 0:
+                    self.logger.debug(f"Propulsão {foot_side}: impulso={impulse:.3f}, norm={normalized_impulse:.3f}, reward={propulsion:.3f}")
+
+        return propulsion_reward
+
     def _calculate_velocity_reward(self, sim):
         """Recompensa de velocidade baseada no documento"""
         vx = getattr(sim, "robot_x_velocity", 0)
@@ -429,6 +460,74 @@ class RewardSystem:
         clipped_vel = np.clip(normalized_vel, 0.0, 1.0)
         return clipped_vel ** gamma
     
+    def _calculate_arm_leg_coordination(self, sim):
+        """Recompensa por coordenação braço-perna em antífase contralateral"""
+        try:
+            coordination_reward = 0.0
+
+            # Obter ângulos atuais
+            left_hip_angle = getattr(sim, "robot_left_hip_frontal_angle", 0)
+            right_hip_angle = getattr(sim, "robot_right_hip_frontal_angle", 0)
+            left_shoulder_angle = getattr(sim, "robot_left_shoulder_front_angle", 0)
+            right_shoulder_angle = getattr(sim, "robot_right_shoulder_front_angle", 0)
+
+            # Calcular correlações contralaterais
+            # Quadril direito vs ombro esquerdo
+            right_hip_left_shoulder_corr = self._calculate_instant_correlation(
+                right_hip_angle, left_shoulder_angle
+            )
+
+            # Quadril esquerdo vs ombro direito  
+            left_hip_right_shoulder_corr = self._calculate_instant_correlation(
+                left_hip_angle, right_shoulder_angle
+            )
+
+            # Recompensar correlação negativa (antífase)
+            # Valor ideal: -1 (perfeita antífase)
+            coordination_score = 0.0
+            coordination_score += max(0, -right_hip_left_shoulder_corr)  # Quanto mais negativo, melhor
+            coordination_score += max(0, -left_hip_right_shoulder_corr)
+
+            coordination_reward = coordination_score / 2.0  # Normalizar para 0-1
+
+            # Bônus adicional para padrão cruzado forte
+            if coordination_score > 1.5:  # Antífase forte em ambos os lados
+                coordination_reward += 0.2
+
+            return min(coordination_reward, 1.0)
+
+        except Exception as e:
+            self.logger.warning(f"Erro no cálculo de coordenação braço-perna: {e}")
+            return 0.0
+
+    def _calculate_instant_correlation(self, angle1, angle2):
+        """Calcula correlação instantânea baseada em sinais normalizados"""
+        try:
+            # Normalizar ângulos para evitar dominância de magnitude
+            norm_angle1 = angle1 / max(abs(angle1), 1.0)  # Evitar divisão por zero
+            norm_angle2 = angle2 / max(abs(angle2), 1.0)
+
+            # Correlação instantânea simplificada
+            # Produto dos sinais normalizados (proxy para correlação)
+            correlation = norm_angle1 * norm_angle2
+
+            # Se ambos estão na mesma direção -> correlação positiva
+            # Se estão em direções opostas -> correlação negativa
+            return correlation
+
+        except:
+            return 0.0
+
+    def _get_shoulder_angles(self, sim, side):
+        """Obtém ângulos dos ombros de forma robusta"""
+        try:
+            if side == "right":
+                return getattr(sim, "robot_right_shoulder_front_angle", 0)
+            else:
+                return getattr(sim, "robot_left_shoulder_front_angle", 0)
+        except:
+            return 0.0
+
     def _calculate_phase_angle_reward(self, sim):
         """Recompensa por seguir metas articulares da fase atual"""
         if self.phase_detector is None:

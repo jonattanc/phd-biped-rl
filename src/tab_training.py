@@ -1150,7 +1150,6 @@ class TrainingTab:
             status_parts = []
             status_parts.append(f"Melhor: {status['best_reward']:.2f}")
             status_parts.append(f"Distância: {status['best_distance']:.2f}m")
-            status_parts.append(f"Steps: {status['total_steps']:,}")
             status_parts.append(f"Sem melhoria: {status['steps_since_improvement']:,}")
 
             # Usar get() para evitar KeyError

@@ -138,12 +138,6 @@ def process_runner(
             else:
                 agent.model.learn(total_timesteps=timesteps_batch_size, reset_num_timesteps=False, callback=callback)
 
-            # Log dos pesos DPG apenas se estiver ativado
-            if enable_dpg and timesteps_completed % 5000 == 0:
-                weights = agent.get_dpg_weights()
-                if weights is not None:
-                    logger.info(f"DPG - Pesos atuais: {weights}")
-
             # Enviar progresso para GUI
             try:
                 ipc_queue.put_nowait({"type": "training_progress", "steps_completed": timesteps_completed})
