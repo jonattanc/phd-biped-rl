@@ -268,6 +268,14 @@ class RewardSystem:
         total_reward = 0.0
         w = self.phase_specific_weights
 
+        # VERIFICAÇÃO PARA FASE INICIAL
+        if hasattr(self, 'gait_phase_dpg') and self.gait_phase_dpg and self.gait_phase_dpg.current_phase == 0:
+            # Na fase inicial, dar bônus imediato por qualquer progresso
+            if sim.episode_distance > 0.2:  # Apenas 20cm de progresso
+                progress_bonus = min(sim.episode_distance / 2.0, 1.0)  # Normalizado para máximo 1.0
+                total_reward += progress_bonus * 2.0  # Bônus significativo
+                self.logger.debug(f"Fase inicial - Progresso: {sim.episode_distance:.2f}m, Bônus: {progress_bonus:.2f}")
+
         # 1. Componente de Velocidade (w_v * r_vel)
         velocity_reward = self._calculate_velocity_reward(sim)
         total_reward += w["velocity"] * velocity_reward
@@ -315,13 +323,27 @@ class RewardSystem:
         slip_penalty = self._calculate_slip_penalty(sim)
         total_reward -= 0.6 * slip_penalty  # Peso moderado contra escorregamento
 
-        # 12. Atualizar progressão DPG se disponível
+        # 12. BÔNUS ADICIONAL PARA FASE INICIAL
+        if hasattr(self, 'gait_phase_dpg') and self.gait_phase_dpg and self.gait_phase_dpg.current_phase == 0:
+            # Bônus por manter estabilidade (evitar quedas)
+            stability_bonus = 0.0
+            if abs(sim.robot_roll) < 0.3:  # Roll estável
+                stability_bonus += 0.5
+            if abs(sim.robot_pitch) < 0.3:  # Pitch estável  
+                stability_bonus += 0.5
+            if sim.robot_z_position > 0.6:  # Não caiu
+                stability_bonus += 1.0
+
+            total_reward += stability_bonus * 0.5  # Peso moderado
+
+        # 13. Atualizar progressão DPG se disponível
         if hasattr(self, 'gait_phase_dpg'):
             episode_results = {
                 "distance": sim.episode_distance, 
                 "success": sim.episode_success, 
                 "duration": sim.episode_steps * sim.time_step_s,
-                "reward": total_reward
+                "reward": total_reward,
+                "roll": abs(sim.robot_roll)  # Adicionado para cálculo de estabilidade
             }
             self.gait_phase_dpg.update_phase(episode_results)
 
@@ -461,15 +483,26 @@ class RewardSystem:
         return propulsion_reward
 
     def _calculate_velocity_reward(self, sim):
-        """Recompensa de velocidade baseada no documento"""
+        """Recompensa de velocidade baseada no documento, adaptada para fase inicial"""
         vx = getattr(sim, "robot_x_velocity", 0)
-        v_min, v_max = 1.2, 2.8
-        gamma = 1.4
         
-        # Fórmula do documento: r_vel = clip((v_fwd - 1.2)/(2.8 - 1.2), 0, 1)^γ
-        normalized_vel = (vx - v_min) / (v_max - v_min)
-        clipped_vel = np.clip(normalized_vel, 0.0, 1.0)
-        return clipped_vel ** gamma
+        # Valores diferentes para fase inicial vs fases avançadas
+        if hasattr(self, 'gait_phase_dpg') and self.gait_phase_dpg and self.gait_phase_dpg.current_phase == 0:
+            # Fase inicial: mais tolerante, qualquer velocidade positiva é boa
+            v_min, v_max = 0.1, 1.0  # Valores muito baixos
+            gamma = 1.0  # Linear
+        else:
+            # Fases normais: valores do documento
+            v_min, v_max = 1.2, 2.8
+            gamma = 1.4
+        
+        # Fórmula do documento: r_vel = clip((v_fwd - v_min)/(v_max - v_min), 0, 1)^γ
+        if v_max - v_min > 0:
+            normalized_vel = (vx - v_min) / (v_max - v_min)
+            clipped_vel = np.clip(normalized_vel, 0.0, 1.0)
+            return clipped_vel ** gamma
+        else:
+            return 0.0
     
     def _calculate_arm_leg_coordination(self, sim):
         """Recompensa por coordenação braço-perna em antífase contralateral"""
