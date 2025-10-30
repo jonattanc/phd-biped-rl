@@ -39,15 +39,27 @@ class RewardTab:
         ttk.Button(control_frame, text="Criar Nova Configuração", command=self.create_new_config).grid(row=0, column=2, padx=5)
 
         # EDITOR COMPLETO COM TODAS AS CATEGORIAS
-        editor_frame = ttk.LabelFrame(main_frame, text="Editor de Componentes de Recompensa", padding="10")
-        editor_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
+        editor_frame_container = ttk.LabelFrame(main_frame, text="Editor de Componentes de Recompensa", padding="10")
+        editor_frame_container.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
+
+        canvas = tk.Canvas(editor_frame_container)
+        scrollbar = ttk.Scrollbar(editor_frame_container, orient=tk.VERTICAL, command=canvas.yview)
+        scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
+
+        self.editor_frame = ttk.Frame(canvas)
+        self.editor_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+
+        canvas.create_window((0, 0), window=self.editor_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        canvas.bind_all("<MouseWheel>", lambda e: canvas.yview_scroll(int(-1 * (e.delta / 120)), "units"))
 
         self.quick_editors = {}
         components = self.reward_system.get_configuration_as_dict()
         row_idx = 1
 
         for key, value in components.items():
-            self._create_component_row(editor_frame, key, value, row_idx)
+            self._create_component_row(self.editor_frame, key, value, row_idx)
             row_idx += 1
 
         # Status
@@ -60,10 +72,10 @@ class RewardTab:
         # Configurar grid
         self.frame.columnconfigure(0, weight=1)
         self.frame.rowconfigure(0, weight=1)
-        self.frame.rowconfigure(1, weight=1)
         main_frame.columnconfigure(0, weight=1)
         main_frame.rowconfigure(1, weight=1)
-        editor_frame.columnconfigure(4, weight=1)
+        editor_frame_container.rowconfigure(0, weight=1)
+        editor_frame_container.columnconfigure(0, weight=1)
 
         # Carregar estado inicial
         self.refresh_config_list()
