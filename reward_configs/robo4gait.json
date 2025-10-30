@@ -108,6 +108,12 @@
       "min_value": -1,
       "max_value": 0
     },
+    "foot_back_penalty": {
+      "weight": -0.001,
+      "enabled": false,
+      "min_value": -1,
+      "max_value": 0
+    },
     "foot_clearance_original": {
       "weight": 0.005,
       "enabled": true,

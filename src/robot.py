@@ -192,6 +192,14 @@ class Robot:
         left_foot_height = left_foot_state[0][2]
         return right_foot_height, left_foot_height
 
+    def get_foot_x_velocities(self):
+        """Retorna as velocidades em x dos pés direito e esquerdo"""
+        right_foot_state = p.getLinkState(self.id, self.get_link_index("right_foot_link"), computeLinkVelocity=1)
+        left_foot_state = p.getLinkState(self.id, self.get_link_index("left_foot_link"), computeLinkVelocity=1)
+        right_foot_x_velocity = right_foot_state[6][0]
+        left_foot_x_velocity = left_foot_state[6][0]
+        return left_foot_x_velocity, right_foot_x_velocity
+
     def get_center_of_mass(self):
         total_mass = 0.0
         weighted_pos = np.zeros(3)
