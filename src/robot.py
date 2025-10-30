@@ -240,6 +240,143 @@ class Robot:
             # Fallback se as juntas não existirem
             return 0.0, 0.0
 
+    def get_gait_pattern_score(self):
+        """
+        Calcula um score que indica a qualidade do padrão de marcha.
+        Retorna um valor entre 0.0 (ruim) e 1.0 (bom).
+        """
+        try:
+            # Obter estados dos pés
+            right_foot_contact, left_foot_contact = self.get_foot_contact_states()
+            
+            # Score baseado no padrão alternado (um pé no chão, outro no ar)
+            if right_foot_contact != left_foot_contact:
+                alternating_score = 1.0  # Padrão alternado ideal
+            else:
+                if right_foot_contact and left_foot_contact:
+                    alternating_score = 0.3  # Ambos no chão - fase de duplo suporte
+                else:
+                    alternating_score = 0.1  # Ambos no ar - fase de voo (pode ser bom em corrida)
+            
+            # Score baseado na diferença de altura dos pés
+            right_foot_height, left_foot_height = self.get_foot_heights()
+            height_diff = abs(right_foot_height - left_foot_height)
+            
+            if height_diff > 0.05:  # Mais de 5cm de diferença
+                clearance_score = 1.0  # Bom clearance
+            elif height_diff > 0.02:  # 2-5cm de diferença
+                clearance_score = 0.7  # Moderado
+            else:
+                clearance_score = 0.3  # Baixo clearance
+            
+            # Combinar scores
+            gait_score = (alternating_score * 0.6 + clearance_score * 0.4)
+            
+            return max(0.0, min(1.0, gait_score))
+            
+        except Exception as e:
+            self.logger.warning(f"Erro ao calcular gait pattern score: {e}")
+            return 0.5  # Valor padrão
+    
+    def get_energy_used(self):
+        """
+        Calcula uma estimativa do 'energia' usada baseada nas velocidades das juntas.
+        Quanto maior o valor, mais 'energia' foi gasta.
+        """
+        try:
+            joint_positions, joint_velocities = self.get_joint_states()
+            
+            # Energia proporcional à soma dos quadrados das velocidades
+            # (aproximação simples para esforço)
+            energy = sum(v**2 for v in joint_velocities) / len(joint_velocities) if joint_velocities else 0.0
+            
+            return energy
+            
+        except Exception as e:
+            self.logger.warning(f"Erro ao calcular energia: {e}")
+            return 1.0  # Valor padrão
+    
+    def get_flight_phase_quality(self):
+        """
+        Calcula a qualidade da fase de voo (para corrida).
+        Retorna um valor entre 0.0 (ruim) e 1.0 (bom).
+        """
+        try:
+            right_foot_contact, left_foot_contact = self.get_foot_contact_states()
+            
+            # Fase de voo = nenhum pé no chão
+            if not right_foot_contact and not left_foot_contact:
+                # Verificar altura dos pés durante voo
+                right_foot_height, left_foot_height = self.get_foot_heights()
+                avg_flight_height = (right_foot_height + left_foot_height) / 2.0
+                
+                if avg_flight_height > 0.08:  # Mais de 8cm de altura
+                    flight_quality = 1.0
+                elif avg_flight_height > 0.04:  # 4-8cm
+                    flight_quality = 0.7
+                else:
+                    flight_quality = 0.3
+            else:
+                flight_quality = 0.0  # Não está em fase de voo
+                
+            return flight_quality
+            
+        except Exception as e:
+            self.logger.warning(f"Erro ao calcular flight phase quality: {e}")
+            return 0.0
+    
+    def get_propulsion_efficiency(self):
+        """
+        Calcula a eficiência propulsiva baseada na velocidade vs esforço.
+        """
+        try:
+            # Obter velocidade atual
+            position, linear_velocity, orientation = self.get_imu_position_velocity_orientation()
+            speed = abs(linear_velocity[0])  # Velocidade em x
+            
+            # Obter energia usada
+            energy = self.get_energy_used()
+            
+            # Eficiência = velocidade / energia (com proteção contra divisão por zero)
+            if energy > 0:
+                efficiency = speed / (energy + 0.1)  # +0.1 para evitar divisão por zero
+            else:
+                efficiency = speed
+                
+            # Normalizar para 0-1
+            normalized_efficiency = min(efficiency / 2.0, 1.0)
+            
+            return normalized_efficiency
+            
+        except Exception as e:
+            self.logger.warning(f"Erro ao calcular propulsion efficiency: {e}")
+            return 0.5
+    
+    def get_clearance_score(self):
+        """
+        Score específico para clearance dos pés durante a marcha.
+        """
+        try:
+            right_foot_height, left_foot_height = self.get_foot_heights()
+            
+            # Considerar o pé que está mais alto (em swing)
+            max_foot_height = max(right_foot_height, left_foot_height)
+            
+            if max_foot_height > 0.08:  # Mais de 8cm
+                clearance_score = 1.0
+            elif max_foot_height > 0.05:  # 5-8cm
+                clearance_score = 0.8
+            elif max_foot_height > 0.03:  # 3-5cm
+                clearance_score = 0.5
+            else:
+                clearance_score = 0.2
+                
+            return clearance_score
+            
+        except Exception as e:
+            self.logger.warning(f"Erro ao calcular clearance score: {e}")
+            return 0.3
+    
     def get_example_action(self, t):
         """Gera uma ação de exemplo baseada no tempo"""
         num_joints = self.get_num_revolute_joints()

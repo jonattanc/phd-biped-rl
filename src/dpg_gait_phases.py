@@ -48,9 +48,6 @@ class GaitPhaseDPG:
         self.regression_count = 0
         
         self._initialize_enhanced_gait_phases()
-
-        from dpg_report_manager import DPGReportManager
-        self.report_manager = DPGReportManager(logger)
         
     def _initialize_enhanced_gait_phases(self):
         """Inicializa as fases da marcha com requisitos mais rigorosos"""
@@ -72,19 +69,18 @@ class GaitPhaseDPG:
                 "distance_bonus": 0.04, 
                 "height_deviation_penalty": 0.01 
             },
-            phase_duration=10,  
+            phase_duration=5,  
             transition_conditions={
-                "min_success_rate": 0.1,       
-                "min_avg_distance": 0.3,       
-                "max_avg_roll": 0.6,          
-                "min_avg_steps": 20,           
-                "min_alternating_score": 0.2,  
-                "consistency_count": 3        
+                "min_success_rate": 0.02,       
+                "min_avg_distance": 0.15,       
+                "max_avg_roll": 0.8,          
+                "min_avg_steps": 10,           
+                "consistency_count": 2        
             },
             skill_requirements={
-                "balance_recovery": 0.5,       
-                "postural_stability": 0.6,     
-                "gait_initiation": 0.4        
+                "basic_balance": 0.4,       
+                "postural_stability": 0.3,     
+                "gait_initiation": 0.1        
             },
             regression_thresholds={
                 "max_failures": 20,           
@@ -125,9 +121,9 @@ class GaitPhaseDPG:
                 "consistency_count": 5
             },
             skill_requirements={
-                "rhythmic_gait": 0.7,          
-                "lateral_stability": 0.75,     
-                "foot_clearance_control": 0.6  
+                "rhythmic_gait": 0.5,          
+                "foot_clearance_control": 0.4,  
+                "step_consistency": 0.6,
             },
             regression_thresholds={
                 "max_failures": 12,
@@ -171,9 +167,9 @@ class GaitPhaseDPG:
                 "consistency_count": 12
             },
             skill_requirements={
-                "propulsive_phase": 0.7,      
-                "dynamic_balance": 0.8,        
-                "rhythm_consistency": 0.75     
+                "balance_recovery": 0.6,        
+                "propulsive_phase": 0.5,        
+                "dynamic_balance": 0.7,     
             },
             regression_thresholds={
                 "max_failures": 10,
@@ -281,42 +277,26 @@ class GaitPhaseDPG:
         """
         Atualiza a fase atual com validação robusta e fallback adaptativo
         """        
-        # VERIFICAÇÃO MAIS FLEXÍVEL para episódios
         episode_duration = episode_results.get('duration', 0)
         episode_distance = episode_results.get('distance', 0)
         episode_steps = episode_results.get('steps', 0)
 
-        # Critérios mais flexíveis para identificar um episódio real
         is_valid_episode = (
-            episode_duration >= 0.1 and      # Duração mínima reduzida
-            episode_steps >= 5 and           # Mínimo de 5 steps
-            episode_distance >= 0            # Distância pode ser 0
+            episode_duration >= 0.1 and      
+            episode_steps >= 5 and           
+            episode_distance >= 0            
         )
 
         if not is_valid_episode:
             self.logger.debug(f"Episódio ignorado - dados insuficientes: duration={episode_duration:.2f}s, steps={episode_steps}, distance={episode_distance:.2f}m")
             return PhaseTransitionResult.FAILURE
 
-        # REGISTRAR DADOS DO EPISÓDIO (MOVER para antes das verificações)
-        episode_report_data = {
-            'timestamp': datetime.now(),
-            'phase': self.current_phase,
-            'distance': episode_results.get('distance', 0),
-            'success': episode_results.get('success', False),
-            'duration': episode_results.get('duration', 0),
-            'reward': episode_results.get('reward', 0),
-            'steps': episode_results.get('steps', 0),
-            'roll': episode_results.get('roll', 0)
-        }
-        self.report_manager.record_episode(episode_report_data)
-
-        # INCREMENTAR CONTADOR DE EPISÓDIOS NA FASE
         self.episodes_in_phase += 1
 
         if self.current_phase >= len(self.phases) - 1:
             return PhaseTransitionResult.SUCCESS 
 
-        # Adicionar resultado ao histórico (ATUALIZADO)
+        # Adicionar resultado ao histórico
         enhanced_results = self._enhance_episode_results(episode_results)
         self.performance_history.append(enhanced_results)
 
@@ -334,62 +314,131 @@ class GaitPhaseDPG:
         # Verificar regressão ou estagnação
         regression_result = self._check_regression_or_stagnation()
         if regression_result != PhaseTransitionResult.SUCCESS:
-            # REGISTRAR REGRESSÕES ANTES DE RETORNAR
-            if regression_result == PhaseTransitionResult.REGRESSION:
-                self.report_manager.record_regression(self.current_phase, "REGRESSION_THRESHOLD", episode_results)
             return regression_result
 
-        # Verificar condições mínimas para transição
+        can_advance = self._check_phase_advancement()
+        if can_advance:
+            return self._advance_to_next_phase()
+
+        return PhaseTransitionResult.FAILURE
+        
+    def _check_phase_advancement(self) -> bool:
+        """Verifica se todas as condições para avançar de fase foram atendidas"""
+        if self.current_phase >= len(self.phases) - 1:
+            return False
+
+        current_phase_config = self.phases[self.current_phase]
+        transition_conditions = current_phase_config.transition_conditions
+
+        # Verificar requisitos mínimos
         if not self._meets_minimum_requirements():
-            return PhaseTransitionResult.FAILURE
+            return False
 
-        # Validar habilidades específicas da fase
-        if not self._validate_phase_skills():
-            return PhaseTransitionResult.FAILURE
+        # Verificar métricas de desempenho
+        success_rate = self._calculate_success_rate()
+        avg_distance = self._calculate_average_distance()
+        avg_roll = self._calculate_average_roll()
+        avg_steps = np.mean([r.get('steps', 0) for r in self.performance_history])
 
-        # Verificar consistência de desempenho
-        if not self._check_performance_consistency():
-            return PhaseTransitionResult.FAILURE
+        # Verificar condições básicas
+        conditions_met = (
+            success_rate >= transition_conditions["min_success_rate"] and
+            avg_distance >= transition_conditions["min_avg_distance"] and 
+            avg_roll <= transition_conditions["max_avg_roll"] and
+            avg_steps >= transition_conditions.get("min_avg_steps", 5) and
+            self._check_performance_consistency() and
+            self._validate_phase_skills()
+        )
 
-        # TODAS as condições atendidas - transicionar
+        if conditions_met:
+            self.logger.info(f"✅ TODAS CONDIÇÕES ATENDIDAS para avançar da Fase {self.current_phase}")
+            self.logger.info(f"   - Success rate: {success_rate:.3f} >= {transition_conditions['min_success_rate']}")
+            self.logger.info(f"   - Avg distance: {avg_distance:.3f}m >= {transition_conditions['min_avg_distance']}m")
+            self.logger.info(f"   - Avg roll: {avg_roll:.3f} <= {transition_conditions['max_avg_roll']}")
+            self.logger.info(f"   - Avg steps: {avg_steps:.1f} >= {transition_conditions.get('min_avg_steps', 5)}")
+            self.logger.info(f"   - Episodes in phase: {self.episodes_in_phase} >= {current_phase_config.phase_duration}")
+
+        return conditions_met
+
+    def _advance_to_next_phase(self) -> PhaseTransitionResult:
+        """Avança para a próxima fase"""
+        if self.current_phase >= len(self.phases) - 1:
+            return PhaseTransitionResult.SUCCESS
+
         old_phase = self.current_phase
         self.current_phase += 1
         self.episodes_in_phase = 0
+        self.consecutive_failures = 0
         self.consecutive_successes = 0
-        self.performance_history = []
-        self.skill_assessment_history = []
+        self.stagnation_counter = 0
+        self.regression_count = 0
+        # Manter o histórico de performance para continuidade
 
-        # REGISTRAR TRANSIÇÃO BEM-SUCEDIDA
-        self.report_manager.record_phase_transition(old_phase, self.current_phase, "SUCCESS")
+        new_phase_config = self.phases[self.current_phase]
 
-        self.logger.info(f"TRANSIÇÃO DE FASE: {self.phases[old_phase].name} → {self.phases[self.current_phase].name}")
-        self.logger.info(f"NOVO ALVO: {self.phases[self.current_phase].target_speed} m/s")
+        self.logger.info(f"🎉 AVANÇO DE FASE: {self.phases[old_phase].name} → {new_phase_config.name}")
+        self.logger.info(f"   Nova velocidade alvo: {new_phase_config.target_speed} m/s")
+        self.logger.info(f"   Duração mínima: {new_phase_config.phase_duration} episódios")
 
         self._apply_phase_config()
         return PhaseTransitionResult.SUCCESS
-        
+
     def _enhance_episode_results(self, episode_results: Dict) -> Dict:
         """Adiciona métricas calculadas aos resultados do episódio"""
         enhanced = episode_results.copy()
-        
+            
         # Calcular métricas adicionais
         if "distance" in episode_results and "duration" in episode_results:
             enhanced["speed"] = episode_results["distance"] / max(episode_results["duration"], 0.1)
             enhanced["efficiency"] = episode_results["distance"] / max(episode_results.get("energy_used", 1), 1)
         
-        # Score de padrão alternado (simplificado)
-        left_contact = episode_results.get("left_contact", 0)
-        right_contact = episode_results.get("right_contact", 0)
-        enhanced["alternating_score"] = 1.0 if left_contact != right_contact else 0.0
+        # Score de padrão alternado
+        left_contact = episode_results.get("left_contact", False)
+        right_contact = episode_results.get("right_contact", False)
+        
+        # Padrão alternado = um pé em contato, outro não
+        if left_contact != right_contact:
+            enhanced["alternating_score"] = 1.0
+        else:
+            enhanced["alternating_score"] = 0.0
         
         # Score de coordenação
         enhanced["coordination_score"] = episode_results.get("gait_pattern_score", 0.5)
+        
+        current_phase = self.current_phase
+        episode_distance = episode_results.get("distance", 0)
+        episode_steps = episode_results.get("steps", 0)
+        episode_roll = abs(episode_results.get("roll", 0))
+        episode_speed = enhanced.get("speed", 0)
+
+        if current_phase == 0:  # estabilidade_postural
+            phase_success = (episode_distance > 0.3 and 
+                       episode_roll < 0.5 and 
+                       episode_steps > 20)
+        elif current_phase == 1:  # marcha_lenta_alternada
+             phase_success = (episode_distance > 1.5 and 
+                        episode_steps > 30 and
+                        episode_speed > 0.2 and
+                        episode_roll < 0.3)
+        elif current_phase == 2:  # marcha_rapida_propulsiva
+            phase_success = (episode_distance > 3.5 and episode_speed > 0.6)
+        elif current_phase == 3:  # corrida_com_voo
+            phase_success = (episode_distance > 7.0 and episode_speed > 1.4)
+        else:  # Fase 4+ - usar sucesso original
+            phase_success = episode_results.get("success", False)
+
+        enhanced["phase_success"] = phase_success
+        
+        # DEBUG: Log para verificar cálculo
+        if current_phase == 1 and episode_steps > 10:
+            self.logger.debug(f"Fase 1 - phase_success: {phase_success} | dist: {episode_distance:.2f} > 1.5? | steps: {episode_steps} > 30? | speed: {episode_speed:.2f} > 0.2? | roll: {episode_roll:.2f} < 0.3?")
         
         return enhanced
         
     def _update_success_failure_counters(self, episode_results: Dict):
         """Atualiza contadores de sucesso e fracasso"""
-        if episode_results.get("success", False):
+        phase_success = episode_results.get("phase_success", False)
+        if phase_success:
             self.consecutive_successes += 1
             self.consecutive_failures = 0
         else:
@@ -467,82 +516,89 @@ class GaitPhaseDPG:
         
     def _meets_minimum_requirements(self) -> bool:
         """Verifica requisitos mínimos para transição"""
-        if self.episodes_in_phase < self.phases[self.current_phase].phase_duration:
-            return False
-            
-        if len(self.performance_history) < 10:  # Mínimo de dados para análise
-            return False
-            
-        return True
+        current_phase_config = self.phases[self.current_phase]
+        has_minimum_duration = self.episodes_in_phase >= current_phase_config.phase_duration
+    
+        # Verificar histórico suficiente
+        has_sufficient_history = len(self.performance_history) >= 5
+
+        if not has_minimum_duration:
+            self.logger.debug(f"Aguardando duração mínima: {self.episodes_in_phase}/{current_phase_config.phase_duration}")
+
+        if not has_sufficient_history:
+            self.logger.debug(f"Aguardando histórico suficiente: {len(self.performance_history)}/5")
+
+        return has_minimum_duration and has_sufficient_history
         
     def _validate_phase_skills(self) -> bool:
-        """Valida se habilidades específicas da fase foram adquiridas"""
+        """Valida apenas as habilidades REQUERIDAS pela fase atual"""
         current_phase = self.phases[self.current_phase]
         skill_requirements = current_phase.skill_requirements
+
+        all_skills = self._assess_phase_skills()
         
-        # Avaliar cada habilidade requerida
-        skill_scores = self._assess_phase_skills()
-        
+        all_skills_met = True
         for skill, required_score in skill_requirements.items():
-            if skill_scores.get(skill, 0) < required_score:
-                self.logger.debug(f"Habilidade '{skill}' insuficiente: {skill_scores.get(skill, 0):.2f} < {required_score}")
-                return False
-                
-        return True
+            current_score = all_skills.get(skill, 0)
+            skill_met = current_score >= required_score
+            all_skills_met = all_skills_met and skill_met
+
+        return all_skills_met
         
     def _assess_phase_skills(self) -> Dict[str, float]:
-        """Avalia habilidades específicas baseadas no histórico"""
+        """Calcula TODAS as habilidades baseadas no histórico"""
         if len(self.performance_history) < 5:
             return {}
-            
+
         recent_results = self.performance_history[-10:]
-        
-        skill_scores = {
-            # Habilidades gerais
-            "balance_recovery": self._calculate_balance_recovery_score(recent_results),
-            "postural_stability": 1.0 - min(self._calculate_average_roll() / 0.5, 1.0),
-            "gait_initiation": self._calculate_success_rate(),
-            
-            # Habilidades de marcha
+        avg_roll = self._calculate_average_roll()
+        success_rate = self._calculate_success_rate()
+        avg_speed = self._calculate_average_speed()
+
+        all_skills = {
+            # Habilidades BÁSICAS
+            "postural_stability": 1.0 - min(avg_roll / 1.0, 1.0),
+            "gait_initiation": success_rate,
+            "basic_balance": 1.0 - min(avg_roll / 0.8, 1.0),
+
+            # Habilidades de MARCHA  
             "rhythmic_gait": np.mean([r.get("alternating_score", 0) for r in recent_results]),
-            "lateral_stability": 1.0 - min(np.mean([abs(r.get("imu_y", 0)) for r in recent_results]) / 0.3, 1.0),
             "foot_clearance_control": np.mean([r.get("clearance_score", 0.5) for r in recent_results]),
-            
-            # Habilidades avançadas
+            "step_consistency": 1.0 - np.std([r.get("distance", 0) for r in recent_results]) / 2.0,
+
+            # Habilidades AVANÇADAS
+            "balance_recovery": self._calculate_balance_recovery_score(recent_results),
             "propulsive_phase": self._calculate_propulsion_efficiency(),
-            "dynamic_balance": 1.0 - min(self._calculate_average_roll() / 0.3, 1.0),
-            "rhythm_consistency": 1.0 - np.std([r.get("speed", 0) for r in recent_results]) / 2.0,
-            
-            # Habilidades de corrida
+            "dynamic_balance": 1.0 - min(avg_roll / 0.3, 1.0),
             "flight_phase_control": np.mean([r.get("flight_quality", 0.5) for r in recent_results]),
-            "impact_absorption": 1.0 - min(np.mean([r.get("impact_force", 0) for r in recent_results]) / 1000, 1.0),
-            "high_speed_stability": 1.0 - min(self._calculate_average_roll() / 0.2, 1.0),
-            
-            # Habilidades de eficiência
-            "energy_efficiency": np.mean([r.get("efficiency", 0) for r in recent_results]),
-            "high_speed_maneuver": min(self._calculate_average_speed() / 2.0, 1.0),
-            "adaptive_gait": self._calculate_consistency_score()
         }
-        
-        return skill_scores
+
+        return all_skills
         
     def _check_performance_consistency(self) -> bool:
         """Verifica consistência do desempenho"""
         current_phase = self.phases[self.current_phase]
         required_consistency = current_phase.transition_conditions.get("consistency_count", 5)
-        
+
         if len(self.performance_history) < required_consistency:
+            self.logger.debug(f"Histórico insuficiente para consistência: {len(self.performance_history)}/{required_consistency}")
             return False
-            
+
         # Verificar últimos 'n' episódios
         recent_results = self.performance_history[-required_consistency:]
-        
-        # Todos devem ter sucesso OU mostrar progresso consistente
-        successful_episodes = sum(1 for r in recent_results if r.get("success", False))
+
+        # Calcular taxa de sucesso nos episódios recentes
+        successful_episodes = sum(1 for r in recent_results if r.get("phase_success", False))
         consistency_ratio = successful_episodes / len(recent_results)
-        
+
         required_success_rate = current_phase.transition_conditions["min_success_rate"]
-        return consistency_ratio >= required_success_rate
+
+        is_consistent = consistency_ratio >= required_success_rate
+
+        if not is_consistent:
+            self.logger.debug(f"Consistência insuficiente: {consistency_ratio:.3f} < {required_success_rate}")
+
+        return is_consistent
         
     def _calculate_balance_recovery_score(self, recent_results: List[Dict]) -> float:
         """Calcula capacidade de recuperar equilíbrio"""
@@ -557,11 +613,13 @@ class GaitPhaseDPG:
             prev_roll = abs(recent_results[i-1].get("roll", 0))
             curr_roll = abs(recent_results[i].get("roll", 0))
             
-            if prev_roll > 0.3 and curr_roll < 0.2:  # Recuperou de instabilidade
+            if prev_roll > 0.3 and curr_roll < 0.2:
                 recovery_events += 1
             total_events += 1
             
-        return recovery_events / max(total_events, 1)
+        score = recovery_events / max(total_events, 1)
+    
+        return score
         
     def _calculate_propulsion_efficiency(self) -> float:
         """Calcula eficiência propulsiva"""
@@ -600,9 +658,7 @@ class GaitPhaseDPG:
                 component.weight = target_weight
             else:
                 component.enabled = False
-                
-        self.logger.info(f"Fase '{current_phase.name}' aplicada - Alvo: {current_phase.target_speed} m/s")
-        
+                        
         # Log detalhado
         active_components = [(name, self.reward_system.components[name].weight) 
                            for name in current_phase.enabled_components]
@@ -640,14 +696,16 @@ class GaitPhaseDPG:
         
     def _calculate_progress_metrics(self) -> Dict:
         """Calcula métricas detalhadas de progresso"""
+        success_rate = self._calculate_success_rate() 
         return {
-            "success_rate": self._calculate_success_rate(),
+            "success_rate": success_rate,
             "avg_distance": self._calculate_average_distance(),
             "avg_speed": self._calculate_average_speed(),
             "avg_roll": self._calculate_average_roll(),
             "stability_score": 1.0 - min(self._calculate_average_roll() / 0.5, 1.0),
             "efficiency_score": np.mean([r.get("efficiency", 0) for r in self.performance_history[-5:]]),
-            "consistency_score": self._calculate_consistency_score()
+            "consistency_score": self._calculate_consistency_score(),
+            "history_size": len(self.performance_history)
         }
         
     def reset(self):
@@ -666,8 +724,10 @@ class GaitPhaseDPG:
     def _calculate_success_rate(self) -> float:
         if not self.performance_history:
             return 0.0
-        successes = sum(1 for result in self.performance_history if result.get("success", False))
-        return successes / len(self.performance_history)
+        successes = sum(1 for result in self.performance_history if result.get("phase_success", False))
+        total = len(self.performance_history)
+
+        return successes / total
         
     def _calculate_average_distance(self) -> float:
         if not self.performance_history:
@@ -707,18 +767,6 @@ class GaitPhaseDPG:
                 if component.enabled:
                     components[name] = component.value
         return components
-    
-    def generate_diagnostic_report(self):
-        """Gera relatório de diagnóstico"""
-        return self.report_manager.generate_diagnostic_report(self)
-    
-    def export_diagnostic_report(self, filename=None):
-        """Exporta relatório para arquivo"""
-        return self.report_manager.export_report(self, filename)
-    
-    def print_diagnostic_summary(self):
-        """Imprime resumo do diagnóstico"""
-        self.report_manager.print_summary(self)
 
     def get_detailed_status(self) -> Dict:
         """Retorna status detalhado com métricas de progresso"""

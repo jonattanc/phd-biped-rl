@@ -169,7 +169,6 @@ class Simulation(gym.Env):
         self.agent = agent
 
     def pre_fill_buffer(self):
-        self.logger.info(f"Pré-preenchendo buffer de replay com {self.agent.prefill_steps} timesteps...")
         obs = self.reset()
 
         self.episode_timeout_s = self.episode_pre_fill_timeout_s
@@ -189,10 +188,15 @@ class Simulation(gym.Env):
 
             if isinstance(obs, (list, tuple)):
                 obs = np.concatenate([np.ravel(o) for o in obs if not isinstance(o, dict)])
+            else:
+                obs = np.array(obs).flatten()
 
             if isinstance(next_obs, (list, tuple)):
                 next_obs = np.concatenate([np.ravel(o) for o in next_obs if not isinstance(o, dict)])
+            else:
+                next_obs = np.array(next_obs).flatten()
 
+            action = np.array(action).flatten()
             self.agent.model.replay_buffer.add(obs, next_obs, action, reward, done, infos=[info])
             obs = next_obs
 
@@ -317,6 +321,7 @@ class Simulation(gym.Env):
         }
 
         # Adicionar informações de fase DPG se disponível
+        current_success = self.episode_success
         if hasattr(self.reward_system, "dpg_manager") and self.reward_system.dpg_manager is not None:
             try:
                 dpg_status = self.reward_system.dpg_manager.gait_phase_dpg.get_detailed_status()  # USAR detailed_status
@@ -331,39 +336,45 @@ class Simulation(gym.Env):
             except Exception as e:
                 self.logger.warning(f"Erro ao obter status DPG detalhado: {e}")
 
-            # DIAGNÓSTICO MELHORADO a cada 50 episódios
-            if self.episode_count % 50 == 0:
+            if self.episode_count % 200 == 0:
                 try:
                     dpg_system = self.reward_system.dpg_manager.gait_phase_dpg
                     current_phase = dpg_system.current_phase
                     detailed_status = dpg_system.get_detailed_status()
+                    self.logger.info(f"🎯 TRANSMIT INFO: episode_success={current_success}, phase_success_recent={current_success}")
 
-                    print(f"\n🎯 DPG DIAGNÓSTICO DETALHADO - Ep: {self.episode_count}")
+                    # DEBUG EXTRA: Verificar cálculo direto
+                    all_successes = sum(1 for r in dpg_system.performance_history if r.get('phase_success', False))
+                    total_all = len(dpg_system.performance_history)
+                    real_success_rate = all_successes / total_all if total_all > 0 else 0
+                    
+                    print(f"\nDPG DIAGNÓSTICO - Ep: {self.episode_count}")
                     print(f"   Fase: {current_phase} ({dpg_system.phases[current_phase].name})")
                     print(f"   Episódios na fase: {detailed_status['episodes_in_phase']}")  # DEVE MOSTRAR > 0
                     print(f"   Histórico: {detailed_status['performance_metrics']['history_size']} episódios")
-                    print(f"   Taxa de sucesso: {detailed_status['performance_metrics']['success_rate']:.1%}")
+                    print(f"   ✅ Taxa de sucesso REAL (histórico completo): {real_success_rate:.1%} ({all_successes}/{total_all})")
+                    print(f"   ❓ Taxa no diagnóstico: {detailed_status['performance_metrics']['success_rate']:.1%}")                    
                     print(f"   Distância média: {detailed_status['performance_metrics']['avg_distance']:.2f}m")
                     print(f"   Velocidade alvo: {detailed_status['target_speed']} m/s")
 
                     # Verificar condições da Fase 0
                     phase_0 = dpg_system.phases[0]
                     current_metrics = detailed_status['performance_metrics']
-                    print(f"   REQUISITOS FASE 0:")
-                    print(f"   - Min success rate: {phase_0.transition_conditions['min_success_rate']} (Atual: {current_metrics['success_rate']:.3f})")
-                    print(f"   - Min avg distance: {phase_0.transition_conditions['min_avg_distance']}m (Atual: {current_metrics['avg_distance']:.3f}m)")
-                    print(f"   - Min avg steps: {phase_0.transition_conditions['min_avg_steps']}")
-
+                    current_phase_config = dpg_system.phases[current_phase]
+                    print(f"   REQUISITOS FASE {current_phase}:")
+                    print(f"   - Min success rate: {current_phase_config.transition_conditions['min_success_rate']} (Atual: {current_metrics['success_rate']:.3f})")
+                    print(f"   - Min avg distance: {current_phase_config.transition_conditions['min_avg_distance']}m (Atual: {current_metrics['avg_distance']:.3f}m)")
+                    print(f"   - Min avg steps: {current_phase_config.transition_conditions.get('min_avg_steps', 10)}")
                     # Verificar se está pronto para transição
                     if (current_metrics['success_rate'] >= phase_0.transition_conditions['min_success_rate'] and
                         current_metrics['avg_distance'] >= phase_0.transition_conditions['min_avg_distance'] and
                         detailed_status['episodes_in_phase'] >= phase_0.phase_duration):
-                        print(f"   ✅ PRONTO PARA TRANSIÇÃO!")
+                        print(f"PRONTO PARA TRANSIÇÃO!")
                     else:
-                        print(f"   ❌ Aguardando critérios...")
+                        print(f"Aguardando critérios...")
 
                 except Exception as e:
-                    print(f"❌ Erro no relatório DPG detalhado: {e}")
+                    print(f"Erro no relatório DPG detalhado: {e}")
 
         # Enviar para ipc_queue
         try:
@@ -495,7 +506,15 @@ class Simulation(gym.Env):
                     "duration": self.episode_steps * self.time_step_s,
                     "reward": self.episode_reward,
                     "roll": abs(self.robot_roll),
-                    "steps": self.episode_steps
+                    "steps": self.episode_steps,
+                    "left_contact": self.robot_left_foot_contact,
+                    "right_contact": self.robot_right_foot_contact,
+                    "gait_pattern_score": self.robot.get_gait_pattern_score(),
+                    "speed": abs(self.robot_x_velocity),
+                    "energy_used": self.robot.get_energy_used(),
+                    "flight_quality": self.robot.get_flight_phase_quality(),
+                    "clearance_score": self.robot.get_clearance_score(),
+                    "propulsion_efficiency": self.robot.get_propulsion_efficiency()
                 }
                 # Chamar update_phase APENAS UMA VEZ
                 try:
