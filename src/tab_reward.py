@@ -78,6 +78,7 @@ class RewardTab:
         main_frame.rowconfigure(1, weight=1)
         editor_frame_container.rowconfigure(0, weight=1)
         editor_frame_container.columnconfigure(0, weight=1)
+        self.editor_frame.columnconfigure(4, weight=1)
 
         # Carregar estado inicial
         self.refresh_config_list()
@@ -91,7 +92,7 @@ class RewardTab:
         ttk.Label(parent, text=component_name).grid(row=row, column=3, sticky=tk.W, padx=5, pady=2)
 
         var = tk.DoubleVar()
-        scale = ttk.Scale(parent, from_=component_content["min_value"], to=component_content["max_value"], variable=var, orient=tk.HORIZONTAL, length=200)
+        scale = ttk.Scale(parent, from_=component_content["min_value"], to=component_content["max_value"], variable=var, orient=tk.HORIZONTAL, length=800)
         scale.grid(row=row, column=4, padx=5, pady=2, sticky=(tk.W, tk.E))
 
         value_label = ttk.Label(parent, text=component_content["weight"], width=8)
