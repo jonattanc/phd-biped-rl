@@ -38,6 +38,8 @@ class GaitPhaseDPG:
         self.episodes_in_phase = 0
         self.phases = []
         self.performance_history = []
+        self.progression_history = []
+        self.max_progression_history = 50
         self.skill_assessment_history = []
         self.consecutive_failures = 0
         self.consecutive_successes = 0
@@ -54,81 +56,97 @@ class GaitPhaseDPG:
         # FASE 0: ESTABILIDADE BÁSICA E CONTROLE POSTURAL
         phase0 = GaitPhaseConfig(
             name="estabilidade_postural",
-            target_speed=0.3,  
+            target_speed=0.5,  
             enabled_components=[
-                "progress", "stability_roll", "stability_pitch", "alternating_foot_contact",
-                "success_bonus", "distance_bonus", "height_deviation_penalty"
+                "stability_roll", "stability_pitch", "alternating_foot_contact", 
+                "progress", "success_bonus", "distance_bonus", "height_deviation_penalty"
             ],
             component_weights={
-                "progress": 0.4,           
-                "stability_roll": 0.2,   
-                "stability_pitch": 0.15,
-                "alternating_foot_contact": 0.15,  
+                "stability_roll": 0.35,   
+                "stability_pitch": 0.25,          
+                "alternating_foot_contact": 0.2, 
+                "progress": 0.1,           
                 "success_bonus": 0.05,     
                 "distance_bonus": 0.04, 
                 "height_deviation_penalty": 0.01 
             },
-            phase_duration=5,  
+            phase_duration=15, 
             transition_conditions={
-                "min_success_rate": 0.02,       
-                "min_avg_distance": 0.15,       
-                "max_avg_roll": 0.8,          
-                "min_avg_steps": 10,           
-                "consistency_count": 2        
+                "min_success_rate": 0.3,       
+                "min_avg_distance": 0.3,    
+                "max_avg_roll": 0.4,           
+                "min_avg_steps": 15,      
+                "consistency_count": 5        
             },
             skill_requirements={
-                "basic_balance": 0.4,       
-                "postural_stability": 0.3,     
-                "gait_initiation": 0.1        
+                "basic_balance": 0.6,      
+                "postural_stability": 0.5,    
+                "gait_initiation": 0.3     
             },
             regression_thresholds={
-                "max_failures": 20,           
-                "min_success_rate": 0.02,      
-                "stagnation_episodes": 30     
+                "max_failures": 30,          
+                "min_success_rate": 0.1,       
+                "stagnation_episodes": 50     
             }
         )
-        
-        # FASE 1: MARCHA LENTA COM PADRÃO ALTERNADO
+
+        # FASE 1: MARCHA LENTA 
         phase1 = GaitPhaseConfig(
-            name="marcha_lenta_alternada",
-            target_speed=0.6,
-            enabled_components=[
-                "progress", "stability_roll", "stability_pitch", "alternating_foot_contact",
-                "gait_pattern_cross", "foot_clearance", "success_bonus", "distance_bonus",
-                "effort_penalty", "y_axis_deviation_penalty"
-            ],
-            component_weights={
-                "progress": 0.35,         
-                "stability_roll": 0.2,     
-                "stability_pitch": 0.15,   
-                "alternating_foot_contact": 0.12,  
-                "gait_pattern_cross": 0.08, 
-                "foot_clearance": 0.05,    
-                "success_bonus": 0.02,
-                "distance_bonus": 0.02,
-                "effort_penalty": 0.005,   
-                "y_axis_deviation_penalty": 0.01  
-            },
-            phase_duration=25,
-            transition_conditions={
-                "min_success_rate": 0.5,      
-                "min_avg_distance": 1.5,       
-                "max_avg_roll": 0.3,           
-                "min_avg_speed": 0.2,          
-                "min_alternating_score": 0.5, 
-                "min_gait_coordination": 0.3,  
-                "consistency_count": 5
-            },
-            skill_requirements={
-                "rhythmic_gait": 0.5,          
-                "foot_clearance_control": 0.4,  
-                "step_consistency": 0.6,
-            },
-            regression_thresholds={
-                "max_failures": 12,
-                "min_success_rate": 0.5,
-                "stagnation_episodes": 15
-            }
+        name="marcha_lenta_alternada",
+        target_speed=0.6,
+        enabled_components=[
+            # COMPONENTES PRINCIPAIS DA FASE 1
+            "progress", "distance_bonus", "gait_pattern_cross", "pitch_forward_bonus",
+            "stability_roll", "stability_pitch", "stability_yaw", "yaw_penalty", "fall_penalty",
+            "height_deviation_penalty", "y_axis_deviation_penalty", "success_bonus", "effort_penalty",
+            "foot_back_penalty", "foot_clearance", "alternating_foot_contact", "knee_flexion", 
+            "hip_extension", "center_bonus", "gait_rhythm"
+        ],
+        component_weights={
+            # PESOS OTIMIZADOS PARA MARCHA LENTA
+            "progress": 0.15,              # Movimento para frente
+            "distance_bonus": 0.08,        # Bônus por distância
+            "gait_pattern_cross": 0.12,    # Padrão cruzado de marcha
+            "pitch_forward_bonus": 0.06,   # Inclinação para frente
+            "stability_roll": 0.10,        # Estabilidade lateral
+            "stability_pitch": 0.08,       # Estabilidade frontal
+            "stability_yaw": 0.05,         # Estabilidade rotacional
+            "yaw_penalty": 0.08,           # Penalidade por desvio
+            "fall_penalty": 0.10,          # Penalidade por queda
+            "height_deviation_penalty": 0.03,  # Altura consistente
+            "y_axis_deviation_penalty": 0.03,  # Desvio lateral
+            "success_bonus": 0.02,         # Bônus por sucesso
+            "effort_penalty": 0.02,        # Penalidade por esforço excessivo
+            "foot_back_penalty": 0.04,     # Pé indo para trás
+            "foot_clearance": 0.04,        # Elevação dos pés
+            "alternating_foot_contact": 0.05,  # Contato alternado
+            "knee_flexion": 0.03,          # Flexão de joelhos
+            "hip_extension": 0.02,         # Extensão de quadril
+            "center_bonus": 0.02,          # Manter-se centralizado
+            "gait_rhythm": 0.03            # Ritmo de marcha
+        },
+        phase_duration=15,  # Episódios mínimos na fase
+        transition_conditions={
+            "min_success_rate": 0.08,        # 8% de sucesso
+            "min_avg_distance": 0.5,         # 0.5m de distância média
+            "max_avg_roll": 0.5,            # Roll médio < 0.5 rad
+            "min_avg_speed": 0.1,           # Velocidade > 0.1 m/s
+            "min_alternating_score": 0.2,   # Score de alternância > 20%
+            "min_gait_coordination": 0.15,   # Coordenação > 15%
+            "consistency_count": 3           # 6 episódios consistentes
+        },
+        skill_requirements={
+            "rhythmic_gait": 0.35,           # Ritmo de marcha
+            "foot_clearance_control": 0.3,   # Controle de elevação
+            "step_consistency": 0.4,         # Consistência de passos
+            "basic_balance": 0.5,            # Equilíbrio básico
+            "postural_stability": 0.4        # Estabilidade postural
+        },
+        regression_thresholds={
+            "max_failures": 25,              # Máximo de falhas consecutivas
+            "min_success_rate": 0.08,        # Taxa mínima de sucesso
+            "stagnation_episodes": 40        # Episódios de estagnação
+        }
         )
         
         # FASE 2: MARCHA RÁPIDA COM PROPULSÃO
@@ -301,6 +319,9 @@ class GaitPhaseDPG:
         # Adicionar resultado ao histórico
         enhanced_results = self._enhance_episode_results(episode_results)
         self.performance_history.append(enhanced_results)
+        self.progression_history.append(enhanced_results)
+        if len(self.progression_history) > self.max_progression_history:
+            self.progression_history.pop(0)
 
         current_phase_success = enhanced_results.get("phase_success", False)
         self.logger.debug(f"Episódio {len(self.performance_history)} - phase_success: {current_phase_success}")
@@ -408,16 +429,22 @@ class GaitPhaseDPG:
         episode_steps = episode_results.get("steps", 0)
         episode_roll = abs(episode_results.get("roll", 0))
         episode_speed = enhanced.get("speed", 0)
+        gait_pattern_score = episode_results.get("gait_pattern_score", 0.5)
+        alternating_score = 1.0 if episode_results.get("left_contact", False) != episode_results.get("right_contact", False) else 0.0
 
         if current_phase == 0:  # estabilidade_postural
             phase_success = (episode_distance > 0.1 and 
                        episode_roll < 0.8 and 
-                       episode_steps > 5)
+                       episode_steps > 10)
         elif current_phase == 1:  # marcha_lenta_alternada
-             phase_success = (episode_distance > 1.5 and 
-                        episode_steps > 30 and
-                        episode_speed > 0.2 and
-                        episode_roll < 0.3)
+            phase_success = (
+                episode_distance > 1.0 and           
+
+                episode_steps > 15 and               
+                episode_roll < 0.45 and              # Inclinação controlada
+                episode_speed > 0.12 and             # Velocidade mínima
+                gait_pattern_score > 0.3 and         # Padrão de marcha
+                alternating_score > 0.5 )
         elif current_phase == 2:  # marcha_rapida_propulsiva
             phase_success = (episode_distance > 3.5 and episode_speed > 0.6)
         elif current_phase == 3:  # corrida_com_voo
@@ -457,11 +484,11 @@ class GaitPhaseDPG:
         regression_thresholds = current_phase.regression_thresholds
 
         if self.current_phase == 0:
-            if self.consecutive_failures >= 50:  
+            if self.consecutive_failures >= 25:  
                 return PhaseTransitionResult.FAILURE
             return PhaseTransitionResult.SUCCESS
         if self.current_phase <= 1:  
-            if self.consecutive_failures >= 50:
+            if self.consecutive_failures >= 25:
                 return PhaseTransitionResult.FAILURE
             return PhaseTransitionResult.SUCCESS
         
@@ -509,13 +536,6 @@ class GaitPhaseDPG:
         self.consecutive_failures = 0
         self.regression_count = 0
         self.stagnation_counter = 0
-        self.performance_history = []
-        
-        # Manter os últimos 10-15 episódios para preservar aprendizado
-        if len(self.performance_history) > 0:
-            self.logger.info(f"Manteve todo o histórico ({len(self.performance_history)} episódios) após regressão")
-        else:
-            self.logger.info("Sem histórico para manter após regressão")
 
         self.logger.warning(f"🔄 REGRESSÃO DE FASE: {self.phases[old_phase].name} → {self.phases[self.current_phase].name}")
 
@@ -583,31 +603,6 @@ class GaitPhaseDPG:
 
         return all_skills
         
-    def _check_performance_consistency(self) -> bool:
-        """Verifica consistência do desempenho"""
-        current_phase = self.phases[self.current_phase]
-        required_consistency = current_phase.transition_conditions.get("consistency_count", 5)
-
-        if len(self.performance_history) < required_consistency:
-            self.logger.debug(f"Histórico insuficiente para consistência: {len(self.performance_history)}/{required_consistency}")
-            return False
-
-        # Verificar últimos 'n' episódios
-        recent_results = self.performance_history[-required_consistency:]
-
-        # Calcular taxa de sucesso nos episódios recentes
-        successful_episodes = sum(1 for r in recent_results if r.get("phase_success", False))
-        consistency_ratio = successful_episodes / len(recent_results)
-
-        required_success_rate = current_phase.transition_conditions["min_success_rate"]
-
-        is_consistent = consistency_ratio >= required_success_rate
-
-        if not is_consistent:
-            self.logger.debug(f"Consistência insuficiente: {consistency_ratio:.3f} < {required_success_rate}")
-
-        return is_consistent
-        
     def _calculate_balance_recovery_score(self, recent_results: List[Dict]) -> float:
         """Calcula capacidade de recuperar equilíbrio"""
         if len(recent_results) < 3:
@@ -672,36 +667,36 @@ class GaitPhaseDPG:
         return self.phases[self.current_phase].target_speed
         
     def get_detailed_status(self) -> Dict:
-        """Retorna status detalhado com métricas de progresso"""
+        """Retorna status detalhado com ambos históricos"""
         current_phase = self.phases[self.current_phase]
-        
-        # Calcular métricas do histórico COMPLETO
-        total_episodes = len(self.performance_history)
+
+        # Calcular métricas do histórico de progressão
         success_rate = self._calculate_success_rate()
-        
-        # Calcular métricas por fase
-        phase_0_episodes = len([r for r in self.performance_history if r.get('phase', 0) == 0])
-        phase_1_episodes = len([r for r in self.performance_history if r.get('phase', 0) == 1])
-        
-        return {
+        avg_distance = self._calculate_average_distance()
+        avg_speed = self._calculate_average_speed()
+        avg_roll = self._calculate_average_roll()
+
+        status = {
             "current_phase": current_phase.name,
             "phase_index": self.current_phase,
             "episodes_in_phase": self.episodes_in_phase,
             "target_speed": current_phase.target_speed,
+            "total_phases": len(self.phases),
             "performance_metrics": {
                 "success_rate": success_rate,
-                "avg_distance": self._calculate_average_distance(),
-                "history_size": total_episodes,
-                "phase_0_episodes": phase_0_episodes,
-                "phase_1_episodes": phase_1_episodes,
-                "total_successes": sum(1 for r in self.performance_history if r.get("phase_success", False))
+                "avg_distance": avg_distance,
+                "avg_speed": avg_speed,
+                "avg_roll": avg_roll,
+                "progression_history_size": len(self.progression_history),  
+                "full_history_size": len(self.performance_history)         
             },
-            "skill_assessment": self._assess_phase_skills(),
             "consecutive_successes": self.consecutive_successes,
             "consecutive_failures": self.consecutive_failures,
             "stagnation_counter": self.stagnation_counter,
             "regression_count": self.regression_count
         }
+
+        return status
         
     def _calculate_progress_metrics(self) -> Dict:
         """Calcula métricas detalhadas de progresso"""
@@ -731,29 +726,47 @@ class GaitPhaseDPG:
         
     # Métodos de cálculo mantidos para compatibilidade
     def _calculate_success_rate(self) -> float:
-        if not self.performance_history:
+        """Calcula taxa de sucesso baseada no histórico de progressão"""
+        if not self.progression_history:
             return 0.0
-        successes = sum(1 for result in self.performance_history if result.get("phase_success", False))
-        total = len(self.performance_history)
+        successes = sum(1 for result in self.progression_history if result.get("phase_success", False))
+        total = len(self.progression_history)
 
         return successes / total
-        
+
     def _calculate_average_distance(self) -> float:
-        if not self.performance_history:
+        """Calcula distância média baseada no histórico de progressão"""
+        if not self.progression_history:
             return 0.0
-        return np.mean([result.get("distance", 0) for result in self.performance_history])
-        
+        return np.mean([result.get("distance", 0) for result in self.progression_history])
+
     def _calculate_average_speed(self) -> float:
-        if not self.performance_history:
+        """Calcula velocidade média baseada no histórico de progressão"""
+        if not self.progression_history:
             return 0.0
-        speeds = [result.get("speed", 0) for result in self.performance_history 
-                 if result.get("speed", 0) > 0]
+        speeds = [result.get("speed", 0) for result in self.progression_history if result.get("speed", 0) > 0]
         return np.mean(speeds) if speeds else 0.0
-        
+
     def _calculate_average_roll(self) -> float:
-        if not self.performance_history:
+        """Calcula roll médio baseada no histórico de progressão"""
+        if not self.progression_history:
             return 0.0
-        return np.mean([abs(result.get("roll", 0)) for result in self.performance_history])
+        return np.mean([abs(result.get("roll", 0)) for result in self.progression_history])
+
+    def _check_performance_consistency(self) -> bool:
+        """Verifica consistência baseada no histórico de progressão"""
+        current_phase = self.phases[self.current_phase]
+        required_consistency = current_phase.transition_conditions.get("consistency_count", 5)
+
+        if len(self.progression_history) < required_consistency:
+            return False
+
+        recent_results = self.progression_history[-required_consistency:]
+        successful_episodes = sum(1 for r in recent_results if r.get("phase_success", False))
+        consistency_ratio = successful_episodes / len(recent_results)
+        required_success_rate = current_phase.transition_conditions["min_success_rate"]
+
+        return consistency_ratio >= required_success_rate
 
     # Método de compatibilidade
     def get_status(self) -> Dict:

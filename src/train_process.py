@@ -151,20 +151,3 @@ def process_runner(
         logger.exception("Erro em process_runner")
 
     ipc_queue.put({"type": "done"})
-
-def setup_phase_detector(sim, robot, logger):
-    """Configura o detector de fases da marcha"""
-    try:
-        from dpg_gait_phase_detector import GaitPhaseDetector
-        
-        # Criar e configurar detector de fases
-        phase_detector = GaitPhaseDetector(robot, logger)
-        sim.reward_system.set_phase_detector(phase_detector)
-        
-        logger.info("Detector de fases da marcha configurado com sucesso")
-        return True
-        
-    except Exception as e:
-        logger.warning(f"Erro ao configurar detector de fases: {e}")
-        logger.warning("Continuando sem detector de fases - usando fallback")
-        return False
