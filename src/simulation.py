@@ -5,7 +5,6 @@ import time
 import numpy as np
 import random
 import math
-from dpg_gait_phase_detector import GaitPhaseDetector
 from dpg_gait_phases import PhaseTransitionResult
 
 
@@ -82,7 +81,6 @@ class Simulation(gym.Env):
         # AGORA podemos obter as informações do robô carregado
         self.action_dim = self.robot.get_num_revolute_joints()
         self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(self.action_dim,), dtype=np.float32)
-        self.phase_detector = None
 
         self.observation_dim = len(self.robot.get_observation())
         self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(self.observation_dim,), dtype=np.float32)
@@ -267,10 +265,6 @@ class Simulation(gym.Env):
         self.episode_robot_x_initial_position = robot_position[0]
         self.episode_robot_y_initial_position = robot_position[1]
 
-        # Inicializar/reinicializar detector de fases
-        self.phase_detector = GaitPhaseDetector(self.robot, self.logger)
-        self.reward_system.set_phase_detector(self.phase_detector)
-
         # Configurar parâmetros físicos para estabilidade
         self._configure_robot_stability()
 
@@ -349,7 +343,6 @@ class Simulation(gym.Env):
                     print(f"\nDPG DIAGNÓSTICO - Ep: {self.episode_count}")
                     print(f"   Fase: {current_phase} ({dpg_system.phases[current_phase].name})")
                     print(f"   Episódios na fase: {detailed_status['episodes_in_phase']}")  # DEVE MOSTRAR > 0
-                    print(f"   Histórico: {detailed_status['performance_metrics']['history_size']} episódios")
                     print(f"   Taxa de sucesso (histórico completo): {real_success_rate:.1%} ({all_successes}/{total_all})")
                     print(f"   Taxa no diagnóstico: {detailed_status['performance_metrics']['success_rate']:.1%}")                    
                     print(f"   Distância média: {detailed_status['performance_metrics']['avg_distance']:.2f}m")

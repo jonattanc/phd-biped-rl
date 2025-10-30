@@ -39,7 +39,6 @@ class GaitPhaseDPG:
         self.phases = []
         self.performance_history = []
         self.skill_assessment_history = []
-        self.max_history_size = 50
         self.consecutive_failures = 0
         self.consecutive_successes = 0
         self.phase_validation_history = []
@@ -303,11 +302,6 @@ class GaitPhaseDPG:
         enhanced_results = self._enhance_episode_results(episode_results)
         self.performance_history.append(enhanced_results)
 
-        # Manter histórico limitado
-        if len(self.performance_history) > self.max_history_size:
-            self.performance_history.pop(0)
-
-        # DEBUG: Verificar phase_success
         current_phase_success = enhanced_results.get("phase_success", False)
         self.logger.debug(f"Episódio {len(self.performance_history)} - phase_success: {current_phase_success}")
 
@@ -383,8 +377,6 @@ class GaitPhaseDPG:
         new_phase_config = self.phases[self.current_phase]
 
         self.logger.info(f"🎉 AVANÇO DE FASE: {self.phases[old_phase].name} → {new_phase_config.name}")
-        self.logger.info(f"   Nova velocidade alvo: {new_phase_config.target_speed} m/s")
-        self.logger.info(f"   Duração mínima: {new_phase_config.phase_duration} episódios")
 
         self._apply_phase_config()
         return PhaseTransitionResult.SUCCESS
@@ -469,7 +461,7 @@ class GaitPhaseDPG:
                 return PhaseTransitionResult.FAILURE
             return PhaseTransitionResult.SUCCESS
         if self.current_phase <= 1:  
-            if self.consecutive_failures >= 100:
+            if self.consecutive_failures >= 50:
                 return PhaseTransitionResult.FAILURE
             return PhaseTransitionResult.SUCCESS
         
