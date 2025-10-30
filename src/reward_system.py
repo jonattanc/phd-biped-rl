@@ -222,6 +222,13 @@ class RewardSystem:
             self.components["foot_back_penalty"].value = backwards_velocity
             total_reward += self.components["foot_back_penalty"].value * self.components["foot_back_penalty"].weight
 
+        if self.is_component_enabled("foot_inclination_penalty"):
+            right_foot_inclination = abs(sim.robot_right_foot_roll) + abs(sim.robot_right_foot_pitch)
+            left_foot_inclination = abs(sim.robot_left_foot_roll) + abs(sim.robot_left_foot_pitch)
+
+            self.components["foot_inclination_penalty"].value = right_foot_inclination + left_foot_inclination
+            total_reward += self.components["foot_inclination_penalty"].value * self.components["foot_inclination_penalty"].weight
+
         if self.is_component_enabled("knee_flexion"):
             self.components["knee_flexion"].value = abs(sim.robot_right_knee_angle) + abs(sim.robot_left_knee_angle)
             total_reward += self.components["knee_flexion"].value * self.components["knee_flexion"].weight

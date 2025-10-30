@@ -200,6 +200,16 @@ class Robot:
         left_foot_x_velocity = left_foot_state[6][0]
         return left_foot_x_velocity, right_foot_x_velocity
 
+    def get_foot_global_angles(self):
+        """Retorna os ângulos globais (roll, pitch, yaw) dos pés direito e esquerdo"""
+        right_foot_state = p.getLinkState(self.id, self.get_link_index("right_foot_link"))
+        left_foot_state = p.getLinkState(self.id, self.get_link_index("left_foot_link"))
+
+        right_foot_orientation = p.getEulerFromQuaternion(right_foot_state[1])
+        left_foot_orientation = p.getEulerFromQuaternion(left_foot_state[1])
+
+        return right_foot_orientation, left_foot_orientation
+
     def get_center_of_mass(self):
         total_mass = 0.0
         weighted_pos = np.zeros(3)
