@@ -6,6 +6,7 @@ import numpy as np
 import random
 import math
 from dpg_gait_phase_detector import GaitPhaseDetector
+from dpg_gait_phases import PhaseTransitionResult
 
 
 class Simulation(gym.Env):
@@ -174,6 +175,11 @@ class Simulation(gym.Env):
         self.episode_timeout_s = self.episode_pre_fill_timeout_s
         self.max_steps = self.max_pre_fill_steps
 
+        dpg_enabled = False
+        if hasattr(self.reward_system, 'dpg_manager') and self.reward_system.dpg_manager:
+            dpg_enabled = self.reward_system.dpg_manager.config.enabled
+            self.reward_system.dpg_manager.config.enabled = False
+
         while self.total_steps < self.agent.prefill_steps and not self.exit_value.value:
             t = self.episode_steps * self.time_step_s
             action = self.robot.get_example_action(t)
@@ -193,6 +199,9 @@ class Simulation(gym.Env):
             if done:
                 obs = self.reset()
 
+        if hasattr(self.reward_system, 'dpg_manager') and self.reward_system.dpg_manager:
+            self.reward_system.dpg_manager.config.enabled = dpg_enabled
+        
         self.episode_timeout_s = self.episode_training_timeout_s
         self.max_steps = self.max_training_steps
 
@@ -308,12 +317,53 @@ class Simulation(gym.Env):
         }
 
         # Adicionar informações de fase DPG se disponível
-        if hasattr(self.reward_system, "gait_phase_dpg") and self.reward_system.gait_phase_dpg is not None:
+        if hasattr(self.reward_system, "dpg_manager") and self.reward_system.dpg_manager is not None:
             try:
-                dpg_status = self.reward_system.gait_phase_dpg.get_status()
-                episode_data.update({"dpg_phase": dpg_status["current_phase"], "dpg_phase_index": dpg_status["phase_index"], "target_speed": dpg_status["target_speed"]})
+                dpg_status = self.reward_system.dpg_manager.gait_phase_dpg.get_detailed_status()  # USAR detailed_status
+                episode_data.update({
+                    "dpg_phase": dpg_status["current_phase"], 
+                    "dpg_phase_index": dpg_status["phase_index"], 
+                    "target_speed": dpg_status["target_speed"],
+                    "dpg_episodes_in_phase": dpg_status["episodes_in_phase"],  # ADICIONAR ESTE
+                    "dpg_success_rate": dpg_status["performance_metrics"]["success_rate"],
+                    "dpg_avg_distance": dpg_status["performance_metrics"]["avg_distance"]
+                })
             except Exception as e:
-                self.logger.warning(f"Erro ao obter status DPG: {e}")
+                self.logger.warning(f"Erro ao obter status DPG detalhado: {e}")
+
+            # DIAGNÓSTICO MELHORADO a cada 50 episódios
+            if self.episode_count % 50 == 0:
+                try:
+                    dpg_system = self.reward_system.dpg_manager.gait_phase_dpg
+                    current_phase = dpg_system.current_phase
+                    detailed_status = dpg_system.get_detailed_status()
+
+                    print(f"\n🎯 DPG DIAGNÓSTICO DETALHADO - Ep: {self.episode_count}")
+                    print(f"   Fase: {current_phase} ({dpg_system.phases[current_phase].name})")
+                    print(f"   Episódios na fase: {detailed_status['episodes_in_phase']}")  # DEVE MOSTRAR > 0
+                    print(f"   Histórico: {detailed_status['performance_metrics']['history_size']} episódios")
+                    print(f"   Taxa de sucesso: {detailed_status['performance_metrics']['success_rate']:.1%}")
+                    print(f"   Distância média: {detailed_status['performance_metrics']['avg_distance']:.2f}m")
+                    print(f"   Velocidade alvo: {detailed_status['target_speed']} m/s")
+
+                    # Verificar condições da Fase 0
+                    phase_0 = dpg_system.phases[0]
+                    current_metrics = detailed_status['performance_metrics']
+                    print(f"   REQUISITOS FASE 0:")
+                    print(f"   - Min success rate: {phase_0.transition_conditions['min_success_rate']} (Atual: {current_metrics['success_rate']:.3f})")
+                    print(f"   - Min avg distance: {phase_0.transition_conditions['min_avg_distance']}m (Atual: {current_metrics['avg_distance']:.3f}m)")
+                    print(f"   - Min avg steps: {phase_0.transition_conditions['min_avg_steps']}")
+
+                    # Verificar se está pronto para transição
+                    if (current_metrics['success_rate'] >= phase_0.transition_conditions['min_success_rate'] and
+                        current_metrics['avg_distance'] >= phase_0.transition_conditions['min_avg_distance'] and
+                        detailed_status['episodes_in_phase'] >= phase_0.phase_duration):
+                        print(f"   ✅ PRONTO PARA TRANSIÇÃO!")
+                    else:
+                        print(f"   ❌ Aguardando critérios...")
+
+                except Exception as e:
+                    print(f"❌ Erro no relatório DPG detalhado: {e}")
 
         # Enviar para ipc_queue
         try:
@@ -433,13 +483,26 @@ class Simulation(gym.Env):
         reward = self.reward_system.calculate_reward(self, action)
         self.episode_reward += reward
 
-        # Atualizar progressão DPG se estiver ativo
-        if hasattr(self.reward_system, "dpg_manager") and self.reward_system.dpg_manager:
-            episode_results = {"distance": self.episode_distance, "success": self.episode_success, "duration": self.episode_steps * self.time_step_s, "reward": reward, "roll": abs(self.robot_roll)}
-            self.reward_system.dpg_manager.update_phase_progression(episode_results)
-
         # Coletar info final quando o episódio terminar
         if self.episode_done:
+            if (hasattr(self.reward_system, 'dpg_manager') and 
+                self.reward_system.dpg_manager and 
+                hasattr(self.reward_system.dpg_manager, 'gait_phase_dpg')):
+
+                episode_results = {
+                    "distance": self.episode_distance,
+                    "success": self.episode_success, 
+                    "duration": self.episode_steps * self.time_step_s,
+                    "reward": self.episode_reward,
+                    "roll": abs(self.robot_roll),
+                    "steps": self.episode_steps
+                }
+                # Chamar update_phase APENAS UMA VEZ
+                try:
+                    transition_result = self.reward_system.dpg_manager.gait_phase_dpg.update_phase(episode_results)
+                except Exception as e:
+                    self.logger.error(f"Erro ao chamar update_phase: {e}")
+        
             self.transmit_episode_info()
 
         self.episode_last_action = action

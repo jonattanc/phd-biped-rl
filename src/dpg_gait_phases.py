@@ -1,4 +1,5 @@
 # dpg_gait_phases.py
+from datetime import datetime
 import numpy as np
 import json
 import os
@@ -47,6 +48,9 @@ class GaitPhaseDPG:
         self.regression_count = 0
         
         self._initialize_enhanced_gait_phases()
+
+        from dpg_report_manager import DPGReportManager
+        self.report_manager = DPGReportManager(logger)
         
     def _initialize_enhanced_gait_phases(self):
         """Inicializa as fases da marcha com requisitos mais rigorosos"""
@@ -68,24 +72,24 @@ class GaitPhaseDPG:
                 "distance_bonus": 0.04, 
                 "height_deviation_penalty": 0.01 
             },
-            phase_duration=15,  
+            phase_duration=10,  
             transition_conditions={
-                "min_success_rate": 0.3,       
-                "min_avg_distance": 0.5,       
-                "max_avg_roll": 0.5,          
-                "min_avg_steps": 30,           
-                "min_alternating_score": 0.3,  
+                "min_success_rate": 0.1,       
+                "min_avg_distance": 0.3,       
+                "max_avg_roll": 0.6,          
+                "min_avg_steps": 20,           
+                "min_alternating_score": 0.2,  
                 "consistency_count": 3        
             },
             skill_requirements={
-                "balance_recovery": 0.7,       
-                "postural_stability": 0.8,     
-                "gait_initiation": 0.6        
+                "balance_recovery": 0.5,       
+                "postural_stability": 0.6,     
+                "gait_initiation": 0.4        
             },
             regression_thresholds={
-                "max_failures": 999,           
-                "min_success_rate": 0.05,      
-                "stagnation_episodes": 25     
+                "max_failures": 20,           
+                "min_success_rate": 0.02,      
+                "stagnation_episodes": 30     
             }
         )
         
@@ -276,38 +280,77 @@ class GaitPhaseDPG:
     def update_phase(self, episode_results: Dict) -> PhaseTransitionResult:
         """
         Atualiza a fase atual com validação robusta e fallback adaptativo
-        """
-        if self.current_phase >= len(self.phases) - 1:
-            return PhaseTransitionResult.SUCCESS  # Fase final alcançada
-            
+        """        
+        # VERIFICAÇÃO MAIS FLEXÍVEL para episódios
+        episode_duration = episode_results.get('duration', 0)
+        episode_distance = episode_results.get('distance', 0)
+        episode_steps = episode_results.get('steps', 0)
+
+        # Critérios mais flexíveis para identificar um episódio real
+        is_valid_episode = (
+            episode_duration >= 0.1 and      # Duração mínima reduzida
+            episode_steps >= 5 and           # Mínimo de 5 steps
+            episode_distance >= 0            # Distância pode ser 0
+        )
+
+        if not is_valid_episode:
+            self.logger.debug(f"Episódio ignorado - dados insuficientes: duration={episode_duration:.2f}s, steps={episode_steps}, distance={episode_distance:.2f}m")
+            return PhaseTransitionResult.FAILURE
+
+        # REGISTRAR DADOS DO EPISÓDIO (MOVER para antes das verificações)
+        episode_report_data = {
+            'timestamp': datetime.now(),
+            'phase': self.current_phase,
+            'distance': episode_results.get('distance', 0),
+            'success': episode_results.get('success', False),
+            'duration': episode_results.get('duration', 0),
+            'reward': episode_results.get('reward', 0),
+            'steps': episode_results.get('steps', 0),
+            'roll': episode_results.get('roll', 0)
+        }
+        self.report_manager.record_episode(episode_report_data)
+
+        # INCREMENTAR CONTADOR DE EPISÓDIOS NA FASE
         self.episodes_in_phase += 1
-        
-        # Adicionar resultado ao histórico
+
+        if self.current_phase >= len(self.phases) - 1:
+            return PhaseTransitionResult.SUCCESS 
+
+        # Adicionar resultado ao histórico (ATUALIZADO)
         enhanced_results = self._enhance_episode_results(episode_results)
         self.performance_history.append(enhanced_results)
+
+        # Manter histórico limitado
         if len(self.performance_history) > self.max_history_size:
             self.performance_history.pop(0)
-            
+        
         # Atualizar contadores de sucesso/fracasso
         self._update_success_failure_counters(enhanced_results)
-        
+
+        if len(self.performance_history) < 3:
+            self.logger.info(f"Aguardando mais dados: {len(self.performance_history)}/3 episódios no histórico")
+            return PhaseTransitionResult.FAILURE
+
         # Verificar regressão ou estagnação
         regression_result = self._check_regression_or_stagnation()
         if regression_result != PhaseTransitionResult.SUCCESS:
+            # REGISTRAR REGRESSÕES ANTES DE RETORNAR
+            if regression_result == PhaseTransitionResult.REGRESSION:
+                self.report_manager.record_regression(self.current_phase, "REGRESSION_THRESHOLD", episode_results)
             return regression_result
-            
+
         # Verificar condições mínimas para transição
         if not self._meets_minimum_requirements():
             return PhaseTransitionResult.FAILURE
-            
+
         # Validar habilidades específicas da fase
         if not self._validate_phase_skills():
             return PhaseTransitionResult.FAILURE
-            
+
         # Verificar consistência de desempenho
         if not self._check_performance_consistency():
             return PhaseTransitionResult.FAILURE
-            
+
         # TODAS as condições atendidas - transicionar
         old_phase = self.current_phase
         self.current_phase += 1
@@ -315,10 +358,13 @@ class GaitPhaseDPG:
         self.consecutive_successes = 0
         self.performance_history = []
         self.skill_assessment_history = []
-        
+
+        # REGISTRAR TRANSIÇÃO BEM-SUCEDIDA
+        self.report_manager.record_phase_transition(old_phase, self.current_phase, "SUCCESS")
+
         self.logger.info(f"TRANSIÇÃO DE FASE: {self.phases[old_phase].name} → {self.phases[self.current_phase].name}")
         self.logger.info(f"NOVO ALVO: {self.phases[self.current_phase].target_speed} m/s")
-        
+
         self._apply_phase_config()
         return PhaseTransitionResult.SUCCESS
         
@@ -652,3 +698,62 @@ class GaitPhaseDPG:
             "total_phases": status["total_phases"],
             "phase_progress": status["phase_progress"]
         }
+    
+    def _get_current_reward_components(self) -> Dict:
+        """Obtém contribuição atual dos componentes de recompensa"""
+        components = {}
+        if hasattr(self.reward_system, 'components'):
+            for name, component in self.reward_system.components.items():
+                if component.enabled:
+                    components[name] = component.value
+        return components
+    
+    def generate_diagnostic_report(self):
+        """Gera relatório de diagnóstico"""
+        return self.report_manager.generate_diagnostic_report(self)
+    
+    def export_diagnostic_report(self, filename=None):
+        """Exporta relatório para arquivo"""
+        return self.report_manager.export_report(self, filename)
+    
+    def print_diagnostic_summary(self):
+        """Imprime resumo do diagnóstico"""
+        self.report_manager.print_summary(self)
+
+    def get_detailed_status(self) -> Dict:
+        """Retorna status detalhado com métricas de progresso"""
+        current_phase = self.phases[self.current_phase]
+
+        # Calcular métricas atuais
+        success_rate = self._calculate_success_rate()
+        avg_distance = self._calculate_average_distance()
+        avg_speed = self._calculate_average_speed()
+
+        status = {
+            "current_phase": current_phase.name,
+            "phase_index": self.current_phase,
+            "episodes_in_phase": self.episodes_in_phase,  # AGORA deve mostrar corretamente
+            "target_speed": current_phase.target_speed,
+            "total_phases": len(self.phases),
+            "phase_progress": f"{self.current_phase + 1}/{len(self.phases)}",
+            "performance_metrics": {
+                "success_rate": success_rate,
+                "avg_distance": avg_distance,
+                "avg_speed": avg_speed,
+                "history_size": len(self.performance_history)
+            },
+            "consecutive_successes": self.consecutive_successes,
+            "consecutive_failures": self.consecutive_failures,
+            "stagnation_counter": self.stagnation_counter,
+            "regression_count": self.regression_count
+        }
+
+        # Adicionar habilidades se houver histórico
+        if len(self.performance_history) >= 3:
+            try:
+                skill_scores = self._assess_phase_skills()
+                status["skill_assessment"] = {k: round(v, 3) for k, v in skill_scores.items()}
+            except Exception as e:
+                status["skill_assessment"] = {"error": str(e)}
+
+        return status

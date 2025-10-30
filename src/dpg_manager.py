@@ -245,17 +245,6 @@ class DPGManager:
 
             total_reward += stability_bonus * 0.5  # Peso moderado
 
-        # Atualizar progressão DPG se disponível
-        if hasattr(self, 'gait_phase_dpg'):
-            episode_results = {
-                "distance": sim.episode_distance, 
-                "success": sim.episode_success, 
-                "duration": sim.episode_steps * sim.time_step_s,
-                "reward": total_reward,
-                "roll": abs(sim.robot_roll)  # Adicionado para cálculo de estabilidade
-            }
-            self.gait_phase_dpg.update_phase(episode_results)
-
         return total_reward
     
     def _calculate_velocity_reward(self, sim):
