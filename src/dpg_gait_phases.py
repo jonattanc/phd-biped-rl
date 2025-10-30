@@ -54,7 +54,7 @@ class GaitPhaseDPG:
         # FASE 0: ESTABILIDADE BÁSICA E CONTROLE POSTURAL
         phase0 = GaitPhaseConfig(
             name="estabilidade_postural",
-            target_speed=0.4,  
+            target_speed=0.3,  
             enabled_components=[
                 "progress", "stability_roll", "stability_pitch", "alternating_foot_contact",
                 "success_bonus", "distance_bonus", "height_deviation_penalty"
@@ -68,14 +68,14 @@ class GaitPhaseDPG:
                 "distance_bonus": 0.04, 
                 "height_deviation_penalty": 0.01 
             },
-            phase_duration=20,  
+            phase_duration=15,  
             transition_conditions={
-                "min_success_rate": 0.5,       
-                "min_avg_distance": 1.0,       
-                "max_avg_roll": 0.4,          
-                "min_avg_steps": 50,           
-                "min_alternating_score": 0.4,  
-                "consistency_count": 5        
+                "min_success_rate": 0.3,       
+                "min_avg_distance": 0.5,       
+                "max_avg_roll": 0.5,          
+                "min_avg_steps": 30,           
+                "min_alternating_score": 0.3,  
+                "consistency_count": 3        
             },
             skill_requirements={
                 "balance_recovery": 0.7,       
@@ -84,15 +84,15 @@ class GaitPhaseDPG:
             },
             regression_thresholds={
                 "max_failures": 999,           
-                "min_success_rate": 0.1,      
-                "stagnation_episodes": 999     
+                "min_success_rate": 0.05,      
+                "stagnation_episodes": 25     
             }
         )
         
         # FASE 1: MARCHA LENTA COM PADRÃO ALTERNADO
         phase1 = GaitPhaseConfig(
             name="marcha_lenta_alternada",
-            target_speed=0.8,
+            target_speed=0.6,
             enabled_components=[
                 "progress", "stability_roll", "stability_pitch", "alternating_foot_contact",
                 "gait_pattern_cross", "foot_clearance", "success_bonus", "distance_bonus",
@@ -112,13 +112,13 @@ class GaitPhaseDPG:
             },
             phase_duration=25,
             transition_conditions={
-                "min_success_rate": 0.65,      
-                "min_avg_distance": 2.5,       
-                "max_avg_roll": 0.25,           
-                "min_avg_speed": 0.3,          
-                "min_alternating_score": 0.65, 
-                "min_gait_coordination": 0.5,  
-                "consistency_count": 8
+                "min_success_rate": 0.5,      
+                "min_avg_distance": 1.5,       
+                "max_avg_roll": 0.3,           
+                "min_avg_speed": 0.2,          
+                "min_alternating_score": 0.5, 
+                "min_gait_coordination": 0.3,  
+                "consistency_count": 5
             },
             skill_requirements={
                 "rhythmic_gait": 0.7,          
@@ -362,30 +362,34 @@ class GaitPhaseDPG:
         """Verifica se há regressão ou estagnação que requer ação"""
         current_phase = self.phases[self.current_phase]
         regression_thresholds = current_phase.regression_thresholds
-    
-        # IMPEDIR REGRESSÃO NA FASE 0
+
+        # PERMITIR MAIS TENTATIVAS NA FASE 0
         if self.current_phase == 0:
+            # Na fase inicial, ser mais tolerante com falhas
+            if self.consecutive_failures >= 15:  # Aumentar limite
+                return PhaseTransitionResult.FAILURE
             return PhaseTransitionResult.SUCCESS
-    
-        # Verificar falhas consecutivas excessivas
-        if self.consecutive_failures >= regression_thresholds["max_failures"]:
+
+        # Relaxar outros thresholds
+        if self.consecutive_failures >= regression_thresholds["max_failures"] * 1.5:  # Aumentar em 50%
             self.regression_count += 1
             if self._should_regress_phase():
                 return self._regress_to_previous_phase()
             return PhaseTransitionResult.FAILURE
-        
-        # Verificar estagnação 
-        if self.stagnation_counter >= regression_thresholds["stagnation_episodes"]:
+
+        # Relaxar threshold de estagnação
+        if self.stagnation_counter >= regression_thresholds["stagnation_episodes"] * 1.5:
             return PhaseTransitionResult.STAGNATION
 
-        # Verificar taxa de sucesso muito baixa
+        # Relaxar taxa de sucesso mínima
         success_rate = self._calculate_success_rate()
-        if success_rate < regression_thresholds["min_success_rate"]:
+        if success_rate < regression_thresholds["min_success_rate"] * 0.8:  # Reduzir para 80%
             self.regression_count += 1
             if self._should_regress_phase():
                 return self._regress_to_previous_phase()
-
             return PhaseTransitionResult.SUCCESS
+
+        return PhaseTransitionResult.SUCCESS
         
     def _should_regress_phase(self) -> bool:
         """Decide se deve regredir para fase anterior"""

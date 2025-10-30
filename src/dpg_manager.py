@@ -60,17 +60,17 @@ class DPGManager:
         
         # Pesos das recompensas por fase
         self.config.phase_weights = {
-            "velocity": 8.0,
-            "phase_angles": 3.0,
-            "propulsion": 2.0,
-            "clearance": 1.5,
-            "stability": 2.0,
-            "symmetry": 1.0,
+            "velocity": 4.0,
+            "phase_angles": 2.0,
+            "propulsion": 1.0,
+            "clearance": 1.0,
+            "stability": 1.5,
+            "symmetry": 0.5,
             "effort_torque": 1e-4,
             "effort_power": 1e-5,
             "action_smoothness": 1e-3,
-            "lateral_penalty": 1.0,
-            "slip_penalty": 2.0,
+            "lateral_penalty": 0.5,
+            "slip_penalty": 1.0,
         }
     
     def enable(self, enabled=True):
@@ -158,18 +158,13 @@ class DPGManager:
             self.stagnation_counter = 0
 
         # RECOMPENSA DE EMERGÊNCIA se estagnado
-        if self.stagnation_counter > 20:  # 20 episódios sem progresso
-            emergency_bonus = 10.0  # Recompensa fixa por qualquer ação
+        if self.stagnation_counter > 30:
+            emergency_bonus = 2.0 
             total_reward += emergency_bonus
         
-        if self.phase_detector is None:
-            self.logger.warning("DPG com fases ativado mas phase_detector não configurado")
-            return self.calculate_standard_reward(sim, action)
-
-
         # RECOMPENSA MASSIVA PARA PRIMEIRO METRO
         if sim.episode_distance <= 1.0:
-            progress_bonus = sim.episode_distance * 100  # 100x multiplier
+            progress_bonus = sim.episode_distance * 20
             total_reward += progress_bonus
 
         # VERIFICAÇÃO PARA FASE INICIAL
@@ -230,9 +225,9 @@ class DPGManager:
         # 12. Penalidades fora da marcha
         if hasattr(sim, 'episode_termination'):  
             if sim.episode_termination == "fell":  
-                total_reward -= 350.0
+                total_reward -= 50.0
             elif sim.episode_termination == "yaw_deviated":  
-                total_reward -= 250.0  
+                total_reward -= 30.0  
 
         if hasattr(sim, 'has_gait_state_changed') and getattr(sim, 'has_gait_state_changed', False):
             total_reward += 25.0

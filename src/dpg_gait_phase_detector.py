@@ -19,9 +19,9 @@ class GaitPhaseDetector:
         self.logger = logger
         
         # Configurações baseadas no documento
-        self.force_contact_threshold = 50.0  # N
-        self.force_release_threshold = 20.0  # N
-        self.swing_velocity_threshold = 0.1  # m/s
+        self.force_contact_threshold = 30.0  # N
+        self.force_release_threshold = 10.0  # N
+        self.swing_velocity_threshold = 0.05  # m/s
         
         # Estados
         self.phase_state = {"left": GaitPhase.IC, "right": GaitPhase.IC}
