@@ -54,76 +54,76 @@ class GaitPhaseDPG:
         # FASE 0: ESTABILIDADE BÁSICA E CONTROLE POSTURAL
         phase0 = GaitPhaseConfig(
             name="estabilidade_postural",
-            target_speed=0.2,  # Velocidade muito baixa para focar em estabilidade
+            target_speed=0.4,  
             enabled_components=[
                 "progress", "stability_roll", "stability_pitch", "alternating_foot_contact",
                 "success_bonus", "distance_bonus", "height_deviation_penalty"
             ],
             component_weights={
-                "progress": 0.3,           # Progresso moderado
-                "stability_roll": 0.25,    # Foco máximo em estabilidade
-                "stability_pitch": 0.2,    # Controle de pitch
-                "alternating_foot_contact": 0.15,  # Padrão básico de marcha
-                "success_bonus": 0.05,     # Bônus mínimo
-                "distance_bonus": 0.03,    # Bônus por distância
-                "height_deviation_penalty": 0.02   # Manter altura
+                "progress": 0.4,           
+                "stability_roll": 0.2,   
+                "stability_pitch": 0.15,
+                "alternating_foot_contact": 0.15,  
+                "success_bonus": 0.05,     
+                "distance_bonus": 0.04, 
+                "height_deviation_penalty": 0.01 
             },
-            phase_duration=40,  # Mais episódios para consolidar fundamentos
+            phase_duration=20,  
             transition_conditions={
-                "min_success_rate": 0.7,       # 70% de sucesso
-                "min_avg_distance": 2.0,       # 2m de progresso médio
-                "max_avg_roll": 0.25,          # Estabilidade angular
-                "min_avg_steps": 80,           # Duração mínima
-                "min_alternating_score": 0.6,  # Padrão de marcha básico
-                "consistency_count": 8         # 8 episódios consistentes
+                "min_success_rate": 0.5,       
+                "min_avg_distance": 1.0,       
+                "max_avg_roll": 0.4,          
+                "min_avg_steps": 50,           
+                "min_alternating_score": 0.4,  
+                "consistency_count": 5        
             },
             skill_requirements={
-                "balance_recovery": 0.7,       # Capacidade de recuperar equilíbrio
-                "postural_stability": 0.8,     # Estabilidade postural
-                "gait_initiation": 0.6         # Iniciar marcha consistentemente
+                "balance_recovery": 0.7,       
+                "postural_stability": 0.8,     
+                "gait_initiation": 0.6        
             },
             regression_thresholds={
-                "max_failures": 15,            # Máximo de falhas consecutivas
-                "min_success_rate": 0.4,       # Limite inferior de sucesso
-                "stagnation_episodes": 20      # Episódios sem melhoria
+                "max_failures": 999,           
+                "min_success_rate": 0.1,      
+                "stagnation_episodes": 999     
             }
         )
         
         # FASE 1: MARCHA LENTA COM PADRÃO ALTERNADO
         phase1 = GaitPhaseConfig(
             name="marcha_lenta_alternada",
-            target_speed=0.6,
+            target_speed=0.8,
             enabled_components=[
                 "progress", "stability_roll", "stability_pitch", "alternating_foot_contact",
                 "gait_pattern_cross", "foot_clearance", "success_bonus", "distance_bonus",
                 "effort_penalty", "y_axis_deviation_penalty"
             ],
             component_weights={
-                "progress": 0.35,          # Aumenta progresso
-                "stability_roll": 0.2,     # Mantém estabilidade
-                "stability_pitch": 0.15,   # Controle postural
-                "alternating_foot_contact": 0.12,  # Padrão consistente
-                "gait_pattern_cross": 0.08, # Coordenação cruzada
-                "foot_clearance": 0.05,    # Clearance básico
+                "progress": 0.35,         
+                "stability_roll": 0.2,     
+                "stability_pitch": 0.15,   
+                "alternating_foot_contact": 0.12,  
+                "gait_pattern_cross": 0.08, 
+                "foot_clearance": 0.05,    
                 "success_bonus": 0.02,
                 "distance_bonus": 0.02,
-                "effort_penalty": 0.005,   # Penalidade leve por esforço
-                "y_axis_deviation_penalty": 0.01  # Controle lateral
+                "effort_penalty": 0.005,   
+                "y_axis_deviation_penalty": 0.01  
             },
-            phase_duration=35,
+            phase_duration=25,
             transition_conditions={
-                "min_success_rate": 0.75,      # 75% de sucesso
-                "min_avg_distance": 3.5,       # 3.5m de progresso
-                "max_avg_roll": 0.2,           # Mais estável
-                "min_avg_speed": 0.4,          # Velocidade mínima
-                "min_alternating_score": 0.75, # Padrão mais consistente
-                "min_gait_coordination": 0.6,  # Coordenação básica
-                "consistency_count": 10
+                "min_success_rate": 0.65,      
+                "min_avg_distance": 2.5,       
+                "max_avg_roll": 0.25,           
+                "min_avg_speed": 0.3,          
+                "min_alternating_score": 0.65, 
+                "min_gait_coordination": 0.5,  
+                "consistency_count": 8
             },
             skill_requirements={
-                "rhythmic_gait": 0.7,          # Marcha rítmica
-                "lateral_stability": 0.75,     # Estabilidade lateral
-                "foot_clearance_control": 0.6  # Controle de clearance
+                "rhythmic_gait": 0.7,          
+                "lateral_stability": 0.75,     
+                "foot_clearance_control": 0.6  
             },
             regression_thresholds={
                 "max_failures": 12,
@@ -143,33 +143,33 @@ class GaitPhaseDPG:
                 "jerk_penalty"
             ],
             component_weights={
-                "progress": 0.4,           # Foco em velocidade
-                "stability_roll": 0.15,    # Estabilidade reduzida
-                "stability_pitch": 0.12,   # Controle necessário
+                "progress": 0.4,           
+                "stability_roll": 0.15,   
+                "stability_pitch": 0.12,   
                 "alternating_foot_contact": 0.08,
-                "gait_pattern_cross": 0.1, # Mais coordenação
-                "foot_clearance": 0.06,    # Clearance importante
-                "pitch_forward_bonus": 0.04, # Postura propulsiva
+                "gait_pattern_cross": 0.1, 
+                "foot_clearance": 0.06,   
+                "pitch_forward_bonus": 0.04, 
                 "success_bonus": 0.02,
                 "distance_bonus": 0.02,
-                "effort_square_penalty": 0.008, # Penalidade por esforço
+                "effort_square_penalty": 0.008, 
                 "y_axis_deviation_square_penalty": 0.01,
-                "jerk_penalty": 0.005      # Movimentos suaves
+                "jerk_penalty": 0.005      
             },
             phase_duration=30,
             transition_conditions={
-                "min_success_rate": 0.8,       # 80% de sucesso
-                "min_avg_distance": 5.0,       # 5m de progresso
-                "min_avg_speed": 0.8,          # Velocidade aumentada
-                "max_avg_roll": 0.15,          # Alta estabilidade
-                "min_propulsion_efficiency": 0.5, # Eficiência propulsiva
+                "min_success_rate": 0.7,       
+                "min_avg_distance": 3.5,       
+                "min_avg_speed": 0.6,          
+                "max_avg_roll": 0.15,          
+                "min_propulsion_efficiency": 0.5, 
                 "min_gait_coordination": 0.75,
                 "consistency_count": 12
             },
             skill_requirements={
-                "propulsive_phase": 0.7,       # Fase propulsiva eficiente
-                "dynamic_balance": 0.8,        # Equilíbrio dinâmico
-                "rhythm_consistency": 0.75     # Ritmo consistente
+                "propulsive_phase": 0.7,      
+                "dynamic_balance": 0.8,        
+                "rhythm_consistency": 0.75     
             },
             regression_thresholds={
                 "max_failures": 10,
@@ -181,7 +181,7 @@ class GaitPhaseDPG:
         # FASE 3: CORRIDA COM FASE DE VOO
         phase3 = GaitPhaseConfig(
             name="corrida_com_voo",
-            target_speed=1.8,
+            target_speed=1.5,
             enabled_components=[
                 "progress", "stability_roll", "stability_pitch", "foot_clearance",
                 "pitch_forward_bonus", "success_bonus", "distance_bonus", 
@@ -189,33 +189,33 @@ class GaitPhaseDPG:
                 "center_bonus", "warning_penalty"
             ],
             component_weights={
-                "progress": 0.45,          # Máximo foco em velocidade
-                "stability_roll": 0.12,    # Estabilidade crítica
-                "stability_pitch": 0.1,    # Controle preciso
-                "foot_clearance": 0.08,    # Clearance importante para corrida
-                "pitch_forward_bonus": 0.06, # Postura aerodinâmica
+                "progress": 0.45,         
+                "stability_roll": 0.12,    
+                "stability_pitch": 0.1,   
+                "foot_clearance": 0.08,    
+                "pitch_forward_bonus": 0.06,
                 "success_bonus": 0.03,
                 "distance_bonus": 0.03,
-                "gait_pattern_cross": 0.07, # Coordenação avançada
+                "gait_pattern_cross": 0.07, 
                 "effort_square_penalty": 0.01,
-                "jerk_penalty": 0.008,     # Movimentos muito suaves
-                "center_bonus": 0.02,      # Manter-se no centro
-                "warning_penalty": 0.015   # Evitar bordas
+                "jerk_penalty": 0.008,     
+                "center_bonus": 0.02,     
+                "warning_penalty": 0.015   
             },
             phase_duration=25,
             transition_conditions={
-                "min_success_rate": 0.85,      # 85% de sucesso
-                "min_avg_distance": 7.0,       # 7m de progresso
-                "min_avg_speed": 1.4,          # Velocidade de corrida
-                "max_avg_roll": 0.12,          # Estabilidade máxima
-                "min_flight_phase_quality": 0.6, # Fase de voo controlada
+                "min_success_rate": 0.85,     
+                "min_avg_distance": 7.0,       
+                "min_avg_speed": 1.4,          
+                "max_avg_roll": 0.12,          
+                "min_flight_phase_quality": 0.6, 
                 "min_propulsion_efficiency": 0.7,
                 "consistency_count": 15
             },
             skill_requirements={
-                "flight_phase_control": 0.7,   # Controle da fase de voo
-                "impact_absorption": 0.75,     # Absorção de impacto
-                "high_speed_stability": 0.8    # Estabilidade em alta velocidade
+                "flight_phase_control": 0.7,   
+                "impact_absorption": 0.75,     
+                "high_speed_stability": 0.8   
             },
             regression_thresholds={
                 "max_failures": 8,
@@ -227,7 +227,7 @@ class GaitPhaseDPG:
         # FASE 4: CORRIDA AVANÇADA E EFICIENTE
         phase4 = GaitPhaseConfig(
             name="corrida_avancada_eficiente",
-            target_speed=2.4,
+            target_speed=2.0,
             enabled_components=[
                 "progress", "stability_roll", "stability_pitch", "foot_clearance",
                 "pitch_forward_bonus", "success_bonus", "distance_bonus", 
@@ -235,34 +235,34 @@ class GaitPhaseDPG:
                 "effort_square_penalty", "jerk_penalty", "direction_change_penalty"
             ],
             component_weights={
-                "progress": 0.5,           # Foco máximo em desempenho
-                "stability_roll": 0.1,     # Estabilidade ótima
-                "stability_pitch": 0.08,   # Controle refinado
-                "foot_clearance": 0.07,    # Clearance eficiente
-                "pitch_forward_bonus": 0.08, # Postura ideal
+                "progress": 0.5,           
+                "stability_roll": 0.1,     
+                "stability_pitch": 0.08,   
+                "foot_clearance": 0.07,    
+                "pitch_forward_bonus": 0.08, 
                 "success_bonus": 0.04,
                 "distance_bonus": 0.04,
-                "gait_pattern_cross": 0.05, # Coordenação automática
+                "gait_pattern_cross": 0.05, 
                 "center_bonus": 0.02,
                 "warning_penalty": 0.015,
-                "effort_square_penalty": 0.012, # Eficiência energética
-                "jerk_penalty": 0.01,      # Suavidade máxima
-                "direction_change_penalty": 0.005 # Trajetória reta
+                "effort_square_penalty": 0.012, 
+                "jerk_penalty": 0.01,      
+                "direction_change_penalty": 0.005 
             },
             phase_duration=20,
             transition_conditions={
-                "min_success_rate": 0.9,       # 90% de sucesso
-                "min_avg_distance": 9.0,       # 9m (quase sucesso total)
-                "min_avg_speed": 2.0,          # Velocidade avançada
-                "max_avg_roll": 0.1,           # Estabilidade excelente
-                "min_energy_efficiency": 0.8,  # Alta eficiência
-                "min_gait_consistency": 0.85,  # Marcha muito consistente
+                "min_success_rate": 0.9,       
+                "min_avg_distance": 9.0,       
+                "min_avg_speed": 2.0,          
+                "max_avg_roll": 0.1,           
+                "min_energy_efficiency": 0.8,  
+                "min_gait_consistency": 0.85,  
                 "consistency_count": 18
             },
             skill_requirements={
-                "energy_efficiency": 0.8,      # Eficiência energética
-                "high_speed_maneuver": 0.75,   # Manobras em alta velocidade
-                "adaptive_gait": 0.7           # Marcha adaptativa
+                "energy_efficiency": 0.8,      
+                "high_speed_maneuver": 0.75,   
+                "adaptive_gait": 0.7           
             },
             regression_thresholds={
                 "max_failures": 5,
@@ -362,36 +362,46 @@ class GaitPhaseDPG:
         """Verifica se há regressão ou estagnação que requer ação"""
         current_phase = self.phases[self.current_phase]
         regression_thresholds = current_phase.regression_thresholds
-        
+    
+        # IMPEDIR REGRESSÃO NA FASE 0
+        if self.current_phase == 0:
+            return PhaseTransitionResult.SUCCESS
+    
         # Verificar falhas consecutivas excessivas
         if self.consecutive_failures >= regression_thresholds["max_failures"]:
             self.regression_count += 1
             if self._should_regress_phase():
                 return self._regress_to_previous_phase()
             return PhaseTransitionResult.FAILURE
-            
-        # Verificar estagnação
+        
+        # Verificar estagnação 
         if self.stagnation_counter >= regression_thresholds["stagnation_episodes"]:
             return PhaseTransitionResult.STAGNATION
-            
+
         # Verificar taxa de sucesso muito baixa
         success_rate = self._calculate_success_rate()
         if success_rate < regression_thresholds["min_success_rate"]:
             self.regression_count += 1
             if self._should_regress_phase():
                 return self._regress_to_previous_phase()
-                
-        return PhaseTransitionResult.SUCCESS
+
+            return PhaseTransitionResult.SUCCESS
         
     def _should_regress_phase(self) -> bool:
         """Decide se deve regredir para fase anterior"""
         # Só regredir se não for a fase inicial e tiver múltiplas regressões
+        if self.current_phase == 0:
+            return False
+    
         return (self.current_phase > 0 and 
                 self.regression_count >= 2 and 
                 self.episodes_in_phase > self.phases[self.current_phase].phase_duration * 1.5)
         
     def _regress_to_previous_phase(self) -> PhaseTransitionResult:
         """Regride para a fase anterior"""
+        if self.current_phase == 0:
+            return PhaseTransitionResult.FAILURE
+    
         old_phase = self.current_phase
         self.current_phase = max(0, self.current_phase - 1)
         self.episodes_in_phase = 0
@@ -401,7 +411,6 @@ class GaitPhaseDPG:
         self.performance_history = []
         
         self.logger.warning(f"REGRESSÃO DE FASE: {self.phases[old_phase].name} → {self.phases[self.current_phase].name}")
-        self.logger.warning(f"Motivo: Desempenho insuficiente na fase anterior")
         
         self._apply_phase_config()
         return PhaseTransitionResult.REGRESSION

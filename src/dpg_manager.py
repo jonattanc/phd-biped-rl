@@ -60,17 +60,17 @@ class DPGManager:
         
         # Pesos das recompensas por fase
         self.config.phase_weights = {
-            "velocity": 2.0,
-            "phase_angles": 1.6,
-            "propulsion": 0.6,
-            "clearance": 0.5,
-            "stability": 0.8,
-            "symmetry": 0.3,
+            "velocity": 8.0,
+            "phase_angles": 3.0,
+            "propulsion": 2.0,
+            "clearance": 1.5,
+            "stability": 2.0,
+            "symmetry": 1.0,
             "effort_torque": 1e-4,
             "effort_power": 1e-5,
             "action_smoothness": 1e-3,
-            "lateral_penalty": 0.2,
-            "slip_penalty": 0.5,
+            "lateral_penalty": 1.0,
+            "slip_penalty": 2.0,
         }
     
     def enable(self, enabled=True):
@@ -227,7 +227,17 @@ class DPGManager:
         slip_penalty = self._calculate_slip_penalty(sim)
         total_reward -= 0.6 * slip_penalty  # Peso moderado contra escorregamento
 
-        # 12. BÔNUS ADICIONAL PARA FASE INICIAL
+        # 12. Penalidades fora da marcha
+        if hasattr(sim, 'episode_termination'):  
+            if sim.episode_termination == "fell":  
+                total_reward -= 350.0
+            elif sim.episode_termination == "yaw_deviated":  
+                total_reward -= 250.0  
+
+        if hasattr(sim, 'has_gait_state_changed') and getattr(sim, 'has_gait_state_changed', False):
+            total_reward += 25.0
+
+        # BÔNUS ADICIONAL PARA FASE INICIAL
         if hasattr(self, 'gait_phase_dpg') and self.gait_phase_dpg and self.gait_phase_dpg.current_phase == 0:
             # Bônus por manter estabilidade (evitar quedas)
             stability_bonus = 0.0
@@ -240,7 +250,7 @@ class DPGManager:
 
             total_reward += stability_bonus * 0.5  # Peso moderado
 
-        # 13. Atualizar progressão DPG se disponível
+        # Atualizar progressão DPG se disponível
         if hasattr(self, 'gait_phase_dpg'):
             episode_results = {
                 "distance": sim.episode_distance, 

@@ -83,20 +83,21 @@ class GaitPhaseDetector:
         try:
             foot_link_name = f"{foot_side}_foot_link"
             foot_link_index = self.robot.get_link_index(foot_link_name)
-            
             contact_points = p.getContactPoints(bodyA=self.robot.id, linkIndexA=foot_link_index)
-            
-            # Considerar contato se houver qualquer ponto de contato
-            return len(contact_points) > 0
-            
+            total_force = 0.0
+            for contact in contact_points:
+                total_force += contact[9]  
+
+            return total_force > self.force_contact_threshold  
+
         except Exception as e:
-            self.logger.warning(f"Erro ao verificar contato do pé {foot_side}: {e}")
-            # Fallback para o método existente do robô
+            self.logger.warning(f"Erro ao verificar contato: {e}")
+            # Fallback
             if foot_side == "right":
                 return self.robot.robot_right_foot_contact
             else:
                 return self.robot.robot_left_foot_contact
-    
+
     def _get_foot_velocity(self, foot_side, current_time):
         """Calcula velocidade vertical do pé usando diferença de posição"""
         try:
