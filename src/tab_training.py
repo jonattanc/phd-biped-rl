@@ -205,9 +205,29 @@ class TrainingTab:
         graph_frame = ttk.LabelFrame(main_frame, text="Desempenho em Tempo Real", padding="1")
         graph_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=1)
 
-        self.fig, self.axs = plt.subplots(5, 1, figsize=(10, 10), constrained_layout=True, sharex=True)
-        self.canvas = FigureCanvasTkAgg(self.fig, master=graph_frame)
-        self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        self.graph_notebook = ttk.Notebook(graph_frame)
+        self.graph_notebook.pack(fill=tk.BOTH, expand=True)
+
+        # Aba 1: Gráficos principais (Recompensa, Tempo, Distância)
+        self.tab_main = ttk.Frame(self.graph_notebook)
+        self.graph_notebook.add(self.tab_main, text="Principais")
+        self.fig_main, self.axs_main = plt.subplots(3, 1, figsize=(10, 10), constrained_layout=True, sharex=True)
+        self.canvas_main = FigureCanvasTkAgg(self.fig_main, master=self.tab_main)
+        self.canvas_main.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+        # Aba 2: Posições (X, Y, Z)
+        self.tab_positions = ttk.Frame(self.graph_notebook)
+        self.graph_notebook.add(self.tab_positions, text="Posições")
+        self.fig_pos, self.axs_pos = plt.subplots(3, 1, figsize=(10, 10), constrained_layout=True, sharex=True)
+        self.canvas_pos = FigureCanvasTkAgg(self.fig_pos, master=self.tab_positions)
+        self.canvas_pos.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+        # Aba 3: Orientação (Roll, Pitch, Yaw)
+        self.tab_orientation = ttk.Frame(self.graph_notebook)
+        self.graph_notebook.add(self.tab_orientation, text="Orientação")
+        self.fig_ori, self.axs_ori = plt.subplots(3, 1, figsize=(10, 10), constrained_layout=True, sharex=True)
+        self.canvas_ori = FigureCanvasTkAgg(self.fig_ori, master=self.tab_orientation)
+        self.canvas_ori.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
         self._initialize_plots()
 
@@ -270,26 +290,49 @@ class TrainingTab:
     def _initialize_plots(self):
         """Inicializa os gráficos com títulos e configurações"""
         try:
-            for i, (ylabel, color) in enumerate(zip(self.plot_ylabels, self.plot_colors)):
-                self.axs[i].clear()
+            # Principais: Recompensa, Tempo, Distância
+            titles_main = self.plot_titles[:3]
+            ylabels_main = self.plot_ylabels[:3]
+            colors_main = self.plot_colors[:3]
+            data_keys_main = self.plot_data_keys[:3]
 
-                if i == 3:  # Gráfico de posição IMU (Y, Z)
-                    self.axs[i].plot([], [], label="Y", color="green", linestyle="-", markersize=3)
-                    self.axs[i].plot([], [], label="Z", color="blue", linestyle="-", markersize=3)
-                elif i == 4:  # Gráfico de orientação (Roll, Pitch, Yaw)
-                    self.axs[i].plot([], [], label="Roll", color="red", linestyle="-", markersize=3)
-                    self.axs[i].plot([], [], label="Pitch", color="green", linestyle="-", markersize=3)
-                    self.axs[i].plot([], [], label="Yaw", color="blue", linestyle="-", markersize=3)
-                else:  # Gráficos normais
-                    self.axs[i].plot([], [], label=ylabel, color=color, linestyle="-", markersize=3)
+            for i, (title, ylabel, color, data_key) in enumerate(zip(titles_main, ylabels_main, colors_main, data_keys_main)):
+                self.axs_main[i].clear()
+                self.axs_main[i].plot([], [], label=ylabel, color=color)
+                self.axs_main[i].set_title(title)
+                self.axs_main[i].set_ylabel(ylabel)
+                self.axs_main[i].grid(True, alpha=0.3)
+                self.axs_main[i].legend(loc="upper left")
+                self.axs_main[i].set_xlim(1, 2)
 
-                self.axs[i].set_ylabel(ylabel)
-                self.axs[i].grid(True, alpha=0.3)
-                self.axs[i].legend(loc="upper left")
-                self.axs[i].set_xlim(1, 2)
+            self.axs_main[-1].set_xlabel("Episódio")
+            self.canvas_main.draw_idle()
 
-            self.axs[-1].set_xlabel("Episódio")
-            self.canvas.draw_idle()
+            # Posições IMU (X, Y, Z)
+            for i, (label, color, key) in enumerate(zip(["X", "Y", "Z"], ["red", "green", "blue"], ["imu_x", "imu_y", "imu_z"])):
+                self.axs_pos[i].clear()
+                self.axs_pos[i].plot(self.episode_data["episodes"], self.episode_data[key], color=color, linestyle="-", alpha=self.nf_alpha, linewidth=self.nf_linewidth)
+                self.axs_pos[i].plot(self.episode_data["episodes"], self.episode_data[f"filtered_{key}"], label=label, color=color, linestyle="-")
+                self.axs_pos[i].set_title(f"Posição {label}")
+                self.axs_pos[i].set_ylabel(f"{label} (m)")
+                self.axs_pos[i].grid(True, alpha=0.3)
+                self.axs_pos[i].legend(loc="upper left")
+                self.axs_pos[i].set_xlim(1, None)
+            self.axs_pos[-1].set_xlabel("Episódio")
+            self.canvas_pos.draw_idle()
+
+            # Orientação (Roll, Pitch, Yaw)
+            for i, (label, color, key) in enumerate(zip(["Roll", "Pitch", "Yaw"], ["red", "green", "blue"], ["roll_deg", "pitch_deg", "yaw_deg"])):
+                self.axs_ori[i].clear()
+                self.axs_ori[i].plot(self.episode_data["episodes"], self.episode_data[key], color=color, linestyle="-", alpha=self.nf_alpha, linewidth=self.nf_linewidth)
+                self.axs_ori[i].plot(self.episode_data["episodes"], self.episode_data[f"filtered_{key}"], label=label, color=color, linestyle="-")
+                self.axs_ori[i].set_title(label)
+                self.axs_ori[i].set_ylabel(f"{label} (°)")
+                self.axs_ori[i].grid(True, alpha=0.3)
+                self.axs_ori[i].legend(loc="upper left")
+                self.axs_ori[i].set_xlim(1, None)
+            self.axs_ori[-1].set_xlabel("Episódio")
+            self.canvas_ori.draw_idle()
 
         except Exception as e:
             self.logger.exception("Erro ao inicializar gráficos")
@@ -1047,33 +1090,48 @@ class TrainingTab:
             self.new_plot_data = False
 
             with self.plot_data_lock:
-                for i, (ylabel, color, data_key) in enumerate(zip(self.plot_ylabels, self.plot_colors, self.plot_data_keys)):
-                    self.axs[i].clear()
+                # Principais
+                titles_main = self.plot_titles[:3]
+                ylabels_main = self.plot_ylabels[:3]
+                colors_main = self.plot_colors[:3]
+                data_keys_main = self.plot_data_keys[:3]
+                for i, (title, ylabel, color, key) in enumerate(zip(titles_main, ylabels_main, colors_main, data_keys_main)):
+                    self.axs_main[i].clear()
+                    self.axs_main[i].plot(self.episode_data["episodes"], self.episode_data[key], color=color, linestyle="-", alpha=self.nf_alpha, linewidth=self.nf_linewidth)
+                    self.axs_main[i].plot(self.episode_data["episodes"], self.episode_data[f"filtered_{key}"], label=ylabel, color=color, linestyle="-")
+                    # self.axs_main[i].set_title(title)
+                    self.axs_main[i].set_ylabel(ylabel)
+                    self.axs_main[i].grid(True, alpha=0.3)
+                    self.axs_main[i].legend(loc="upper left")
+                    self.axs_main[i].set_xlim(1, None)
+                self.axs_main[-1].set_xlabel("Episódio")
+                self.canvas_main.draw()
 
-                    if i == 3:  # Gráfico de posição IMU
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_y"], color="green", linestyle="-", alpha=self.nf_alpha, linewidth=self.nf_linewidth)
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["imu_z"], color="blue", linestyle="-", alpha=self.nf_alpha, linewidth=self.nf_linewidth)
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["filtered_imu_y"], label="Y", color="green", linestyle="-")
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["filtered_imu_z"], label="Z", color="blue", linestyle="-")
-                    elif i == 4:  # Gráfico de orientação
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["roll_deg"], color="red", linestyle="-", alpha=self.nf_alpha, linewidth=self.nf_linewidth)
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["pitch_deg"], color="green", linestyle="-", alpha=self.nf_alpha, linewidth=self.nf_linewidth)
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["yaw_deg"], color="blue", linestyle="-", alpha=self.nf_alpha, linewidth=self.nf_linewidth)
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["filtered_roll_deg"], label="Roll", color="red", linestyle="-")
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["filtered_pitch_deg"], label="Pitch", color="green", linestyle="-")
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data["filtered_yaw_deg"], label="Yaw", color="blue", linestyle="-")
-                    else:  # Gráficos normais
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data[data_key], color=color, linestyle="-", alpha=self.nf_alpha, linewidth=self.nf_linewidth)
-                        self.axs[i].plot(self.episode_data["episodes"], self.episode_data[f"filtered_{data_key}"], label=ylabel, color=color, linestyle="-")
+                # Posições IMU (X, Y, Z)
+                for i, (label, color, key) in enumerate(zip(["X", "Y", "Z"], ["red", "green", "blue"], ["imu_x", "imu_y", "imu_z"])):
+                    self.axs_pos[i].clear()
+                    self.axs_pos[i].plot(self.episode_data["episodes"], self.episode_data[key], color=color, linestyle="-", alpha=self.nf_alpha, linewidth=self.nf_linewidth)
+                    self.axs_pos[i].plot(self.episode_data["episodes"], self.episode_data[f"filtered_{key}"], label=label, color=color, linestyle="-")
+                    # self.axs_pos[i].set_title(f"Posição {label}")
+                    self.axs_pos[i].set_ylabel(f"{label} (m)")
+                    self.axs_pos[i].grid(True, alpha=0.3)
+                    self.axs_pos[i].legend(loc="upper left")
+                    self.axs_pos[i].set_xlim(1, None)
+                self.axs_pos[-1].set_xlabel("Episódio")
+                self.canvas_pos.draw()
 
-                    self.axs[i].set_ylabel(ylabel)
-                    self.axs[i].grid(True, alpha=0.3)
-                    self.axs[i].legend(loc="upper left")
-                    self.axs[i].set_xlim(1, None)
-
-                self.axs[-1].set_xlabel("Episódio")
-
-            self.canvas.draw()
+                # Orientação (Roll, Pitch, Yaw)
+                for i, (label, color, key) in enumerate(zip(["Roll", "Pitch", "Yaw"], ["red", "green", "blue"], ["roll_deg", "pitch_deg", "yaw_deg"])):
+                    self.axs_ori[i].clear()
+                    self.axs_ori[i].plot(self.episode_data["episodes"], self.episode_data[key], color=color, linestyle="-", alpha=self.nf_alpha, linewidth=self.nf_linewidth)
+                    self.axs_ori[i].plot(self.episode_data["episodes"], self.episode_data[f"filtered_{key}"], label=label, color=color, linestyle="-")
+                    # self.axs_ori[i].set_title(label)
+                    self.axs_ori[i].set_ylabel(f"{label} (°)")
+                    self.axs_ori[i].grid(True, alpha=0.3)
+                    self.axs_ori[i].legend(loc="upper left")
+                    self.axs_ori[i].set_xlim(1, None)
+                self.axs_ori[-1].set_xlabel("Episódio")
+                self.canvas_ori.draw()
 
         except Exception as e:
             self.logger.exception("Plot error")
