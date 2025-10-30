@@ -335,15 +335,10 @@ class Simulation(gym.Env):
                     dpg_system = self.reward_system.dpg_manager.gait_phase_dpg
                     current_phase = dpg_system.current_phase
                     detailed_status = dpg_system.get_detailed_status()
-
-                    all_successes = sum(1 for r in dpg_system.performance_history if r.get('phase_success', False))
-                    total_all = len(dpg_system.performance_history)
-                    real_success_rate = all_successes / total_all if total_all > 0 else 0
-                    
+                   
                     print(f"\nDPG DIAGNÓSTICO - Ep: {self.episode_count}")
                     print(f"   Fase: {current_phase} ({dpg_system.phases[current_phase].name})")
-                    print(f"   Episódios na fase: {detailed_status['episodes_in_phase']}")  # DEVE MOSTRAR > 0
-                    print(f"   Taxa de sucesso (histórico completo): {real_success_rate:.1%} ({all_successes}/{total_all})")
+                    print(f"   Episódios na fase: {detailed_status['episodes_in_phase']}")  
                     print(f"   Taxa no diagnóstico: {detailed_status['performance_metrics']['success_rate']:.1%}")                    
                     print(f"   Distância média: {detailed_status['performance_metrics']['avg_distance']:.2f}m")
                     print(f"   Velocidade alvo: {detailed_status['target_speed']} m/s")
@@ -464,15 +459,6 @@ class Simulation(gym.Env):
             self.episode_termination = "timeout"
 
         self.episode_done = self.episode_truncated or self.episode_terminated
-
-        # Atualizar detector de fases se existir
-        if self.phase_detector:
-            current_time = self.episode_steps * self.time_step_s
-            try:
-                self.phase_detector.detect_phase_transition("left", current_time)
-                self.phase_detector.detect_phase_transition("right", current_time)
-            except Exception as e:
-                self.logger.warning(f"Erro ao atualizar detector de fases: {e}")
 
         # Calcular recompensa
         reward = self.reward_system.calculate_reward(self, action)

@@ -4,7 +4,6 @@ import pybullet as p
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 from dpg_gait_phases import GaitPhaseDPG
-from dpg_gait_phase_detector import GaitPhaseDetector
 
 
 @dataclass
@@ -86,16 +85,12 @@ class DPGManager:
     
     def _setup_dpg_components(self):
         """Configura todos os componentes do DPG"""
-        try:
-            # 1. Configurar detector de fases
-            self.phase_detector = GaitPhaseDetector(self.robot, self.logger)
-            self.reward_system.set_phase_detector(self.phase_detector)
-            
-            # 2. Configurar DPG de fases da marcha
+        try:        
+            # 1. Configurar DPG de fases da marcha
             self.gait_phase_dpg = GaitPhaseDPG(self.logger, self.reward_system)
             self.reward_system.gait_phase_dpg = self.gait_phase_dpg
             
-            # 3. Aplicar configuração inicial de fase
+            # 2. Aplicar configuração inicial de fase
             self.gait_phase_dpg._apply_phase_config()
             
             self.logger.info("Todos os componentes DPG configurados")
