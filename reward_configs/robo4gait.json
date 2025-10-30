@@ -109,7 +109,7 @@
       "max_value": 0
     },
     "foot_back_penalty": {
-      "weight": -10,
+      "weight": -10.0,
       "enabled": true,
       "min_value": -100,
       "max_value": 0
