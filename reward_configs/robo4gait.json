@@ -1,13 +1,13 @@
 {
   "components": {
     "gait_state_change": {
-      "weight": 15.0,
+      "weight": 25.0,
       "enabled": true,
       "min_value": 0,
       "max_value": 200
     },
     "progress": {
-      "weight": 10.0,
+      "weight": 5.0,
       "enabled": true,
       "min_value": 0,
       "max_value": 50
@@ -109,9 +109,9 @@
       "max_value": 0
     },
     "foot_back_penalty": {
-      "weight": -0.001,
-      "enabled": false,
-      "min_value": -1,
+      "weight": -10,
+      "enabled": true,
+      "min_value": -100,
       "max_value": 0
     },
     "foot_inclination_penalty": {
@@ -122,7 +122,7 @@
     },
     "foot_clearance_original": {
       "weight": 0.005,
-      "enabled": true,
+      "enabled": false,
       "min_value": 0,
       "max_value": 1
     },
