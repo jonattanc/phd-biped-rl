@@ -124,10 +124,18 @@ class Agent:
             return FastTD3(
                 "MlpPolicy",
                 self.env,
-                verbose=1,
-                action_dim=self.action_dim,
+                learning_rate=3e-4,  # Aumentar LR
+                buffer_size=50000,  # Buffer menor para aprendizado mais rápido
+                learning_starts=2000,  # Começar a aprender mais cedo
+                batch_size=256,  # Batch menor
+                gamma=0.98,  # Desconto menor = foco em recompensas imediatas
+                train_freq=(4, "step"),  # Treinar com menos frequência
+                gradient_steps=1,  # Mais atualizações quando treinar
+                policy_delay=2,
+                target_policy_noise=0.1,
+                target_noise_clip=0.1,
                 tensorboard_log="./logs/",
-                device=device,
+                device=device
             )
         else:
             raise ValueError(f"Algoritmo {algorithm} não suportado. Use 'PPO', 'TD3' ou 'FastTD3'")

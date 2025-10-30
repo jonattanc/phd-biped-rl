@@ -48,9 +48,9 @@ class DPGManager:
         
         # Metas articulares por fase
         self.config.phase_targets = {
-            "IC": {"hip": +0.35, "knee": +0.10, "ankle": +0.05, "sigma": 0.10},
-            "LR": {"hip": +0.30, "knee": +0.15, "ankle": +0.05, "sigma": 0.12},
-            "MS": {"hip": +0.10, "knee": +0.05, "ankle": +0.10, "sigma": 0.12},
+            "IC": {"hip": +0.15, "knee": +0.05, "ankle": +0.02, "sigma": 0.15},
+            "LR": {"hip": +0.10, "knee": +0.08, "ankle": +0.02, "sigma": 0.15},
+            "MS": {"hip": +0.05, "knee": +0.03, "ankle": +0.05, "sigma": 0.15},
             "TS": {"hip": -0.20, "knee": +0.05, "ankle": -0.30, "sigma": 0.15},
             "PS": {"hip": 0.00, "knee": +0.40, "ankle": -0.10, "sigma": 0.15},
             "ISw": {"hip": +0.25, "knee": +1.00, "ankle": +0.08, "sigma": 0.20},
@@ -145,12 +145,32 @@ class DPGManager:
         """
         Calcula recompensa DGP usando o sistema completo de fases da marcha
         """
+        total_reward = 0.0
+        w = self.config.phase_weights
+        
+        # Detectar se está preso
+        if hasattr(self, 'stagnation_counter'):
+            if sim.episode_distance < 0.1:
+                self.stagnation_counter += 1
+            else:
+                self.stagnation_counter = 0
+        else:
+            self.stagnation_counter = 0
+
+        # RECOMPENSA DE EMERGÊNCIA se estagnado
+        if self.stagnation_counter > 200:  # 200 episódios sem progresso
+            emergency_bonus = 10.0  # Recompensa fixa por qualquer ação
+            total_reward += emergency_bonus
+        
         if self.phase_detector is None:
             self.logger.warning("DPG com fases ativado mas phase_detector não configurado")
             return self.calculate_standard_reward(sim, action)
 
-        total_reward = 0.0
-        w = self.phase_specific_weights
+
+        # RECOMPENSA MASSIVA PARA PRIMEIRO METRO
+        if sim.episode_distance <= 1.0:
+            progress_bonus = sim.episode_distance * 100  # 100x multiplier
+            total_reward += progress_bonus
 
         # VERIFICAÇÃO PARA FASE INICIAL
         if hasattr(self, 'gait_phase_dpg') and self.gait_phase_dpg and self.gait_phase_dpg.current_phase == 0:
@@ -390,6 +410,68 @@ class DPGManager:
         except:
             return 0.0
     
+    def _calculate_arm_leg_coordination(self, sim):
+        """Calcula recompensa por coordenação braço-perna"""
+        try:
+            left_arm_angle = getattr(sim, "robot_left_shoulder_front_angle", 0)
+            right_arm_angle = getattr(sim, "robot_right_shoulder_front_angle", 0)
+            left_contact = getattr(sim, "robot_left_foot_contact", False)
+            right_contact = getattr(sim, "robot_right_foot_contact", False)
+
+            coordination = 0.0
+
+            # Coordenação contralateral: braço esquerdo com pé direito e vice-versa
+            if not right_contact and left_arm_angle > 0.1:  # Braço esquerdo avança quando pé direito está no ar
+                coordination += 0.5
+            if not left_contact and right_arm_angle > 0.1:  # Braço direito avança quando pé esquerdo está no ar
+                coordination += 0.5
+
+            return coordination
+        except:
+            return 0.0
+
+    def _calculate_flight_phase_reward(self, sim):
+        """Recompensa por fase de voo controlada"""
+        if not self.phase_detector:
+            return 0.0
+
+        flight_duration = self.phase_detector.get_flight_duration(sim.episode_steps * sim.time_step_s)
+
+        # Recompensa por fase de voo curta e controlada (ideal para corrida)
+        if 0.05 < flight_duration < 0.2:  # 50-200ms é ideal
+            return 1.0
+        elif flight_duration > 0:  # Qualquer fase de voo é melhor que nenhuma
+            return 0.5 * min(flight_duration / 0.3, 1.0)  # Normalizado
+        return 0.0
+
+    def _calculate_anti_foot_slap_penalty(self, sim):
+        """Penalidade por foot-slap (plantarflexão rápida no contato inicial)"""
+        if not self.phase_detector:
+            return 0.0
+
+        current_time = sim.episode_steps * sim.time_step_s
+        foot_slap_intensity = 0.0
+
+        for foot_side in ["left", "right"]:
+            slap = self.phase_detector.detect_foot_slap(foot_side, current_time)
+            foot_slap_intensity += slap
+
+        return foot_slap_intensity
+
+    def _calculate_slip_penalty(self, sim):
+        """Penalidade por escorregamento dos pés"""
+        if not self.phase_detector:
+            return 0.0
+
+        current_time = sim.episode_steps * sim.time_step_s
+        slip_intensity = 0.0
+
+        for foot_side in ["left", "right"]:
+            slip = self.phase_detector.detect_foot_slip(foot_side, current_time)
+            slip_intensity += slip
+
+        return slip_intensity
+
     def update_phase_progression(self, episode_results):
         """Atualiza progressão de fases do DPG"""
         if self.gait_phase_dpg:

@@ -1,5 +1,6 @@
 # reward_system.py
 import os
+import time
 import numpy as np
 import json
 from dataclasses import dataclass
@@ -267,8 +268,9 @@ class RewardSystem:
 
     def calculate_reward(self, sim, action):
         """Método principal - escolhe entre DPG progressivo ou padrão"""
-        if self.dpg_enabled:
-            return self.calculate_dpg_reward(sim, action)
+        if (hasattr(self, 'dpg_manager') and self.dpg_manager is not None and 
+            hasattr(self.dpg_manager, 'config') and self.dpg_manager.config.enabled):
+            return self.dpg_manager.calculate_reward(sim, action)
         else:
             return self.calculate_standard_reward(sim, action)
 
