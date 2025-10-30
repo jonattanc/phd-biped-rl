@@ -1011,7 +1011,7 @@ class TrainingTab:
     def build_steps_label_text(self, training_time, total_steps, steps_per_second):
         time_struct = time.gmtime(training_time)
         formatted_time = time.strftime("%H:%M:%S", time_struct)
-        return f"Training time: {formatted_time} | Total Steps: {total_steps} | Steps/s: {steps_per_second:.1f}"
+        return f"Training time: {formatted_time} | Total Steps: {total_steps:,} | Steps/s: {steps_per_second:.1f}"
 
     def _update_step_counter(self):
         """Atualiza o contador de steps periodicamente"""
@@ -1228,11 +1228,11 @@ class TrainingTab:
             if self.tracker.should_pause():
                 self.logger.info("Pausa automática por plateau de performance")
                 self._trigger_auto_pause()
-            
+
             # Atualizar DPG com fases da marcha
-            if hasattr(self.reward_system, 'dpg_manager') and self.reward_system.dpg_manager:
+            if hasattr(self.reward_system, "dpg_manager") and self.reward_system.dpg_manager:
                 self.reward_system.dpg_manager.update_phase_progression(episode_data)
-            elif hasattr(self.reward_system, 'gait_phase_dpg') and self.reward_system.gait_phase_dpg:
+            elif hasattr(self.reward_system, "gait_phase_dpg") and self.reward_system.gait_phase_dpg:
                 self.reward_system.gait_phase_dpg.update_phase(episode_data)
 
             # Atualizar status na interface
