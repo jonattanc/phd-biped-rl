@@ -158,7 +158,7 @@ class DPGManager:
             self.stagnation_counter = 0
 
         # RECOMPENSA DE EMERGÊNCIA se estagnado
-        if self.stagnation_counter > 200:  # 200 episódios sem progresso
+        if self.stagnation_counter > 20:  # 20 episódios sem progresso
             emergency_bonus = 10.0  # Recompensa fixa por qualquer ação
             total_reward += emergency_bonus
         
