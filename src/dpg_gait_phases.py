@@ -675,22 +675,28 @@ class GaitPhaseDPG:
         """Retorna status detalhado com métricas de progresso"""
         current_phase = self.phases[self.current_phase]
         
-        if len(self.performance_history) >= 5:
-            skill_scores = self._assess_phase_skills()
-            progress_metrics = self._calculate_progress_metrics()
-        else:
-            skill_scores = {}
-            progress_metrics = {}
-            
+        # Calcular métricas do histórico COMPLETO
+        total_episodes = len(self.performance_history)
+        success_rate = self._calculate_success_rate()
+        
+        # Calcular métricas por fase
+        phase_0_episodes = len([r for r in self.performance_history if r.get('phase', 0) == 0])
+        phase_1_episodes = len([r for r in self.performance_history if r.get('phase', 0) == 1])
+        
         return {
             "current_phase": current_phase.name,
             "phase_index": self.current_phase,
             "episodes_in_phase": self.episodes_in_phase,
             "target_speed": current_phase.target_speed,
-            "total_phases": len(self.phases),
-            "phase_progress": f"{self.current_phase + 1}/{len(self.phases)}",
-            "performance_metrics": progress_metrics,
-            "skill_assessment": skill_scores,
+            "performance_metrics": {
+                "success_rate": success_rate,
+                "avg_distance": self._calculate_average_distance(),
+                "history_size": total_episodes,
+                "phase_0_episodes": phase_0_episodes,
+                "phase_1_episodes": phase_1_episodes,
+                "total_successes": sum(1 for r in self.performance_history if r.get("phase_success", False))
+            },
+            "skill_assessment": self._assess_phase_skills(),
             "consecutive_successes": self.consecutive_successes,
             "consecutive_failures": self.consecutive_failures,
             "stagnation_counter": self.stagnation_counter,
