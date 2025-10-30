@@ -187,23 +187,9 @@ class RewardSystem:
             self.components["stability_yaw"].value = sim.robot_yaw**2
             total_reward += sim.robot_yaw**2 * self.components["stability_yaw"].weight
 
-        if self.is_component_enabled("yaw_penalty"):
-            if sim.episode_termination == "yaw_deviated":
-                self.components["yaw_penalty"].value = 1
-                total_reward += self.components["yaw_penalty"].weight
-
-        if self.is_component_enabled("fall_penalty"):
-            if sim.episode_termination == "fell":
-                self.components["fall_penalty"].value = 1
-                total_reward += self.components["fall_penalty"].weight
-
         if self.is_component_enabled("height_deviation_penalty"):
             self.components["height_deviation_penalty"].value = abs(sim.robot_y_position - sim.episode_robot_y_initial_position)
             total_reward += self.components["height_deviation_penalty"].value * self.components["height_deviation_penalty"].weight
-
-        if self.is_component_enabled("height_deviation_square_penalty"):
-            self.components["height_deviation_square_penalty"].value = (sim.robot_y_position - sim.episode_robot_y_initial_position) ** 2
-            total_reward += self.components["height_deviation_square_penalty"].value * self.components["height_deviation_square_penalty"].weight
 
         if self.is_component_enabled("success_bonus"):
             if sim.episode_termination == "success":
@@ -221,22 +207,6 @@ class RewardSystem:
             direction_changes = np.sum(action_products < 0)
             self.components["direction_change_penalty"].value = direction_changes
             total_reward += direction_changes * self.components["direction_change_penalty"].weight
-
-        if self.is_component_enabled("foot_clearance"):
-            foot_height = 0
-
-            if not sim.robot_left_foot_contact:
-                foot_height += sim.robot_left_foot_height
-
-            if not sim.robot_right_foot_contact:
-                foot_height += sim.robot_right_foot_height
-
-            self.components["foot_clearance"].value = foot_height
-            total_reward += self.components["foot_clearance"].value * self.components["foot_clearance"].weight
-
-        if self.is_component_enabled("alternating_foot_contact"):
-            self.components["alternating_foot_contact"].value = sim.robot_left_foot_contact != sim.robot_right_foot_contact
-            total_reward += self.components["alternating_foot_contact"].value * self.components["alternating_foot_contact"].weight
 
         if self.is_component_enabled("knee_flexion"):
             self.components["knee_flexion"].value = abs(sim.robot_right_knee_angle) + abs(sim.robot_left_knee_angle)
