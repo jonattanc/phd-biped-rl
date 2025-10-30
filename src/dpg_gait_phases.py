@@ -276,21 +276,24 @@ class GaitPhaseDPG:
     def update_phase(self, episode_results: Dict) -> PhaseTransitionResult:
         """
         Atualiza a fase atual com validação robusta e fallback adaptativo
-        """        
+        """    
+        # VERIFICAÇÃO MAIS FLEXÍVEL para episódios
         episode_duration = episode_results.get('duration', 0)
         episode_distance = episode_results.get('distance', 0)
         episode_steps = episode_results.get('steps', 0)
 
+        # Critérios mais flexíveis para identificar um episódio real
         is_valid_episode = (
-            episode_duration >= 0.1 and      
-            episode_steps >= 5 and           
-            episode_distance >= 0            
+            episode_duration >= 0.1 and      # Duração mínima reduzida
+            episode_steps >= 5 and           # Mínimo de 5 steps
+            episode_distance >= 0            # Distância pode ser 0
         )
 
         if not is_valid_episode:
             self.logger.debug(f"Episódio ignorado - dados insuficientes: duration={episode_duration:.2f}s, steps={episode_steps}, distance={episode_distance:.2f}m")
             return PhaseTransitionResult.FAILURE
 
+        # INCREMENTAR CONTADOR DE EPISÓDIOS NA FASE
         self.episodes_in_phase += 1
 
         if self.current_phase >= len(self.phases) - 1:
@@ -303,21 +306,26 @@ class GaitPhaseDPG:
         # Manter histórico limitado
         if len(self.performance_history) > self.max_history_size:
             self.performance_history.pop(0)
-        
+
+        # DEBUG: Verificar phase_success
+        current_phase_success = enhanced_results.get("phase_success", False)
+        self.logger.debug(f"Episódio {len(self.performance_history)} - phase_success: {current_phase_success}")
+
         # Atualizar contadores de sucesso/fracasso
         self._update_success_failure_counters(enhanced_results)
 
         if len(self.performance_history) < 3:
-            self.logger.info(f"Aguardando mais dados: {len(self.performance_history)}/3 episódios no histórico")
             return PhaseTransitionResult.FAILURE
 
-        # Verificar regressão ou estagnação
+        # Verificar regressão ou estagnação PRIMEIRO
         regression_result = self._check_regression_or_stagnation()
         if regression_result != PhaseTransitionResult.SUCCESS:
             return regression_result
 
+        # VERIFICAR SE PODE AVANÇAR DE FASE
         can_advance = self._check_phase_advancement()
         if can_advance:
+            self.logger.info("CONDIÇÕES ATENDIDAS - Avançando para próxima fase!")
             return self._advance_to_next_phase()
 
         return PhaseTransitionResult.FAILURE
@@ -328,9 +336,8 @@ class GaitPhaseDPG:
             return False
 
         current_phase_config = self.phases[self.current_phase]
-        transition_conditions = current_phase_config.transition_conditions
 
-        # Verificar requisitos mínimos
+        # Verificar requisitos mínimos PRIMEIRO
         if not self._meets_minimum_requirements():
             return False
 
@@ -341,24 +348,23 @@ class GaitPhaseDPG:
         avg_steps = np.mean([r.get('steps', 0) for r in self.performance_history])
 
         # Verificar condições básicas
-        conditions_met = (
-            success_rate >= transition_conditions["min_success_rate"] and
-            avg_distance >= transition_conditions["min_avg_distance"] and 
-            avg_roll <= transition_conditions["max_avg_roll"] and
-            avg_steps >= transition_conditions.get("min_avg_steps", 5) and
+        basic_conditions_met = (
+            success_rate >= current_phase_config.transition_conditions["min_success_rate"] and
+            avg_distance >= current_phase_config.transition_conditions["min_avg_distance"] and 
+            avg_roll <= current_phase_config.transition_conditions["max_avg_roll"] and
+            avg_steps >= current_phase_config.transition_conditions.get("min_avg_steps", 5)
+        )
+
+        if not basic_conditions_met:
+            return False
+
+        # Verificar condições adicionais
+        additional_conditions_met = (
             self._check_performance_consistency() and
             self._validate_phase_skills()
         )
 
-        if conditions_met:
-            self.logger.info(f"✅ TODAS CONDIÇÕES ATENDIDAS para avançar da Fase {self.current_phase}")
-            self.logger.info(f"   - Success rate: {success_rate:.3f} >= {transition_conditions['min_success_rate']}")
-            self.logger.info(f"   - Avg distance: {avg_distance:.3f}m >= {transition_conditions['min_avg_distance']}m")
-            self.logger.info(f"   - Avg roll: {avg_roll:.3f} <= {transition_conditions['max_avg_roll']}")
-            self.logger.info(f"   - Avg steps: {avg_steps:.1f} >= {transition_conditions.get('min_avg_steps', 5)}")
-            self.logger.info(f"   - Episodes in phase: {self.episodes_in_phase} >= {current_phase_config.phase_duration}")
-
-        return conditions_met
+        return additional_conditions_met
 
     def _advance_to_next_phase(self) -> PhaseTransitionResult:
         """Avança para a próxima fase"""
@@ -412,9 +418,9 @@ class GaitPhaseDPG:
         episode_speed = enhanced.get("speed", 0)
 
         if current_phase == 0:  # estabilidade_postural
-            phase_success = (episode_distance > 0.3 and 
-                       episode_roll < 0.5 and 
-                       episode_steps > 20)
+            phase_success = (episode_distance > 0.1 and 
+                       episode_roll < 0.8 and 
+                       episode_steps > 5)
         elif current_phase == 1:  # marcha_lenta_alternada
              phase_success = (episode_distance > 1.5 and 
                         episode_steps > 30 and
@@ -458,27 +464,29 @@ class GaitPhaseDPG:
         current_phase = self.phases[self.current_phase]
         regression_thresholds = current_phase.regression_thresholds
 
-        # PERMITIR MAIS TENTATIVAS NA FASE 0
         if self.current_phase == 0:
-            # Na fase inicial, ser mais tolerante com falhas
-            if self.consecutive_failures >= 15:  # Aumentar limite
+            if self.consecutive_failures >= 50:  
                 return PhaseTransitionResult.FAILURE
             return PhaseTransitionResult.SUCCESS
-
+        if self.current_phase <= 1:  
+            if self.consecutive_failures >= 100:
+                return PhaseTransitionResult.FAILURE
+            return PhaseTransitionResult.SUCCESS
+        
         # Relaxar outros thresholds
-        if self.consecutive_failures >= regression_thresholds["max_failures"] * 1.5:  # Aumentar em 50%
+        if self.consecutive_failures >= regression_thresholds["max_failures"] * 2:  
             self.regression_count += 1
             if self._should_regress_phase():
                 return self._regress_to_previous_phase()
             return PhaseTransitionResult.FAILURE
 
         # Relaxar threshold de estagnação
-        if self.stagnation_counter >= regression_thresholds["stagnation_episodes"] * 1.5:
+        if self.stagnation_counter >= regression_thresholds["stagnation_episodes"] * 2:
             return PhaseTransitionResult.STAGNATION
 
         # Relaxar taxa de sucesso mínima
         success_rate = self._calculate_success_rate()
-        if success_rate < regression_thresholds["min_success_rate"] * 0.8:  # Reduzir para 80%
+        if success_rate < regression_thresholds["min_success_rate"] * 0.5:
             self.regression_count += 1
             if self._should_regress_phase():
                 return self._regress_to_previous_phase()
@@ -488,13 +496,15 @@ class GaitPhaseDPG:
         
     def _should_regress_phase(self) -> bool:
         """Decide se deve regredir para fase anterior"""
-        # Só regredir se não for a fase inicial e tiver múltiplas regressões
         if self.current_phase == 0:
             return False
     
-        return (self.current_phase > 0 and 
-                self.regression_count >= 2 and 
-                self.episodes_in_phase > self.phases[self.current_phase].phase_duration * 1.5)
+        should_regress = (
+        self.current_phase > 0 and 
+        self.regression_count >= 3 and  
+        self.episodes_in_phase > self.phases[self.current_phase].phase_duration * 2 
+    )
+        return should_regress
         
     def _regress_to_previous_phase(self) -> PhaseTransitionResult:
         """Regride para a fase anterior"""
@@ -509,8 +519,14 @@ class GaitPhaseDPG:
         self.stagnation_counter = 0
         self.performance_history = []
         
-        self.logger.warning(f"REGRESSÃO DE FASE: {self.phases[old_phase].name} → {self.phases[self.current_phase].name}")
-        
+        # Manter os últimos 10-15 episódios para preservar aprendizado
+        if len(self.performance_history) > 0:
+            self.logger.info(f"Manteve todo o histórico ({len(self.performance_history)} episódios) após regressão")
+        else:
+            self.logger.info("Sem histórico para manter após regressão")
+
+        self.logger.warning(f"🔄 REGRESSÃO DE FASE: {self.phases[old_phase].name} → {self.phases[self.current_phase].name}")
+
         self._apply_phase_config()
         return PhaseTransitionResult.REGRESSION
         
@@ -658,11 +674,6 @@ class GaitPhaseDPG:
                 component.weight = target_weight
             else:
                 component.enabled = False
-                        
-        # Log detalhado
-        active_components = [(name, self.reward_system.components[name].weight) 
-                           for name in current_phase.enabled_components]
-        self.logger.info(f"Componentes ativos: {active_components}")
         
     def get_current_speed_target(self) -> float:
         """Retorna a velocidade alvo da fase atual"""

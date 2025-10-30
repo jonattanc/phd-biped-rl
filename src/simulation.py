@@ -341,9 +341,7 @@ class Simulation(gym.Env):
                     dpg_system = self.reward_system.dpg_manager.gait_phase_dpg
                     current_phase = dpg_system.current_phase
                     detailed_status = dpg_system.get_detailed_status()
-                    self.logger.info(f"🎯 TRANSMIT INFO: episode_success={current_success}, phase_success_recent={current_success}")
 
-                    # DEBUG EXTRA: Verificar cálculo direto
                     all_successes = sum(1 for r in dpg_system.performance_history if r.get('phase_success', False))
                     total_all = len(dpg_system.performance_history)
                     real_success_rate = all_successes / total_all if total_all > 0 else 0
@@ -352,8 +350,8 @@ class Simulation(gym.Env):
                     print(f"   Fase: {current_phase} ({dpg_system.phases[current_phase].name})")
                     print(f"   Episódios na fase: {detailed_status['episodes_in_phase']}")  # DEVE MOSTRAR > 0
                     print(f"   Histórico: {detailed_status['performance_metrics']['history_size']} episódios")
-                    print(f"   ✅ Taxa de sucesso REAL (histórico completo): {real_success_rate:.1%} ({all_successes}/{total_all})")
-                    print(f"   ❓ Taxa no diagnóstico: {detailed_status['performance_metrics']['success_rate']:.1%}")                    
+                    print(f"   Taxa de sucesso (histórico completo): {real_success_rate:.1%} ({all_successes}/{total_all})")
+                    print(f"   Taxa no diagnóstico: {detailed_status['performance_metrics']['success_rate']:.1%}")                    
                     print(f"   Distância média: {detailed_status['performance_metrics']['avg_distance']:.2f}m")
                     print(f"   Velocidade alvo: {detailed_status['target_speed']} m/s")
 
@@ -365,13 +363,6 @@ class Simulation(gym.Env):
                     print(f"   - Min success rate: {current_phase_config.transition_conditions['min_success_rate']} (Atual: {current_metrics['success_rate']:.3f})")
                     print(f"   - Min avg distance: {current_phase_config.transition_conditions['min_avg_distance']}m (Atual: {current_metrics['avg_distance']:.3f}m)")
                     print(f"   - Min avg steps: {current_phase_config.transition_conditions.get('min_avg_steps', 10)}")
-                    # Verificar se está pronto para transição
-                    if (current_metrics['success_rate'] >= phase_0.transition_conditions['min_success_rate'] and
-                        current_metrics['avg_distance'] >= phase_0.transition_conditions['min_avg_distance'] and
-                        detailed_status['episodes_in_phase'] >= phase_0.phase_duration):
-                        print(f"PRONTO PARA TRANSIÇÃO!")
-                    else:
-                        print(f"Aguardando critérios...")
 
                 except Exception as e:
                     print(f"Erro no relatório DPG detalhado: {e}")
