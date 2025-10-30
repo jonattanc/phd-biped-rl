@@ -58,6 +58,8 @@ class RewardTab:
         components = self.reward_system.get_configuration_as_dict()
         row_idx = 1
 
+        components = dict(sorted(components.items()))
+
         for key, value in components.items():
             self._create_component_row(self.editor_frame, key, value, row_idx)
             row_idx += 1
