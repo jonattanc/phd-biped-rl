@@ -214,7 +214,7 @@ class TrainingTab:
             6: "Robô - Frontal",
             7: "Robô - Traseira",
         }
-        self.camera_selection_int = 3
+        self.camera_selection_int = self.settings.get("camera_index", 1)
         self.camera_selection_var = tk.StringVar(value=camera_options[self.camera_selection_int])
         self.camera_selection_combobox = ttk.Combobox(row2_frame, textvariable=self.camera_selection_var, values=list(camera_options.values()), state="readonly", width=25)
         self.camera_selection_combobox.grid(row=0, column=7, padx=5)
