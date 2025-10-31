@@ -1113,7 +1113,14 @@ class TrainingTab:
     def build_steps_label_text(self, training_time, total_steps, steps_per_second):
         time_struct = time.gmtime(training_time)
         formatted_time = time.strftime("%H:%M:%S", time_struct)
-        return f"Training time: {formatted_time} | Total Steps: {total_steps:,} | Steps/s: {steps_per_second:.1f}"
+
+        if len(self.episode_data["filtered_distances"]) > 0:
+            mean_distance = self.episode_data["filtered_distances"][-1]
+
+        else:
+            mean_distance = 0.0
+
+        return f"Training time: {formatted_time} | Total Steps: {total_steps:,} | Steps/s: {steps_per_second:.1f} | Distância filtrada: {mean_distance:.2f}m"
 
     def _update_step_counter(self):
         """Atualiza o contador de steps periodicamente"""
