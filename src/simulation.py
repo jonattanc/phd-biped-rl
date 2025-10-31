@@ -119,13 +119,14 @@ class Simulation(gym.Env):
         # Usar visualização apenas se estiver habilitada
         if self.is_visualization_enabled:
             self.physics_client = p.connect(p.GUI)
+            p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0)
         else:
             self.physics_client = p.connect(p.DIRECT)
 
         self.last_selected_camera = self.camera_selection_value.value
 
         if self.last_selected_camera == 1:  # Ambiente geral
-            p.resetDebugVisualizerCamera(cameraDistance=6.5, cameraYaw=35, cameraPitch=-45, cameraTargetPosition=[6.0, 0.0, 0.6])
+            p.resetDebugVisualizerCamera(cameraDistance=5.0, cameraYaw=35, cameraPitch=-45, cameraTargetPosition=[6.0, 0.0, 0.6])
 
         elif self.last_selected_camera == 2:  # Robô - Diagonal direita
             p.resetDebugVisualizerCamera(cameraDistance=2.0, cameraYaw=40, cameraPitch=-25, cameraTargetPosition=[0.8, 0.0, 0.0])
