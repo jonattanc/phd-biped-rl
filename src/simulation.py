@@ -352,14 +352,38 @@ class Simulation(gym.Env):
                     print(f"   Distância média: {detailed_status['performance_metrics']['avg_distance']:.2f}m")
                     print(f"   Velocidade alvo: {detailed_status['target_speed']} m/s")
 
-                    # Verificar condições da Fase 0
-                    phase_0 = dpg_system.phases[0]
                     current_metrics = detailed_status["performance_metrics"]
                     current_phase_config = dpg_system.phases[current_phase]
                     print(f"   REQUISITOS FASE {current_phase}:")
-                    print(f"   - Min success rate: {current_phase_config.transition_conditions['min_success_rate']} (Atual: {current_metrics['success_rate']:.3f})")
-                    print(f"   - Min avg distance: {current_phase_config.transition_conditions['min_avg_distance']}m (Atual: {current_metrics['avg_distance']:.3f}m)")
-                    print(f"   - Min avg steps: {current_phase_config.transition_conditions.get('min_avg_steps', 10)}")
+                    
+                    success_rate_met = current_metrics['success_rate'] >= current_phase_config.transition_conditions['min_success_rate']
+                    success_icon = "✅" if success_rate_met else "❌"
+                    print(f"     {success_icon} Min success rate: {current_phase_config.transition_conditions['min_success_rate']} (Atual: {current_metrics['success_rate']:.3f})")
+        
+                    distance_met = current_metrics['avg_distance'] >= current_phase_config.transition_conditions['min_avg_distance']
+                    distance_icon = "✅" if distance_met else "❌"
+                    print(f"     {distance_icon} Min avg distance: {current_phase_config.transition_conditions['min_avg_distance']}m (Atual: {current_metrics['avg_distance']:.3f}m)")
+
+                    roll_met = current_metrics['avg_roll'] <= current_phase_config.transition_conditions['max_avg_roll']
+                    roll_icon = "✅" if roll_met else "❌"
+                    print(f"     {roll_icon} Max avg roll: {current_phase_config.transition_conditions['max_avg_roll']} (Atual: {current_metrics['avg_roll']:.3f})")
+
+                    if 'min_avg_steps' in current_phase_config.transition_conditions:
+                        avg_steps = np.mean([r.get("steps", 0) for r in dpg_system.progression_history])
+                        steps_met = avg_steps >= current_phase_config.transition_conditions['min_avg_steps']
+                        steps_icon = "✅" if steps_met else "❌"
+                        print(f"     {steps_icon} Min avg steps: {current_phase_config.transition_conditions['min_avg_steps']} (Atual: {avg_steps:.1f})")
+
+                    consistency_met = dpg_system._check_performance_consistency()
+                    consistency_icon = "✅" if consistency_met else "❌"
+                    print(f"     {consistency_icon} Consistência: {current_phase_config.transition_conditions['consistency_count']} episódios consistentes")
+
+                    skills = dpg_system._assess_phase_skills()
+                    print("   HABILIDADES:")
+                    for skill, req in current_phase_config.skill_requirements.items():
+                        current = skills.get(skill, 0)
+                        status = "✅" if current >= req else "❌"
+                        print(f"     {status} {skill}: {current:.3f} / {req:.3f}")
 
                 except Exception as e:
                     print(f"Erro no relatório DPG detalhado: {e}")
