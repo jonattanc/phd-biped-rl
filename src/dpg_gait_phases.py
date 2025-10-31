@@ -57,17 +57,14 @@ class GaitPhaseDPG:
         phase0 = GaitPhaseConfig(
             name="estabilidade_postural",
             target_speed=0.5,
-            enabled_components=["stability_roll", "stability_pitch", "alternating_foot_contact", "progress", "success_bonus", "distance_bonus", "height_deviation_penalty"],
+            enabled_components=["stability_roll", "stability_pitch", "center_bonus", "success_bonus"],
             component_weights={
-                "stability_roll": 0.35,
-                "stability_pitch": 0.25,
-                "alternating_foot_contact": 0.2,
-                "progress": 0.1,
+                "stability_roll": 0.5,
+                "stability_pitch": 0.3,
+                "center_bonus": 0.15,
                 "success_bonus": 0.05,
-                "distance_bonus": 0.04,
-                "height_deviation_penalty": 0.01,
             },
-            phase_duration=15,
+            phase_duration=100,
             transition_conditions={"min_success_rate": 0.3, "min_avg_distance": 0.3, "max_avg_roll": 0.4, "min_avg_steps": 15, "consistency_count": 5},
             skill_requirements={"basic_balance": 0.6, "postural_stability": 0.5, "gait_initiation": 0.3},
             regression_thresholds={"max_failures": 30, "min_success_rate": 0.1, "stagnation_episodes": 50},
@@ -80,63 +77,33 @@ class GaitPhaseDPG:
             enabled_components=[
                 "progress",
                 "distance_bonus",
-                "gait_pattern_cross",
-                "pitch_forward_bonus",
                 "stability_roll",
                 "stability_pitch",
-                "stability_yaw",
-                "yaw_penalty",
-                "fall_penalty",
-                "height_deviation_penalty",
-                "y_axis_deviation_penalty",
-                "success_bonus",
-                "effort_penalty",
-                "foot_back_penalty",
-                "foot_clearance",
                 "alternating_foot_contact",
-                "knee_flexion",
-                "hip_extension",
+                "success_bonus",
                 "center_bonus",
-                "gait_rhythm",
             ],
             component_weights={
-                "progress": 0.15,  
-                "distance_bonus": 0.08, 
-                "gait_pattern_cross": 0.12,  
-                "pitch_forward_bonus": 0.06,  
-                "stability_roll": 0.10,  
-                "stability_pitch": 0.08,  
-                "stability_yaw": 0.05,  
-                "yaw_penalty": 0.08,  
-                "fall_penalty": 0.10, 
-                "height_deviation_penalty": 0.03,  
-                "y_axis_deviation_penalty": 0.03, 
+                "progress": 0.25,  
+                "distance_bonus": 0.2, 
+                "stability_roll": 0.25,  
+                "stability_pitch": 0.15,
+                "alternating_foot_contact": 0.08,  
                 "success_bonus": 0.02,  
-                "effort_penalty": 0.02, 
-                "foot_back_penalty": 0.04,  
-                "foot_clearance": 0.04,  
-                "alternating_foot_contact": 0.05,  
-                "knee_flexion": 0.03,  
-                "hip_extension": 0.02,  
                 "center_bonus": 0.02,  
-                "gait_rhythm": 0.03,  
             },
             phase_duration=15,  
             transition_conditions={
                 "min_success_rate": 0.08,  
                 "min_avg_distance": 0.5,  
                 "max_avg_roll": 0.5,  
-                "min_avg_speed": 0.08,  
                 "min_alternating_score": 0.2,  
                 "min_gait_coordination": 0.15,  
-                "consistency_count": 3,  
             },
             skill_requirements={
-                "rhythmic_gait": 0.25,  
-                "foot_clearance_control": 0.3,  
-                "step_consistency": 0.4,  
                 "basic_balance": 0.4,  
                 "postural_stability": 0.4,  
+                "step_consistency": 0.4,    
             },
             regression_thresholds={"max_failures": 25, "min_success_rate": 0.08, "stagnation_episodes": 40},  # Máximo de falhas consecutivas  # Taxa mínima de sucesso  # Episódios de estagnação
         )
@@ -344,6 +311,8 @@ class GaitPhaseDPG:
 
         if not self._meets_minimum_requirements():
             return False
+        if self._has_recent_instability():
+            return False
 
         success_rate = self._calculate_success_rate()
         avg_distance = self._calculate_average_distance()
@@ -456,10 +425,15 @@ class GaitPhaseDPG:
             if self.consecutive_failures >= 25:
                 return PhaseTransitionResult.FAILURE
             return PhaseTransitionResult.SUCCESS
-        if self.current_phase <= 1:
+        if self.current_phase == 1:
             if self.consecutive_failures >= 25:
                 return PhaseTransitionResult.FAILURE
             return PhaseTransitionResult.SUCCESS
+        if self.current_phase == 2:  
+            recent_roll = np.mean([abs(r.get("roll", 0)) for r in self.progression_history[-3:]])
+            if recent_roll > 0.8:
+                self.logger.warning("⚡ Regressão rápida - instabilidade crítica na Fase 2")
+                return self._regress_to_previous_phase()
 
         if self.consecutive_failures >= regression_thresholds["max_failures"] * 2:
             self.regression_count += 1
@@ -521,6 +495,16 @@ class GaitPhaseDPG:
 
         return has_minimum_duration and has_sufficient_history
 
+    def _has_recent_instability(self) -> bool:
+        """Detecta instabilidade recente baseada em roll alto"""
+        if len(self.progression_history) < 5:
+            return True  
+
+        recent_rolls = [abs(r.get("roll", 0)) for r in self.progression_history[-5:]]
+        avg_recent_roll = np.mean(recent_rolls)
+
+        return avg_recent_roll > 0.6
+
     def _validate_phase_skills(self) -> bool:
         """Valida apenas as habilidades REQUERIDAS pela fase atual"""
         current_phase = self.phases[self.current_phase]
@@ -545,12 +529,16 @@ class GaitPhaseDPG:
         avg_roll = self._calculate_average_roll()
         success_rate = self._calculate_success_rate()
         avg_speed = self._calculate_average_speed()
+        roll_stability = 1.0 - min(avg_roll / 0.5, 1.0)
+        roll_values = [abs(r.get("roll", 0)) for r in recent_results]
+        roll_consistency = 1.0 - min(np.std(roll_values) / 0.3, 1.0) if len(roll_values) > 1 else 0.5
+        balance_recovery = self._calculate_enhanced_balance_recovery(recent_results)
 
         all_skills = {
             # Habilidades BÁSICAS
-            "postural_stability": 1.0 - min(avg_roll / 1.0, 1.0),
+            "postural_stability": (roll_stability * 0.6 + roll_consistency * 0.4),
             "gait_initiation": success_rate,
-            "basic_balance": 1.0 - min(avg_roll / 0.8, 1.0),
+            "basic_balance": (balance_recovery * 0.7 + roll_stability * 0.3),
             # Habilidades de MARCHA
             "rhythmic_gait": np.mean([r.get("alternating_score", 0) for r in recent_results]),
             "foot_clearance_control": np.mean([r.get("clearance_score", 0.5) for r in recent_results]),
@@ -564,25 +552,49 @@ class GaitPhaseDPG:
 
         return all_skills
 
+    def _calculate_enhanced_balance_recovery(self, recent_results: List[Dict]) -> float:
+        """Calcula capacidade de recuperar equilíbrio de forma mais robusta"""
+        if len(recent_results) < 3:
+            return 0.5
+
+        recovery_events = 0
+        total_critical_events = 0
+
+        for i in range(1, len(recent_results)):
+            prev_roll = abs(recent_results[i - 1].get("roll", 0))
+            curr_roll = abs(recent_results[i].get("roll", 0))
+
+            if prev_roll > 0.5:
+                total_critical_events += 1
+                if curr_roll < 0.3 and curr_roll < prev_roll * 0.7:
+                    recovery_events += 1
+
+        if total_critical_events == 0:
+            return 0.8
+
+        return recovery_events / total_critical_events
+
     def _calculate_balance_recovery_score(self, recent_results: List[Dict]) -> float:
         """Calcula capacidade de recuperar equilíbrio"""
         if len(recent_results) < 3:
             return 0.5
 
         recovery_events = 0
-        total_events = 0
+        total_critical_events = 0
 
         for i in range(1, len(recent_results)):
             prev_roll = abs(recent_results[i - 1].get("roll", 0))
             curr_roll = abs(recent_results[i].get("roll", 0))
 
-            if prev_roll > 0.3 and curr_roll < 0.2:
-                recovery_events += 1
-            total_events += 1
+            if prev_roll > 0.5:
+                total_critical_events += 1
+                if curr_roll < 0.3 and curr_roll < prev_roll * 0.7:
+                    recovery_events += 1
 
-        score = recovery_events / max(total_events, 1)
+        if total_critical_events == 0:
+            return 0.8
 
-        return score
+        return recovery_events / total_critical_events
 
     def _calculate_propulsion_efficiency(self) -> float:
         """Calcula eficiência propulsiva baseada no progression_history"""

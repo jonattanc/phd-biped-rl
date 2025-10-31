@@ -339,7 +339,7 @@ class Simulation(gym.Env):
             except Exception as e:
                 self.logger.warning(f"Erro ao obter status DPG detalhado: {e}")
 
-            if self.episode_count % 200 == 0:
+            if self.episode_count % 100 == 0:
                 try:
                     dpg_system = self.reward_system.dpg_manager.gait_phase_dpg
                     current_phase = dpg_system.current_phase
@@ -368,15 +368,15 @@ class Simulation(gym.Env):
                     roll_icon = "✅" if roll_met else "❌"
                     print(f"     {roll_icon} Max avg roll: {current_phase_config.transition_conditions['max_avg_roll']} (Atual: {current_metrics['avg_roll']:.3f})")
 
-                    if 'min_avg_steps' in current_phase_config.transition_conditions:
-                        avg_steps = np.mean([r.get("steps", 0) for r in dpg_system.progression_history])
-                        steps_met = avg_steps >= current_phase_config.transition_conditions['min_avg_steps']
-                        steps_icon = "✅" if steps_met else "❌"
-                        print(f"     {steps_icon} Min avg steps: {current_phase_config.transition_conditions['min_avg_steps']} (Atual: {avg_steps:.1f})")
+                    min_episodes = current_phase_config.transition_conditions.get('min_episodes', 10)
+                    episodes_met = detailed_status['episodes_in_phase'] >= min_episodes
+                    episodes_icon = "✅" if episodes_met else "❌"
+                    print(f"     {episodes_icon} Min episodes: {min_episodes} (Atual: {detailed_status['episodes_in_phase']})")
 
-                    consistency_met = dpg_system._check_performance_consistency()
-                    consistency_icon = "✅" if consistency_met else "❌"
-                    print(f"     {consistency_icon} Consistência: {current_phase_config.transition_conditions['consistency_count']} episódios consistentes")
+                    if 'consistency_count' in current_phase_config.transition_conditions:
+                        consistency_met = dpg_system._check_performance_consistency()
+                        consistency_icon = "✅" if consistency_met else "❌"
+                        print(f"     {consistency_icon} Consistência: {current_phase_config.transition_conditions['consistency_count']} episódios consistentes")
 
                     skills = dpg_system._assess_phase_skills()
                     print("   HABILIDADES:")
