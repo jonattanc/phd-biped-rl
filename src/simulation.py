@@ -173,7 +173,7 @@ class Simulation(gym.Env):
         self.max_steps = self.max_pre_fill_steps
 
         dpg_enabled = False
-        if hasattr(self.reward_system, 'dpg_manager') and self.reward_system.dpg_manager:
+        if hasattr(self.reward_system, "dpg_manager") and self.reward_system.dpg_manager:
             dpg_enabled = self.reward_system.dpg_manager.config.enabled
             self.reward_system.dpg_manager.config.enabled = False
 
@@ -201,9 +201,9 @@ class Simulation(gym.Env):
             if done:
                 obs = self.reset()
 
-        if hasattr(self.reward_system, 'dpg_manager') and self.reward_system.dpg_manager:
+        if hasattr(self.reward_system, "dpg_manager") and self.reward_system.dpg_manager:
             self.reward_system.dpg_manager.config.enabled = dpg_enabled
-        
+
         self.episode_timeout_s = self.episode_training_timeout_s
         self.max_steps = self.max_training_steps
 
@@ -261,7 +261,7 @@ class Simulation(gym.Env):
             self.soft_env_reset()
 
         # Obter posição inicial
-        robot_position, robot_velocity, robot_orientation = self.robot.get_imu_position_velocity_orientation()
+        robot_position, robot_velocity, robot_orientation, robot_orientation_velocity = self.robot.get_imu_position_velocity_orientation()
         self.episode_robot_x_initial_position = robot_position[0]
         self.episode_robot_y_initial_position = robot_position[1]
 
@@ -309,9 +309,15 @@ class Simulation(gym.Env):
             "imu_x": self.robot_x_position,
             "imu_y": self.robot_y_position,
             "imu_z": self.robot_z_position,
+            "imu_x_vel": self.robot_x_velocity,
+            "imu_y_vel": self.robot_y_velocity,
+            "imu_z_vel": self.robot_z_velocity,
             "roll": self.robot_roll,
             "pitch": self.robot_pitch,
             "yaw": self.robot_yaw,
+            "roll_vel": self.robot_roll_vel,
+            "pitch_vel": self.robot_pitch_vel,
+            "yaw_vel": self.robot_yaw_vel,
         }
 
         # Adicionar informações de fase DPG se disponível
@@ -319,14 +325,16 @@ class Simulation(gym.Env):
         if hasattr(self.reward_system, "dpg_manager") and self.reward_system.dpg_manager is not None:
             try:
                 dpg_status = self.reward_system.dpg_manager.gait_phase_dpg.get_detailed_status()  # USAR detailed_status
-                episode_data.update({
-                    "dpg_phase": dpg_status["current_phase"], 
-                    "dpg_phase_index": dpg_status["phase_index"], 
-                    "target_speed": dpg_status["target_speed"],
-                    "dpg_episodes_in_phase": dpg_status["episodes_in_phase"],  # ADICIONAR ESTE
-                    "dpg_success_rate": dpg_status["performance_metrics"]["success_rate"],
-                    "dpg_avg_distance": dpg_status["performance_metrics"]["avg_distance"]
-                })
+                episode_data.update(
+                    {
+                        "dpg_phase": dpg_status["current_phase"],
+                        "dpg_phase_index": dpg_status["phase_index"],
+                        "target_speed": dpg_status["target_speed"],
+                        "dpg_episodes_in_phase": dpg_status["episodes_in_phase"],  # ADICIONAR ESTE
+                        "dpg_success_rate": dpg_status["performance_metrics"]["success_rate"],
+                        "dpg_avg_distance": dpg_status["performance_metrics"]["avg_distance"],
+                    }
+                )
             except Exception as e:
                 self.logger.warning(f"Erro ao obter status DPG detalhado: {e}")
 
@@ -335,17 +343,17 @@ class Simulation(gym.Env):
                     dpg_system = self.reward_system.dpg_manager.gait_phase_dpg
                     current_phase = dpg_system.current_phase
                     detailed_status = dpg_system.get_detailed_status()
-                   
+
                     print(f"\nDPG DIAGNÓSTICO - Ep: {self.episode_count}")
                     print(f"   Fase: {current_phase} ({dpg_system.phases[current_phase].name})")
-                    print(f"   Episódios na fase: {detailed_status['episodes_in_phase']}")  
-                    print(f"   Taxa no diagnóstico: {detailed_status['performance_metrics']['success_rate']:.1%}")                    
+                    print(f"   Episódios na fase: {detailed_status['episodes_in_phase']}")
+                    print(f"   Taxa no diagnóstico: {detailed_status['performance_metrics']['success_rate']:.1%}")
                     print(f"   Distância média: {detailed_status['performance_metrics']['avg_distance']:.2f}m")
                     print(f"   Velocidade alvo: {detailed_status['target_speed']} m/s")
 
                     # Verificar condições da Fase 0
                     phase_0 = dpg_system.phases[0]
-                    current_metrics = detailed_status['performance_metrics']
+                    current_metrics = detailed_status["performance_metrics"]
                     current_phase_config = dpg_system.phases[current_phase]
                     print(f"   REQUISITOS FASE {current_phase}:")
                     print(f"   - Min success rate: {current_phase_config.transition_conditions['min_success_rate']} (Atual: {current_metrics['success_rate']:.3f})")
@@ -406,14 +414,19 @@ class Simulation(gym.Env):
         self.has_gait_state_changed = self.robot.update_gait_state()
         obs = self.robot.get_observation()
 
-        robot_position, robot_velocity, robot_orientation = self.robot.get_imu_position_velocity_orientation()
+        robot_position, robot_velocity, robot_orientation, robot_orientation_velocity = self.robot.get_imu_position_velocity_orientation()
         self.robot_x_position = robot_position[0]
         self.robot_y_position = robot_position[1]
         self.robot_z_position = robot_position[2]
         self.robot_x_velocity = robot_velocity[0]
+        self.robot_y_velocity = robot_velocity[1]
+        self.robot_z_velocity = robot_velocity[2]
         self.robot_roll = robot_orientation[0]
         self.robot_pitch = robot_orientation[1]
         self.robot_yaw = robot_orientation[2]
+        self.robot_roll_vel = robot_orientation_velocity[0]
+        self.robot_pitch_vel = robot_orientation_velocity[1]
+        self.robot_yaw_vel = robot_orientation_velocity[2]
         self.robot_right_knee_angle, self.robot_left_knee_angle = self.robot.get_knee_angles()
         self.robot_right_hip_frontal_angle, self.robot_left_hip_frontal_angle = self.robot.get_hip_frontal_angles()
         self.robot_right_hip_lateral_angle, self.robot_left_hip_lateral_angle = self.robot.get_hip_lateral_angles()
@@ -466,13 +479,11 @@ class Simulation(gym.Env):
 
         # Coletar info final quando o episódio terminar
         if self.episode_done:
-            if (hasattr(self.reward_system, 'dpg_manager') and 
-                self.reward_system.dpg_manager and 
-                hasattr(self.reward_system.dpg_manager, 'gait_phase_dpg')):
+            if hasattr(self.reward_system, "dpg_manager") and self.reward_system.dpg_manager and hasattr(self.reward_system.dpg_manager, "gait_phase_dpg"):
 
                 episode_results = {
                     "distance": self.episode_distance,
-                    "success": self.episode_success, 
+                    "success": self.episode_success,
                     "duration": self.episode_steps * self.time_step_s,
                     "reward": self.episode_reward,
                     "roll": abs(self.robot_roll),
@@ -484,14 +495,14 @@ class Simulation(gym.Env):
                     "energy_used": self.robot.get_energy_used(),
                     "flight_quality": self.robot.get_flight_phase_quality(),
                     "clearance_score": self.robot.get_clearance_score(),
-                    "propulsion_efficiency": self.robot.get_propulsion_efficiency()
+                    "propulsion_efficiency": self.robot.get_propulsion_efficiency(),
                 }
                 # Chamar update_phase APENAS UMA VEZ
                 try:
                     transition_result = self.reward_system.dpg_manager.gait_phase_dpg.update_phase(episode_results)
                 except Exception as e:
                     self.logger.error(f"Erro ao chamar update_phase: {e}")
-        
+
             self.transmit_episode_info()
 
         self.episode_last_action = action

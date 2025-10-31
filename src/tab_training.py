@@ -44,15 +44,34 @@ class TrainingTab:
             "imu_x": [],
             "imu_y": [],
             "imu_z": [],
-            "roll": [],
-            "pitch": [],
-            "yaw": [],
             "roll_deg": [],
             "pitch_deg": [],
             "yaw_deg": [],
+            "imu_x_vel": [],
+            "imu_y_vel": [],
+            "imu_z_vel": [],
+            "roll_vel_deg": [],
+            "pitch_vel_deg": [],
+            "yaw_vel_deg": [],
         }
 
-        self.keys_to_filter = ["rewards", "times", "distances", "imu_x", "imu_y", "imu_z", "roll_deg", "pitch_deg", "yaw_deg"]
+        self.keys_to_filter = [
+            "rewards",
+            "times",
+            "distances",
+            "imu_x",
+            "imu_y",
+            "imu_z",
+            "roll_deg",
+            "pitch_deg",
+            "yaw_deg",
+            "imu_x_vel",
+            "imu_y_vel",
+            "imu_z_vel",
+            "roll_vel_deg",
+            "pitch_vel_deg",
+            "yaw_vel_deg",
+        ]
 
         for key in self.keys_to_filter:
             self.episode_data[f"filtered_{key}"] = []
@@ -229,6 +248,20 @@ class TrainingTab:
         self.canvas_ori = FigureCanvasTkAgg(self.fig_ori, master=self.tab_orientation)
         self.canvas_ori.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
+        # Aba 4: Velocidade (vx, vy, vz)
+        self.tab_velocity = ttk.Frame(self.graph_notebook)
+        self.graph_notebook.add(self.tab_velocity, text="Velocidade")
+        self.fig_vel, self.axs_vel = plt.subplots(3, 1, figsize=(10, 10), constrained_layout=True, sharex=True)
+        self.canvas_vel = FigureCanvasTkAgg(self.fig_vel, master=self.tab_velocity)
+        self.canvas_vel.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+        # Aba 5: Velocidade Angular (wx, wy, wz)
+        self.tab_ang_velocity = ttk.Frame(self.graph_notebook)
+        self.graph_notebook.add(self.tab_ang_velocity, text="Velocidade Angular")
+        self.fig_angvel, self.axs_angvel = plt.subplots(3, 1, figsize=(10, 10), constrained_layout=True, sharex=True)
+        self.canvas_angvel = FigureCanvasTkAgg(self.fig_angvel, master=self.tab_ang_velocity)
+        self.canvas_angvel.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
         self._initialize_plots()
 
         # Logs
@@ -333,6 +366,32 @@ class TrainingTab:
                 self.axs_ori[i].set_xlim(1, None)
             self.axs_ori[-1].set_xlabel("Episódio")
             self.canvas_ori.draw_idle()
+
+            # Velocidade (vx, vy, vz)
+            for i, (label, color, key) in enumerate(zip(["Vx", "Vy", "Vz"], ["red", "green", "blue"], ["imu_x_vel", "imu_y_vel", "imu_z_vel"])):
+                self.axs_vel[i].clear()
+                self.axs_vel[i].plot(self.episode_data["episodes"], self.episode_data.get(key, []), color=color, linestyle="-", alpha=self.nf_alpha, linewidth=self.nf_linewidth)
+                self.axs_vel[i].plot(self.episode_data["episodes"], self.episode_data.get(f"filtered_{key}", []), label=label, color=color, linestyle="-")
+                self.axs_vel[i].set_title(f"Velocidade {label}")
+                self.axs_vel[i].set_ylabel(f"{label} (m/s)")
+                self.axs_vel[i].grid(True, alpha=0.3)
+                self.axs_vel[i].legend(loc="upper left")
+                self.axs_vel[i].set_xlim(1, None)
+            self.axs_vel[-1].set_xlabel("Episódio")
+            self.canvas_vel.draw_idle()
+
+            # Velocidade Angular (wx, wy, wz)
+            for i, (label, color, key) in enumerate(zip(["Wx", "Wy", "Wz"], ["red", "green", "blue"], ["roll_vel_deg", "pitch_vel_deg", "yaw_vel_deg"])):
+                self.axs_angvel[i].clear()
+                self.axs_angvel[i].plot(self.episode_data["episodes"], self.episode_data.get(key, []), color=color, linestyle="-", alpha=self.nf_alpha, linewidth=self.nf_linewidth)
+                self.axs_angvel[i].plot(self.episode_data["episodes"], self.episode_data.get(f"filtered_{key}", []), label=label, color=color, linestyle="-")
+                self.axs_angvel[i].set_title(f"Velocidade Angular {label}")
+                self.axs_angvel[i].set_ylabel(f"{label} (°/s)")
+                self.axs_angvel[i].grid(True, alpha=0.3)
+                self.axs_angvel[i].legend(loc="upper left")
+                self.axs_angvel[i].set_xlim(1, None)
+            self.axs_angvel[-1].set_xlabel("Episódio")
+            self.canvas_angvel.draw_idle()
 
         except Exception as e:
             self.logger.exception("Erro ao inicializar gráficos")
@@ -1104,6 +1163,8 @@ class TrainingTab:
                         self.axs_main[i].grid(True, alpha=0.3)
                         self.axs_main[i].legend(loc="upper left")
                         self.axs_main[i].set_xlim(1, None)
+                        if i == 2:
+                            self.axs_main[i].set_ylim(-1.5, 10)
                     self.axs_main[-1].set_xlabel("Episódio")
                     self.canvas_main.draw()
                 elif current_tab == 1:
@@ -1128,6 +1189,28 @@ class TrainingTab:
                         self.axs_ori[i].set_xlim(1, None)
                     self.axs_ori[-1].set_xlabel("Episódio")
                     self.canvas_ori.draw()
+                elif current_tab == 3:
+                    for i, (label, color, key) in enumerate(zip(["Vx", "Vy", "Vz"], ["red", "green", "blue"], ["imu_x_vel", "imu_y_vel", "imu_z_vel"])):
+                        self.axs_vel[i].clear()
+                        self.axs_vel[i].plot(self.episode_data["episodes"], self.episode_data.get(key, []), color=color, linestyle="-", alpha=self.nf_alpha, linewidth=self.nf_linewidth)
+                        self.axs_vel[i].plot(self.episode_data["episodes"], self.episode_data.get(f"filtered_{key}", []), label=label, color=color, linestyle="-")
+                        self.axs_vel[i].set_ylabel(f"{label} (m/s)")
+                        self.axs_vel[i].grid(True, alpha=0.3)
+                        self.axs_vel[i].legend(loc="upper left")
+                        self.axs_vel[i].set_xlim(1, None)
+                    self.axs_vel[-1].set_xlabel("Episódio")
+                    self.canvas_vel.draw()
+                elif current_tab == 4:
+                    for i, (label, color, key) in enumerate(zip(["Wx", "Wy", "Wz"], ["red", "green", "blue"], ["roll_vel_deg", "pitch_vel_deg", "yaw_vel_deg"])):
+                        self.axs_angvel[i].clear()
+                        self.axs_angvel[i].plot(self.episode_data["episodes"], self.episode_data.get(key, []), color=color, linestyle="-", alpha=self.nf_alpha, linewidth=self.nf_linewidth)
+                        self.axs_angvel[i].plot(self.episode_data["episodes"], self.episode_data.get(f"filtered_{key}", []), label=label, color=color, linestyle="-")
+                        self.axs_angvel[i].set_ylabel(f"{label} (°/s)")
+                        self.axs_angvel[i].grid(True, alpha=0.3)
+                        self.axs_angvel[i].legend(loc="upper left")
+                        self.axs_angvel[i].set_xlim(1, None)
+                    self.axs_angvel[-1].set_xlabel("Episódio")
+                    self.canvas_angvel.draw()
 
         except Exception as e:
             self.logger.exception("Plot error")
@@ -1334,18 +1417,27 @@ class TrainingTab:
                             self.episode_data["imu_x"].append(msg.get("imu_x", 0))
                             self.episode_data["imu_y"].append(msg.get("imu_y", 0))
                             self.episode_data["imu_z"].append(msg.get("imu_z", 0))
+                            self.episode_data["imu_x_vel"].append(msg.get("imu_x_vel", 0))
+                            self.episode_data["imu_y_vel"].append(msg.get("imu_y_vel", 0))
+                            self.episode_data["imu_z_vel"].append(msg.get("imu_z_vel", 0))
                             roll = msg.get("roll", 0)
                             pitch = msg.get("pitch", 0)
                             yaw = msg.get("yaw", 0)
+                            roll_vel = msg.get("roll_vel", 0)
+                            pitch_vel = msg.get("pitch_vel", 0)
+                            yaw_vel = msg.get("yaw_vel", 0)
                             roll_deg = math.degrees(roll)
                             pitch_deg = math.degrees(pitch)
                             yaw_deg = math.degrees(yaw)
-                            self.episode_data["roll"].append(roll)
-                            self.episode_data["pitch"].append(pitch)
-                            self.episode_data["yaw"].append(yaw)
+                            roll_vel_deg = math.degrees(roll_vel)
+                            pitch_vel_deg = math.degrees(pitch_vel)
+                            yaw_vel_deg = math.degrees(yaw_vel)
                             self.episode_data["roll_deg"].append(roll_deg)
                             self.episode_data["pitch_deg"].append(pitch_deg)
                             self.episode_data["yaw_deg"].append(yaw_deg)
+                            self.episode_data["roll_vel_deg"].append(roll_vel_deg)
+                            self.episode_data["pitch_vel_deg"].append(pitch_vel_deg)
+                            self.episode_data["yaw_vel_deg"].append(yaw_vel_deg)
                             self.update_filtered_data()
 
                         self.new_plot_data = True
