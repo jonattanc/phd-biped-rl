@@ -59,17 +59,17 @@ class DPGManager:
         
         # Pesos das recompensas por fase
         self.config.phase_weights = {
-            "velocity": 4.0,
-            "phase_angles": 2.0,
-            "propulsion": 1.0,
-            "clearance": 1.0,
-            "stability": 1.5,
-            "symmetry": 0.5,
+            "velocity": 2.0,
+            "phase_angles": 1.0,
+            "propulsion": 0.5,
+            "clearance": 0.2,
+            "stability": 3.0,
+            "symmetry": 0.3,
             "effort_torque": 1e-4,
             "effort_power": 1e-5,
             "action_smoothness": 1e-3,
-            "lateral_penalty": 0.5,
-            "slip_penalty": 1.0,
+            "lateral_penalty": 1.0,
+            "slip_penalty": 0.5,
         }
     
     def enable(self, enabled=True):
@@ -137,11 +137,31 @@ class DPGManager:
             return 0.0
     
     def _calculate_dpg_reward(self, sim, action):
-        """
-        Calcula recompensa DGP usando o sistema completo de fases da marcha
-        """
+        """Recompensas mais focadas no aprendizado gradual"""
         total_reward = 0.0
-        w = self.config.phase_weights
+
+        # BÔNUS MASSIVO PARA FASE INICIAL
+        if hasattr(self, 'gait_phase_dpg') and self.gait_phase_dpg:
+            current_phase = self.gait_phase_dpg.current_phase
+
+            if current_phase == 0:
+                # Bônus generoso por qualquer progresso
+                if sim.episode_distance > 0.1:
+                    progress_bonus = min(sim.episode_distance * 10, 5.0)
+                    total_reward += progress_bonus
+
+                # Bônus por estabilidade básica
+                if abs(sim.robot_roll) < 0.5 and abs(sim.robot_pitch) < 0.4:
+                    stability_bonus = 2.0
+                    total_reward += stability_bonus
+
+            elif current_phase == 1:
+                # Bônus por alternância e padrão cruzado
+                alternation = sim.robot_left_foot_contact != sim.robot_right_foot_contact
+                if alternation:
+                    total_reward += 1.0
+            total_reward = 0.0
+            w = self.config.phase_weights
         
         # Detectar se está preso
         if hasattr(self, 'stagnation_counter'):
@@ -157,19 +177,6 @@ class DPGManager:
             emergency_bonus = 2.0 
             total_reward += emergency_bonus
         
-        # RECOMPENSA MASSIVA PARA PRIMEIRO METRO
-        if sim.episode_distance <= 1.0:
-            progress_bonus = sim.episode_distance * 20
-            total_reward += progress_bonus
-
-        # VERIFICAÇÃO PARA FASE INICIAL
-        if hasattr(self, 'gait_phase_dpg') and self.gait_phase_dpg and self.gait_phase_dpg.current_phase == 0:
-            # Na fase inicial, dar bônus imediato por qualquer progresso
-            if sim.episode_distance > 0.2:  # Apenas 20cm de progresso
-                progress_bonus = min(sim.episode_distance / 2.0, 1.0)  # Normalizado para máximo 1.0
-                total_reward += progress_bonus * 2.0  # Bônus significativo
-                self.logger.debug(f"Fase inicial - Progresso: {sim.episode_distance:.2f}m, Bônus: {progress_bonus:.2f}")
-
         # 1. Componente de Velocidade (w_v * r_vel)
         velocity_reward = self._calculate_velocity_reward(sim)
         total_reward += w["velocity"] * velocity_reward
@@ -460,6 +467,34 @@ class DPGManager:
             slip_intensity += slip
 
         return slip_intensity
+
+    def _calculate_alternating_score(self, sim):
+        """Calcula score de alternância baseado no DPG"""
+        left_contact = getattr(sim, "robot_left_foot_contact", False)
+        right_contact = getattr(sim, "robot_right_foot_contact", False)
+
+        alternation = left_contact != right_contact
+        return 1.0 if alternation else 0.0
+
+    def _calculate_gait_coordination(self, sim):
+        """Calcula coordenação baseado no padrão cruzado do DPG"""
+        coordination_score = self._calculate_arm_leg_coordination(sim)
+        return coordination_score  
+
+    def _calculate_consistency_score(self, sim):
+        """Calcula consistência baseada no histórico do DPG"""
+        if not hasattr(self, 'recent_distances'):
+            self.recent_distances = []
+
+        self.recent_distances.append(sim.episode_distance)
+        if len(self.recent_distances) > 10:
+            self.recent_distances.pop(0)
+
+        if len(self.recent_distances) < 3:
+            return 0.5
+
+        consistency = 1.0 - (np.std(self.recent_distances) / 2.0)
+        return max(0.0, consistency)
 
     def update_phase_progression(self, episode_results):
         """Atualiza progressão de fases do DPG"""
