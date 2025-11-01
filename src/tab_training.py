@@ -624,7 +624,7 @@ class TrainingTab:
             with open(training_data_path, "w", encoding="utf-8") as f:
                 json.dump(training_data, f, indent=4, ensure_ascii=False)
 
-            self._save_additional_data(save_path)
+            # self._save_additional_data(save_path) dando erro
 
             if is_autosave:
                 self.last_autosave_folder = save_path

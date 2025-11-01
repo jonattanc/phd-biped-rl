@@ -569,7 +569,6 @@ class DPGManager:
         try:
             # Inicializar componentes avançados
             self.gait_phase_dpg._initialize_adaptive_reward_components()
-            self.logger.info("Componentes avançados DPG configurados (HDPG, IRL, DASS)")
         except Exception as e:
             self.logger.error(f"Erro ao configurar componentes avançados DPG: {e}")
 

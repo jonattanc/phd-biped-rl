@@ -245,35 +245,35 @@ class GaitPhaseDPG:
             enabled_components=[
                 "progress", "distance_bonus", "stability_roll", 
                 "stability_pitch", "alternating_foot_contact",
-                "gait_pattern_cross", "success_bonus", "center_bonus",
+                "success_bonus", "center_bonus",
             ],
             component_weights={
-                "progress": 0.4,
-                "distance_bonus": 0.3,
+                "progress": 0.25,
+                "distance_bonus": 0.35,
                 "stability_roll": 0.15,
                 "stability_pitch": 0.08,
                 "alternating_foot_contact": 0.04,
-                "gait_pattern_cross": 0.02,
                 "success_bonus": 0.01,
             },
-            phase_duration=25,
+            phase_duration=40,
             transition_conditions={
-                "min_success_rate": 0.3,
+                "min_success_rate": 0.4,
                 "min_avg_distance": 0.8,    
                 "max_avg_roll": 0.6,        
                 "min_avg_steps": 8,
                 "min_avg_speed": 0.2,
-                "min_alternating_score": 0.2,
+                "min_alternating_score": 0.3,
+                "consistency_count": 8,
             },
             skill_requirements={
-                "basic_balance": 0.5,
-                "postural_stability": 0.4,
-                "step_consistency": 0.2,
+                "basic_balance": 0.6,
+                "postural_stability": 0.5,
+                "step_consistency": 0.3,
             },
             regression_thresholds={
-                "max_failures": 25,
+                "max_failures": 20,
                 "min_success_rate": 0.15,
-                "stagnation_episodes": 40,
+                "stagnation_episodes": 30,
             },
             dass_samples_required=1200,
             transfer_learning_enabled=True
@@ -490,6 +490,12 @@ class GaitPhaseDPG:
         self.performance_history.append(enhanced_results)
         self.progression_history.append(enhanced_results)
 
+        if self._detect_critical_regression(enhanced_results):
+            return self._regress_to_previous_phase()
+
+        self._update_success_failure_counters(enhanced_results)
+        self._collect_dass_samples(enhanced_results)
+
         if len(self.progression_history) > self.max_progression_history:
             self.progression_history.pop(0)
         if len(self.performance_history) > 1000:
@@ -512,6 +518,50 @@ class GaitPhaseDPG:
 
         return PhaseTransitionResult.SUCCESS
 
+    def _detect_critical_regression(self, episode_results: Dict) -> bool:
+        """Detecta regressão crítica que justifica voltar à fase anterior"""
+        if self.current_phase == 0:
+            return False  # Não pode regredir da fase 0
+
+        if len(self.progression_history) < 10:
+            return False
+
+        # Calcular métricas recentes
+        recent_results = self.progression_history[-10:]
+        recent_success_rate = sum(1 for r in recent_results if r.get("phase_success", False)) / len(recent_results)
+        recent_avg_distance = np.mean([r.get("distance", 0) for r in recent_results])
+
+        # Obter desempenho da fase anterior para comparação
+        phase_config = self.phases[self.current_phase]
+        previous_phase_config = self.phases[self.current_phase - 1]
+
+        # Critérios de regressão CRÍTICA
+        critical_failure = False
+
+        # 1. Sucesso muito baixo por tempo prolongado
+        if recent_success_rate < 0.1 and self.episodes_in_phase > 50:
+            self.logger.error(f"🚨 CRITICAL: Success rate too low: {recent_success_rate:.1%}")
+            critical_failure = True
+
+        # 2. Distância muito abaixo do mínimo da fase ANTERIOR
+        previous_min_distance = previous_phase_config.transition_conditions.get("min_avg_distance", 0.1)
+        if recent_avg_distance < previous_min_distance * 0.5 and self.episodes_in_phase > 30:
+            self.logger.error(f"🚨 CRITICAL: Distance regressed: {recent_avg_distance:.2f}m < {previous_min_distance * 0.5:.2f}m")
+            critical_failure = True
+
+        # 3. Muitas falhas consecutivas
+        if self.consecutive_failures > 50:
+            self.logger.error(f"🚨 CRITICAL: Too many consecutive failures: {self.consecutive_failures}")
+            critical_failure = True
+
+        # 4. Estagnação prolongada com performance ruim
+        if (self.stagnation_counter > 100 and 
+            recent_avg_distance < phase_config.transition_conditions.get("min_avg_distance", 1.0) * 0.3):
+            self.logger.error(f"🚨 CRITICAL: Prolonged stagnation: {self.stagnation_counter} episodes")
+            critical_failure = True
+
+        return critical_failure
+    
     def _enhance_episode_results(self, episode_results: Dict) -> Dict:
         """Adiciona métricas calculadas aos resultados do episódio"""
         enhanced = episode_results.copy()
@@ -1859,14 +1909,50 @@ class GaitPhaseDPG:
         return np.mean(efficiencies) if efficiencies else 0.3 
 
     def _apply_phase_config(self):
-        """Aplica a configuração da fase atual ao sistema de recompensa"""
+        """Aplica a configuração da fase atual com fallback automático"""
         current_phase = self.phases[self.current_phase]
 
+        # VERIFICAR SE HOUVE QUEDA DE PERFORMANCE APÓS MUDANÇA
+        if self._performance_drop_after_transition():
+            self._apply_conservative_fallback(current_phase)
+        else:
+            # Aplicar configuração normal
+            for component_name, component in self.reward_system.components.items():
+                if component_name in current_phase.enabled_components:
+                    component.enabled = True
+                    target_weight = current_phase.component_weights.get(component_name, component.weight)
+                    component.weight = target_weight
+                else:
+                    component.enabled = False
+
+    def _performance_drop_after_transition(self) -> bool:
+        """Detecta se houve queda significativa de performance após transição"""
+        if self.episodes_in_phase < 10:
+            return False
+
+        recent_results = self.progression_history[-10:]
+        recent_success_rate = sum(1 for r in recent_results if r.get("phase_success", False)) / len(recent_results)
+
+        # Se taxa de sucesso caiu para menos de 30% após transição
+        return recent_success_rate < 0.3
+
+    def _apply_conservative_fallback(self, current_phase):
+        """Aplica configuração mais conservadora baseada na fase anterior"""
+        if self.current_phase == 0:
+            return
+
+        previous_phase = self.phases[self.current_phase - 1]
+        
         for component_name, component in self.reward_system.components.items():
-            if component_name in current_phase.enabled_components:
+            # Mistura conservadora: 70% fase anterior + 30% fase atual
+            previous_weight = previous_phase.component_weights.get(component_name, 0)
+            current_weight = current_phase.component_weights.get(component_name, 0)
+
+            blended_weight = previous_weight * 0.7 + current_weight * 0.3
+
+            if component_name in previous_phase.enabled_components or component_name in current_phase.enabled_components:
                 component.enabled = True
-                target_weight = current_phase.component_weights.get(component_name, component.weight)
-                component.weight = target_weight
+                component.weight = blended_weight
             else:
                 component.enabled = False
 
