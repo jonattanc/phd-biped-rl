@@ -610,8 +610,8 @@ class GaitPhaseDPG:
             # 3. Aprender pesos via Maximum Margin IRL simplificado
             learned_weights = self._learn_weights_maximum_margin(feature_matrix, successful_samples)
 
-            # 4. Calcular confiança do modelo
-            confidence = self._calculate_irl_confidence(feature_matrix, learned_weights, successful_samples)
+            # 4. Calcular confiança do modelo (CHAMADA CORRIGIDA)
+            confidence = self._calculate_irl_model_confidence(feature_matrix, learned_weights, successful_samples)
 
             # 5. Aplicar smoothing e validar pesos
             validated_weights = self._validate_and_smooth_weights(learned_weights, confidence)
@@ -630,8 +630,6 @@ class GaitPhaseDPG:
             # 7. Aplicar gradualmente ao sistema de recompensa se confiança alta
             if confidence > current_phase_config.irl_confidence_threshold:
                 self._apply_learned_reward_weights(validated_weights, feature_names, confidence)
-
-            self.logger.info(f"🎯 IRL Fase {self.current_phase}: {confidence:.3f} confiança, {len(successful_samples)} amostras")
 
         except Exception as e:
             self.logger.warning(f"Erro no IRL: {e}")
@@ -743,7 +741,7 @@ class GaitPhaseDPG:
 
         return weights.tolist()
 
-    def _calculate_irl_confidence(self, feature_matrix, weights, samples) -> float:
+    def _calculate_irl_model_confidence(self, feature_matrix, weights, samples) -> float:
         """Calcula confiança do modelo IRL aprendido"""
         if len(samples) < 50:
             return 0.0
