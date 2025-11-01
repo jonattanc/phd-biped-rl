@@ -253,6 +253,26 @@ class DPGManager:
 
         return total_reward
     
+    def _calculate_pitch_forward_bonus(self, episode_results: Dict) -> float:
+        """Recompensa inclinação frontal proposital para gerar propulsão"""
+        pitch = episode_results.get('pitch', 0)
+        speed = episode_results.get('speed', 0)
+        distance = episode_results.get('distance', 0)
+    
+        # Pitch ideal para geração de propulsão: entre -0.4 e -0.1 radianos
+        if pitch < -0.1 and pitch > -0.4:
+            # Base bonus on actual progress
+            pitch_bonus = 0.5 + min(abs(pitch) * 2.0, 0.5)  
+            # Scale by actual forward progress
+            progress_factor = min(distance / 0.5, 1.0)  
+            return pitch_bonus * progress_factor
+    
+        # Penalize excessive pitching 
+        elif pitch < -0.6:
+            return -0.2
+    
+        return 0.0
+
     def _calculate_velocity_reward(self, sim):
         """Recompensa de velocidade adaptada para DPG"""
         vx = getattr(sim, "robot_x_velocity", 0)
