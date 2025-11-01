@@ -48,6 +48,12 @@ class GaitPhaseDPG:
         self.last_avg_distance = 0.0
         self.regression_count = 0
 
+        self.transition_episodes = 0
+        self.transition_active = False
+        self.old_weights = None
+        self.old_enabled_components = None
+        self.transition_total_episodes = 8
+        
         self._initialize_enhanced_gait_phases()
 
     def _initialize_enhanced_gait_phases(self):
@@ -352,8 +358,11 @@ class GaitPhaseDPG:
 
     def update_phase(self, episode_results: Dict) -> PhaseTransitionResult:
         """
-        Atualiza a fase atual com validação robusta e fallback adaptativo
+        Atualiza a fase atual com validação robusta e transição gradual
         """    
+        if self.transition_active:
+            return self._update_transition_progress()
+
         episode_duration = episode_results.get('duration', 0)
         episode_distance = episode_results.get('distance', 0)
         episode_steps = episode_results.get('steps', 0)
@@ -365,7 +374,6 @@ class GaitPhaseDPG:
         )
 
         if not is_valid_episode:
-            self.logger.debug(f"Episódio ignorado - dados insuficientes: duration={episode_duration:.2f}s, steps={episode_steps}, distance={episode_distance:.2f}m")
             return PhaseTransitionResult.FAILURE
 
         self.episodes_in_phase += 1
@@ -391,7 +399,6 @@ class GaitPhaseDPG:
         self._update_success_failure_counters(enhanced_results)
 
         if len(self.progression_history) < 3:
-            self.logger.debug(f"Aguardando histórico suficiente: {len(self.progression_history)}/3")
             return PhaseTransitionResult.FAILURE
 
         regression_result = self._check_regression_or_stagnation()
@@ -400,8 +407,8 @@ class GaitPhaseDPG:
 
         can_advance = self._check_phase_advancement()
         if can_advance:
-            self.logger.info("CONDIÇÕES ATENDIDAS - Avançando para próxima fase!")
-            return self._advance_to_next_phase()
+            self.logger.info("CONDIÇÕES ATENDIDAS - Iniciando transição para próxima fase!")
+            return self._start_gradual_transition()
 
         return PhaseTransitionResult.FAILURE
 
@@ -456,28 +463,6 @@ class GaitPhaseDPG:
                     all_conditions_met = False
 
         return all_conditions_met
-
-    def _advance_to_next_phase(self) -> PhaseTransitionResult:
-        """Avança para a próxima fase"""
-        if self.current_phase >= len(self.phases) - 1:
-            return PhaseTransitionResult.SUCCESS
-
-        old_phase = self.current_phase
-        self.current_phase += 1
-        self.episodes_in_phase = 0
-        self.consecutive_failures = 0
-        self.consecutive_successes = 0
-        self.stagnation_counter = 0
-        self.regression_count = 0
-
-        keep_episodes = min(10, len(self.progression_history))
-        self.progression_history = self.progression_history[-keep_episodes:]
-        new_phase_config = self.phases[self.current_phase]
-
-        self.logger.info(f"🎉 AVANÇO DE FASE: {self.phases[old_phase].name} → {new_phase_config.name}")
-
-        self._apply_phase_config()
-        return PhaseTransitionResult.SUCCESS
 
     def _enhance_episode_results(self, episode_results: Dict) -> Dict:
         """Adiciona métricas calculadas aos resultados do episódio"""
@@ -611,38 +596,221 @@ class GaitPhaseDPG:
 
         return PhaseTransitionResult.SUCCESS
 
-    def _should_regress_phase(self) -> bool:
-        """Decisão de regressão mais conservadora"""
-        if self.current_phase == 0:
-            return False
+    def _start_gradual_transition(self) -> PhaseTransitionResult:
+        """Inicia transição gradual para próxima fase"""
+        if self.current_phase >= len(self.phases) - 1:
+            return PhaseTransitionResult.SUCCESS
 
-        # Só regride se estiver claramente travado
-        should_regress = (
-            self.current_phase > 0 and 
-            self.regression_count >= 4 and  # Mais regressões necessárias
-            self.episodes_in_phase > self.phases[self.current_phase].phase_duration * 2.5  # Mais tempo
-        )
-        return should_regress
+        self.old_weights = {}
+        self.old_enabled_components = {}
+        
+        current_config = self.phases[self.current_phase]
+        for component_name in current_config.enabled_components:
+            if component_name in self.reward_system.components:
+                self.old_weights[component_name] = self.reward_system.components[component_name].weight
+                self.old_enabled_components[component_name] = self.reward_system.components[component_name].enabled
 
+        self.transition_active = True
+        self.transition_episodes = 0
+        self.transition_total_episodes = 10  
+
+        self._smart_buffer_transition()
+        
+        return PhaseTransitionResult.SUCCESS
+    
+    def _update_transition_progress(self) -> PhaseTransitionResult:
+        """Atualiza progresso da transição gradual"""
+        self.transition_episodes += 1
+        transition_progress = self.transition_episodes / self.transition_total_episodes
+        self._apply_gradual_phase_config(transition_progress)
+        
+        if self.transition_episodes >= self.transition_total_episodes:
+            return self._complete_phase_transition()
+        
+        return PhaseTransitionResult.SUCCESS
+    
+    def _apply_gradual_phase_config(self, progress: float):
+        """Aplica configuração gradualmente durante transição"""
+        current_phase_config = self.phases[self.current_phase]
+        next_phase_config = self.phases[self.current_phase + 1]
+        
+        for component_name, component in self.reward_system.components.items():
+            old_weight = self.old_weights.get(component_name, 0.0)
+            new_weight = next_phase_config.component_weights.get(component_name, 0.0)
+            interpolated_weight = old_weight * (1 - progress) + new_weight * progress
+            component.weight = interpolated_weight
+            old_enabled = self.old_enabled_components.get(component_name, False)
+            new_enabled = component_name in next_phase_config.enabled_components
+            component.enabled = old_enabled or new_enabled
+
+    def _complete_phase_transition(self) -> PhaseTransitionResult:
+        """Completa a transição para próxima fase"""
+        old_phase = self.current_phase
+        self.current_phase += 1
+        self.episodes_in_phase = 0
+        self.consecutive_failures = 0
+        self.consecutive_successes = 0
+        self.stagnation_counter = 0
+        self.regression_count = 0
+        
+        self.transition_active = False
+        self.transition_episodes = 0
+        self.old_weights = None
+        self.old_enabled_components = None
+        
+        self._apply_phase_config()
+        
+        keep_episodes = min(8, len(self.progression_history))
+        self.progression_history = self.progression_history[-keep_episodes:]
+        
+        new_phase_config = self.phases[self.current_phase]
+        self.logger.info(f"🎉 TRANSIÇÃO CONCLUÍDA: {self.phases[old_phase].name} → {new_phase_config.name}")
+        
+        return PhaseTransitionResult.SUCCESS
+    
+    def _smart_buffer_transition(self):
+        """Transição inteligente do buffer preservando melhores experiências"""
+        try:
+            if hasattr(self.reward_system, 'agent') and self.reward_system.agent:
+                if hasattr(self.reward_system.agent.model, 'replay_buffer'):
+                    buffer = self.reward_system.agent.model.replay_buffer
+                    buffer_size_before = len(buffer)
+                    
+                    if self.current_phase <= 1:
+                        buffer.clear()
+                    else:
+                        preserved_count = self._preserve_high_value_experiences(buffer, preserve_ratio=0.3)
+                    
+                    self._refill_replay_buffer()
+                    
+        except Exception as e:
+            self.logger.warning(f"⚠️ Erro na transição do buffer: {e}")
+            self._clear_agent_replay_buffer()
+
+    def _preserve_high_value_experiences(self, buffer, preserve_ratio=0.3) -> int:
+        """Preserva as melhores experiências do buffer baseado em qualidade"""
+        try:
+            if not hasattr(buffer, 'buffer') or len(buffer) == 0:
+                return 0
+            
+            experiences = []
+            for i in range(len(buffer)):
+                experience = buffer.buffer[i]
+                quality_score = self._calculate_experience_quality(experience)
+                experiences.append((quality_score, experience))
+            
+            experiences.sort(key=lambda x: x[0], reverse=True)
+            
+            preserve_count = int(len(experiences) * preserve_ratio)
+            preserved_experiences = experiences[:preserve_count]
+            
+            buffer.clear()
+            for quality_score, experience in preserved_experiences:
+                buffer.add(*experience)
+            
+            return preserve_count
+            
+        except Exception as e:
+            self.logger.warning(f"⚠️ Erro ao preservar experiências: {e}")
+            return 0
+        
+    def _calculate_experience_quality(self, experience) -> float:
+        """Calcula qualidade de uma experiência baseado em estabilidade e progresso"""
+        try:
+            obs, next_obs, action, reward, done, info = experience
+            
+            quality_score = 0.0
+            
+            quality_score += min(abs(reward) * 0.1, 1.0)
+            
+            if not done:
+                quality_score += 0.5
+            
+            if hasattr(action, '__len__'):
+                action_smoothness = 1.0 - min(np.std(action) * 2.0, 1.0)
+                quality_score += action_smoothness * 0.3
+            
+            return min(quality_score, 1.0)
+            
+        except Exception as e:
+            return 0.5  
+        
     def _regress_to_previous_phase(self) -> PhaseTransitionResult:
-        """Regride para a fase anterior"""
+        """Regride para a fase anterior com transição gradual"""
         if self.current_phase == 0:
             return PhaseTransitionResult.FAILURE
 
-        old_phase = self.current_phase
-        self.current_phase = max(0, self.current_phase - 1)
-        self.episodes_in_phase = 0
-        self.consecutive_failures = 0
-        self.regression_count = 0
-        self.stagnation_counter = 0
+        self.old_weights = {}
+        self.old_enabled_components = {}
+        
+        current_config = self.phases[self.current_phase]
+        for component_name in current_config.enabled_components:
+            if component_name in self.reward_system.components:
+                self.old_weights[component_name] = self.reward_system.components[component_name].weight
+                self.old_enabled_components[component_name] = self.reward_system.components[component_name].enabled
 
-        keep_episodes = min(10, len(self.progression_history))
-        self.progression_history = self.progression_history[-keep_episodes:]
-        self.logger.warning(f"🔄 REGRESSÃO DE FASE: {self.phases[old_phase].name} → {self.phases[self.current_phase].name}")
+        self.transition_active = True
+        self.transition_episodes = 0
+        self.transition_total_episodes = 8  
+        self._smart_buffer_transition()
 
-        self._apply_phase_config()
+        old_phase_name = self.phases[self.current_phase].name
+        new_phase_name = self.phases[self.current_phase - 1].name
+        self.logger.warning(f"🔄 REGRESSÃO INICIADA: {old_phase_name} → {new_phase_name}")
+
         return PhaseTransitionResult.REGRESSION
 
+    def _clear_agent_replay_buffer(self):
+        """Limpar buffer de replay do agente quando as recompensas mudam"""
+        try:
+            if hasattr(self.reward_system, 'agent') and self.reward_system.agent:
+                if hasattr(self.reward_system.agent.model, 'replay_buffer'):
+                    buffer_size_before = len(self.reward_system.agent.model.replay_buffer)
+                    self.reward_system.agent.model.replay_buffer.clear()
+                    
+        except Exception as e:
+            self.logger.warning(f"⚠️ Não foi possível limpar buffer: {e}")
+        
+    def _refill_replay_buffer(self):
+        """Preencher rapidamente o buffer após limpeza"""
+        try:
+            if hasattr(self.reward_system, 'agent') and self.reward_system.agent:
+                agent = self.reward_system.agent
+                target_size = agent.prefill_steps // 2  
+
+                if hasattr(agent.model, 'replay_buffer'):
+                    current_size = len(agent.model.replay_buffer)
+
+                    if current_size < target_size:
+                        obs, _ = self.reward_system.agent.env.reset()
+                        steps_collected = 0
+
+                        while steps_collected < target_size and not self.reward_system.agent.env.exit_value.value:
+                            action = self.reward_system.agent.env.robot.get_example_action(
+                                self.reward_system.agent.env.episode_steps * self.reward_system.agent.env.time_step_s
+                            )
+
+                            next_obs, reward, terminated, truncated, info = self.reward_system.agent.env.step(action)
+                            done = terminated or truncated
+
+                            agent.model.replay_buffer.add(
+                                obs.flatten(), 
+                                next_obs.flatten(), 
+                                action, 
+                                reward, 
+                                done, 
+                                [info]
+                            )
+
+                            obs = next_obs
+                            steps_collected += 1
+
+                            if done:
+                                obs, _ = self.reward_system.agent.env.reset()
+
+        except Exception as e:
+            self.logger.warning(f"⚠️ Erro ao preencher buffer: {e}")
+        
     def _meets_minimum_requirements(self) -> bool:
         """Verifica requisitos mínimos para transição"""
         current_phase_config = self.phases[self.current_phase]
@@ -779,28 +947,6 @@ class GaitPhaseDPG:
         
         return np.mean(efficiencies) if efficiencies else 0.5
 
-    def _calculate_enhanced_balance_recovery(self, recent_results: List[Dict]) -> float:
-        """Calcula capacidade de recuperar equilíbrio de forma mais robusta"""
-        if len(recent_results) < 3:
-            return 0.5
-
-        recovery_events = 0
-        total_critical_events = 0
-
-        for i in range(1, len(recent_results)):
-            prev_roll = abs(recent_results[i - 1].get("roll", 0))
-            curr_roll = abs(recent_results[i].get("roll", 0))
-
-            if prev_roll > 0.5:
-                total_critical_events += 1
-                if curr_roll < 0.3 and curr_roll < prev_roll * 0.7:
-                    recovery_events += 1
-
-        if total_critical_events == 0:
-            return 0.8
-
-        return recovery_events / total_critical_events
-
     def _calculate_balance_recovery_score(self, recent_results: List[Dict]) -> float:
         """Calcula capacidade de recuperar equilíbrio"""
         if len(recent_results) < 3:
@@ -928,6 +1074,11 @@ class GaitPhaseDPG:
                 "max_avg_roll": current_phase.transition_conditions.get("max_avg_roll", 0),
                 "min_avg_steps": current_phase.transition_conditions.get("min_avg_steps", 0),
             },
+            # Transição
+            "transition_active": self.transition_active,
+            "transition_episodes": self.transition_episodes,
+            "transition_total_episodes": self.transition_total_episodes,
+            "transition_progress": self.transition_episodes / self.transition_total_episodes if self.transition_active else 1.0,
         }
 
         return status

@@ -171,15 +171,16 @@ class Simulation(gym.Env):
         self.agent = agent
 
     def pre_fill_buffer(self):
+        dpg_enabled = False
+        if hasattr(self.reward_system, "dpg_manager") and self.reward_system.dpg_manager:
+            dpg_enabled = self.reward_system.dpg_manager.config.enabled
+        if dpg_enabled:
+            return
+        
         obs = self.reset()
 
         self.episode_timeout_s = self.episode_pre_fill_timeout_s
         self.max_steps = self.max_pre_fill_steps
-
-        dpg_enabled = False
-        if hasattr(self.reward_system, "dpg_manager") and self.reward_system.dpg_manager:
-            dpg_enabled = self.reward_system.dpg_manager.config.enabled
-            self.reward_system.dpg_manager.config.enabled = False
 
         while self.total_steps < self.agent.prefill_steps and not self.exit_value.value:
             t = self.episode_steps * self.time_step_s
