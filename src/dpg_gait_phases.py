@@ -1655,9 +1655,9 @@ class GaitPhaseDPG:
             prev_roll = abs(recent_results[i - 1].get("roll", 0))
             curr_roll = abs(recent_results[i].get("roll", 0))
 
-            if prev_roll > 0.5:
+            if prev_roll > 0.4:
                 total_critical_events += 1
-                if curr_roll < 0.3 and curr_roll < prev_roll * 0.7:
+                if curr_roll < 0.3 and curr_roll < prev_roll * 0.8:
                     recovery_events += 1
 
         if total_critical_events == 0:
@@ -1927,37 +1927,29 @@ class GaitPhaseDPG:
     
     def _assess_phase_skills(self) -> Dict[str, float]:
         """Cálculo de habilidades"""
-
         if len(self.progression_history) < 2:
-            return {
-                "basic_balance": 0.3,
-                "postural_stability": 0.2, 
-                "gait_initiation": 0.1,
-                "step_consistency": 0.1,
-                "dynamic_balance": 0.1,
-                "balance_recovery": 0.1,
-                "propulsive_phase": 0.1,
-                "energy_efficiency": 0.1,
-                "gait_coordination": 0.1,
-            }
+            return self._get_default_skills()
 
-        recent_results = self.progression_history[-8:]
+        recent_results = self.progression_history[-8:]  
 
-        # MÉTRICAS BÁSICAS
+        # MÉTRICAS BÁSICAS 
         success_rate = self._calculate_success_rate()
         avg_roll = self._calculate_average_roll()
         avg_distance = self._calculate_average_distance()
         avg_speed = self._calculate_average_speed()
 
-        # 1. BASIC BALANCE - estabilidade geral
-        z_positions = [r.get("imu_z", 0.8) for r in recent_results]
-        avg_height = np.mean(z_positions)
+        # 1. BASIC BALANCE - estabilidade geral 
+        z_positions = [r.get("imu_z", 0.8) for r in recent_results if r.get("imu_z") is not None]
+        avg_height = np.mean(z_positions) if z_positions else 0.8
         height_stability = min(avg_height / 0.8, 1.0)  
-        roll_stability = 1.0 - min(avg_roll / 1.0, 1.0)
+
+        roll_values = [abs(r.get("roll", 0)) for r in recent_results]
+        avg_roll_current = np.mean(roll_values) if roll_values else 0.0
+        roll_stability = 1.0 - min(avg_roll_current / 1.0, 1.0)  
+
         basic_balance = (roll_stability * 0.7 + height_stability * 0.3)
 
-        # 2. POSTURAL STABILITY - controle postural
-        roll_values = [abs(r.get("roll", 0)) for r in recent_results]
+        # 2. POSTURAL STABILITY - controle postural 
         if len(roll_values) > 1:
             roll_consistency = 1.0 - min(np.std(roll_values) / 0.5, 1.0)
         else:
@@ -1967,7 +1959,7 @@ class GaitPhaseDPG:
         # 3. GAIT INITIATION - início da marcha
         gait_initiation = success_rate
 
-        # 4. STEP CONSISTENCY - consistência de passos
+        # 4. STEP CONSISTENCY - consistência de passos 
         distances = [r.get("distance", 0) for r in recent_results]
         if len(distances) >= 3 and np.mean(distances) > 0.1:
             std_dev = np.std(distances)
@@ -1977,8 +1969,21 @@ class GaitPhaseDPG:
         else:
             step_consistency = 0.1
 
-        # 5. DYNAMIC BALANCE - equilíbrio dinâmico
-        dynamic_balance = 1.0 - min(avg_roll / 0.6, 1.0)  
+        # 5. DYNAMIC BALANCE - equilíbrio dinâmico 
+        dynamic_balance_factors = []
+
+        # Fator 1: Estabilidade durante movimento
+        if avg_speed > 0.1:  
+            speed_balance = 1.0 - min(avg_roll_current / (0.4 + avg_speed * 0.5), 1.0)
+            dynamic_balance_factors.append(speed_balance * 0.6)
+        else:
+            dynamic_balance_factors.append(0.3)  
+
+        # Fator 2: Recuperação de equilíbrio
+        recovery_score = self._calculate_balance_recovery_score(recent_results)
+        dynamic_balance_factors.append(recovery_score * 0.4)
+
+        dynamic_balance = np.mean(dynamic_balance_factors) if dynamic_balance_factors else 0.3
 
         # 6. BALANCE RECOVERY - recuperação de equilíbrio
         balance_recovery = self._calculate_balance_recovery_score(recent_results)
@@ -1997,11 +2002,29 @@ class GaitPhaseDPG:
             "postural_stability": min(postural_stability, 1.0),
             "gait_initiation": gait_initiation,
             "step_consistency": step_consistency,
-            "dynamic_balance": dynamic_balance,
+            "dynamic_balance": min(dynamic_balance, 1.0),  
             "balance_recovery": balance_recovery,
             "propulsive_phase": propulsion_efficiency,
             "energy_efficiency": energy_efficiency,
             "gait_coordination": gait_coordination,
         }
 
+        # DEBUG: Log das habilidades calculadas
+        self.logger.debug(f"Habilidades calculadas: dynamic_balance={dynamic_balance:.3f}, "
+                         f"roll_stability={roll_stability:.3f}, avg_speed={avg_speed:.3f}")
+
         return all_skills
+    
+    def _get_default_skills(self) -> Dict[str, float]:
+        """Retorna habilidades padrão quando não há histórico suficiente"""
+        return {
+            "basic_balance": 0.3,
+            "postural_stability": 0.2, 
+            "gait_initiation": 0.1,
+            "step_consistency": 0.1,
+            "dynamic_balance": 0.1,  
+            "balance_recovery": 0.1,
+            "propulsive_phase": 0.1,
+            "energy_efficiency": 0.1,
+            "gait_coordination": 0.1,
+        }
