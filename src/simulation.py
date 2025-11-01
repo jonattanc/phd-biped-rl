@@ -566,7 +566,6 @@ class Simulation(gym.Env):
                     "clearance_score": self.robot.get_clearance_score(),
                     "propulsion_efficiency": self.robot.get_propulsion_efficiency(),
                 }
-                # Chamar update_phase APENAS UMA VEZ
                 try:
                     transition_result = self.reward_system.dpg_manager.gait_phase_dpg.update_phase(episode_results)
                 except Exception as e:

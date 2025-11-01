@@ -96,6 +96,9 @@ class GaitPhaseDPG:
         self.stagnation_counter = 0
         self.last_avg_distance = 0.0
         self.regression_count = 0
+        self.critical_failure_count = 0
+        self.critical_failures_required = 3
+        self.last_regression_episode = -100
 
         self.transition_episodes = 0
         self.transition_active = False
@@ -481,8 +484,15 @@ class GaitPhaseDPG:
     def update_phase(self, episode_results: Dict) -> PhaseTransitionResult:
         """Atualiza fase com validação HDPG completa"""
     
+        if self.current_phase >= len(self.phases):
+            self.current_phase = len(self.phases) - 1
+            return PhaseTransitionResult.SUCCESS
+        
         if self.transition_active:
-            return self._update_transition_progress()
+            result = self._update_transition_progress()
+            if (result == PhaseTransitionResult.REGRESSION or 
+                (hasattr(self, 'old_weights') and self.old_weights is not None and self.current_phase > 0)):
+                return result
 
         enhanced_results = self._enhance_episode_results(episode_results)
 
@@ -490,7 +500,17 @@ class GaitPhaseDPG:
         self.performance_history.append(enhanced_results)
         self.progression_history.append(enhanced_results)
 
-        if self._detect_critical_regression(enhanced_results):
+        regression_detected = self._detect_critical_regression(enhanced_results)
+
+        if len(self.progression_history) >= 5 and not self.transition_active and not regression_detected:  
+            can_advance = self._check_enhanced_phase_advancement()
+
+            if can_advance and self.current_phase < len(self.phases) - 1:  
+                self.logger.info("🎯 CONDIÇÕES HDPG ATENDIDAS - Transição aprovada!")
+                self.critical_failure_count = 0
+                return self._start_gradual_transition()
+
+        if regression_detected and not self.transition_active:
             return self._regress_to_previous_phase()
 
         self._update_success_failure_counters(enhanced_results)
@@ -509,19 +529,17 @@ class GaitPhaseDPG:
             self._learn_reward_via_irl()
         if self.current_phase >= 3:
             self._update_hdpg_weights()
-        if len(self.progression_history) >= 5:  
-            can_advance = self._check_enhanced_phase_advancement()
-
-            if can_advance and not self.transition_active:
-                self.logger.info("🎯 CONDIÇÕES HDPG ATENDIDAS - Transição aprovada!")
-                return self._start_gradual_transition()
 
         return PhaseTransitionResult.SUCCESS
 
     def _detect_critical_regression(self, episode_results: Dict) -> bool:
         """Detecta regressão crítica que justifica voltar à fase anterior"""
-        if self.current_phase == 0:
-            return False  # Não pode regredir da fase 0
+        if self.current_phase == 0 or self.current_phase >= len(self.phases):
+            return False
+
+        # Evitar regressão muito frequente
+        if self.episodes_in_phase - self.last_regression_episode < 20:
+            return False
 
         if len(self.progression_history) < 10:
             return False
@@ -532,7 +550,7 @@ class GaitPhaseDPG:
         recent_avg_distance = np.mean([r.get("distance", 0) for r in recent_results])
 
         # Obter desempenho da fase anterior para comparação
-        phase_config = self.phases[self.current_phase]
+        current_phase_config = self.phases[self.current_phase]
         previous_phase_config = self.phases[self.current_phase - 1]
 
         # Critérios de regressão CRÍTICA
@@ -540,27 +558,30 @@ class GaitPhaseDPG:
 
         # 1. Sucesso muito baixo por tempo prolongado
         if recent_success_rate < 0.1 and self.episodes_in_phase > 50:
-            self.logger.error(f"🚨 CRITICAL: Success rate too low: {recent_success_rate:.1%}")
             critical_failure = True
 
         # 2. Distância muito abaixo do mínimo da fase ANTERIOR
         previous_min_distance = previous_phase_config.transition_conditions.get("min_avg_distance", 0.1)
         if recent_avg_distance < previous_min_distance * 0.5 and self.episodes_in_phase > 30:
-            self.logger.error(f"🚨 CRITICAL: Distance regressed: {recent_avg_distance:.2f}m < {previous_min_distance * 0.5:.2f}m")
             critical_failure = True
 
         # 3. Muitas falhas consecutivas
         if self.consecutive_failures > 50:
-            self.logger.error(f"🚨 CRITICAL: Too many consecutive failures: {self.consecutive_failures}")
             critical_failure = True
 
         # 4. Estagnação prolongada com performance ruim
         if (self.stagnation_counter > 100 and 
-            recent_avg_distance < phase_config.transition_conditions.get("min_avg_distance", 1.0) * 0.3):
-            self.logger.error(f"🚨 CRITICAL: Prolonged stagnation: {self.stagnation_counter} episodes")
+            recent_avg_distance < current_phase_config.transition_conditions.get("min_avg_distance", 1.0) * 0.3):
             critical_failure = True
 
-        return critical_failure
+        # Atualizar contador de falhas críticas
+        if critical_failure:
+            self.critical_failure_count += 1
+        else:
+            if self.critical_failure_count > 0:
+                self.critical_failure_count = max(0, self.critical_failure_count - 0.2) 
+
+        return self.critical_failure_count >= self.critical_failures_required
     
     def _enhance_episode_results(self, episode_results: Dict) -> Dict:
         """Adiciona métricas calculadas aos resultados do episódio"""
@@ -1528,41 +1549,55 @@ class GaitPhaseDPG:
     def _complete_phase_transition(self) -> PhaseTransitionResult:
         """Completa a transição para próxima fase"""
         old_phase = self.current_phase
-        if self.current_phase >= len(self.phases) - 1:
-            return PhaseTransitionResult.SUCCESS
         
+        # Verificar se é uma regressão 
+        is_regression = (self.transition_active and 
+                        hasattr(self, 'old_weights') and 
+                        self.old_weights is not None and
+                        old_phase > 0)  
+
+        if self.current_phase >= len(self.phases) - 1 and not is_regression:
+            return PhaseTransitionResult.SUCCESS
+
         old_phase_name = self.phases[old_phase].name
         episodes_in_old_phase = self.episodes_in_phase
 
-        self.current_phase += 1
+        # Atualizar fase (para frente ou para trás)
+        if is_regression:
+            self.current_phase -= 1  # Regredir para fase anterior
+        else:
+            self.current_phase += 1  # Avançar para próxima fase
+
         self.episodes_in_phase = 0
         self.consecutive_failures = 0
         self.consecutive_successes = 0
         self.stagnation_counter = 0
-        self.regression_count = 0
-        
+        self.regression_count = 0 if not is_regression else self.regression_count + 1
+
         self.transition_active = False
         self.transition_episodes = 0
         self.old_weights = None
         self.old_enabled_components = None
-        
+
         self._apply_phase_config()
-        
+
         keep_episodes = min(8, len(self.progression_history))
         self.progression_history = self.progression_history[-keep_episodes:]
-        
-        new_phase_config = self.phases[self.current_phase]
-        self._generate_phase_transition_report(old_phase, old_phase_name, new_phase_config, episodes_in_old_phase)
 
-        if self.current_phase < len(self.phases):
+        # GERAR RELATÓRIO APENAS PARA PROGRESSÃO 
+        if not is_regression and self.current_phase < len(self.phases):
             new_phase_config = self.phases[self.current_phase]
             self._generate_phase_transition_report(old_phase, old_phase_name, new_phase_config, episodes_in_old_phase)
+        elif is_regression:
+            # Apenas log simples para regressão
+            new_phase_name = self.phases[self.current_phase].name
+            self.logger.info(f"🔄 Regressão concluída: {old_phase_name} → {new_phase_name}")
         else:
             # Reverter para fase anterior em caso de erro
             self.current_phase = old_phase
             self.episodes_in_phase = episodes_in_old_phase
             return PhaseTransitionResult.FAILURE
-        
+
         return PhaseTransitionResult.SUCCESS
 
     def _generate_phase_transition_report(self, old_phase: int, old_phase_name: str, new_phase_config, episodes_in_old_phase: int):
@@ -1752,13 +1787,17 @@ class GaitPhaseDPG:
         """Regride para a fase anterior com transição gradual"""
         if self.transition_active:
             self._cancel_current_transition()
-        
+
         if self.current_phase == 0:
             return PhaseTransitionResult.FAILURE
 
+        # Resetar contador de falhas críticas
+        self.critical_failure_count = 0
+        self.last_regression_episode = self.episodes_in_phase
+
         self.old_weights = {}
         self.old_enabled_components = {}
-        
+
         current_config = self.phases[self.current_phase]
         for component_name in current_config.enabled_components:
             if component_name in self.reward_system.components:
@@ -1767,13 +1806,12 @@ class GaitPhaseDPG:
 
         self.transition_active = True
         self.transition_episodes = 0
-        self.transition_total_episodes = 8  
+        self.transition_total_episodes = 8
         self._smart_buffer_transition()
 
         old_phase_name = self.phases[self.current_phase].name
         new_phase_name = self.phases[self.current_phase - 1].name
-        self.logger.warning(f"🔄 REGRESSÃO INICIADA: {old_phase_name} → {new_phase_name}")
-
+        
         return PhaseTransitionResult.REGRESSION
 
     def _clear_agent_replay_buffer(self):
