@@ -1528,6 +1528,9 @@ class GaitPhaseDPG:
     def _complete_phase_transition(self) -> PhaseTransitionResult:
         """Completa a transição para próxima fase"""
         old_phase = self.current_phase
+        if self.current_phase >= len(self.phases) - 1:
+            return PhaseTransitionResult.SUCCESS
+        
         old_phase_name = self.phases[old_phase].name
         episodes_in_old_phase = self.episodes_in_phase
 
@@ -1551,6 +1554,15 @@ class GaitPhaseDPG:
         new_phase_config = self.phases[self.current_phase]
         self._generate_phase_transition_report(old_phase, old_phase_name, new_phase_config, episodes_in_old_phase)
 
+        if self.current_phase < len(self.phases):
+            new_phase_config = self.phases[self.current_phase]
+            self._generate_phase_transition_report(old_phase, old_phase_name, new_phase_config, episodes_in_old_phase)
+        else:
+            # Reverter para fase anterior em caso de erro
+            self.current_phase = old_phase
+            self.episodes_in_phase = episodes_in_old_phase
+            return PhaseTransitionResult.FAILURE
+        
         return PhaseTransitionResult.SUCCESS
 
     def _generate_phase_transition_report(self, old_phase: int, old_phase_name: str, new_phase_config, episodes_in_old_phase: int):
@@ -2169,6 +2181,27 @@ class GaitPhaseDPG:
 
         return stability
 
+    def _check_performance_consistency(self) -> bool:
+        """Verifica consistência de performance nos últimos episódios"""
+        if len(self.progression_history) < 5:
+            return False
+
+        recent_results = self.progression_history[-5:]
+
+        # Verificar se há consistência nas distâncias
+        distances = [r.get("distance", 0) for r in recent_results]
+        distance_std = np.std(distances)
+        distance_mean = np.mean(distances) if np.mean(distances) != 0 else 0.1
+
+        # Considerar consistente se o desvio padrão for menor que 30% da média
+        consistent = (distance_std / distance_mean) < 0.3
+
+        # Verificar consistência no sucesso também
+        successes = [1 if r.get("phase_success", False) else 0 for r in recent_results]
+        success_consistency = np.mean(successes) > 0.6  # Pelo menos 60% de sucesso
+
+        return consistent and success_consistency
+    
     def _assess_phase_skills(self) -> Dict[str, float]:
         """Cálculo de habilidades"""
         if len(self.progression_history) < 2:
