@@ -479,34 +479,97 @@ class GaitPhaseDPG:
 
     def update_phase(self, episode_results: Dict) -> PhaseTransitionResult:
         """Atualiza fase com validação HDPG completa"""
+    
         if self.transition_active:
             return self._update_transition_progress()
 
-        # Coletar dados para HDPG
-        self._collect_dass_samples(episode_results)
+        enhanced_results = self._enhance_episode_results(episode_results)
 
-        # Atualizar componentes HDPG
+        self.episodes_in_phase += 1
+        self.performance_history.append(enhanced_results)
+        self.progression_history.append(enhanced_results)
+
+        if len(self.progression_history) > self.max_progression_history:
+            self.progression_history.pop(0)
+        if len(self.performance_history) > 1000:
+            self.performance_history.pop(0)
+
+        self._update_success_failure_counters(enhanced_results)
+        self._collect_dass_samples(enhanced_results)  
         if self.current_phase >= 1:
-            self._update_adaptive_components(episode_results)
-
-        # Aprendizado IRL (fases avançadas)
+            self._update_adaptive_components(enhanced_results)
         if self.current_phase >= 2 and len(self.dass_samples) >= 500:
             self._learn_reward_via_irl()
-
-        # Otimização HDPG (fases mais avançadas)
         if self.current_phase >= 3:
             self._update_hdpg_weights()
-            # Verificar convergência HDPG para transição
-            hdpg_ready = self._validate_hdpg_convergence()
+        if len(self.progression_history) >= 5:  
+            can_advance = self._check_enhanced_phase_advancement()
 
-        # Usar verificação avançada para transição
-        can_advance = self._check_enhanced_phase_advancement()
+            if can_advance and not self.transition_active:
+                self.logger.info("🎯 CONDIÇÕES HDPG ATENDIDAS - Transição aprovada!")
+                return self._start_gradual_transition()
 
-        if can_advance and not self.transition_active:
-            self.logger.info("🎯 CONDIÇÕES HDPG ATENDIDAS - Transição aprovada!")
-            return self._start_gradual_transition()
+        return PhaseTransitionResult.SUCCESS
 
-        return PhaseTransitionResult.FAILURE
+    def _enhance_episode_results(self, episode_results: Dict) -> Dict:
+        """Adiciona métricas calculadas aos resultados do episódio"""
+        enhanced = episode_results.copy()
+
+        # Garantir que temos métricas básicas
+        distance = episode_results.get("distance", 0)
+        roll = abs(episode_results.get("roll", 0))
+        steps = episode_results.get("steps", 0)
+        speed = episode_results.get("speed", 0)
+
+        # Calcular sucesso da fase atual
+        current_config = self.phases[self.current_phase]
+        conditions = current_config.transition_conditions
+
+        episode_success = True
+
+        # Verificar condições básicas
+        if "min_avg_distance" in conditions and distance < conditions["min_avg_distance"] * 0.3:  # Mais leniente para episódios individuais
+            episode_success = False
+
+        if "max_avg_roll" in conditions and roll > conditions["max_avg_roll"] * 1.5:  # Mais leniente
+            episode_success = False
+
+        if "min_avg_steps" in conditions and steps < conditions["min_avg_steps"] * 0.5:  # Mais leniente
+            episode_success = False
+
+        if "min_avg_speed" in conditions and speed < conditions["min_avg_speed"] * 0.3:  # Mais leniente
+            episode_success = False
+
+        enhanced["phase_success"] = episode_success
+        enhanced["phase"] = self.current_phase
+
+        # Adicionar métricas padrão se não existirem
+        if "total_reward" not in enhanced:
+            enhanced["total_reward"] = episode_results.get("reward", 0)
+
+        return enhanced
+
+    def _update_success_failure_counters(self, episode_results: Dict):
+        """Atualiza contadores de sucesso e fracasso"""
+        phase_success = episode_results.get("phase_success", False)
+
+        if phase_success:
+            self.consecutive_successes += 1
+            self.consecutive_failures = 0
+        else:
+            self.consecutive_failures += 1
+            self.consecutive_successes = 0
+
+        # Atualizar contador de estagnação
+        current_avg_distance = self._calculate_average_distance()
+        if current_avg_distance > self.last_avg_distance + 0.05:
+            self.stagnation_counter = 0
+        elif abs(current_avg_distance - self.last_avg_distance) < 0.02:
+            self.stagnation_counter += 1
+        else:
+            self.stagnation_counter = max(0, self.stagnation_counter - 1)
+
+        self.last_avg_distance = current_avg_distance
 
     def _collect_dass_samples(self, episode_results: Dict):
         """Coleta amostras para DASS"""
@@ -535,13 +598,13 @@ class GaitPhaseDPG:
             # 1. Filtrar demonstrações de alta qualidade
             successful_samples = self._extract_high_quality_demonstrations()
 
-            if len(successful_samples) < 80:  # Mais amostras para aprendizado robusto
+            if len(successful_samples) < 80:  
                 return
 
             # 2. Extrair features relevantes
             feature_matrix, feature_names = self._extract_irl_features(successful_samples)
 
-            if feature_matrix.shape[0] < 50:  # Garantir matriz suficiente
+            if feature_matrix.shape[0] < 50:  
                 return
 
             # 3. Aprender pesos via Maximum Margin IRL simplificado
@@ -583,13 +646,13 @@ class GaitPhaseDPG:
             # Critérios de qualidade mais rigorosos
             quality_score = self._calculate_demonstration_quality(sample)
 
-            if quality_score > 0.6:  # Apenas amostras de boa qualidade
+            if quality_score > 0.6:  
                 quality_samples.append(sample)
 
         # Ordenar por qualidade e pegar as melhores
         quality_samples.sort(key=lambda x: self._calculate_demonstration_quality(x), reverse=True)
 
-        return quality_samples[:300]  # Limitar para evitar overfitting
+        return quality_samples[:300]  
 
     def _calculate_demonstration_quality(self, sample) -> float:
         """Calcula qualidade de uma demonstração para IRL"""
@@ -604,19 +667,19 @@ class GaitPhaseDPG:
         # 2. Distância percorrida (normalizada)
         distance = episode.get('distance', 0)
         target_distance = self.phases[sample['phase']].transition_conditions.get('min_avg_distance', 1.0)
-        distance_score = min(distance / max(target_distance, 0.1), 2.0)  # Até 2x a distância alvo
+        distance_score = min(distance / max(target_distance, 0.1), 2.0)  
         quality_factors.append(distance_score)
 
         # 3. Estabilidade
         roll = abs(episode.get('roll', 0))
         pitch = abs(episode.get('pitch', 0))
-        stability_score = 2.0 - min((roll + pitch) / 0.5, 2.0)  # Penalizar instabilidade
+        stability_score = 2.0 - min((roll + pitch) / 0.5, 2.0)  
         quality_factors.append(stability_score)
 
         # 4. Eficiência energética
         energy = episode.get('energy_used', 1.0)
         energy_efficiency = distance / max(energy, 0.1)
-        energy_score = min(energy_efficiency / 1.0, 1.5)  # Bônus por eficiência
+        energy_score = min(energy_efficiency / 1.0, 1.5)  
         quality_factors.append(energy_score)
 
         # 5. Padrão de marcha
@@ -720,7 +783,7 @@ class GaitPhaseDPG:
         predicted_scores = []
         actual_scores = []
 
-        for sample in samples[:50]:  # Limitar para performance
+        for sample in samples[:50]:  
             episode = sample['episode_results']
             features = [
                 episode.get('distance', 0),
@@ -737,7 +800,7 @@ class GaitPhaseDPG:
 
             # Score real baseado em sucesso e qualidade
             actual_score = 1.0 if episode.get('success', False) else 0.5
-            actual_score += min(episode.get('distance', 0) / 2.0, 0.5)  # Bônus por distância
+            actual_score += min(episode.get('distance', 0) / 2.0, 0.5)  
             actual_scores.append(min(actual_score, 1.0))
 
         # Calcular correlação
@@ -935,7 +998,7 @@ class GaitPhaseDPG:
         # 5. Convergência de prioridades HDPG
         priorities_converged = self._check_priority_convergence()
 
-        # 6. Validação IRL (apenas fases avançadas)
+        # 6. Validação IRL 
         irl_valid = True
         if self.current_phase >= 2:
             irl_confidence = self._calculate_irl_confidence()
@@ -950,7 +1013,7 @@ class GaitPhaseDPG:
             irl_valid
         )
 
-        # Para fases iniciais, ser mais permissivo; fases avançadas, mais rigoroso
+        # Para fases iniciais, ser mais permissivo; 
         if self.current_phase <= 2:
             return basic_conditions_met and (hdpg_convergence_met or gradient_stable)
         else:
@@ -971,7 +1034,7 @@ class GaitPhaseDPG:
 
     def _validate_hdpg_convergence(self) -> bool:
         """Valida convergência do HDPG usando múltiplas métricas"""
-        if self.current_phase < 2:  # HDPG só ativo a partir da fase 2
+        if self.current_phase < 2:  
             return True
 
         convergence_metrics = {
@@ -999,9 +1062,7 @@ class GaitPhaseDPG:
             total_score += score * weights[metric]
 
         # Threshold adaptativo por fase
-        phase_threshold = 0.6 + (self.current_phase * 0.05)  # Mais rigoroso em fases avançadas
-
-        self.logger.debug(f"HDPG Convergence: {total_score:.3f} (threshold: {phase_threshold:.3f})")
+        phase_threshold = 0.6 + (self.current_phase * 0.05) 
 
         return total_score >= phase_threshold
 
@@ -1064,7 +1125,6 @@ class GaitPhaseDPG:
 
             # 4. Se não há métricas específicas, usar estabilidade geral
             if not convergence_metrics:
-                # Fallback: usar estabilidade das recompensas como proxy
                 recent_rewards = []
                 for component in self.adaptive_components.values():
                     if component['recent_rewards']:
@@ -1082,7 +1142,7 @@ class GaitPhaseDPG:
             return 0.5
 
     def _check_basic_advancement_conditions(self) -> bool:
-        """Verifica condições básicas de avanço de fase (substitui a versão antiga)"""
+        """Verifica condições básicas de avanço de fase"""
         if self.current_phase >= len(self.phases) - 1:
             return False
 
@@ -1233,7 +1293,7 @@ class GaitPhaseDPG:
         try:
             stability_metrics = []
 
-            # 1. Estabilidade da distância (progresso suave)
+            # 1. Estabilidade da distância 
             distances = [r.get('distance', 0) for r in self.progression_history[-15:]]
             if len(distances) >= 10:
                 distance_changes = [abs(distances[i] - distances[i-1]) for i in range(1, len(distances))]
@@ -1301,7 +1361,7 @@ class GaitPhaseDPG:
         for component, current_prio in current_priorities.items():
             if component in self.previous_priorities:
                 previous_prio = self.previous_priorities[component]
-                if previous_prio > 0:  # Evitar divisão por zero
+                if previous_prio > 0:  
                     change = abs(current_prio - previous_prio) / previous_prio
                     total_change += change
                     count += 1
@@ -1552,17 +1612,23 @@ class GaitPhaseDPG:
     def _meets_minimum_requirements(self) -> bool:
         """Verifica requisitos mínimos para transição"""
         current_phase_config = self.phases[self.current_phase]
-        has_minimum_duration = self.episodes_in_phase >= current_phase_config.phase_duration
 
-        has_sufficient_history = len(self.progression_history) >= 5
+        min_duration = current_phase_config.phase_duration
+        if self.current_phase == 0:
+            min_duration = max(5, min_duration)  
+
+        has_minimum_duration = self.episodes_in_phase >= min_duration
+        has_sufficient_history = len(self.progression_history) >= 3  
 
         if not has_minimum_duration:
-            self.logger.debug(f"Aguardando duração mínima: {self.episodes_in_phase}/{current_phase_config.phase_duration}")
+            self.logger.debug(f"Aguardando duração mínima: {self.episodes_in_phase}/{min_duration}")
+            return False
 
         if not has_sufficient_history:
-            self.logger.debug(f"Aguardando histórico suficiente: {len(self.progression_history)}/5")
+            self.logger.debug(f"Aguardando histórico suficiente: {len(self.progression_history)}/3")
+            return False
 
-        return has_minimum_duration and has_sufficient_history
+        return True
 
     def _calculate_energy_efficiency(self, recent_results: List[Dict]) -> float:
         """Calcula eficiência energética de forma mais realista"""
@@ -1740,7 +1806,7 @@ class GaitPhaseDPG:
                 "energy_efficiency": 0.5
             }
 
-        recent_history = self.progression_history[-10:]  # Últimos 10 episódios
+        recent_history = self.progression_history[-10:] 
 
         # Taxa de sucesso
         successes = sum(1 for r in recent_history if r.get("phase_success", False))
@@ -1817,7 +1883,7 @@ class GaitPhaseDPG:
         slope, _ = np.polyfit(x, distances, 1)
 
         # Normalizar para 0-1 (0.5 = estável)
-        trend = 0.5 + min(max(slope / 0.1, -0.5), 0.5)  # Normalizar slope
+        trend = 0.5 + min(max(slope / 0.1, -0.5), 0.5)  
 
         return trend
 
@@ -1835,7 +1901,7 @@ class GaitPhaseDPG:
         if len(performances) < 2:
             return 0.5
 
-        # Score baseado na variância (baixa variância = bom balanceamento)
+        # Score baseado na variância 
         variance = np.var(performances)
         balance_score = 1.0 - min(variance * 2.0, 1.0)
 
@@ -1857,7 +1923,7 @@ class GaitPhaseDPG:
             return 0.5
 
         avg_change = np.mean(recent_changes)
-        stability = 1.0 - min(avg_change / 0.3, 1.0)  # Normalizar
+        stability = 1.0 - min(avg_change / 0.3, 1.0)  
 
         return stability
     
@@ -1914,7 +1980,7 @@ class GaitPhaseDPG:
             step_consistency = 0.1
 
         # 5. DYNAMIC BALANCE - equilíbrio dinâmico
-        dynamic_balance = 1.0 - min(avg_roll / 0.6, 1.0)  # Mais exigente que basic_balance
+        dynamic_balance = 1.0 - min(avg_roll / 0.6, 1.0)  
 
         # 6. BALANCE RECOVERY - recuperação de equilíbrio
         balance_recovery = self._calculate_balance_recovery_score(recent_results)
