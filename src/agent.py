@@ -119,6 +119,7 @@ class Agent:
                 target_noise_clip=0.5,
                 tensorboard_log="./logs/",
                 device=device,
+                seed=42,
             )
         elif algorithm.upper() == "FASTTD3":
             return FastTD3(

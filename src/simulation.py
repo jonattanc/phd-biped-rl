@@ -5,6 +5,7 @@ import time
 import numpy as np
 import random
 import math
+import torch
 from dpg_gait_phases import PhaseTransitionResult
 
 
@@ -22,13 +23,15 @@ class Simulation(gym.Env):
         enable_real_time_value,
         camera_selecion_value,
         config_changed_value,
+        seed,
         num_episodes=1,
-        seed=42,
         initial_episode=0,
     ):
         super(Simulation, self).__init__()
         np.random.seed(seed)
         random.seed(seed)
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
 
         self.robot = robot
         self.environment = environment

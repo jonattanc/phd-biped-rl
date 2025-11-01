@@ -63,6 +63,7 @@ def process_runner(
     enable_real_time_value,
     camera_selection_value,
     config_changed_value,
+    seed,
     device="cpu",
     initial_episode=0,
     model_path=None,
@@ -93,9 +94,10 @@ def process_runner(
             enable_real_time_value,
             camera_selection_value,
             config_changed_value,
+            seed,
             initial_episode=initial_episode,
         )
-        
+
         if enable_dpg:
             dpg_manager = DPGManager(logger, robot, reward_system)
             dpg_manager.enable(True)
@@ -105,7 +107,7 @@ def process_runner(
             logger.info("Usando sistema de recompensa padrão (sem DPG)")
 
         agent = Agent(logger, env=sim, model_path=model_path, algorithm=algorithm, device=device, initial_episode=initial_episode)
-        sim.set_agent(agent)    
+        sim.set_agent(agent)
 
         callback = TrainingCallback(logger)
         ipc_queue.put_nowait({"type": "minimum_steps_to_save", "minimum_steps_to_save": agent.minimum_steps_to_save})

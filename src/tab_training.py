@@ -178,6 +178,12 @@ class TrainingTab:
         self.stop_btn = ttk.Button(row1_frame, text="Finalizar", command=self.stop_training, state=tk.DISABLED, width=10)
         self.stop_btn.grid(row=0, column=8, padx=1)
 
+        # Input para random seed
+        self.seed_var = tk.IntVar(value=42)
+        seed_input = ttk.Spinbox(row1_frame, from_=0, to=100000, textvariable=self.seed_var, width=8)
+        # ttk.Label(row1_frame, text="Seed:").grid(row=0, column=9, sticky=tk.W, padx=1)
+        # seed_input.grid(row=0, column=10, padx=5) # TODO: Trocar seed não funciona
+
         # Linha 2: Botões secundários e checkboxes
         row2_frame = ttk.Frame(control_frame)
         row2_frame.grid(row=1, column=0, columnspan=12, sticky=(tk.W, tk.E), pady=1)
@@ -469,6 +475,7 @@ class TrainingTab:
                     realtime_val,
                     camera_selection_val,
                     config_changed_val,
+                    self.seed_var.get(),
                     self.device,
                     0,
                     None,
@@ -547,6 +554,7 @@ class TrainingTab:
                     realtime_val,
                     camera_selection_val,
                     config_changed_val,
+                    self.seed_var.get(),
                     self.device,
                     self.current_episode,
                     model_path,

@@ -7,7 +7,7 @@ import multiprocessing
 import utils
 
 
-def evaluate_and_save(model_path, circuit_name="PR", avatar_name="robot_stage1", role="AE", num_episodes=5, seed=42, deterministic=True, enable_visualization=False):
+def evaluate_and_save(model_path, seed, circuit_name="PR", avatar_name="robot_stage1", role="AE", num_episodes=5, deterministic=True, enable_visualization=False):
     """Avalia um modelo e salva as métricas"""
 
     logging.info(f"Avaliando {avatar_name} no circuito {circuit_name}...")
@@ -34,7 +34,7 @@ def evaluate_and_save(model_path, circuit_name="PR", avatar_name="robot_stage1",
         logger = utils.get_logger(["evaluation", circuit_name, avatar_name])
         robot = Robot(logger, name=avatar_name)
         env_obj = Environment(logger, name=circuit_name)
-        env = Simulation(logger, robot, env_obj, None, ipc_queue, pause_val, exit_val, enable_visualization_val, realtime_val, camera_selection_val, config_changed_value, num_episodes, seed=seed)
+        env = Simulation(logger, robot, env_obj, None, ipc_queue, pause_val, exit_val, enable_visualization_val, realtime_val, camera_selection_val, config_changed_value, seed, num_episodes)
         agent = Agent(logger, env=env, model_path=model_path)  # TODO: Passar algoritmo
 
         # Configurar o agente

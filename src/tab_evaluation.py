@@ -231,7 +231,7 @@ class EvaluationTab:
 
             # Executar avaliação
             metrics = evaluate_and_save(
-                model_path=model_path, circuit_name=environment, avatar_name=robot, num_episodes=episodes, deterministic=deterministic, seed=42, enable_visualization=enable_visualization
+                model_path, self.seed, circuit_name=environment, avatar_name=robot, num_episodes=episodes, deterministic=deterministic, seed=42, enable_visualization=enable_visualization
             )
 
             if metrics:
