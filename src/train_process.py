@@ -7,48 +7,6 @@ from dpg_manager import DPGManager
 import utils
 import time
 import os
-import json
-
-
-def verify_control_files(control_dir, logger, agent, ipc_queue, context):
-    """Verifica arquivos de controle e para cada um: salva o modelo, confirma via IPC e remove o arquivo de controle"""
-    try:
-        control_files = [f for f in os.listdir(control_dir) if f.startswith("save_model_") and f.endswith(".json")]
-        control_files.sort()  # Processar em ordem
-
-        for control_file in control_files:
-            control_path = os.path.join(control_dir, control_file)
-            with open(control_path, "r") as f:
-                control_data = json.load(f)
-
-            model_path = control_data.get("model_path")
-            if model_path:
-                logger.info(f"COMANDO DE SALVAMENTO {context}: {model_path}")
-
-                # SALVAR MODELO
-                agent.save_model(model_path)
-                logger.info(f"MODELO SALVO {context}: {model_path}")
-
-                # Verificar se foi salvo
-                if os.path.exists(model_path):
-                    file_size = os.path.getsize(model_path)
-                    logger.info(f"ARQUIVO CONFIRMADO: {model_path} ({file_size} bytes)")
-
-                    # Enviar confirmação via IPC
-                    ipc_queue.put({"type": "model_saved", "model_path": model_path})
-
-                else:
-                    logger.error(f"FALHA: Arquivo não criado: {model_path}")
-
-                # Remover arquivo de controle processado
-                try:
-                    os.remove(control_path)
-                    logger.info(f"Arquivo de controle removido: {control_file}")
-                except Exception as e:
-                    logger.warning(f"Não foi possível remover: {control_file}")
-
-    except Exception as e:
-        logger.exception("Erro ao verificar arquivos de controle")
 
 
 def process_runner(
@@ -56,6 +14,7 @@ def process_runner(
     selected_robot,
     algorithm,
     ipc_queue,
+    ipc_queue_main_to_process,
     reward_system,
     pause_value,
     exit_value,
@@ -87,6 +46,7 @@ def process_runner(
             environment,
             reward_system,
             ipc_queue,
+            ipc_queue_main_to_process,
             pause_value,
             exit_value,
             enable_visualization_value,
@@ -95,7 +55,7 @@ def process_runner(
             config_changed_value,
             initial_episode=initial_episode,
         )
-        
+
         if enable_dpg:
             dpg_manager = DPGManager(logger, robot, reward_system)
             dpg_manager.enable(True)
@@ -105,10 +65,9 @@ def process_runner(
             logger.info("Usando sistema de recompensa padrão (sem DPG)")
 
         agent = Agent(logger, env=sim, model_path=model_path, algorithm=algorithm, device=device, initial_episode=initial_episode)
-        sim.set_agent(agent)    
+        sim.set_agent(agent)
 
         callback = TrainingCallback(logger)
-        ipc_queue.put_nowait({"type": "minimum_steps_to_save", "minimum_steps_to_save": agent.minimum_steps_to_save})
 
         # Iniciar treinamento
         logger.info(f"Iniciando treinamento {algorithm} no episódio {initial_episode}...")
@@ -117,22 +76,9 @@ def process_runner(
         timesteps_completed = 0
         timesteps_batch_size = 1000
 
-        # Diretório para controle de salvamento
-        control_dir = utils.TRAINING_CONTROL_PATH
-        os.makedirs(control_dir, exist_ok=True)
-
         sim.pre_fill_buffer()
 
         while not exit_value.value:
-            verify_control_files(control_dir, logger, agent, ipc_queue, "VIA ARQUIVO")
-
-            while pause_value.value and not exit_value.value:
-                time.sleep(0.5)  # Verificar menos frequentemente durante pausa
-                verify_control_files(control_dir, logger, agent, ipc_queue, "DURANTE PAUSA")
-
-            if exit_value.value:
-                break
-
             timesteps_completed += timesteps_batch_size
             agent.model.learn(total_timesteps=timesteps_batch_size, reset_num_timesteps=False, callback=callback)
 

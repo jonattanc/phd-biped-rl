@@ -135,7 +135,7 @@ class Agent:
                 target_policy_noise=0.1,
                 target_noise_clip=0.1,
                 tensorboard_log="./logs/",
-                device=device
+                device=device,
             )
         else:
             raise ValueError(f"Algoritmo {algorithm} não suportado. Use 'PPO', 'TD3' ou 'FastTD3'")
@@ -339,14 +339,10 @@ class Agent:
         self.logger.info(f"Desvio padrão: {std_time:.2f}s")
 
         return metrics
-    
+
     def learn(self, total_timesteps, reset_num_timesteps=False, callback=None):
         """
         Método learn para compatibilidade com DPG
         """
         # Apenas delega para o modelo
-        return self.model.learn(
-            total_timesteps=total_timesteps,
-            reset_num_timesteps=reset_num_timesteps,
-            callback=callback
-        )
+        return self.model.learn(total_timesteps=total_timesteps, reset_num_timesteps=reset_num_timesteps, callback=callback)

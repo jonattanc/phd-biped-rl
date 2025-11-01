@@ -5,7 +5,11 @@ import time
 import numpy as np
 import random
 import math
+import queue
+import os
 from dpg_gait_phases import PhaseTransitionResult
+import best_model_tracker
+import utils
 
 
 class Simulation(gym.Env):
@@ -16,6 +20,7 @@ class Simulation(gym.Env):
         environment,
         reward_system,
         ipc_queue,
+        ipc_queue_main_to_process,
         pause_value,
         exit_value,
         enable_visualization_value,
@@ -33,6 +38,7 @@ class Simulation(gym.Env):
         self.robot = robot
         self.environment = environment
         self.ipc_queue = ipc_queue
+        self.ipc_queue_main_to_process = ipc_queue_main_to_process
         self.pause_value = pause_value
         self.exit_value = exit_value
         self.enable_visualization_value = enable_visualization_value
@@ -51,6 +57,9 @@ class Simulation(gym.Env):
         self.physics_client = None
         self.com_marker = None
         self.reward_system = reward_system
+        self.should_save_model = False
+
+        self.tracker = best_model_tracker.BestModelTracker(self)
 
         # Configurações de simulação
         self.target_pitch_rad = math.radians(1)  # rad
@@ -298,14 +307,17 @@ class Simulation(gym.Env):
 
         self.episode_count += 1
 
+        self.ipc_queue.put({"type": "tracker_status", "tracker_status": self.tracker.get_status()})
+
         # Criar dados do episódio
         episode_data = {
             "type": "episode_data",
-            "episode": self.episode_count,
-            "reward": self.episode_reward,
-            "time": self.episode_steps * self.time_step_s,
+            "episodes": self.episode_count,
+            "rewards": self.episode_reward,
+            "times": self.episode_steps * self.time_step_s,
             "steps": self.episode_steps,
-            "distance": self.episode_distance,
+            "total_steps": self.total_steps,
+            "distances": self.episode_distance,
             "success": self.episode_success,
             "imu_x": self.robot_x_position,
             "imu_y": self.robot_y_position,
@@ -355,25 +367,25 @@ class Simulation(gym.Env):
                     current_metrics = detailed_status["performance_metrics"]
                     current_phase_config = dpg_system.phases[current_phase]
                     print(f"   REQUISITOS FASE {current_phase}:")
-                    
-                    success_rate_met = current_metrics['success_rate'] >= current_phase_config.transition_conditions['min_success_rate']
+
+                    success_rate_met = current_metrics["success_rate"] >= current_phase_config.transition_conditions["min_success_rate"]
                     success_icon = "✅" if success_rate_met else "❌"
                     print(f"     {success_icon} Min success rate: {current_phase_config.transition_conditions['min_success_rate']} (Atual: {current_metrics['success_rate']:.3f})")
-        
-                    distance_met = current_metrics['avg_distance'] >= current_phase_config.transition_conditions['min_avg_distance']
+
+                    distance_met = current_metrics["avg_distance"] >= current_phase_config.transition_conditions["min_avg_distance"]
                     distance_icon = "✅" if distance_met else "❌"
                     print(f"     {distance_icon} Min avg distance: {current_phase_config.transition_conditions['min_avg_distance']}m (Atual: {current_metrics['avg_distance']:.3f}m)")
 
-                    roll_met = current_metrics['avg_roll'] <= current_phase_config.transition_conditions['max_avg_roll']
+                    roll_met = current_metrics["avg_roll"] <= current_phase_config.transition_conditions["max_avg_roll"]
                     roll_icon = "✅" if roll_met else "❌"
                     print(f"     {roll_icon} Max avg roll: {current_phase_config.transition_conditions['max_avg_roll']} (Atual: {current_metrics['avg_roll']:.3f})")
 
-                    min_episodes = current_phase_config.transition_conditions.get('min_episodes', 10)
-                    episodes_met = detailed_status['episodes_in_phase'] >= min_episodes
+                    min_episodes = current_phase_config.transition_conditions.get("min_episodes", 10)
+                    episodes_met = detailed_status["episodes_in_phase"] >= min_episodes
                     episodes_icon = "✅" if episodes_met else "❌"
                     print(f"     {episodes_icon} Min episodes: {min_episodes} (Atual: {detailed_status['episodes_in_phase']})")
 
-                    if 'consistency_count' in current_phase_config.transition_conditions:
+                    if "consistency_count" in current_phase_config.transition_conditions:
                         consistency_met = dpg_system._check_performance_consistency()
                         consistency_icon = "✅" if consistency_met else "❌"
                         print(f"     {consistency_icon} Consistência: {current_phase_config.transition_conditions['consistency_count']} episódios consistentes")
@@ -422,6 +434,13 @@ class Simulation(gym.Env):
         """
         Executa uma ação e retorna (observação, recompensa, done, info).
         """
+        if self.should_save_model:
+            self.ipc_queue.put({"type": "tracker_status", "tracker_status": self.tracker.get_status()})
+            save_path = os.path.join(utils.TEMP_MODEL_SAVE_PATH, f"autosave_{self.tracker.auto_save_count}")
+            utils.ensure_directory(save_path)
+            model_full_path = os.path.join(save_path, f"autosave_model_{self.tracker.auto_save_count}.zip")
+            self.save_and_confirm(save_path, model_full_path, autosave=True)
+            self.should_save_model = False
 
         self.apply_action(action)
 
@@ -502,6 +521,22 @@ class Simulation(gym.Env):
         reward = self.reward_system.calculate_reward(self, action)
         self.episode_reward += reward
 
+        if self.config_changed_value.value:  # Se houve mudança de configuração
+            if self.pause_value.value:
+                self.ipc_queue.put({"type": "tracker_status", "tracker_status": self.tracker.get_status()})
+
+                while self.pause_value.value and not self.exit_value.value:
+                    self.try_to_resolve_config_change()
+                    time.sleep(0.1)
+
+            self.try_to_resolve_config_change()
+
+        else:  # Desabilita espera real-time quando há mudança de configuração pendente
+            if self.is_visualization_enabled and self.is_real_time_enabled:
+                time.sleep(self.time_step_s)
+
+        self.should_save_model = self.tracker.update()
+
         # Coletar info final quando o episódio terminar
         if self.episode_done:
             if hasattr(self.reward_system, "dpg_manager") and self.reward_system.dpg_manager and hasattr(self.reward_system.dpg_manager, "gait_phase_dpg"):
@@ -532,17 +567,9 @@ class Simulation(gym.Env):
 
         self.episode_last_action = action
 
-        if self.config_changed_value.value:  # Se houve mudança de configuração
-            if self.pause_value.value:
-                while self.pause_value.value and not self.exit_value.value:
-                    self.try_to_resolve_config_change()
-                    time.sleep(0.1)
-
-            self.try_to_resolve_config_change()
-
-        else:  # Desabilita espera real-time quando há mudança de configuração pendente
-            if self.is_visualization_enabled and self.is_real_time_enabled:
-                time.sleep(self.time_step_s)
+        if self.tracker.should_pause():
+            self.ipc_queue.put({"type": "autopause_request", "tracker_status": self.tracker.get_status()})
+            self.tracker.patience_steps += self.tracker.original_patience
 
         if self.exit_value.value:
             self.logger.info("Sinal de saída recebido em step. Finalizando simulação.")
@@ -554,8 +581,27 @@ class Simulation(gym.Env):
         self.config_changed_value.value = 0
         self.is_real_time_enabled = self.enable_real_time_value.value
 
+        try:
+            msg = self.ipc_queue_main_to_process.get_nowait()
+            data_type = msg.get("type")
+
+            if data_type == "save_request":
+                save_path = msg.get("save_session_path")
+                model_full_path = os.path.join(save_path, "latest_model.zip")
+                self.save_and_confirm(save_path, model_full_path, autosave=False)
+
+        except queue.Empty:
+            pass
+
         if self.last_selected_camera != self.camera_selection_value.value or self.is_visualization_enabled != self.enable_visualization_value.value:
             self.config_changed_value.value = 1  # Para esta mudança de configuração, precisamos aguardar o término do episódio atual para reiniciar a simulação
+
+    def save_and_confirm(self, save_path, model_full_path, autosave):
+        """Salva modelo do agente, solicita salvamento de dados da gui, pausa treinamento enquanto gui salva os dados"""
+        self.pause_value.value = True
+        self.config_changed_value.value = True
+        self.agent.save_model(model_full_path)
+        self.ipc_queue.put({"type": "agent_model_saved", "save_path": save_path, "autosave": autosave, "tracker_status": self.tracker.get_status()})
 
     def close(self):
         p.disconnect()

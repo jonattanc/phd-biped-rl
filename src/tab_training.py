@@ -18,10 +18,9 @@ import numpy as np
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from best_model_tracker import BestModelTracker
 import train_process
 import utils
-from utils import ensure_directory, ENVIRONMENT_PATH, ROBOTS_PATH
+from utils import ENVIRONMENT_PATH, ROBOTS_PATH
 
 
 class TrainingTab:
@@ -36,6 +35,7 @@ class TrainingTab:
         self.current_env = ""
         self.current_robot = ""
         self.current_algorithm = ""
+        self.tracker_status = None
         self.episode_data = {
             "episodes": [],
             "rewards": [],
@@ -86,11 +86,13 @@ class TrainingTab:
         self.config_changed_values = []
         self.gui_log_queue = queue.Queue()
         self.ipc_queue = multiprocessing.Queue()
+        self.ipc_queue_main_to_process = multiprocessing.Queue()
         self.ipc_thread = None
         self.plot_data_lock = threading.Lock()
         self.gui_closed = False
         self.after_ids = {}
         self.new_plot_data = False
+        self.last_pause_value = 0
 
         # Configurações de treinamento
         self.total_steps = 0
@@ -100,15 +102,8 @@ class TrainingTab:
         self.pause_time = None
         self.current_episode = 0
         self.loaded_episode_count = 0
-        self.training_data_dir = utils.TRAINING_DATA_PATH
-        self.current_training_session = None
         self.is_resuming = False
         self.resumed_session_dir = None
-        self.hyperparams = {}
-
-        # Sistema de tracking de performance
-        self.tracker = BestModelTracker()
-        self.current_best_model_path = None
 
         # Configurações de plot
         self.plot_titles = ["Recompensa por Episódio", "Duração do Episódio", "Distância Percorrida (X)", "Posição IMU (Y, Z)", "Orientação (Roll, Pitch, Yaw)"]
@@ -182,7 +177,7 @@ class TrainingTab:
         row2_frame = ttk.Frame(control_frame)
         row2_frame.grid(row=1, column=0, columnspan=12, sticky=(tk.W, tk.E), pady=1)
 
-        self.save_training_btn = ttk.Button(row2_frame, text="Salvar Treino", command=self.save_training_data, state=tk.DISABLED, width=15)
+        self.save_training_btn = ttk.Button(row2_frame, text="Salvar Treino", command=self.save_training_callback_btn, state=tk.DISABLED, width=15)
         self.save_training_btn.grid(row=0, column=0, padx=1)
 
         self.load_training_btn = ttk.Button(row2_frame, text="Carregar Treino", command=self.load_training_data, width=15)
@@ -405,7 +400,7 @@ class TrainingTab:
 
         if self.is_resuming:
             self.logger.info(f"Retomando treinamento - current_episode: {self.current_episode}")
-            self._resume_training()
+            # self._resume_training()
         else:
             self.current_episode = 0
             self.loaded_episode_count = 0
@@ -424,18 +419,16 @@ class TrainingTab:
             self.current_algorithm = self.algorithm_var.get()
 
             # Limpar dados anteriores
+            self.tracker_status = None
             self.episode_data = {key: [] for key in self.episode_data.keys()}
             self.training_time = 0
+            self.total_steps = 0
             self.steps_per_second = 0
             self._initialize_plots()
 
-            if not hasattr(self, "best_models_dir"):
-                self.best_models_dir = utils.ensure_directory(os.path.join(utils.TRAINING_DATA_PATH, "best_models_temp"))
-
-            # Reiniciar dados
-            self.tracker.reset()
-            self.total_steps = 0
-            self.current_best_model_path = None
+            shutil.rmtree(utils.TEMP_MODEL_SAVE_PATH)
+            utils.ensure_directory(utils.TEMP_MODEL_SAVE_PATH)
+            self.last_autosave_folder = None
 
             self.logger.info("Sistema de tracking preparado para novo treinamento")
 
@@ -462,6 +455,7 @@ class TrainingTab:
                     self.current_robot,
                     self.current_algorithm,
                     self.ipc_queue,
+                    self.ipc_queue_main_to_process,
                     self.reward_system,
                     pause_val,
                     exit_val,
@@ -482,18 +476,8 @@ class TrainingTab:
 
             self.logger.info(f"Processo de treinamento iniciado: {self.current_env} + {self.current_robot} + {self.current_algorithm}")
 
-            # Criar sessão de treinamento atual
-            self.current_training_session = {
-                "start_time": datetime.now(),
-                "environment": self.current_env,
-                "robot": self.current_robot,
-                "algorithm": self.current_algorithm,
-                "episode_data": self.episode_data.copy(),
-                "hyperparams": self.hyperparams,
-            }
-
             # Habilitar botões
-            self.save_training_btn.config(state=tk.DISABLED)
+            self.save_training_btn.config(state=tk.NORMAL)
             self.pause_btn.config(state=tk.NORMAL)
             self.stop_btn.config(state=tk.NORMAL)
             self.start_btn.config(text="Iniciar Treino")
@@ -502,70 +486,6 @@ class TrainingTab:
         except Exception as e:
             self.logger.exception("Erro ao iniciar treinamento")
             messagebox.showerror("Erro", f"Erro ao iniciar treinamento: {e}")
-            self.start_btn.config(state=tk.NORMAL, text="Iniciar Treino")
-            self.enable_other_tabs()
-
-    def _resume_training(self):
-        """Retoma um treinamento existente"""
-        try:
-            # Encontrar o modelo para retomada
-            model_path = self._find_model_for_resume()
-            if not model_path:
-                return
-
-            # Iniciar processo de retomada
-            pause_val = multiprocessing.Value("b", 0)
-            exit_val = multiprocessing.Value("b", 0)
-
-            self.pause_values.append(pause_val)
-            self.exit_values.append(exit_val)
-            enable_visualization_val = multiprocessing.Value("b", self.enable_visualization_var.get())
-            realtime_val = multiprocessing.Value("b", self.real_time_var.get())
-            camera_selection_val = multiprocessing.Value("i", self.camera_selection_int)
-            config_changed_val = multiprocessing.Value("b", 0)
-
-            self.logger.info(f"Retomando treinamento - episódio: {self.current_episode}")
-
-            # Carregar estado do tracker se existir
-            tracker_state_path = os.path.join(self.resumed_session_dir, "tracker_state.json")
-            if os.path.exists(tracker_state_path):
-                self.tracker.load_state(tracker_state_path)
-                self.total_steps = self.tracker.total_steps
-                self.logger.info(f"Estado do tracker carregado: {self.tracker.get_status()}")
-
-            p = multiprocessing.Process(
-                target=train_process.process_runner,
-                args=(
-                    self.current_env,
-                    self.current_robot,
-                    self.current_algorithm,
-                    self.ipc_queue,
-                    self.reward_system,
-                    pause_val,
-                    exit_val,
-                    enable_visualization_val,
-                    realtime_val,
-                    camera_selection_val,
-                    config_changed_val,
-                    self.device,
-                    self.current_episode,
-                    model_path,
-                    self.enable_dpg_var.get(),
-                ),
-            )
-            p.start()
-            self.processes.append(p)
-
-            self.logger.info(f"Processo de treinamento retomado: {self.current_env} + {self.current_robot} + {self.current_algorithm}")
-            self.save_training_btn.config(state=tk.DISABLED)
-            self.pause_btn.config(state=tk.NORMAL)
-            self.stop_btn.config(state=tk.NORMAL)
-            self.start_btn.config(text="Iniciar Treino")
-            self.is_resuming = False
-
-        except Exception as e:
-            self.logger.exception("Erro ao retomar treinamento")
-            messagebox.showerror("Erro", f"Erro ao retomar treinamento: {e}")
             self.start_btn.config(state=tk.NORMAL, text="Iniciar Treino")
             self.enable_other_tabs()
 
@@ -600,18 +520,17 @@ class TrainingTab:
 
         raise FileNotFoundError(f"Nenhum modelo (.zip) encontrado em {self.resumed_session_dir}")
 
-    def pause_training(self):
+    def pause_training(self, force_pause=False):
         """Pausa ou retoma o treinamento"""
         if not self.pause_values:
             self.logger.warning("Nenhum processo de treinamento ativo.")
             return
 
         try:
-            if self.pause_values[-1].value:
+            if self.pause_values[-1].value and not force_pause:
                 self.logger.info("Retomando treinamento.")
                 self.pause_values[-1].value = 0
                 self.pause_btn.config(text="Pausar")
-                self.save_training_btn.config(state=tk.DISABLED)
 
                 if self.pause_time is not None:
                     paused_duration = time.time() - self.pause_time
@@ -622,38 +541,13 @@ class TrainingTab:
                 self.logger.info("Pausando treinamento.")
                 self.pause_values[-1].value = 1
                 self.pause_btn.config(text="Retomar")
-                self.save_training_btn.config(state=tk.NORMAL)
                 self.pause_time = time.time()
 
+            self.last_pause_value = self.pause_values[-1].value
             self.config_changed_values[-1].value = 1
-
-            # Salvar modelo durante pausa/retomada
-            self._save_model_immediately()
 
         except Exception as e:
             self.logger.exception("Erro ao pausar/retomar treinamento")
-
-    def _save_model_immediately(self):
-        """Salva o modelo imediatamente ao pausar - SEMPRE no current_session"""
-        try:
-            # SEMPRE salvar no current_session para pausa
-            temp_dir = utils.ensure_directory(os.path.join(utils.TRAINING_DATA_PATH, "current_session", "models"))
-            model_path = os.path.join(temp_dir, "model.zip")
-
-            # Usar sistema de arquivo para garantir o salvamento
-            control_dir = utils.ensure_directory(utils.TRAINING_CONTROL_PATH)
-            control_file = f"save_model_{int(time.time() * 1000)}.json"
-            control_path = os.path.join(control_dir, control_file)
-
-            control_data = {"model_path": model_path, "timestamp": time.time(), "immediate": True}
-
-            with open(control_path, "w") as f:
-                json.dump(control_data, f, indent=2)
-
-            self.logger.info(f"Salvamento imediato solicitado: {model_path}")
-
-        except Exception as e:
-            self.logger.exception("Erro ao solicitar salvamento imediato")
 
     def disable_other_tabs(self):
         current = self.notebook.select()
@@ -685,152 +579,73 @@ class TrainingTab:
 
         self.logger.info("Treinamento finalizado pelo usuário")
 
-    def save_training_data(self):
+    def save_training_callback_btn(self):
         """Salva todos os dados do treinamento atual incluindo o modelo"""
-        if not self.current_training_session:
+        if self.training_start_time is None:
             messagebox.showwarning("Aviso", "Nenhum treinamento em andamento para salvar.")
             return
 
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        session_name = f"{self.current_env}__{self.current_robot}__{timestamp}"
+        save_session_path = utils.ensure_directory(os.path.join(utils.TRAINING_DATA_PATH, session_name))
+
+        self.ipc_queue_main_to_process.put({"type": "save_request", "save_session_path": save_session_path})
+        self.config_changed_values[-1].value = 1
+
+    def save_training_data(self, is_autosave, save_path, tracker_status):
         try:
-            # Usar ensure_directory do utils
-            ensure_directory(self.training_data_dir)
-
-            # Criar pasta específica para esta sessão
-            timestamp = self.current_training_session["start_time"].strftime("%Y%m%d_%H%M%S")
-            session_name = f"{self.current_env}_{self.current_robot}_{self.current_algorithm}_{timestamp}"
-            session_dir = ensure_directory(os.path.join(self.training_data_dir, session_name))
-
-            # Determinar episódio atual
-            current_episode = max(self.episode_data["episodes"]) if self.episode_data["episodes"] else 0
             total_episodes = len(self.episode_data["episodes"])
 
-            # Salvar dados do treinamento
             training_data = {
                 "session_info": {
+                    "is_autosave": is_autosave,
                     "environment": self.current_env,
                     "robot": self.current_robot,
                     "algorithm": self.current_algorithm,
-                    "start_time": self.current_training_session["start_time"].isoformat(),
+                    "training_start_time": self.training_start_time,
+                    "save_time": datetime.now().isoformat(),
                     "total_steps": self.total_steps,
-                    "current_episode": current_episode,
                     "total_episodes": total_episodes,
                     "device": self.device,
                 },
+                "tracker_status": tracker_status,
                 "episode_data": self.episode_data,
-                "hyperparams": self.hyperparams,
             }
-            training_data_path = os.path.join(session_dir, "training_data.json")
+
+            training_data_path = os.path.join(save_path, "training_data.json")
+
             with open(training_data_path, "w", encoding="utf-8") as f:
-                json.dump(training_data, f, indent=2, ensure_ascii=False)
+                json.dump(training_data, f, indent=4, ensure_ascii=False)
 
-            best_model_used = False
+            self._save_additional_data(save_path)
 
-            if hasattr(self, "current_best_model_path") and self.current_best_model_path and os.path.exists(self.current_best_model_path):
-                # Copiar o melhor modelo automático para a sessão
-                models_dir = utils.ensure_directory(os.path.join(session_dir, "models"))
-                final_model_path = os.path.join(models_dir, "model.zip")
+            if is_autosave:
+                self.last_autosave_folder = save_path
 
-                shutil.copy2(self.current_best_model_path, final_model_path)
-                best_model_used = True
-
-                self.logger.info(f"Usando melhor modelo automático: {os.path.basename(self.current_best_model_path)}")
-
-            if not best_model_used:
-                # Fallback para sistema tradicional
-                self.logger.info("Usando sistema tradicional de salvamento")
-                model_saved = self._save_model_with_control(session_dir, session_name)
             else:
-                model_saved = True
+                if self.last_autosave_folder is None:
+                    messagebox.showwarning("Aviso", f"Treinamento salvo com sucesso, porém não há histórico de salvamento automático por melhoria de recompensa\nDiretório: {save_path}")
 
-            # Salvar informações básicas do tracker se existir
-            if hasattr(self, "tracker"):
-                tracker_info = {"best_reward": self.tracker.best_reward, "best_distance": self.tracker.best_distance, "total_steps": self.tracker.total_steps, "used_best_model": best_model_used}
-
-                with open(os.path.join(session_dir, "training_info.json"), "w") as f:
-                    json.dump(tracker_info, f, indent=2)
-
-            # Salvar modelo usando sistema de controle
-            model_saved = self._save_model_with_control(session_dir, session_name)
-
-            # Salvar logs e gráficos
-            self._save_additional_data(session_dir)
-
-            # Mensagem final
-            if model_saved:
-                messagebox.showinfo("Sucesso", f"Treinamento salvo com sucesso!\n" f"Diretório: {session_dir}\n" f"Pronto para retomada!")
-            else:
-                messagebox.showwarning("Aviso", f"Dados salvos, mas modelo pode não estar atualizado.\n" f"Tente pausar o treinamento antes de salvar.\n" f"Diretório: {session_dir}")
+                else:
+                    autosave_copy_path = os.path.join(save_path, "last_autosave")
+                    shutil.copytree(self.last_autosave_folder, autosave_copy_path, dirs_exist_ok=True)
+                    messagebox.showinfo("Sucesso", f"Treinamento salvo com sucesso!\nDiretório: {save_path}")
 
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao salvar treinamento: {e}")
             self.logger.exception("Erro ao salvar treinamento")
 
-    def _save_model_with_control(self, session_dir, session_name):
-        """Salva modelo usando sistema de controle OU copia do current_session"""
-        try:
-            models_dir = utils.ensure_directory(os.path.join(session_dir, "models"))
-            model_path = os.path.join(models_dir, "model.zip")
-
-            self.logger.info(f"INICIANDO SALVAMENTO DO MODELO: {model_path}")
-
-            # PRIMEIRO: Tentar copiar do current_session (se existe do salvamento na pausa)
-            current_session_model = os.path.join(utils.TRAINING_DATA_PATH, "current_session", "models", "model.zip")
-            if os.path.exists(current_session_model):
-                self.logger.info(f"Copiando modelo do current_session: {current_session_model}")
-                shutil.copy2(current_session_model, model_path)
-                self.logger.info(f"Modelo copiado com sucesso: {model_path}")
-                return True
-
-            # SEGUNDO: Se não existe no current_session, usar sistema de controle
-            control_dir = utils.ensure_directory(utils.TRAINING_CONTROL_PATH)
-            control_file = f"save_model_{int(time.time() * 1000)}.json"
-            control_path = os.path.join(control_dir, control_file)
-
-            control_data = {"model_path": model_path, "timestamp": time.time(), "session": session_name}
-
-            with open(control_path, "w") as f:
-                json.dump(control_data, f, indent=2)
-
-            self.logger.info(f"Arquivo de controle criado: {control_path}")
-
-            # Aguardar salvamento
-            max_wait = 10  # Reduzido para 10 segundos
-            check_interval = 0.5  # Verificar mais frequentemente
-
-            for wait_time in range(max_wait):
-                if os.path.exists(model_path):
-                    file_size = os.path.getsize(model_path)
-                    self.logger.info(f"MODELO SALVO: {model_path} ({file_size} bytes)")
-
-                    # Limpar arquivo de controle
-                    try:
-                        if os.path.exists(control_path):
-                            os.remove(control_path)
-                            self.logger.info("Arquivo de controle removido")
-                    except Exception as e:
-                        pass
-
-                    return True
-                time.sleep(check_interval)
-
-            self.logger.warning(f"Timeout ao aguardar salvamento do modelo")
-            return False
-
-        except Exception as e:
-            self.logger.exception("Erro no sistema de controle de salvamento")
-            return False
-
-    def _save_additional_data(self, session_dir):
+    def _save_additional_data(self, save_path):
         """Salva logs e gráficos adicionais"""
         try:
             # Salvar logs
-            logs_dir = ensure_directory(os.path.join(session_dir, "logs"))
+            logs_dir = utils.ensure_directory(os.path.join(save_path, "logs"))
             log_files = [f for f in os.listdir("logs") if f.endswith(".txt")]
             for log_file in log_files:
                 shutil.copy2(os.path.join("logs", log_file), logs_dir)
 
             # Salvar gráficos
-            plots_dir = ensure_directory(os.path.join(session_dir, "plots"))
+            plots_dir = utils.ensure_directory(os.path.join(save_path, "plots"))
             self.save_plots_to_directory(plots_dir)
 
         except Exception as e:
@@ -839,7 +654,7 @@ class TrainingTab:
     def load_training_data(self):
         """Carrega dados de treinamento salvos e prepara para retomada"""
         try:
-            session_dir = filedialog.askdirectory(title="Selecione a pasta do treinamento", initialdir=self.training_data_dir)
+            session_dir = filedialog.askdirectory(title="Selecione a pasta do treinamento", initialdir=utils.TRAINING_DATA_PATH)
 
             if not session_dir:
                 return
@@ -893,7 +708,6 @@ class TrainingTab:
         """Restaura dados do treinamento carregado"""
         session_info = training_data["session_info"]
         self.episode_data = training_data["episode_data"]
-        self.hyperparams = training_data.get("hyperparams", {})
 
         saved_current_episode = session_info.get("current_episode", 0)
         total_episodes = session_info.get("total_episodes", 0)
@@ -909,15 +723,6 @@ class TrainingTab:
         self.current_env = session_info["environment"]
         self.current_robot = session_info["robot"]
         self.current_algorithm = session_info["algorithm"]
-
-        self.current_training_session = {
-            "start_time": datetime.fromisoformat(session_info["start_time"]),
-            "environment": self.current_env,
-            "robot": self.current_robot,
-            "algorithm": self.current_algorithm,
-            "episode_data": self.episode_data.copy(),
-            "hyperparams": self.hyperparams,
-        }
 
         # Tentar carregar informações do tracker se existirem
         training_info_path = os.path.join(session_dir, "training_info.json")
@@ -935,10 +740,6 @@ class TrainingTab:
 
             except Exception as e:
                 self.logger.exception("Erro ao carregar informações de treino")
-
-        # Configurar sistema básico se não existir
-        if not hasattr(self, "best_models_dir"):
-            self.best_models_dir = utils.ensure_directory(os.path.join(utils.TRAINING_DATA_PATH, "best_models_temp"))
 
     def export_plots(self):
         """Exporta gráficos como imagens para uso na tese"""
@@ -1122,10 +923,12 @@ class TrainingTab:
 
         return f"Training time: {formatted_time} | Total Steps: {total_steps:,} | Steps/s: {steps_per_second:.1f} | Distância filtrada: {mean_distance:.2f}m"
 
-    def _update_step_counter(self):
-        """Atualiza o contador de steps periodicamente"""
+    def _update_gui_info(self):
+        """Atualiza o contador de steps e outras informações periodicamente"""
         if self.gui_closed:
             return
+
+        self._update_tracker_status()
 
         if self.pause_time is None and self.training_start_time is not None and self.total_steps is not None and self.exit_values[-1].value == 0:
             current_time = time.time()
@@ -1139,8 +942,8 @@ class TrainingTab:
 
             self.steps_label.config(text=self.build_steps_label_text(self.training_time, self.total_steps, self.steps_per_second))
 
-        after_id = self.root.after(500, self._update_step_counter)
-        self.after_ids["_update_step_counter"] = after_id
+        after_id = self.root.after(500, self._update_gui_info)
+        self.after_ids["_update_gui_info"] = after_id
 
     def _refresh_plots(self):
         """Atualiza os gráficos com os dados atuais"""
@@ -1258,11 +1061,8 @@ class TrainingTab:
             if self.pause_values and not self.pause_values[-1].value:
                 self.pause_values[-1].value = 1
                 self.config_changed_values[-1].value = 1
+                self.last_pause_value = self.pause_values[-1].value
                 self.pause_btn.config(text="Retomar")
-                self.save_training_btn.config(state=tk.NORMAL)
-
-                # Salvar modelo atual antes de pausar
-                self._save_best_model_automatically("pre_pause")
 
                 # Mostrar mensagem informativa
                 self.root.after(100, lambda: self._show_auto_pause_message())
@@ -1270,25 +1070,25 @@ class TrainingTab:
         except Exception as e:
             self.logger.exception("Erro ao ativar pausa automática")
 
-    def _show_auto_pause_message(self):
+    def _show_auto_pause_message(self, tracker_status):
         """Mostra mensagem de pausa automática"""
         messagebox.showinfo(
             "Treinamento Pausado Automaticamente",
-            f"O treinamento foi pausado automaticamente após {self.tracker.patience_steps:,} steps sem melhoria significativa.\n\n"
-            f"• Melhor recompensa: {self.tracker.best_reward:.2f}\n"
-            f"• Melhor distância: {self.tracker.best_distance:.2f}m\n"
-            f"• Steps totais: {self.tracker.total_steps:,}\n"
-            f"• Steps sem melhoria: {self.tracker.steps_since_improvement:,}\n\n"
+            f"O treinamento foi pausado automaticamente após {tracker_status["patience_steps"]:,} steps sem melhoria significativa.\n\n"
+            f"• Melhor recompensa: {tracker_status["best_reward"]:.2f}\n"
+            f"• Melhor distância: {tracker_status["best_distance"]:.2f}m\n"
+            f"• Steps totais: {self.total_steps:,}\n"
+            f"• Steps sem melhoria: {tracker_status["steps_since_improvement"]:,}\n\n"
             "Clique em 'Retomar' para continuar o treinamento ou 'Salvar Treino' para finalizar.",
         )
 
     def _update_tracker_status(self):
         """Atualiza o label de status do tracker"""
         try:
-            if not hasattr(self, "tracker_status_label") or not self.tracker_status_label.winfo_exists():
+            if self.tracker_status is None:
                 return
 
-            status = self.tracker.get_status()
+            status = self.tracker_status
 
             # Criar texto de status com emojis para melhor visualização
             status_parts = []
@@ -1296,8 +1096,8 @@ class TrainingTab:
             status_parts.append(f"Distância: {status['best_distance']:.2f}m")
             status_parts.append(f"Sem melhoria: {status['steps_since_improvement']:,}")
 
-            # Usar get() para evitar KeyError
             auto_save_count = status.get("auto_save_count", 0)
+
             if auto_save_count > 0:
                 status_parts.append(f"Salvamentos: {auto_save_count}")
 
@@ -1316,71 +1116,13 @@ class TrainingTab:
             self.logger.exception("Erro ao atualizar status do tracker")
             self.tracker_status_label.config(text="Status: Erro no tracker")
 
-    def _save_best_model_automatically(self, reason="improvement"):
-        """Salva automaticamente o melhor modelo"""
-        try:
-            # Verificar se o diretório existe
-            if not hasattr(self, "best_models_dir"):
-                self.best_models_dir = utils.ensure_directory(os.path.join(utils.TRAINING_DATA_PATH, "best_models_temp"))
-
-            # Gerar nome do arquivo
-            filename = self.tracker.get_auto_save_filename()
-            model_path = os.path.join(self.best_models_dir, filename)
-
-            # Usar sistema de controle para salvar
-            control_dir = utils.ensure_directory(utils.TRAINING_CONTROL_PATH)
-            control_file = f"auto_save_{int(time.time() * 1000)}.json"
-            control_path = os.path.join(control_dir, control_file)
-
-            control_data = {
-                "model_path": model_path,
-                "timestamp": time.time(),
-                "best_reward": self.tracker.best_reward,
-                "best_distance": self.tracker.best_distance,
-                "total_steps": self.tracker.total_steps,
-                "reason": reason,
-                "auto_save": True,
-            }
-
-            with open(control_path, "w") as f:
-                json.dump(control_data, f, indent=2)
-
-            self.current_best_model_path = model_path
-
-            self.logger.info(f"Modelo salvo automaticamente ({reason}): {os.path.basename(model_path)}")
-
-            # Atualizar status
-            self._update_tracker_status()
-
-        except Exception as e:
-            self.logger.exception("Erro ao salvar modelo automaticamente")
-
     def _handle_episode_data(self, episode_data):
-        """Processa dados do episódio para o tracker"""
         try:
-            episode_reward = episode_data.get("reward", 0)
-            episode_distance = episode_data.get("distance", 0)
-
-            # Atualizar tracker
-            should_save, reason = self.tracker.update(episode_reward, episode_distance, self.total_steps, self.minimum_steps_to_save)
-
-            if should_save:
-                self.logger.info(f"NOVA MELHORIA! Recompensa: {episode_reward:.2f} (Motivo: {reason})")
-                self._save_best_model_automatically(reason)
-
-            # Verificar se deve pausar por plateau
-            if self.tracker.should_pause():
-                self.logger.info("Pausa automática por plateau de performance")
-                self._trigger_auto_pause()
-
             # Atualizar DPG com fases da marcha
             if hasattr(self.reward_system, "dpg_manager") and self.reward_system.dpg_manager:
                 self.reward_system.dpg_manager.update_phase_progression(episode_data)
             elif hasattr(self.reward_system, "gait_phase_dpg") and self.reward_system.gait_phase_dpg:
                 self.reward_system.gait_phase_dpg.update_phase(episode_data)
-
-            # Atualizar status na interface
-            self._update_tracker_status()
 
         except Exception as e:
             self.logger.exception("Erro ao processar dados do episódio para tracker")
@@ -1404,7 +1146,6 @@ class TrainingTab:
             while True:
                 try:
                     msg = self.ipc_queue.get(timeout=1.0)
-
                     if msg is None:
                         self.logger.info("ipc_runner finalizando")
                         break
@@ -1413,49 +1154,31 @@ class TrainingTab:
                         self.gui_log_queue.put(msg)
                         continue
 
-                    data_type = msg.get("type")
+                    data_type = msg.pop("type")
 
                     if data_type == "episode_data":
+                        self.total_steps = msg.pop("total_steps")
+
                         with self.plot_data_lock:
-                            self.episode_data["episodes"].append(msg["episode"])
-                            self.episode_data["rewards"].append(msg["reward"])
-                            self.episode_data["times"].append(msg["time"])
-                            self.episode_data["distances"].append(msg["distance"])
-                            self.episode_data["imu_x"].append(msg.get("imu_x", 0))
-                            self.episode_data["imu_y"].append(msg.get("imu_y", 0))
-                            self.episode_data["imu_z"].append(msg.get("imu_z", 0))
-                            self.episode_data["imu_x_vel"].append(msg.get("imu_x_vel", 0))
-                            self.episode_data["imu_y_vel"].append(msg.get("imu_y_vel", 0))
-                            self.episode_data["imu_z_vel"].append(msg.get("imu_z_vel", 0))
-                            roll = msg.get("roll", 0)
-                            pitch = msg.get("pitch", 0)
-                            yaw = msg.get("yaw", 0)
-                            roll_vel = msg.get("roll_vel", 0)
-                            pitch_vel = msg.get("pitch_vel", 0)
-                            yaw_vel = msg.get("yaw_vel", 0)
-                            roll_deg = math.degrees(roll)
-                            pitch_deg = math.degrees(pitch)
-                            yaw_deg = math.degrees(yaw)
-                            roll_vel_deg = math.degrees(roll_vel)
-                            pitch_vel_deg = math.degrees(pitch_vel)
-                            yaw_vel_deg = math.degrees(yaw_vel)
-                            self.episode_data["roll_deg"].append(roll_deg)
-                            self.episode_data["pitch_deg"].append(pitch_deg)
-                            self.episode_data["yaw_deg"].append(yaw_deg)
-                            self.episode_data["roll_vel_deg"].append(roll_vel_deg)
-                            self.episode_data["pitch_vel_deg"].append(pitch_vel_deg)
-                            self.episode_data["yaw_vel_deg"].append(yaw_vel_deg)
+                            for key, value in msg.items():
+                                if key not in self.episode_data:
+                                    self.episode_data[key] = []
+
+                                self.episode_data[key].append(value)
+
+                            self.episode_data["roll_deg"].append(math.degrees(msg.get("roll", 0)))
+                            self.episode_data["pitch_deg"].append(math.degrees(msg.get("pitch", 0)))
+                            self.episode_data["yaw_deg"].append(math.degrees(msg.get("yaw", 0)))
+                            self.episode_data["roll_vel_deg"].append(math.degrees(msg.get("roll_vel", 0)))
+                            self.episode_data["pitch_vel_deg"].append(math.degrees(msg.get("pitch_vel", 0)))
+                            self.episode_data["yaw_vel_deg"].append(math.degrees(msg.get("yaw_vel", 0)))
                             self.update_filtered_data()
 
                         self.new_plot_data = True
                         self._handle_episode_data(msg)
 
-                        # Atualizar contador de steps
-                        if self.total_steps is None:
-                            self.total_steps = msg.get("steps", 0)
-
-                        else:
-                            self.total_steps += msg.get("steps", 0)
+                    elif data_type == "tracker_status":
+                        self.tracker_status = msg.get("tracker_status")
 
                     elif data_type == "training_progress":
                         # Atualizar contador de steps
@@ -1466,15 +1189,15 @@ class TrainingTab:
                         self.logger.info("Janela do PyBullet pronta para visualização.")
                         self.focus_pybullet_window()
 
-                    elif data_type == "save_model":
-                        # Comando de salvamento - apenas registrar, não processar aqui
-                        model_path = msg.get("model_path", "desconhecido")
-                        self.logger.info(f"Comando de salvamento recebido na GUI: {model_path}")
+                    elif data_type == "agent_model_saved":
+                        # O modelo do agente foi salvo
+                        self.save_training_data(msg["autosave"], msg["save_path"], msg["tracker_status"])  # Salvar dados da gui na mesma pasta do modelo do agente
+                        self.pause_values[-1].value = self.last_pause_value  # Restaurar pause, pois o treinamento é pausado ao salvar o modelo do agente
+                        self.config_changed_values[-1].value = 1  # Ativa verificação de pause value pelo processo de treinamento
 
-                    elif data_type == "model_saved":
-                        # Confirmação de que o modelo foi salvo
-                        model_path = msg.get("model_path", "desconhecido")
-                        self.logger.info(f"Confirmação: Modelo salvo pelo processo: {model_path}")
+                    elif data_type == "autopause_request":
+                        self.pause_training(force_pause=True)
+                        self._show_auto_pause_message(msg["tracker_status"])
 
                     elif data_type == "done":
                         self.logger.info("Processo de treinamento finalizado.")
@@ -1485,12 +1208,9 @@ class TrainingTab:
                         self.enable_other_tabs()
                         self.is_resuming = False
 
-                    elif data_type == "minimum_steps_to_save":
-                        self.minimum_steps_to_save = msg["minimum_steps_to_save"]
-                        self.logger.info(f"Minimum steps to save updated: {self.minimum_steps_to_save}")
-
                     else:
                         self.logger.error(f"Tipo de dados desconhecido: {data_type} - Conteúdo: {msg}")
+
                 except queue.Empty:
                     # Timeout normal, continuar loop
                     continue
@@ -1576,8 +1296,8 @@ class TrainingTab:
         after_id = self.root.after(500, self._refresh_plots)
         self.after_ids["_refresh_plots"] = after_id
 
-        after_id = self.root.after(500, self._update_step_counter)
-        self.after_ids["_update_step_counter"] = after_id
+        after_id = self.root.after(500, self._update_gui_info)
+        self.after_ids["_update_gui_info"] = after_id
 
     @property
     def root(self):

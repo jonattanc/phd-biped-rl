@@ -1,45 +1,39 @@
 # best_model_tracker.py
-import time
 
 
 class BestModelTracker:
-    def __init__(self):
+    def __init__(self, sim):
         self.improvement_threshold = 0.05
-        self.patience_steps = 3e6
+        self.patience_steps = 2.5e6
+        self.original_patience = self.patience_steps
+
+        self.sim = sim
 
         self.best_reward = -float("inf")
         self.best_distance = 0.0
         self.steps_since_improvement = 0
-        self.total_steps = 0
         self.last_improvement_steps = 0
         self.auto_save_count = 0
+        self.reward_reference = 0
 
-        # Adicionar flag para controle de estado
-        self._active = True
-
-    def update(self, episode_reward, episode_distance, current_steps, minimum_steps_to_save):
+    def update(self):
         """Atualiza tracker com nova recompensa e retorna se houve melhoria"""
-        if not self._active:
-            return False, "tracker_inactive"
-
-        self.total_steps = current_steps
-
         # Atualizar melhor distância se for maior
-        if episode_distance > self.best_distance:
-            self.best_distance = episode_distance
+        if self.sim.episode_distance > self.best_distance:
+            self.best_distance = self.sim.episode_distance
 
-        if episode_reward < self.reward_reference:
-            self.reward_reference = episode_reward
+        if self.sim.episode_reward < self.reward_reference:
+            self.reward_reference = self.sim.episode_reward
 
         # Primeira recompensa sempre é considerada melhoria
         if self.best_reward == -float("inf"):
-            self.best_reward = episode_reward
-            self.last_improvement_steps = current_steps
+            self.best_reward = self.sim.episode_reward
+            self.last_improvement_steps = self.sim.total_steps
             self.steps_since_improvement = 0
-            return False, "first_reward"
+            return False
 
         # Calcular melhoria percentual
-        normalized_episode_reward = episode_reward - self.reward_reference
+        normalized_episode_reward = self.sim.episode_reward - self.reward_reference
         normalized_best_reward = self.best_reward - self.reward_reference
 
         if normalized_best_reward == 0:
@@ -48,54 +42,29 @@ class BestModelTracker:
         else:
             improvement = (normalized_episode_reward - normalized_best_reward) / abs(normalized_best_reward)
 
-        if improvement >= self.improvement_threshold and self.total_steps >= minimum_steps_to_save:
-            self.best_reward = episode_reward
+        if improvement >= self.improvement_threshold and self.sim.total_steps >= self.sim.agent.minimum_steps_to_save:
+            self.best_reward = self.sim.episode_reward
             self.steps_since_improvement = 0
-            self.last_improvement_steps = current_steps
+            self.last_improvement_steps = self.sim.total_steps
             self.auto_save_count += 1
-            return True, f"improvement_{improvement:.2%}"
+            return True
         else:
-            self.steps_since_improvement = current_steps - self.last_improvement_steps
-            return False, "no_improvement"
+            self.steps_since_improvement = self.sim.total_steps - self.last_improvement_steps
+            return False
 
     def should_pause(self):
         """Verifica se deve pausar por plateau"""
-        if not self._active:
-            return False
         return self.steps_since_improvement >= self.patience_steps
-
-    def get_auto_save_filename(self):
-        """Gera nome de arquivo para salvamento automático"""
-        timestamp = int(time.time())
-        return f"best_model_{timestamp}.zip"
 
     def get_status(self):
         """Retorna status atual para logging"""
-        if not self._active:
-            return {"status": "inactive"}
-
         return {
-            "best_reward": self.best_reward,
-            "best_distance": self.best_distance,
-            "total_steps": self.total_steps,
-            "steps_since_improvement": self.steps_since_improvement,
             "improvement_threshold": self.improvement_threshold,
             "patience_steps": self.patience_steps,
+            "best_reward": self.best_reward,
+            "best_distance": self.best_distance,
+            "steps_since_improvement": self.steps_since_improvement,
+            "last_improvement_steps": self.last_improvement_steps,
             "auto_save_count": self.auto_save_count,
-            "status": "active",
+            "reward_reference": self.reward_reference,
         }
-
-    def deactivate(self):
-        """Desativa o tracker para evitar erros"""
-        self._active = False
-
-    def reset(self):
-        """Reseta o tracker para novo treinamento"""
-        self._active = True
-        self.best_reward = -float("inf")
-        self.best_distance = 0.0
-        self.steps_since_improvement = 0
-        self.total_steps = 0
-        self.last_improvement_steps = 0
-        self.auto_save_count = 0
-        self.reward_reference = 0

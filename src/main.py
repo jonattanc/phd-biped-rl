@@ -90,6 +90,9 @@ def setup_folders():
 
         os.makedirs(folder, exist_ok=True)
 
+    utils.ensure_directory(utils.TRAINING_DATA_PATH)
+    utils.ensure_directory(utils.TEMP_MODEL_SAVE_PATH)
+
     return logs
 
 
