@@ -326,18 +326,23 @@ class Simulation(gym.Env):
         }
 
         # Adicionar informações de fase DPG se disponível
-        current_success = self.episode_success
         if hasattr(self.reward_system, "dpg_manager") and self.reward_system.dpg_manager is not None:
             try:
-                dpg_status = self.reward_system.dpg_manager.gait_phase_dpg.get_detailed_status()  # USAR detailed_status
+                dpg_status = self.reward_system.dpg_manager.gait_phase_dpg.get_detailed_status()
+                advanced_metrics = self.reward_system.dpg_manager.get_advanced_metrics()
                 episode_data.update(
                     {
                         "dpg_phase": dpg_status["current_phase"],
                         "dpg_phase_index": dpg_status["phase_index"],
                         "target_speed": dpg_status["target_speed"],
-                        "dpg_episodes_in_phase": dpg_status["episodes_in_phase"],  # ADICIONAR ESTE
+                        "dpg_episodes_in_phase": dpg_status["episodes_in_phase"], 
                         "dpg_success_rate": dpg_status["performance_metrics"]["success_rate"],
                         "dpg_avg_distance": dpg_status["performance_metrics"]["avg_distance"],
+                        "dass_samples": advanced_metrics.get("dass_samples", 0),
+                        "irl_confidence": advanced_metrics.get("irl_confidence", 0.0),
+                        "hdpg_convergence": advanced_metrics.get("hdpg_convergence", 0.0),
+                        "hdpg_active": advanced_metrics.get("hdpg_active", False),
+                        "phase_name": advanced_metrics.get("phase_name", "unknown")
                     }
                 )
             except Exception as e:

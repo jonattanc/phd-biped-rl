@@ -89,12 +89,15 @@ class DPGManager:
             # 1. Configurar DPG de fases da marcha
             self.gait_phase_dpg = GaitPhaseDPG(self.logger, self.reward_system)
             self.reward_system.gait_phase_dpg = self.gait_phase_dpg
-            
-            # 2. Aplicar configuração inicial de fase
+
+            # 2. Configurar componentes avançados
+            self.setup_advanced_dpg_components()
+
+            # 3. Aplicar configuração inicial de fase
             self.gait_phase_dpg._apply_phase_config()
-            
-            self.logger.info("Todos os componentes DPG configurados")
-            
+
+            self.logger.info("Todos os componentes DPG configurados (incluindo avançados)")
+
         except Exception as e:
             self.logger.error(f"Erro ao configurar componentes DPG: {e}")
             raise
@@ -516,3 +519,38 @@ class DPGManager:
             status.update(self.gait_phase_dpg.get_status())
         
         return status
+    
+    def setup_advanced_dpg_components(self):
+        """Configura componentes avançados do DPG"""
+        if not self.config.enabled or not self.gait_phase_dpg:
+            return
+
+        try:
+            # Inicializar componentes avançados
+            self.gait_phase_dpg._initialize_adaptive_reward_components()
+            self.logger.info("Componentes avançados DPG configurados (HDPG, IRL, DASS)")
+        except Exception as e:
+            self.logger.error(f"Erro ao configurar componentes avançados DPG: {e}")
+
+    def get_advanced_metrics(self):
+        """Retorna métricas avançadas do sistema"""
+        if not self.config.enabled or not self.gait_phase_dpg:
+            return {}
+        
+        metrics = {
+            "dpg_phase": self.gait_phase_dpg.current_phase,
+            "phase_name": self.gait_phase_dpg.phases[self.gait_phase_dpg.current_phase].name,
+            "dass_samples": len(self.gait_phase_dpg.dass_samples),
+            "hdpg_active": self.gait_phase_dpg.current_phase >= 3,
+            "irl_confidence": 0.0,
+            "hdpg_convergence": 0.0
+        }
+        
+        if hasattr(self.gait_phase_dpg, 'learned_reward_model') and self.gait_phase_dpg.learned_reward_model:
+            metrics["irl_confidence"] = self.gait_phase_dpg.learned_reward_model.get('confidence', 0.0)
+        
+        if self.gait_phase_dpg.current_phase >= 3:
+            metrics["hdpg_convergence"] = self.gait_phase_dpg._validate_hdpg_convergence()
+        
+        return metrics
+
