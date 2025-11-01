@@ -287,29 +287,30 @@ class GaitPhaseDPG:
                 "progress", "distance_bonus", "stability_roll", 
                 "stability_pitch", "alternating_foot_contact",
                 "gait_pattern_cross", "foot_clearance", "success_bonus",
-                "effort_square_penalty", "center_bonus",
+                "effort_square_penalty", "center_bonus", "pitch_forward_bonus",
             ],
             component_weights={
-                "progress": 0.4,
+                "progress": 0.5,
                 "distance_bonus": 0.25,
-                "stability_roll": 0.12,
-                "stability_pitch": 0.08,
+                "stability_roll": 0.08,
+                "stability_pitch": 0.05,
                 "alternating_foot_contact": 0.05,
                 "gait_pattern_cross": 0.04,
                 "foot_clearance": 0.03,
                 "success_bonus": 0.02,
                 "effort_square_penalty": 0.005,
                 "center_bonus": 0.005,
+                "pitch_forward_bonus": 0.01,
             },
             phase_duration=30,
             transition_conditions={
                 "min_success_rate": 0.4,
-                "min_avg_distance": 1.0,    
-                "max_avg_roll": 0.5,       
-                "min_avg_steps": 12,
-                "min_avg_speed": 0.4,
-                "min_alternating_score": 0.4,
-                "min_gait_coordination": 0.3,
+                "min_avg_distance": 0.8,    
+                "max_avg_roll": 0.6,       
+                "min_avg_steps": 10,
+                "min_avg_speed": 0.3,
+                "min_alternating_score": 0.3,
+                "min_gait_coordination": 0.2,
             },
             skill_requirements={
                 "basic_balance": 0.6,
@@ -879,7 +880,7 @@ class GaitPhaseDPG:
                         self.reward_system.components[component_name].weight = new_weight
 
     def _update_adaptive_components(self, episode_results: Dict):
-        """Atualiza componentes adaptativos do HDPG incluindo dados do crítico"""
+        """Atualiza componentes adaptativos com foco em progresso - VERSÃO CORRIGIDA"""
         # Coletar métricas de performance para cada componente
         component_metrics = {}
 
@@ -899,21 +900,38 @@ class GaitPhaseDPG:
                 'performance': metrics
             }
 
+        current_distance = episode_results.get('distance', 0)
+        current_speed = episode_results.get('speed', 0)
+
+        # Se está tendo pouco progresso, aumentar peso do progresso
+        if current_distance < 0.5:  
+            progress_boost = 1.5
+            stability_penalty = 0.7
+        else:
+            progress_boost = 1.0
+            stability_penalty = 1.0
+
+        # Calcular pesos dinâmicos com ajuste de progresso
+        dynamic_weights = self._calculate_dynamic_weights(component_metrics)
+
+        # Aplicar ajuste de progresso
+        for component, weight in dynamic_weights.items():
+            if component in ["progress", "distance_bonus", "pitch_forward_bonus"]:
+                dynamic_weights[component] = weight * progress_boost
+            elif component in ["stability_roll", "stability_pitch"]:
+                dynamic_weights[component] = weight * stability_penalty
+
+        # Atualizar pesos no sistema de recompensa
+        for component, weight in dynamic_weights.items():
+            if component in self.reward_system.components:
+                adaptive_weight = weight * self.adaptive_components[component]['learning_rate']
+                self.reward_system.components[component].weight = adaptive_weight
+
         # Coletar dados para análise do crítico
         total_reward = episode_results.get('total_reward', 0)
         self.recent_actual_rewards.append(total_reward)
         if len(self.recent_actual_rewards) > 50:
             self.recent_actual_rewards.pop(0)
-
-        # Calcular pesos dinâmicos
-        dynamic_weights = self._calculate_dynamic_weights(component_metrics)
-
-        # Atualizar pesos no sistema de recompensa
-        for component, weight in dynamic_weights.items():
-            if component in self.reward_system.components:
-                # Ajustar peso baseado na adaptação HDPG
-                adaptive_weight = weight * self.adaptive_components[component]['learning_rate']
-                self.reward_system.components[component].weight = adaptive_weight
 
     def _calculate_component_metrics(self, component: str, episode_results: Dict) -> Dict:
         """Calcula métricas específicas para cada componente"""
@@ -925,7 +943,11 @@ class GaitPhaseDPG:
         elif component == "balance_stability":
             roll = abs(episode_results.get('roll', 0))
             pitch = abs(episode_results.get('pitch', 0))
-            stability = 1.0 - min((roll + pitch) / 2.0, 1.0)
+            ideal_pitch = -0.1  
+            pitch_error = abs(pitch - ideal_pitch)
+            pitch_stability = 1.0 - min(pitch_error / 0.5, 1.0)
+            roll_stability = 1.0 - min(roll / 1.0, 1.0)
+            stability = (roll_stability * 0.7 + pitch_stability * 0.3)
             return {'reward': stability, 'score': stability}
         
         elif component == "energy_efficiency":
@@ -937,7 +959,7 @@ class GaitPhaseDPG:
         elif component == "speed_tracking":
             current_speed = episode_results.get('speed', 0)
             target_speed = self.get_current_speed_target()
-            tracking = 1.0 - min(abs(current_speed - target_speed) / target_speed, 1.0)
+            tracking = 1.0 - min(abs(current_speed - target_speed) / (target_speed + 0.1), 1.0)
             return {'reward': tracking, 'score': tracking}
         
         return {'reward': 0.5, 'score': 0.5}
@@ -1432,6 +1454,7 @@ class GaitPhaseDPG:
     def _complete_phase_transition(self) -> PhaseTransitionResult:
         """Completa a transição para próxima fase"""
         old_phase = self.current_phase
+        old_phase_name = self.phases[old_phase].name
         self.current_phase += 1
         self.episodes_in_phase = 0
         self.consecutive_failures = 0
@@ -1450,10 +1473,92 @@ class GaitPhaseDPG:
         self.progression_history = self.progression_history[-keep_episodes:]
         
         new_phase_config = self.phases[self.current_phase]
-        self.logger.info(f"🎉 TRANSIÇÃO CONCLUÍDA: {self.phases[old_phase].name} → {new_phase_config.name}")
-        
+        self._generate_phase_transition_report(old_phase, old_phase_name, new_phase_config)
+
         return PhaseTransitionResult.SUCCESS
-    
+
+    def _generate_phase_transition_report(self, old_phase: int, old_phase_name: str, new_phase_config):
+        """Gera relatório detalhado da transição de fase"""
+        try:
+            current_metrics = self._calculate_performance_metrics()
+            old_phase_config = self.phases[old_phase]
+
+            print(f"\n🎯 RELATÓRIO DE TRANSIÇÃO DE FASE - Episódio {len(self.performance_history)}")
+            print(f"   {old_phase_name.upper()} → {new_phase_config.name.upper()}")
+            print(f"   Fase {old_phase} → Fase {self.current_phase}")
+            print("")
+
+            # MÉTRICAS DE PERFORMANCE NA FASE ANTERIOR
+            print("   MÉTRICAS DE PERFORMANCE (fase anterior):")
+            print(f"     ✅ Taxa de sucesso: {current_metrics['success_rate']:.1%}")
+            print(f"     📏 Distância média: {current_metrics['avg_distance']:.2f}m")
+            print(f"     🚀 Velocidade média: {current_metrics['avg_speed']:.2f} m/s")
+            print(f"     ⚖️  Estabilidade (roll): {current_metrics['avg_roll']:.3f}")
+            print(f"     🔄 Consistência: {current_metrics['consistency']:.1%}")
+            print(f"     ⚡ Eficiência energética: {current_metrics['energy_efficiency']:.1%}")
+            print("")
+
+            # REQUISITOS ATENDIDOS
+            print("   REQUISITOS ATENDIDOS:")
+
+            success_rate_met = current_metrics['success_rate'] >= old_phase_config.transition_conditions['min_success_rate']
+            success_icon = "✅" if success_rate_met else "❌"
+            print(f"     {success_icon} Taxa de sucesso: {current_metrics['success_rate']:.3f} >= {old_phase_config.transition_conditions['min_success_rate']}")
+
+            distance_met = current_metrics['avg_distance'] >= old_phase_config.transition_conditions['min_avg_distance']
+            distance_icon = "✅" if distance_met else "❌"
+            print(f"     {distance_icon} Distância média: {current_metrics['avg_distance']:.3f}m >= {old_phase_config.transition_conditions['min_avg_distance']}m")
+
+            roll_met = current_metrics['avg_roll'] <= old_phase_config.transition_conditions['max_avg_roll']
+            roll_icon = "✅" if roll_met else "❌"
+            print(f"     {roll_icon} Estabilidade: {current_metrics['avg_roll']:.3f} <= {old_phase_config.transition_conditions['max_avg_roll']}")
+
+            min_episodes = old_phase_config.phase_duration
+            episodes_met = self.episodes_in_phase >= min_episodes
+            episodes_icon = "✅" if episodes_met else "❌"
+            print(f"     {episodes_icon} Episódios mínimos: {self.episodes_in_phase} >= {min_episodes}")
+            print("")
+
+            # HABILIDADES DESENVOLVIDAS
+            skills = self._assess_phase_skills()
+            print("   HABILIDADES DESENVOLVIDAS:")
+            for skill, req in old_phase_config.skill_requirements.items():
+                current = skills.get(skill, 0)
+                improvement = current - self._get_default_skills().get(skill, 0)
+                status = "✅" if current >= req else "🔄"
+                improvement_icon = "📈" if improvement > 0.1 else "➡️" if improvement > 0 else "📉"
+                print(f"     {status} {skill}: {current:.3f} / {req:.3f} {improvement_icon} ({improvement:+.3f})")
+            print("")
+
+            # NOVOS OBJETIVOS DA PRÓXIMA FASE
+            print("   NOVOS OBJETIVOS DA FASE:")
+            print(f"     🎯 Velocidade alvo: {new_phase_config.target_speed} m/s")
+            print(f"     📏 Distância mínima: {new_phase_config.transition_conditions.get('min_avg_distance', 'N/A')}m")
+            print(f"     ✅ Taxa de sucesso: {new_phase_config.transition_conditions.get('min_success_rate', 'N/A')}")
+            print(f"     ⚖️  Estabilidade máxima: {new_phase_config.transition_conditions.get('max_avg_roll', 'N/A')}")
+
+            # COMPONENTES ATIVOS
+            enabled_count = len(new_phase_config.enabled_components)
+            print(f"     🔧 Componentes ativos: {enabled_count}")
+            print("")
+
+            # ESTATÍSTICAS DO APRENDIZADO
+            print("   ESTATÍSTICAS DO APRENDIZADO:")
+            print(f"     📊 Total de episódios: {len(self.performance_history)}")
+            print(f"     🎯 Sucessos consecutivos: {self.consecutive_successes}")
+            print(f"     💀 Falhas consecutivas: {self.consecutive_failures}")
+            print(f"     🌀 Contador de estagnação: {self.stagnation_counter}")
+            print(f"     📦 Amostras DASS: {len(self.dass_samples)}")
+
+            if self.learned_reward_model:
+                print(f"     🧠 Confiança IRL: {self.learned_reward_model.get('confidence', 0):.1%}")
+
+            print("")
+            print("   " + "="*50)
+
+        except Exception as e:
+            self.logger.warning(f"Erro ao gerar relatório de transição: {e}")
+        
     def _smart_buffer_transition(self):
         """Transição inteligente do buffer preservando melhores experiências"""
         try:
@@ -1924,7 +2029,7 @@ class GaitPhaseDPG:
         stability = 1.0 - min(avg_change / 0.3, 1.0)  
 
         return stability
-    
+
     def _assess_phase_skills(self) -> Dict[str, float]:
         """Cálculo de habilidades"""
         if len(self.progression_history) < 2:
