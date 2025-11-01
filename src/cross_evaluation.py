@@ -171,7 +171,8 @@ class CrossEvaluation:
             from evaluate_model import evaluate_and_save
 
             metrics = evaluate_and_save(
-                model_path=model_path,
+                model_path,
+                self.seed,
                 circuit_name=circuit_name,
                 avatar_name=robot_name,
                 num_episodes=num_episodes,

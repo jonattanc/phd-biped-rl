@@ -22,6 +22,7 @@ def process_runner(
     enable_real_time_value,
     camera_selection_value,
     config_changed_value,
+    seed,
     device="cpu",
     initial_episode=0,
     model_path=None,
@@ -53,6 +54,7 @@ def process_runner(
             enable_real_time_value,
             camera_selection_value,
             config_changed_value,
+            seed,
             initial_episode=initial_episode,
         )
 
@@ -60,6 +62,7 @@ def process_runner(
             dpg_manager = DPGManager(logger, robot, reward_system)
             dpg_manager.enable(True)
             reward_system.set_dpg_manager(dpg_manager)
+            dpg_manager.setup_advanced_dpg_components()
             logger.info("Sistema DPG configurado e ativado")
         else:
             logger.info("Usando sistema de recompensa padrão (sem DPG)")

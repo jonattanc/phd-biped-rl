@@ -7,6 +7,7 @@ import random
 import math
 import queue
 import os
+import torch
 from dpg_gait_phases import PhaseTransitionResult
 import best_model_tracker
 import utils
@@ -27,13 +28,15 @@ class Simulation(gym.Env):
         enable_real_time_value,
         camera_selecion_value,
         config_changed_value,
+        seed,
         num_episodes=1,
-        seed=42,
         initial_episode=0,
     ):
         super(Simulation, self).__init__()
         np.random.seed(seed)
         random.seed(seed)
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
 
         self.robot = robot
         self.environment = environment
@@ -177,15 +180,16 @@ class Simulation(gym.Env):
         self.agent = agent
 
     def pre_fill_buffer(self):
+        dpg_enabled = False
+        if hasattr(self.reward_system, "dpg_manager") and self.reward_system.dpg_manager:
+            dpg_enabled = self.reward_system.dpg_manager.config.enabled
+        if dpg_enabled:
+            return
+
         obs = self.reset()
 
         self.episode_timeout_s = self.episode_pre_fill_timeout_s
         self.max_steps = self.max_pre_fill_steps
-
-        dpg_enabled = False
-        if hasattr(self.reward_system, "dpg_manager") and self.reward_system.dpg_manager:
-            dpg_enabled = self.reward_system.dpg_manager.config.enabled
-            self.reward_system.dpg_manager.config.enabled = False
 
         while self.total_steps < self.agent.prefill_steps and not self.exit_value.value:
             t = self.episode_steps * self.time_step_s
@@ -334,18 +338,23 @@ class Simulation(gym.Env):
         }
 
         # Adicionar informações de fase DPG se disponível
-        current_success = self.episode_success
         if hasattr(self.reward_system, "dpg_manager") and self.reward_system.dpg_manager is not None:
             try:
-                dpg_status = self.reward_system.dpg_manager.gait_phase_dpg.get_detailed_status()  # USAR detailed_status
+                dpg_status = self.reward_system.dpg_manager.gait_phase_dpg.get_detailed_status()
+                advanced_metrics = self.reward_system.dpg_manager.get_advanced_metrics()
                 episode_data.update(
                     {
                         "dpg_phase": dpg_status["current_phase"],
                         "dpg_phase_index": dpg_status["phase_index"],
                         "target_speed": dpg_status["target_speed"],
-                        "dpg_episodes_in_phase": dpg_status["episodes_in_phase"],  # ADICIONAR ESTE
+                        "dpg_episodes_in_phase": dpg_status["episodes_in_phase"],
                         "dpg_success_rate": dpg_status["performance_metrics"]["success_rate"],
                         "dpg_avg_distance": dpg_status["performance_metrics"]["avg_distance"],
+                        "dass_samples": advanced_metrics.get("dass_samples", 0),
+                        "irl_confidence": advanced_metrics.get("irl_confidence", 0.0),
+                        "hdpg_convergence": advanced_metrics.get("hdpg_convergence", 0.0),
+                        "hdpg_active": advanced_metrics.get("hdpg_active", False),
+                        "phase_name": advanced_metrics.get("phase_name", "unknown"),
                     }
                 )
             except Exception as e:

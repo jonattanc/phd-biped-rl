@@ -7,7 +7,7 @@ import multiprocessing
 import utils
 
 
-def evaluate_and_save(model_path, circuit_name="PR", avatar_name="robot_stage1", role="AE", num_episodes=5, seed=42, deterministic=True, enable_visualization=False):
+def evaluate_and_save(model_path, seed, circuit_name="PR", avatar_name="robot_stage1", role="AE", num_episodes=5, deterministic=True, enable_visualization=False):
     """Avalia um modelo e salva as métricas"""
 
     logging.info(f"Avaliando {avatar_name} no circuito {circuit_name}...")
