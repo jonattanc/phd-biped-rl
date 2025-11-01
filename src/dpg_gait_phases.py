@@ -219,7 +219,7 @@ class GaitPhaseDPG:
             phase_duration=20,
             transition_conditions={
                 "min_success_rate": 0.25,
-                "min_avg_distance": 0.3,    
+                "min_avg_distance": 0.5,    
                 "max_avg_roll": 0.7,        
                 "min_avg_steps": 6,
                 "min_avg_speed": 0.1,
@@ -259,7 +259,7 @@ class GaitPhaseDPG:
             phase_duration=25,
             transition_conditions={
                 "min_success_rate": 0.3,
-                "min_avg_distance": 0.5,    
+                "min_avg_distance": 0.8,    
                 "max_avg_roll": 0.6,        
                 "min_avg_steps": 8,
                 "min_avg_speed": 0.2,
@@ -305,7 +305,7 @@ class GaitPhaseDPG:
             phase_duration=30,
             transition_conditions={
                 "min_success_rate": 0.4,
-                "min_avg_distance": 0.8,    
+                "min_avg_distance": 1.0,    
                 "max_avg_roll": 0.6,       
                 "min_avg_steps": 10,
                 "min_avg_speed": 0.3,
@@ -521,6 +521,7 @@ class GaitPhaseDPG:
         roll = abs(episode_results.get("roll", 0))
         steps = episode_results.get("steps", 0)
         speed = episode_results.get("speed", 0)
+        success = episode_results.get("success", False)
 
         # Calcular sucesso da fase atual
         current_config = self.phases[self.current_phase]
@@ -529,17 +530,29 @@ class GaitPhaseDPG:
         episode_success = True
 
         # Verificar condições básicas
-        if "min_avg_distance" in conditions and distance < conditions["min_avg_distance"] * 0.3:  # Mais leniente para episódios individuais
-            episode_success = False
+        if "min_avg_distance" in conditions:
+            min_episode_distance = conditions["min_avg_distance"] * 0.3
+            if distance < min_episode_distance:
+                episode_success = False
 
-        if "max_avg_roll" in conditions and roll > conditions["max_avg_roll"] * 1.5:  # Mais leniente
-            episode_success = False
+        if "max_avg_roll" in conditions:
+            max_episode_roll = conditions["max_avg_roll"] * 1.5
+            if roll > max_episode_roll:
+                episode_success = False
 
-        if "min_avg_steps" in conditions and steps < conditions["min_avg_steps"] * 0.5:  # Mais leniente
-            episode_success = False
+        if "min_avg_steps" in conditions:
+            min_episode_steps = conditions["min_avg_steps"] * 0.5
+            if steps < min_episode_steps:
+                episode_success = False
 
-        if "min_avg_speed" in conditions and speed < conditions["min_avg_speed"] * 0.3:  # Mais leniente
-            episode_success = False
+        if "min_avg_speed" in conditions:
+            min_episode_speed = conditions["min_avg_speed"] * 0.3
+            if speed < min_episode_speed:
+                episode_success = False
+
+        # Considerar sucesso geral do episódio como fator adicional
+        if success:
+            episode_success = True  
 
         enhanced["phase_success"] = episode_success
         enhanced["phase"] = self.current_phase
@@ -562,15 +575,26 @@ class GaitPhaseDPG:
             self.consecutive_successes = 0
 
         # Atualizar contador de estagnação
-        current_avg_distance = self._calculate_average_distance()
-        if current_avg_distance > self.last_avg_distance + 0.05:
-            self.stagnation_counter = 0
-        elif abs(current_avg_distance - self.last_avg_distance) < 0.02:
-            self.stagnation_counter += 1
-        else:
-            self.stagnation_counter = max(0, self.stagnation_counter - 1)
+        current_distance = episode_results.get("distance", 0)
 
-        self.last_avg_distance = current_avg_distance
+        # Calcular progresso relativo
+        if len(self.progression_history) >= 2:
+            recent_distances = [r.get("distance", 0) for r in self.progression_history[-5:]]
+            avg_recent_distance = np.mean(recent_distances) if recent_distances else current_distance
+
+            # Verificar se há progresso significativo
+            progress_threshold = 0.02  
+            if current_distance > avg_recent_distance + progress_threshold:
+                self.stagnation_counter = 0  
+            elif abs(current_distance - avg_recent_distance) < progress_threshold:
+                self.stagnation_counter += 1  
+            else:
+                self.stagnation_counter = max(0, self.stagnation_counter - 1)  
+        else:
+            # Inicialização
+            self.stagnation_counter = 0
+
+        self.last_avg_distance = current_distance
 
     def _collect_dass_samples(self, episode_results: Dict):
         """Coleta amostras para DASS"""
@@ -1455,6 +1479,8 @@ class GaitPhaseDPG:
         """Completa a transição para próxima fase"""
         old_phase = self.current_phase
         old_phase_name = self.phases[old_phase].name
+        episodes_in_old_phase = self.episodes_in_phase
+
         self.current_phase += 1
         self.episodes_in_phase = 0
         self.consecutive_failures = 0
@@ -1473,21 +1499,21 @@ class GaitPhaseDPG:
         self.progression_history = self.progression_history[-keep_episodes:]
         
         new_phase_config = self.phases[self.current_phase]
-        self._generate_phase_transition_report(old_phase, old_phase_name, new_phase_config)
+        self._generate_phase_transition_report(old_phase, old_phase_name, new_phase_config, episodes_in_old_phase)
 
         return PhaseTransitionResult.SUCCESS
 
-    def _generate_phase_transition_report(self, old_phase: int, old_phase_name: str, new_phase_config):
+    def _generate_phase_transition_report(self, old_phase: int, old_phase_name: str, new_phase_config, episodes_in_old_phase: int):
         """Gera relatório detalhado da transição de fase"""
         try:
             current_metrics = self._calculate_performance_metrics()
             old_phase_config = self.phases[old_phase]
-
+            
             print(f"\n🎯 RELATÓRIO DE TRANSIÇÃO DE FASE - Episódio {len(self.performance_history)}")
             print(f"   {old_phase_name.upper()} → {new_phase_config.name.upper()}")
             print(f"   Fase {old_phase} → Fase {self.current_phase}")
             print("")
-
+            
             # MÉTRICAS DE PERFORMANCE NA FASE ANTERIOR
             print("   MÉTRICAS DE PERFORMANCE (fase anterior):")
             print(f"     ✅ Taxa de sucesso: {current_metrics['success_rate']:.1%}")
@@ -1497,28 +1523,38 @@ class GaitPhaseDPG:
             print(f"     🔄 Consistência: {current_metrics['consistency']:.1%}")
             print(f"     ⚡ Eficiência energética: {current_metrics['energy_efficiency']:.1%}")
             print("")
-
-            # REQUISITOS ATENDIDOS
+            
+            # REQUISITOS ATENDIDOS - CORRIGIDO
             print("   REQUISITOS ATENDIDOS:")
-
+            
             success_rate_met = current_metrics['success_rate'] >= old_phase_config.transition_conditions['min_success_rate']
             success_icon = "✅" if success_rate_met else "❌"
             print(f"     {success_icon} Taxa de sucesso: {current_metrics['success_rate']:.3f} >= {old_phase_config.transition_conditions['min_success_rate']}")
-
+            
             distance_met = current_metrics['avg_distance'] >= old_phase_config.transition_conditions['min_avg_distance']
             distance_icon = "✅" if distance_met else "❌"
             print(f"     {distance_icon} Distância média: {current_metrics['avg_distance']:.3f}m >= {old_phase_config.transition_conditions['min_avg_distance']}m")
-
+            
             roll_met = current_metrics['avg_roll'] <= old_phase_config.transition_conditions['max_avg_roll']
             roll_icon = "✅" if roll_met else "❌"
             print(f"     {roll_icon} Estabilidade: {current_metrics['avg_roll']:.3f} <= {old_phase_config.transition_conditions['max_avg_roll']}")
-
+            
+            # CORREÇÃO: Usar episodes_in_old_phase em vez de self.episodes_in_phase
             min_episodes = old_phase_config.phase_duration
-            episodes_met = self.episodes_in_phase >= min_episodes
+            episodes_met = episodes_in_old_phase >= min_episodes
             episodes_icon = "✅" if episodes_met else "❌"
-            print(f"     {episodes_icon} Episódios mínimos: {self.episodes_in_phase} >= {min_episodes}")
+            print(f"     {episodes_icon} Episódios mínimos: {episodes_in_old_phase} >= {min_episodes}")
+            
+            # Verificar condições específicas por fase
+            if old_phase >= 2:  # Fases 2+
+                if "min_alternating_score" in old_phase_config.transition_conditions:
+                    alternation_score = self._calculate_gait_coordination(self.progression_history[-8:])
+                    alternation_met = alternation_score >= old_phase_config.transition_conditions["min_alternating_score"]
+                    alternation_icon = "✅" if alternation_met else "❌"
+                    print(f"     {alternation_icon} Coordenação: {alternation_score:.3f} >= {old_phase_config.transition_conditions['min_alternating_score']}")
+            
             print("")
-
+            
             # HABILIDADES DESENVOLVIDAS
             skills = self._assess_phase_skills()
             print("   HABILIDADES DESENVOLVIDAS:")
@@ -1529,33 +1565,50 @@ class GaitPhaseDPG:
                 improvement_icon = "📈" if improvement > 0.1 else "➡️" if improvement > 0 else "📉"
                 print(f"     {status} {skill}: {current:.3f} / {req:.3f} {improvement_icon} ({improvement:+.3f})")
             print("")
-
+            
             # NOVOS OBJETIVOS DA PRÓXIMA FASE
             print("   NOVOS OBJETIVOS DA FASE:")
             print(f"     🎯 Velocidade alvo: {new_phase_config.target_speed} m/s")
             print(f"     📏 Distância mínima: {new_phase_config.transition_conditions.get('min_avg_distance', 'N/A')}m")
             print(f"     ✅ Taxa de sucesso: {new_phase_config.transition_conditions.get('min_success_rate', 'N/A')}")
             print(f"     ⚖️  Estabilidade máxima: {new_phase_config.transition_conditions.get('max_avg_roll', 'N/A')}")
-
+            
+            # Adicionar requisitos específicos da nova fase
+            if self.current_phase >= 2:
+                if "min_alternating_score" in new_phase_config.transition_conditions:
+                    print(f"     🔄 Coordenação mínima: {new_phase_config.transition_conditions['min_alternating_score']}")
+                if "min_gait_coordination" in new_phase_config.transition_conditions:
+                    print(f"     🦶 Coordenação de marcha: {new_phase_config.transition_conditions['min_gait_coordination']}")
+            
             # COMPONENTES ATIVOS
             enabled_count = len(new_phase_config.enabled_components)
             print(f"     🔧 Componentes ativos: {enabled_count}")
+            
+            # NOVOS COMPONENTES ADICIONADOS
+            old_components = set(self.phases[old_phase].enabled_components)
+            new_components = set(new_phase_config.enabled_components)
+            added_components = new_components - old_components
+            if added_components:
+                print(f"     ➕ Novos componentes: {', '.join(added_components)}")
             print("")
-
+            
             # ESTATÍSTICAS DO APRENDIZADO
             print("   ESTATÍSTICAS DO APRENDIZADO:")
             print(f"     📊 Total de episódios: {len(self.performance_history)}")
+            print(f"     🎯 Episódios na fase anterior: {episodes_in_old_phase}")
             print(f"     🎯 Sucessos consecutivos: {self.consecutive_successes}")
             print(f"     💀 Falhas consecutivas: {self.consecutive_failures}")
             print(f"     🌀 Contador de estagnação: {self.stagnation_counter}")
             print(f"     📦 Amostras DASS: {len(self.dass_samples)}")
-
+            
             if self.learned_reward_model:
                 print(f"     🧠 Confiança IRL: {self.learned_reward_model.get('confidence', 0):.1%}")
-
+            
+            # PROGRESSO GERAL
+            print(f"     📈 Progresso geral: {self.current_phase}/{len(self.phases)-1} fases")
             print("")
             print("   " + "="*50)
-
+            
         except Exception as e:
             self.logger.warning(f"Erro ao gerar relatório de transição: {e}")
         
