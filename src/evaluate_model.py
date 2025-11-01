@@ -34,7 +34,9 @@ def evaluate_and_save(model_path, seed, circuit_name="PR", avatar_name="robot_st
         logger = utils.get_logger(["evaluation", circuit_name, avatar_name])
         robot = Robot(logger, name=avatar_name)
         env_obj = Environment(logger, name=circuit_name)
-        env = Simulation(logger, robot, env_obj, None, ipc_queue, pause_val, exit_val, enable_visualization_val, realtime_val, camera_selection_val, config_changed_value, seed, num_episodes)
+        env = Simulation(
+            logger, robot, env_obj, None, ipc_queue, None, pause_val, exit_val, enable_visualization_val, realtime_val, camera_selection_val, config_changed_value, num_episodes, seed=seed
+        )
         agent = Agent(logger, env=env, model_path=model_path)  # TODO: Passar algoritmo
 
         # Configurar o agente
