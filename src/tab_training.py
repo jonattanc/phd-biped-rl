@@ -100,10 +100,6 @@ class TrainingTab:
         self.training_start_time = None
         self.training_time = 0
         self.pause_time = None
-        self.current_episode = 0
-        self.loaded_episode_count = 0
-        self.is_resuming = False
-        self.resumed_session_dir = None
 
         # Configurações de plot
         self.plot_titles = ["Recompensa por Episódio", "Duração do Episódio", "Distância Percorrida (X)", "Posição IMU (Y, Z)", "Orientação (Roll, Pitch, Yaw)"]
@@ -227,6 +223,7 @@ class TrainingTab:
 
         self.graph_notebook = ttk.Notebook(graph_frame)
         self.graph_notebook.pack(fill=tk.BOTH, expand=True)
+        self.graph_notebook.bind("<<NotebookTabChanged>>", self._on_graph_tab_changed)
 
         # Aba 1: Gráficos principais (Recompensa, Tempo, Distância)
         self.tab_main = ttk.Frame(self.graph_notebook)
@@ -403,15 +400,9 @@ class TrainingTab:
         """Inicia um novo treinamento do zero"""
         self.start_btn.config(state=tk.DISABLED, text="Iniciando...")
         self.disable_other_tabs()
-
-        if self.is_resuming:
-            self.logger.info(f"Retomando treinamento - current_episode: {self.current_episode}")
-            # self._resume_training()
-        else:
-            self.current_episode = 0
-            self.loaded_episode_count = 0
-            self.logger.info(f"Iniciando NOVO treinamento - current_episode: {self.current_episode}")
-            self._start_new_training()
+        self.logger.info(f"Iniciando NOVO treinamento")
+        self._start_new_training()
+        self.start_btn.config(text="Iniciar Treino")
 
     def _start_new_training(self):
         """Inicia um novo treinamento do zero"""
@@ -485,47 +476,28 @@ class TrainingTab:
 
             # Habilitar botões
             self.save_training_btn.config(state=tk.NORMAL)
+            self.load_training_btn.config(state=tk.DISABLED)
             self.pause_btn.config(state=tk.NORMAL)
             self.stop_btn.config(state=tk.NORMAL)
-            self.start_btn.config(text="Iniciar Treino")
             self.pause_btn.config(text="Pausar")
 
         except Exception as e:
             self.logger.exception("Erro ao iniciar treinamento")
             messagebox.showerror("Erro", f"Erro ao iniciar treinamento: {e}")
-            self.start_btn.config(state=tk.NORMAL, text="Iniciar Treino")
+            self.start_btn.config(state=tk.NORMAL)
             self.enable_other_tabs()
 
-    def _find_model_for_resume(self):
-        """Encontra modelo para retomada usando busca flexível"""
-        if not self.resumed_session_dir:
-            raise ValueError("Diretório de sessão não definido para retomada.")
+    def _find_model_for_resume(self, path):
+        """Encontra modelo para carregamento usando busca flexível"""
 
-        # Buscar em models/
-        models_dir = os.path.join(self.resumed_session_dir, "models")
-        if os.path.exists(models_dir):
-            for file in os.listdir(models_dir):
+        if os.path.exists(path):
+            for file in os.listdir(path):
                 if file.endswith(".zip"):
-                    model_path = os.path.join(models_dir, file)
-                    self.logger.info(f"Modelo encontrado para retomada: {file}")
+                    model_path = os.path.join(path, file)
+                    self.logger.info(f"Modelo encontrado para carregamento: {file}")
                     return model_path
 
-        # Buscar no diretório principal
-        for file in os.listdir(self.resumed_session_dir):
-            if file.endswith(".zip"):
-                model_path = os.path.join(self.resumed_session_dir, file)
-                self.logger.info(f"Modelo encontrado no diretório principal: {file}")
-                return model_path
-
-        # Buscar recursivamente
-        for root, dirs, files in os.walk(self.resumed_session_dir):
-            for file in files:
-                if file.endswith(".zip"):
-                    model_path = os.path.join(root, file)
-                    self.logger.info(f"Modelo encontrado em subdiretório: {model_path}")
-                    return model_path
-
-        raise FileNotFoundError(f"Nenhum modelo (.zip) encontrado em {self.resumed_session_dir}")
+        raise FileNotFoundError(f"Nenhum modelo (.zip) encontrado em {path}")
 
     def pause_training(self, force_pause=False):
         """Pausa ou retoma o treinamento"""
@@ -582,6 +554,7 @@ class TrainingTab:
         self.pause_btn.config(state=tk.DISABLED)
         self.stop_btn.config(state=tk.DISABLED)
         self.save_training_btn.config(state=tk.DISABLED)
+        self.load_training_btn.config(state=tk.NORMAL)
         self.enable_other_tabs()
 
         self.logger.info("Treinamento finalizado pelo usuário")
@@ -667,36 +640,14 @@ class TrainingTab:
                 return
 
             # Carregar dados do treinamento
-            self.resumed_session_dir = session_dir
             training_data = self._load_training_data_file(session_dir)
-
-            # Encontrar modelo
-            model_path = self._find_model_for_resume()
-            if not model_path:
-                return
 
             # Restaurar dados do treinamento
             self._restore_training_data(training_data, session_dir)
 
-            # Configurar para retomada
-            self.is_resuming = True
-            self.resumed_session_dir = session_dir
-
-            # Atualizar interface
-            self.start_btn.config(text="Retomar Treino", state=tk.NORMAL)
-            self.pause_btn.config(state=tk.DISABLED)
-            self.stop_btn.config(state=tk.DISABLED)
-
             # Atualizar gráficos
             self.new_plot_data = True
             self._refresh_plots()
-
-            # Habilitar botões
-            self.save_training_btn.config(state=tk.NORMAL)
-
-            messagebox.showinfo(
-                "Sucesso", f"Treinamento carregado!\n" f"Modelo: {os.path.basename(model_path)}\n" f"Próximo episódio: {self.current_episode}\n" f"Clique em 'Retomar Treino' para continuar."
-            )
 
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao carregar treinamento: {e}")
@@ -714,39 +665,19 @@ class TrainingTab:
     def _restore_training_data(self, training_data, session_dir):
         """Restaura dados do treinamento carregado"""
         session_info = training_data["session_info"]
-        self.episode_data = training_data["episode_data"]
-
-        saved_current_episode = session_info.get("current_episode", 0)
-        total_episodes = session_info.get("total_episodes", 0)
-
-        if self.episode_data["episodes"]:
-            self.current_episode = max(self.episode_data["episodes"])
-            self.loaded_episode_count = len(self.episode_data["episodes"])
-        else:
-            self.current_episode = session_info.get("current_episode", 0)
-            self.loaded_episode_count = 0
+        self.logger.info(f"Treinamento carregado:\n{session_info}")
 
         # Atualizar configurações
         self.current_env = session_info["environment"]
         self.current_robot = session_info["robot"]
         self.current_algorithm = session_info["algorithm"]
 
-        # Tentar carregar informações do tracker se existirem
-        training_info_path = os.path.join(session_dir, "training_info.json")
-        if os.path.exists(training_info_path):
-            try:
-                with open(training_info_path, "r") as f:
-                    training_info = json.load(f)
+        self.env_var.set(self.current_env)
+        self.robot_var.set(self.current_robot)
+        self.algorithm_var.set(self.current_algorithm)
 
-                # Restaurar dados básicos
-                self.tracker.best_reward = training_info.get("best_reward", -float("inf"))
-                self.tracker.best_distance = training_info.get("best_distance", 0.0)
-                self.total_steps = training_info.get("total_steps", 0)
-
-                self.logger.info(f"Informações de treino carregadas: recompensa={self.tracker.best_reward}, steps={self.total_steps}")
-
-            except Exception as e:
-                self.logger.exception("Erro ao carregar informações de treino")
+        self.episode_data = training_data["episode_data"]
+        self.tracker_status = training_data["tracker_status"]
 
     def export_plots(self):
         """Exporta gráficos como imagens para uso na tese"""
@@ -838,7 +769,7 @@ class TrainingTab:
                 ax.set_xlabel("Episódio")
                 ax.grid(True, alpha=0.3)
                 ax.legend(loc="upper left")
-                ax.set_xlim(1, None)
+                ax.set_xlim(1, self.episode_data["episodes"][-1])
 
                 filename = f"plot_{data_key}.png"
                 fig.savefig(os.path.join(directory, filename), dpi=dpi, bbox_inches="tight")
@@ -866,7 +797,7 @@ class TrainingTab:
             axs[i].set_ylabel(ylabel)
             axs[i].grid(True, alpha=0.3)
             axs[i].legend(loc="upper left")
-            axs[i].set_xlim(1, None)
+            axs[i].set_xlim(1, self.episode_data["episodes"][-1])
 
         axs[-1].set_xlabel("Episódio")
 
@@ -917,6 +848,14 @@ class TrainingTab:
 
         else:
             self.logger.info("update_camera_selection: Nenhum processo de treinamento ativo.")
+
+    def _on_graph_tab_changed(self, event):
+        try:
+            self.new_plot_data = True
+            self._refresh_plots()
+
+        except Exception as e:
+            self.logger.exception("Erro no callback de mudança de aba dos gráficos")
 
     def build_steps_label_text(self, training_time, total_steps, steps_per_second):
         time_struct = time.gmtime(training_time)
@@ -979,7 +918,7 @@ class TrainingTab:
                         self.axs_main[i].set_ylabel(ylabel)
                         self.axs_main[i].grid(True, alpha=0.3)
                         self.axs_main[i].legend(loc="upper left")
-                        self.axs_main[i].set_xlim(1, None)
+                        self.axs_main[i].set_xlim(1, self.episode_data["episodes"][-1])
                         if i == 2:
                             self.axs_main[i].set_ylim(-1.5, 10)
                     self.axs_main[-1].set_xlabel("Episódio")
@@ -992,7 +931,7 @@ class TrainingTab:
                         self.axs_pos[i].set_ylabel(f"{label} (m)")
                         self.axs_pos[i].grid(True, alpha=0.3)
                         self.axs_pos[i].legend(loc="upper left")
-                        self.axs_pos[i].set_xlim(1, None)
+                        self.axs_pos[i].set_xlim(1, self.episode_data["episodes"][-1])
                     self.axs_pos[-1].set_xlabel("Episódio")
                     self.canvas_pos.draw()
                 elif current_tab == 2:
@@ -1003,7 +942,7 @@ class TrainingTab:
                         self.axs_ori[i].set_ylabel(f"{label} (°)")
                         self.axs_ori[i].grid(True, alpha=0.3)
                         self.axs_ori[i].legend(loc="upper left")
-                        self.axs_ori[i].set_xlim(1, None)
+                        self.axs_ori[i].set_xlim(1, self.episode_data["episodes"][-1])
                     self.axs_ori[-1].set_xlabel("Episódio")
                     self.canvas_ori.draw()
                 elif current_tab == 3:
@@ -1014,7 +953,7 @@ class TrainingTab:
                         self.axs_vel[i].set_ylabel(f"{label} (m/s)")
                         self.axs_vel[i].grid(True, alpha=0.3)
                         self.axs_vel[i].legend(loc="upper left")
-                        self.axs_vel[i].set_xlim(1, None)
+                        self.axs_vel[i].set_xlim(1, self.episode_data["episodes"][-1])
                     self.axs_vel[-1].set_xlabel("Episódio")
                     self.canvas_vel.draw()
                 elif current_tab == 4:
@@ -1025,7 +964,7 @@ class TrainingTab:
                         self.axs_angvel[i].set_ylabel(f"{label} (°/s)")
                         self.axs_angvel[i].grid(True, alpha=0.3)
                         self.axs_angvel[i].legend(loc="upper left")
-                        self.axs_angvel[i].set_xlim(1, None)
+                        self.axs_angvel[i].set_xlim(1, self.episode_data["episodes"][-1])
                     self.axs_angvel[-1].set_xlabel("Episódio")
                     self.canvas_angvel.draw()
 
@@ -1212,8 +1151,8 @@ class TrainingTab:
                         self.pause_btn.config(state=tk.DISABLED)
                         self.stop_btn.config(state=tk.DISABLED)
                         self.save_training_btn.config(state=tk.DISABLED)
+                        self.load_training_btn.config(state=tk.NORMAL)
                         self.enable_other_tabs()
-                        self.is_resuming = False
 
                     else:
                         self.logger.error(f"Tipo de dados desconhecido: {data_type} - Conteúdo: {msg}")
