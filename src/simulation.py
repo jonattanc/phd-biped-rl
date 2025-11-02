@@ -341,22 +341,22 @@ class Simulation(gym.Env):
         if hasattr(self.reward_system, "dpg_manager") and self.reward_system.dpg_manager is not None:
             try:
                 dpg_manager = self.reward_system.dpg_manager
-                dpg_status = dpg_manager.get_status()
+                dpg_status = dpg_manager.get_brain_status()
                 advanced_metrics = dpg_manager.get_advanced_metrics()
 
-                # Obter informações da fase atual
-                if dpg_manager.phase_manager:
-                    phase_info = dpg_manager.phase_manager.get_current_phase_info()
+                # Obter informações da fase atual 
+                if hasattr(dpg_manager, 'phase_manager') and dpg_manager.phase_manager:
+                    phase_info = dpg_manager.phase_manager.get_current_sub_phase_info()
                     episode_data.update({
-                        "dpg_phase": phase_info['phase'],
-                        "dpg_phase_index": phase_info['phase'],
-                        "target_speed": phase_info['target_speed'],
-                        "dpg_episodes_in_phase": phase_info['episodes_in_phase'],
-                        "phase_name": phase_info['name'],
+                        "dpg_phase": phase_info.get('current_phase', 0), 
+                        "dpg_phase_index": phase_info.get('phase_index', 0),  
+                        "target_speed": phase_info.get('target_speed', 0.0),
+                        "dpg_episodes_in_phase": phase_info.get('episodes_in_phase', 0),
+                        "phase_name": "sub_fase",  
                         "dpg_success_rate": advanced_metrics.get("success_rate", 0.0),
                         "dpg_avg_distance": advanced_metrics.get("avg_distance", 0.0),
                     })
-                
+
                 episode_data.update({
                     "dass_samples": advanced_metrics.get("dass_samples", 0),
                     "irl_confidence": advanced_metrics.get("irl_confidence", 0.0),
@@ -369,23 +369,24 @@ class Simulation(gym.Env):
             if self.episode_count % 100 == 0:
                 try:
                     dpg_system = self.reward_system.dpg_manager
-                    if dpg_manager and dpg_manager.phase_manager:
+                    if dpg_manager and hasattr(dpg_manager, 'phase_manager') and dpg_manager.phase_manager:
                         phase_manager = dpg_manager.phase_manager
-                        current_phase = dpg_manager.phase_manager.current_phase
-                        phase_config = dpg_manager.phase_manager.current_phase_config
-                        detailed_status = dpg_manager.phase_manager.get_status()
+                        current_phase = phase_manager.current_sub_phase  
+                        phase_config = phase_manager.current_sub_phase_config  
+                        detailed_status = phase_manager.get_status()
 
                         print(f"\nDPG DIAGNÓSTICO - Ep: {self.episode_count}")
-                        print(f"   Fase: {current_phase} ({phase_config.name})")
-                        print(f"   Episódios na fase: {detailed_status['episodes_in_phase']}")
+                        print(f"   Sub-fase: {current_phase} ({phase_config.name})")  
+                        print(f"   Episódios na sub-fase: {detailed_status.get('episodes_in_sub_phase', 0)}")  
                         print(f"   Taxa de sucesso: {detailed_status.get('success_rate', 0):.1%}")
-                        print(f"   Transições: {detailed_status.get('phase_transitions', 0)}")
+                        print(f"   Grupo atual: {detailed_status.get('current_group', 0)}")  
 
                         # Condições de transição
-                        print(f"   REQUISITOS FASE {current_phase}:")
+                        print(f"   REQUISITOS SUB-FASE {current_phase}:") 
+                        
                         conditions = phase_config.transition_conditions
                         for condition_name, required_value in conditions.items():
-                            current_value = self._get_current_condition_value(condition_name, detailed_status, dpg_manager.phase_manager)
+                            current_value = self._get_current_condition_value(condition_name, detailed_status, phase_manager)
                             met = self._is_condition_met(condition_name, current_value, required_value)
                             icon = "✅" if met else "❌"
                             if isinstance(current_value, float):
@@ -393,6 +394,7 @@ class Simulation(gym.Env):
                             else:
                                 formatted_current = str(current_value)
                             print(f"     {icon} {condition_name}: {required_value} (Atual: {formatted_current})")
+
                         # Habilidades focadas
                         print("   HABILIDADES FOCADAS:")
                         focus_skills = phase_config.focus_skills
