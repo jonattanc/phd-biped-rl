@@ -383,7 +383,7 @@ class Simulation(gym.Env):
 
                         # Condições de transição
                         print(f"   REQUISITOS SUB-FASE {current_phase}:") 
-                        
+
                         conditions = phase_config.transition_conditions
                         for condition_name, required_value in conditions.items():
                             current_value = self._get_current_condition_value(condition_name, detailed_status, phase_manager)
@@ -420,31 +420,28 @@ class Simulation(gym.Env):
     def _get_current_condition_value(self, condition_name, detailed_status, phase_manager):
         """Obtém o valor atual para uma condição específica"""
         try:
+            performance_metrics = phase_manager.get_performance_metrics()
+        
             if condition_name == "min_success_rate":
-                return detailed_status["performance_metrics"]["success_rate"]
+                return performance_metrics["success_rate"]
             elif condition_name == "min_avg_distance":
-                return detailed_status["performance_metrics"]["avg_distance"]
+                return performance_metrics["avg_distance"]
             elif condition_name == "max_avg_roll":
-                return phase_manager._calculate_avg_roll()
+                return performance_metrics["avg_roll"]
             elif condition_name == "min_avg_speed":
-                return phase_manager._calculate_avg_speed()
+                return performance_metrics["avg_speed"]
             elif condition_name == "min_avg_steps":
-                return float(self._calculate_avg_steps(phase_manager))
+                return performance_metrics["avg_steps"]
             elif condition_name == "min_alternating_score":
-                return float(self._calculate_alternating_score(phase_manager))
+                return performance_metrics["alternating_score"]
             elif condition_name == "min_gait_coordination":
-                return float(self._calculate_gait_coordination(phase_manager))
-            elif condition_name == "min_propulsion_efficiency":
-                return float(self._calculate_propulsion_efficiency(phase_manager))
-            elif condition_name == "consistency_count":
-                return int(self._calculate_consistency_count(phase_manager))
-            elif condition_name == "min_positive_distance_rate":
-                return phase_manager._calculate_positive_movement_rate()
-            elif condition_name == "max_avg_pitch":
-                return float(self._calculate_avg_pitch(phase_manager))
+                return performance_metrics["gait_coordination"]
+            elif condition_name == "min_positive_movement_rate":
+                return performance_metrics["positive_movement_rate"]
             else:
                 return "N/A"
-        except:
+        except Exception as e:
+            print(f"Erro ao obter condição {condition_name}: {e}")
             return "N/A"
 
     def _is_condition_met(self, condition_name, current_value, required_value):

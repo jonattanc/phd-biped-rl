@@ -231,6 +231,7 @@ class PhaseManager:
         self.current_sub_phase = 0
         self.episodes_in_sub_phase = 0
         self.groups = self._initialize_groups()
+        self.performance_history = []
         
         # Sistema de validação
         self.validator = AdaptiveValidator(logger)
@@ -432,7 +433,6 @@ class PhaseManager:
         
         if should_validate:
             self.validation_required = True
-            self.logger.info(f"🔍 Validação necessária: {trigger}")
             return PhaseTransitionResult.VALIDATION_REQUIRED
         
         # Executar validação se requisitada
@@ -762,6 +762,27 @@ class PhaseManager:
         positive_movements = sum(1 for r in recent_history if r.get("distance", 0) > 0.1)
         return positive_movements / len(recent_history)
     
+    def _calculate_avg_steps(self) -> float:
+        """Calcula média de passos"""
+        if not self.performance_history:
+            return 0.0
+        recent_history = self.performance_history[-10:]
+        steps = [r.get("steps", 0) for r in recent_history]
+        return np.mean(steps) if steps else 0.0
+
+    def get_performance_metrics(self) -> Dict:
+        """Retorna métricas de performance consolidadas"""
+        return {
+            "success_rate": self._calculate_success_rate(),
+            "avg_distance": self._calculate_avg_distance(),
+            "avg_roll": self._calculate_avg_roll(),
+            "avg_speed": self._calculate_avg_speed(),
+            "positive_movement_rate": self._calculate_positive_movement_rate(),
+            "avg_steps": self._calculate_avg_steps(),
+            "alternating_score": self._calculate_alternating_score(),
+            "gait_coordination": self._calculate_gait_coordination()
+        }
+
     def get_current_phase_info(self) -> Dict:
         """Retorna informações da sub-fase atual"""
         group_config = self.current_group_config

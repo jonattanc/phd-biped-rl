@@ -222,7 +222,7 @@ class DPGManager:
         """Ativa o sistema completo"""
         self.enabled = enabled
         if enabled:
-            self.logger.info("🧠 Sistema DPG Adaptável ativado")
+            self.logger.info("Sistema DPG Adaptável ativado")
     
     def calculate_reward(self, sim, action) -> float:
         """Calcula recompensa com todos os sistemas"""
@@ -376,7 +376,6 @@ class DPGManager:
         # Executar validação se necessária
         if result == PhaseTransitionResult.VALIDATION_REQUIRED:
             validation_results = self.phase_manager.execute_validation()
-            self.logger.info(f"🔍 Validação executada: {validation_results}")
         
         # Atualizar transições de buffer se grupo mudou
         if (hasattr(self, 'last_group') and 
