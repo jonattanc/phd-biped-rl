@@ -171,9 +171,9 @@ class TrainingTab:
 
         # Input para random seed
         self.seed_var = tk.IntVar(value=42)
-        seed_input = ttk.Spinbox(row1_frame, from_=0, to=100000, textvariable=self.seed_var, width=8)
+        self.seed_input = ttk.Spinbox(row1_frame, from_=0, to=100000, textvariable=self.seed_var, width=8)
         ttk.Label(row1_frame, text="Seed:").grid(row=0, column=9, sticky=tk.W, padx=1)
-        seed_input.grid(row=0, column=10, padx=5)
+        self.seed_input.grid(row=0, column=10, padx=5)
 
         # Linha 2: Botões secundários e checkboxes
         row2_frame = ttk.Frame(control_frame)
@@ -399,6 +399,7 @@ class TrainingTab:
     def start_training(self):
         """Inicia um novo treinamento do zero"""
         self.start_btn.config(state=tk.DISABLED, text="Iniciando...")
+        self.seed_input.config(state=tk.DISABLED)
         self.disable_other_tabs()
         self.logger.info(f"Iniciando NOVO treinamento")
         self._start_new_training()
@@ -485,6 +486,7 @@ class TrainingTab:
             self.logger.exception("Erro ao iniciar treinamento")
             messagebox.showerror("Erro", f"Erro ao iniciar treinamento: {e}")
             self.start_btn.config(state=tk.NORMAL)
+            self.seed_input.config(state=tk.NORMAL)
             self.enable_other_tabs()
 
     def _find_model_for_resume(self, path):
@@ -551,6 +553,7 @@ class TrainingTab:
 
         # Atualizar estado dos botões
         self.start_btn.config(state=tk.NORMAL)
+        self.seed_input.config(state=tk.NORMAL)
         self.pause_btn.config(state=tk.DISABLED)
         self.stop_btn.config(state=tk.DISABLED)
         self.save_training_btn.config(state=tk.DISABLED)
@@ -1149,6 +1152,7 @@ class TrainingTab:
                     elif data_type == "done":
                         self.logger.info("Processo de treinamento finalizado.")
                         self.start_btn.config(state=tk.NORMAL)
+                        self.seed_input.config(state=tk.NORMAL)
                         self.pause_btn.config(state=tk.DISABLED)
                         self.stop_btn.config(state=tk.DISABLED)
                         self.save_training_btn.config(state=tk.DISABLED)
