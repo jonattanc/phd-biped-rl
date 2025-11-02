@@ -1105,44 +1105,49 @@ class GaitPhaseDPG:
             return False
 
         current_phase_config = self.phases[self.current_phase]
+        conditions = current_phase_config.transition_conditions
 
-        # 1. Verificação básica de condições
-        basic_conditions_met = self._check_basic_advancement_conditions()
-        if not basic_conditions_met:
-            return False
+        # Verificar apenas as condições básicas obrigatórias
+        basic_conditions_met = True
 
-        # 2. Validação HDPG - Convergência do crítico multi-head
-        hdpg_convergence_met = self._validate_hdpg_convergence()
+        # Taxa de sucesso mínima
+        if "min_success_rate" in conditions:
+            current_success = self._calculate_success_rate()
+            if current_success < conditions["min_success_rate"]:
+                basic_conditions_met = False
 
-        # 3. Estabilidade do gradiente de política
-        gradient_stable = self._check_gradient_stability()
+        # Distância média mínima  
+        if "min_avg_distance" in conditions:
+            current_avg_distance = self._calculate_average_distance()
+            if current_avg_distance < conditions["min_avg_distance"]:
+                basic_conditions_met = False
 
-        # 4. Balanceamento de componentes adaptativos
-        components_balanced = self._check_component_balance() > 0.7
+        # Estabilidade máxima
+        if "max_avg_roll" in conditions:
+            current_avg_roll = self._calculate_average_roll()
+            if current_avg_roll > conditions["max_avg_roll"]:
+                basic_conditions_met = False
 
-        # 5. Convergência de prioridades HDPG
-        priorities_converged = self._check_priority_convergence()
+        if self.current_phase == 0 and basic_conditions_met:
+            return True
 
-        # 6. Validação IRL 
-        irl_valid = True
-        if self.current_phase >= 2:
-            irl_confidence = self._calculate_irl_confidence()
-            irl_valid = irl_confidence > current_phase_config.irl_confidence_threshold
+        # Para fases superiores, manter validação HDPG completa
+        if self.current_phase >= 1:
+            hdpg_convergence_met = self._validate_hdpg_convergence()
+            gradient_stable = self._check_gradient_stability()
+            components_balanced = self._check_component_balance() > 0.7
+            priorities_converged = self._check_priority_convergence()
 
-        # Critério HDPG: Todos os componentes devem estar estáveis
-        hdpg_conditions = (
-            hdpg_convergence_met and 
-            gradient_stable and 
-            components_balanced and 
-            priorities_converged and
-            irl_valid
-        )
+            hdpg_conditions = (
+                hdpg_convergence_met and 
+                gradient_stable and 
+                components_balanced and 
+                priorities_converged
+            )
 
-        # Para fases iniciais, ser mais permissivo; 
-        if self.current_phase <= 2:
-            return basic_conditions_met and (hdpg_convergence_met or gradient_stable)
-        else:
             return basic_conditions_met and hdpg_conditions
+
+        return basic_conditions_met
 
     def _calculate_irl_confidence(self) -> float:
         """Calcula confiança no modelo IRL aprendido"""
@@ -1897,19 +1902,15 @@ class GaitPhaseDPG:
         """Verifica requisitos mínimos para transição"""
         current_phase_config = self.phases[self.current_phase]
 
-        min_duration = current_phase_config.phase_duration
         if self.current_phase == 0:
-            min_duration = max(5, min_duration)  
+            min_duration = 5
+        else:
+            min_duration = current_phase_config.phase_duration
 
         has_minimum_duration = self.episodes_in_phase >= min_duration
-        has_sufficient_history = len(self.progression_history) >= 3  
+        has_sufficient_history = len(self.progression_history) >= 3
 
-        if not has_minimum_duration:
-            self.logger.debug(f"Aguardando duração mínima: {self.episodes_in_phase}/{min_duration}")
-            return False
-
-        if not has_sufficient_history:
-            self.logger.debug(f"Aguardando histórico suficiente: {len(self.progression_history)}/3")
+        if not has_minimum_duration or not has_sufficient_history:
             return False
 
         return True
