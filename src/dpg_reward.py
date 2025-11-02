@@ -291,17 +291,18 @@ class RewardCalculator:
     def _initialize_components(self) -> Dict[str, RewardComponent]:
         """Inicializa componentes de recompensa"""
         return {
-            "stability": RewardComponent("stability", 3.0, self._calculate_stability_reward),
-            "basic_progress": RewardComponent("basic_progress", 2.0, self._calculate_basic_progress_reward),
-            "posture": RewardComponent("posture", 1.5, self._calculate_posture_reward),
-            "velocity": RewardComponent("velocity", 2.0, self._calculate_velocity_reward),
-            "phase_angles": RewardComponent("phase_angles", 1.5, self._calculate_phase_angles_reward),
-            "propulsion": RewardComponent("propulsion", 1.0, self._calculate_propulsion_reward),
-            "clearance": RewardComponent("clearance", 1.0, self._calculate_clearance_reward),
-            "coordination": RewardComponent("coordination", 1.5, self._calculate_coordination_reward),
-            "efficiency": RewardComponent("efficiency", 1.2, self._calculate_efficiency_reward),
+            "stability": RewardComponent("stability", 4.0, self._calculate_stability_reward),
+            "basic_progress": RewardComponent("basic_progress", 3.0, self._calculate_basic_progress_reward),
+            "posture": RewardComponent("posture", 3.5, self._calculate_posture_reward),
+            "direction": RewardComponent("direction", 2.0, self._calculate_direction_reward),
+            "velocity": RewardComponent("velocity", 1.5, self._calculate_velocity_reward),
+            "phase_angles": RewardComponent("phase_angles", 1.0, self._calculate_phase_angles_reward),
+            "propulsion": RewardComponent("propulsion", 0.5, self._calculate_propulsion_reward),
+            "clearance": RewardComponent("clearance", 0.5, self._calculate_clearance_reward),
+            "coordination": RewardComponent("coordination", 1.0, self._calculate_coordination_reward),
+            "efficiency": RewardComponent("efficiency", 0.8, self._calculate_efficiency_reward),
             "success_bonus": RewardComponent("success_bonus", 5.0, self._calculate_success_bonus),
-            "effort_penalty": RewardComponent("effort_penalty", 0.005, self._calculate_effort_penalty),
+            "effort_penalty": RewardComponent("effort_penalty", 0.008, self._calculate_effort_penalty),
         }
     
     def calculate(self, sim, action, phase_info: Dict) -> float:
@@ -398,18 +399,48 @@ class RewardCalculator:
         
         return min(quality, 1.0)
     
-    # Implementações dos componentes de recompensa (mantidas do original)
+    # Implementações dos componentes de recompensa 
     def _calculate_stability_reward(self, sim, phase_info) -> float:
         roll = abs(getattr(sim, "robot_roll", 0))
-        return 1.0 - min(roll * 1.5, 1.0)
+        pitch = abs(getattr(sim, "robot_pitch", 0))
+        roll_penalty = min(roll * 3.0, 1.0)
+        pitch_penalty = min(pitch * 1.5, 1.0)
+        total_penalty = (roll_penalty * 0.7) + (pitch_penalty * 0.3)
+    
+        return 1.0 - total_penalty
     
     def _calculate_basic_progress_reward(self, sim, phase_info) -> float:
         distance = getattr(sim, "episode_distance", 0)
-        return min(distance / 2.0, 1.0)
+        velocity = getattr(sim, "robot_x_velocity", 0)
+        distance_reward = min(distance / 1.0, 2.0)  
+        if velocity > 0.1:
+            velocity_reward = min(velocity * 0.5, 1.0)
+        else:
+            velocity_reward = 0.0
+        total_reward = (distance_reward * 0.6) + (velocity_reward * 0.4)
+
+        return min(total_reward, 2.0)
     
+    def _calculate_direction_reward(self, sim, phase_info) -> float:
+        """Recompensa por manter direção correta"""
+        y_velocity = abs(getattr(sim, "robot_y_velocity", 0))
+        y_position = abs(getattr(sim, "robot_y_position", 0))
+        lateral_penalty = min(y_velocity * 2.0, 1.0)
+        position_penalty = min(y_position * 1.0, 0.5)
+        total_penalty = lateral_penalty + position_penalty
+
+        return 1.0 - min(total_penalty, 1.0)
+
     def _calculate_posture_reward(self, sim, phase_info) -> float:
-        pitch = abs(getattr(sim, "robot_pitch", 0))
-        return 1.0 - min(pitch * 2.0, 1.0)
+        pitch = getattr(sim, "robot_pitch", 0)
+        if pitch < -0.1: 
+            penalty = min(abs(pitch) * 4.0, 2.0)  
+            return max(0.0, 1.0 - penalty)
+        elif pitch > 0.3: 
+            penalty = min(pitch * 2.0, 1.0)
+            return 1.0 - penalty
+        else:
+            return 1.0
     
     def _calculate_velocity_reward(self, sim, phase_info) -> float:
         vx = getattr(sim, "robot_x_velocity", 0)
@@ -495,17 +526,26 @@ class RewardCalculator:
         """Calcula penalidades globais adaptadas ao grupo"""
         penalties = 0.0
         
-        # Penalidade de ação extrema (mais tolerante em grupos iniciais)
+        # Penalidade de ação extrema 
         if hasattr(action, '__len__'):
-            action_penalty = np.sum(np.abs(action)) * 0.01
-            # Grupos avançados são mais penalizados por ações extremas
-            group_tolerance = 1.0 - (group_level * 0.2)  # 0.8, 0.6, 0.4
-            penalties += min(action_penalty * group_tolerance, 1.0)
+            action_penalty = np.sum(np.abs(action)) * 0.02
+            group_tolerance = 1.0 - (group_level * 0.2) 
+            penalties += min(action_penalty * group_tolerance, 1.5)
         
         # Penalidade por queda iminente
         height = getattr(sim, "robot_z_position", 0.8)
-        if height < 0.5:
-            penalties += (0.5 - height) * 3.0
+        if height < 0.6:
+            penalties += (0.6 - height) * 5.0
+
+        # Penalidade por movimento lateral excessivo
+        y_velocity = abs(getattr(sim, "robot_y_velocity", 0))
+        if y_velocity > 0.2:
+            penalties += y_velocity * 2.0
+
+        # Penalidade por inclinação excessiva
+        roll = abs(getattr(sim, "robot_roll", 0))
+        if roll > 0.5:
+            penalties += (roll - 0.5) * 3.0
         
         return penalties
     
