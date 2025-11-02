@@ -1130,11 +1130,6 @@ class TrainingTab:
                     elif data_type == "tracker_status":
                         self.tracker_status = msg.get("tracker_status")
 
-                    elif data_type == "training_progress":
-                        # Atualizar contador de steps
-                        self.total_steps = msg.get("steps_completed", 0)
-                        self.logger.debug(f"Progresso: {self.total_steps} steps")
-
                     elif data_type == "pybullet_window_ready":
                         self.logger.info("Janela do PyBullet pronta para visualização.")
                         self.focus_pybullet_window()

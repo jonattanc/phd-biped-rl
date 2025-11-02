@@ -90,13 +90,8 @@ def process_runner(
             agent.model.learn(total_timesteps=timesteps_batch_size, reset_num_timesteps=False, callback=callback)
 
             # Enviar progresso para GUI
-            try:
-                ipc_queue.put_nowait({"type": "training_progress", "steps_completed": timesteps_completed})
-            except Exception as e:
-                logger.exception("Erro ao enviar progresso via IPC")
-
             if timesteps_completed % 10000 == 0:
-                logger.info(f"Progresso: {timesteps_completed} timesteps")
+                logger.info(f"Progresso: {timesteps_completed} timesteps com aprendizagem")
 
         logger.info("Treinamento concluído!")
 
