@@ -367,27 +367,69 @@ class DPGManager:
         self.critic_manager.adapt_architecture(group_level, performance, experience_count)
     
     def update_phase_progression(self, episode_results):
-        """Atualiza progressão com validação"""
+        """Atualiza progressão com relatório inteligente"""
         if not self.enabled:
             return
         
+        # Atualizar contador de episódios
+        if not hasattr(self, 'episode_count'):
+            self.episode_count = 0
+        self.episode_count += 1
+        
+        # Guardar estado anterior para detectar mudanças
+        old_group = self.phase_manager.current_group
+        old_sub_phase = self.phase_manager.current_sub_phase
+        
+        # Executar atualização normal
         result = self.phase_manager.update_phase(episode_results)
+        
+        # Detectar mudanças reais
+        current_group = self.phase_manager.current_group
+        current_sub_phase = self.phase_manager.current_sub_phase
+        
+        group_changed = old_group != current_group
+        sub_phase_changed = old_sub_phase != current_sub_phase
+        
+        # Lógica inteligente para relatórios
+        should_report = False
+        report_reason = ""
+        
+        if group_changed:
+            should_report = True
+            report_reason = f"mudança de grupo {old_group}→{current_group}"
+        elif sub_phase_changed:
+            should_report = True
+            report_reason = f"mudança de sub-fase {old_sub_phase}→{current_sub_phase}"
+        elif self.episode_count % 100 == 0:
+            should_report = True
+            report_reason = "checkpoint de 100 episódios"
+        elif result == PhaseTransitionResult.REGRESSION:
+            should_report = True
+            report_reason = "regressão detectada"
+        elif self.phase_manager.episodes_in_sub_phase == 1:
+            should_report = True
+            report_reason = "início de nova sub-fase"
+        
+        # Gerar relatório se necessário
+        if should_report:
+            self.logger.info(f"📊 Gerando relatório DPG: {report_reason}")
+            self.print_dpg_diagnostic(self.episode_count)
         
         # Executar validação se necessária
         if result == PhaseTransitionResult.VALIDATION_REQUIRED:
-            validation_results = self.phase_manager.execute_validation()
-        
-        # Atualizar transições de buffer se grupo mudou
-        if (hasattr(self, 'last_group') and 
-            self.last_group != self.phase_manager.current_group):
+            self.phase_manager.execute_validation()
+    
+        # Preservação de aprendizado em mudanças de grupo
+        if hasattr(self, 'last_group') and self.last_group != current_group:
+            self.logger.info(f"✅ Mudança de grupo detectada: {self.last_group} → {current_group}")
             
             self.buffer_manager.transition_with_preservation(
                 self.last_group,
-                self.phase_manager.current_group,
+                current_group,
                 self.phase_manager.current_group_config.adaptive_config
             )
         
-        self.last_group = self.phase_manager.current_group
+        self.last_group = current_group
         return result
     
     def _extract_state(self, sim):
@@ -429,3 +471,116 @@ class DPGManager:
             status.update(self.critic_manager.get_critic_status())
         
         return status
+    
+    def get_dpg_diagnostic_report(self) -> Dict:
+        """Gera relatório completo de diagnóstico do DPG"""
+        if not self.enabled or not self.phase_manager:
+            return {"status": "DPG disabled"}
+
+        try:
+            phase_manager = self.phase_manager
+            current_group = phase_manager.current_group
+            current_sub_phase = phase_manager.current_sub_phase
+            group_config = phase_manager.current_group_config
+            sub_phase_config = phase_manager.current_sub_phase_config
+
+            # Obter métricas de performance
+            performance_metrics = phase_manager.get_performance_metrics()
+            conditions = sub_phase_config.transition_conditions
+
+            # Verificar cada condição
+            condition_status = {}
+            for condition_name, required_value in conditions.items():
+                current_value = self._get_current_condition_value(condition_name, performance_metrics)
+                met = self._is_condition_met(condition_name, current_value, required_value)
+                condition_status[condition_name] = {
+                    "required": required_value,
+                    "current": current_value,
+                    "met": met
+                }
+
+            # Relatório completo
+            report = {
+                "episode": self.episode_count if hasattr(self, 'episode_count') else 0,
+                "current_group": current_group,
+                "group_name": group_config.name,
+                "current_sub_phase": current_sub_phase,
+                "sub_phase_name": sub_phase_config.name,
+                "episodes_in_sub_phase": phase_manager.episodes_in_sub_phase,
+                "success_rate": performance_metrics["success_rate"],
+                "condition_status": condition_status,
+                "focus_skills": sub_phase_config.focus_skills,
+                "target_speed": sub_phase_config.target_speed,
+                "enabled_components": sub_phase_config.enabled_components
+            }
+
+            return report
+
+        except Exception as e:
+            self.logger.error(f"Erro ao gerar relatório DPG: {e}")
+            return {"error": str(e)}
+
+    def _get_current_condition_value(self, condition_name: str, performance_metrics: Dict) -> float:
+        """Obtém o valor atual para uma condição específica"""
+        metric_map = {
+            "min_success_rate": "success_rate",
+            "min_avg_distance": "avg_distance", 
+            "max_avg_roll": "avg_roll",
+            "min_avg_steps": "avg_steps",
+            "min_avg_speed": "avg_speed",
+            "min_alternating_score": "alternating_score",
+            "min_gait_coordination": "gait_coordination",
+            "min_positive_movement_rate": "positive_movement_rate"
+        }
+
+        metric_name = metric_map.get(condition_name)
+        return performance_metrics.get(metric_name, 0.0) if metric_name else 0.0
+
+    def _is_condition_met(self, condition_name: str, current_value: float, required_value: float) -> bool:
+        """Verifica se uma condição está sendo atendida"""
+        if condition_name.startswith("min_"):
+            return current_value >= required_value
+        elif condition_name.startswith("max_"):
+            return current_value <= required_value
+        else:
+            return True
+        
+    def print_dpg_diagnostic(self, episode_number: int):
+        """Imprime relatório de diagnóstico do DPG formatado"""
+        if not self.enabled:
+            return
+
+        report = self.get_dpg_diagnostic_report()
+
+        if "error" in report:
+            self.logger.error(f"Erro no diagnóstico DPG: {report['error']}")
+            return
+
+        # Formatar relatório
+        self.logger.info("🎯 DPG DIAGNÓSTICO")
+        self.logger.info(f"   Episódio: {episode_number}")
+        self.logger.info(f"   Grupo: {report['current_group']} ({report['group_name']})")
+        self.logger.info(f"   Sub-fase: {report['current_sub_phase']} ({report['sub_phase_name']})")
+        self.logger.info(f"   Episódios na sub-fase: {report['episodes_in_sub_phase']}")
+        self.logger.info(f"   Taxa de sucesso: {report['success_rate']:.1%}")
+        self.logger.info(f"   Velocidade alvo: {report['target_speed']} m/s")
+
+        self.logger.info("   REQUISITOS:")
+        for condition_name, status in report['condition_status'].items():
+            icon = "✅" if status['met'] else "❌"
+            current = status['current']
+            required = status['required']
+
+            if isinstance(current, float):
+                current_str = f"{current:.3f}"
+            else:
+                current_str = str(current)
+
+            self.logger.info(f"     {icon} {condition_name}: {required} (Atual: {current_str})")
+
+        self.logger.info("   HABILIDADES FOCADAS:")
+        for skill in report['focus_skills']:
+            self.logger.info(f"     📍 {skill}")
+
+        self.logger.info("   COMPONENTES ATIVOS:")
+        self.logger.info(f"     {', '.join(report['enabled_components'])}")

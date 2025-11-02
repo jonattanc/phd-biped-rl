@@ -70,19 +70,19 @@ class AdaptiveValidator:
         """Decide se deve validar baseado em múltiplos gatilhos """
 
         # Gatilho: Queda de performance 
-        if performance_trend < -0.3:  
+        if performance_trend < -0.5:  
             return True, "performance_drop"
 
         # Gatilho: Estagnação 
-        if episodes_in_phase > 25 and performance_trend < 0.05:  
+        if episodes_in_phase > 25 and performance_trend < 0.02:  
             return True, "stagnation"
 
         # Gatilho: Muitas falhas consecutivas 
-        if consecutive_failures > 15:  
+        if consecutive_failures > 25:  
             return True, "regression"
 
         # Gatilho periódico baseado no grupo
-        validation_freq = self._get_validation_frequency(group_level)
+        validation_freq = self._get_validation_frequency(group_level)* 2
         if len(self.validation_history) > 0:
             last_validation = self.validation_history[-1]
             episodes_since_last = episodes_in_phase - last_validation.get('episode', 0)
@@ -153,7 +153,7 @@ class AdaptiveValidator:
         avg_distance = np.mean([r.get("distance", 0) for r in recent])
         target_distance = sub_phase_config.transition_conditions.get("min_avg_distance", 0.5)
 
-        return avg_distance >= target_distance * 0.3
+        return avg_distance >= target_distance * 0.1
     
     def _coordination_validation(self, performance_history: List[Dict]) -> bool:
         """Validação de coordenação"""
@@ -414,7 +414,19 @@ class PhaseManager:
             return self._update_transition_progress()
         
         self.episodes_in_sub_phase += 1
-        self.performance_history.append(episode_results)
+
+        essential_data = {
+            "distance": episode_results.get("distance", 0),
+            "success": episode_results.get("success", False),
+            "steps": episode_results.get("steps", 0),
+            "roll": episode_results.get("roll", 0),
+            "speed": episode_results.get("speed", 0),
+            "left_contact": episode_results.get("left_contact", False),
+            "right_contact": episode_results.get("right_contact", False),
+            "alternating": episode_results.get("alternating", False)
+        }
+        
+        self.performance_history.append(essential_data)
         
         # Manter histórico limitado
         if len(self.performance_history) > 100:
@@ -423,36 +435,22 @@ class PhaseManager:
         # Atualizar contadores
         self._update_success_counters(episode_results)
         
-        # Verificar necessidade de validação
-        should_validate, trigger = self.validator.should_validate(
-            self.current_group_config.group_level,
-            self._calculate_performance_trend(),
-            self.consecutive_failures,
-            self.episodes_in_sub_phase
-        )
-        
-        if should_validate:
-            self.validation_required = True
-            return PhaseTransitionResult.VALIDATION_REQUIRED
-        
-        # Executar validação se requisitada
-        if self.validation_required:
-            validation_results = self.execute_validation()
-            if not all(validation_results.values()):
-                self.logger.warning("❌ Validação falhou - requer ajustes")
-                return PhaseTransitionResult.FAILURE
-            self.validation_required = False
-        
-        # Verificar transições (lógica anterior mantida)
-        if self._should_advance_sub_phase():
+        should_regress = False
+        if self.episodes_in_sub_phase >= 20:  
+            should_regress = self._should_regress()
+
+        # Verificar avanço primeiro, depois regressão
+        should_advance = self._should_advance_sub_phase()
+        if should_advance:
             return self._advance_to_next_sub_phase()
-        
+
+        # Verificar outras transições
         if self._should_advance_group():
             return self._start_group_advancement()
-        
-        if self._should_regress():
+
+        if should_regress:
             return self._start_regression()
-        
+
         return PhaseTransitionResult.SUCCESS
     
     def execute_validation(self) -> Dict[str, bool]:
@@ -475,26 +473,74 @@ class PhaseManager:
         
         if len(distances) >= 3:
             return (distances[-1] - distances[0]) / max(distances[0], 0.1)
-        
+
         return 0.0
-    
+
     def _should_advance_sub_phase(self) -> bool:
         """Verifica se pode avançar para próxima sub-fase"""
         current_sub_phase = self.current_sub_phase_config
-        
+
         if self.episodes_in_sub_phase < current_sub_phase.min_episodes:
             return False
-        
-        conditions = current_sub_phase.transition_conditions
-        
-        # Verificar condições básicas
-        if not self._check_basic_conditions(conditions):
-            return False
-        
-        # Verificar se há próxima sub-fase disponível
+
         if self.current_sub_phase >= len(self.current_group_config.sub_phases) - 1:
             return False
-        
+
+        return self._check_all_conditions(current_sub_phase.transition_conditions)
+
+    def _check_all_conditions(self, conditions: Dict) -> bool:
+        """Verifica todas as condições de transição - COM LOGS DETALHADOS"""
+
+        # Sucess rate
+        success_rate = self._calculate_success_rate()
+        min_success = conditions.get("min_success_rate", 0.3)
+        success_ok = success_rate >= min_success
+        if not success_ok:
+            return False
+
+        # Average distance
+        avg_distance = self._calculate_avg_distance()
+        min_distance = conditions.get("min_avg_distance", 0.5)
+        distance_ok = avg_distance >= min_distance
+        if not distance_ok:
+            return False
+
+        # Average roll
+        avg_roll = self._calculate_avg_roll()
+        max_roll = conditions.get("max_avg_roll", 1.0)
+        roll_ok = avg_roll <= max_roll
+        if not roll_ok:
+            return False
+
+        # Average steps
+        avg_steps = self._calculate_avg_steps()
+        min_steps = conditions.get("min_avg_steps", 3)
+        steps_ok = avg_steps >= min_steps
+        if not steps_ok:
+            return False
+
+        # Positive movement rate
+        positive_rate = self._calculate_positive_movement_rate()
+        min_positive = conditions.get("min_positive_movement_rate", 0.6)
+        positive_ok = positive_rate >= min_positive
+        if not positive_ok:
+            return False
+
+        # Additional conditions that might be present
+        if "min_avg_speed" in conditions:
+            avg_speed = self._calculate_avg_speed()
+            min_speed = conditions["min_avg_speed"]
+            speed_ok = avg_speed >= min_speed
+            if not speed_ok:
+                return False
+
+        if "min_alternating_score" in conditions:
+            alternating_score = self._calculate_alternating_score()
+            min_alternating = conditions["min_alternating_score"]
+            alternating_ok = alternating_score >= min_alternating
+            if not alternating_ok:
+                return False
+
         return True
     
     def _should_advance_group(self) -> bool:
@@ -510,16 +556,13 @@ class PhaseManager:
         
         conditions = current_sub_phase.transition_conditions
         
-        # Condições mais rigorosas para avanço de grupo
         success_rate = self._calculate_success_rate()
-        if success_rate < conditions.get("min_success_rate", 0.3) + 0.1:  # +10% de exigência
+        if success_rate < conditions.get("min_success_rate", 0.3) + 0.1:  
             return False
         
-        # Verificar consistência avançada
         if not self._check_advanced_consistency():
             return False
         
-        # Verificar se há próximo grupo disponível
         if self.current_group >= len(self.groups) - 1:
             return False
         
@@ -540,58 +583,53 @@ class PhaseManager:
         """Inicia transição para próximo grupo"""
         self.transition_active = True
         self.transition_episodes = 0
-        self.transition_total_episodes = 12  # Mais episódios para transição de grupo
+        self.transition_total_episodes = 12  
         
-        self.logger.info(f"🚀 Iniciando transição para grupo {self.current_group + 1}")
         return PhaseTransitionResult.SUCCESS
     
     def _should_regress(self) -> bool:
         """Verifica se precisa regredir (sub-fase ou grupo)"""
         regression_thresholds = {
-            1: {"max_failures": 25, "min_success_rate": 0.2, "stagnation_episodes": 40},
-            2: {"max_failures": 20, "min_success_rate": 0.25, "stagnation_episodes": 35},
-            3: {"max_failures": 15, "min_success_rate": 0.3, "stagnation_episodes": 30}
+            1: {"max_failures": 50, "min_success_rate": 0.1, "stagnation_episodes": 10},
+            2: {"max_failures": 40, "min_success_rate": 0.15, "stagnation_episodes": 8},
+            3: {"max_failures": 30, "min_success_rate": 0.2, "stagnation_episodes": 6}
         }
         
         thresholds = regression_thresholds.get(self.current_group_config.group_level, regression_thresholds[1])
         
-        # Regressão por falhas consecutivas
+        if self.episodes_in_sub_phase < 20: 
+            return False
+        
         if self.consecutive_failures > thresholds["max_failures"]:
             return True
-        
-        # Regressão por estagnação
+
         if self.stagnation_counter > thresholds["stagnation_episodes"]:
             return True
-        
-        # Regressão por performance baixa
+
         success_rate = self._calculate_success_rate()
-        if success_rate < thresholds["min_success_rate"]:
+        if success_rate < thresholds["min_success_rate"] and self.episodes_in_sub_phase > 30:
             return True
-        
+
         return False
     
     def _start_regression(self) -> PhaseTransitionResult:
         """Inicia processo de regressão"""
-        # Decidir se regride sub-fase ou grupo
         if self.current_sub_phase > 0:
-            # Regride sub-fase
+            old_phase = self.current_sub_phase
             self.current_sub_phase -= 1
-            self.logger.info(f"📉 Regressão para sub-fase {self.current_sub_phase}")
-        elif self.current_group > 0:
-            # Regride grupo
+            self.episodes_in_sub_phase = 0
+            self.consecutive_failures = 0
+            self.stagnation_counter = 0
+            return PhaseTransitionResult.REGRESSION
+        elif self.current_group > 0 and self.episodes_in_sub_phase > 50:
             self.transition_active = True
             self.transition_episodes = 0
             self.transition_total_episodes = 10
-            self.logger.info(f"📉 Iniciando regressão para grupo {self.current_group - 1}")
+            return PhaseTransitionResult.REGRESSION
         else:
-            # Já está no nível mais baixo
+            self.consecutive_failures = 0  
+            self.stagnation_counter = 0
             return PhaseTransitionResult.FAILURE
-        
-        self.episodes_in_sub_phase = 0
-        self.consecutive_failures = 0
-        self.stagnation_counter = 0
-        
-        return PhaseTransitionResult.REGRESSION
     
     def _update_transition_progress(self) -> PhaseTransitionResult:
         """Atualiza progresso da transição entre grupos"""
@@ -653,19 +691,20 @@ class PhaseManager:
             self.consecutive_successes = 0
         
         # Detectar estagnação
-        if len(self.performance_history) >= 5:
-            recent_distances = [r.get("distance", 0) for r in self.performance_history[-5:]]
+        if len(self.performance_history) >= 10:  # Aumentado de 5 para 10
+            recent_distances = [r.get("distance", 0) for r in self.performance_history[-10:]]
             current_distance = episode_results.get("distance", 0)
-            
+
             avg_recent = np.mean(recent_distances)
             std_recent = np.std(recent_distances)
-            
-            if (std_recent < 0.05 and
-                abs(current_distance - avg_recent) < 0.1 and
-                current_distance < 0.5):
+
+            # Condições mais relaxadas para estagnação
+            if (std_recent < 0.1 and  # Aumentado de 0.05 para 0.1
+                abs(current_distance - avg_recent) < 0.2 and  # Aumentado de 0.1 para 0.2
+                current_distance < 1.0):  # Aumentado de 0.5 para 1.0
                 self.stagnation_counter += 1
             else:
-                self.stagnation_counter = max(0, self.stagnation_counter - 1)
+                self.stagnation_counter = max(0, self.stagnation_counter - 2)
     
     def _check_basic_conditions(self, conditions: Dict) -> bool:
         """Verifica condições básicas obrigatórias"""
@@ -695,24 +734,32 @@ class PhaseManager:
         distance_std = np.std(distances)
         distance_mean = np.mean(distances) if np.mean(distances) > 0 else 0.1
         
-        if (distance_std / distance_mean) > 0.3:  # Mais rigoroso para grupos
+        if (distance_std / distance_mean) > 0.3:  
             return False
         
         # Consistência no sucesso
         successes = [1 if r.get("success", False) else 0 for r in recent_results]
         success_rate = np.mean(successes)
         
-        if success_rate < 0.6:  # Mais rigoroso para grupos
+        if success_rate < 0.6:  
             return False
         
         return True
     
-    # Métricas de cálculo (mantidas do original)
+    # Métricas de cálculo 
     def _calculate_success_rate(self) -> float:
         if not self.performance_history:
             return 0.0
         recent_history = self.performance_history[-10:]
-        successes = sum(1 for r in recent_history if r.get("success", False))
+        successes = 0
+        for r in recent_history:
+            if r.get("success", False):
+                successes += 1
+            elif r.get("episode_success", False):
+                successes += 1
+            elif r.get("distance", 0) > 0.5:  
+                successes += 1
+
         return successes / len(recent_history)
     
     def _calculate_avg_distance(self) -> float:
@@ -804,6 +851,8 @@ class PhaseManager:
     
     def get_status(self) -> Dict:
         """Retorna status com informações de validação"""
+        performance_metrics = self.get_performance_metrics()
+
         status = {
             "current_group": self.current_group,
             "current_sub_phase": self.current_sub_phase,
@@ -812,6 +861,9 @@ class PhaseManager:
             "last_validation_episode": self.last_validation_episode,
             "consecutive_failures": self.consecutive_failures,
             "performance_trend": self._calculate_performance_trend(),
+            "success_rate": performance_metrics["success_rate"],
+            "avg_distance": performance_metrics["avg_distance"],
+            "avg_roll": performance_metrics["avg_roll"],
         }
         
         # Adicionar status do validador
@@ -820,10 +872,10 @@ class PhaseManager:
         return status
     
     def get_current_sub_phase_info(self) -> Dict:
-        """Retorna informações da sub-fase atual (para compatibilidade)"""
+        """Retorna informações da sub-fase atual """
         return {
-            "current_phase": self.current_group,  # Compatibilidade
-            "phase_index": self.current_sub_phase,  # Compatibilidade
+            "current_phase": self.current_group,  
+            "phase_index": self.current_sub_phase,  
             "target_speed": self.current_sub_phase_config.target_speed,
             "episodes_in_phase": self.episodes_in_sub_phase,
             "performance_metrics": {
@@ -834,7 +886,7 @@ class PhaseManager:
                 "positive_movement_rate": self._calculate_positive_movement_rate()
             }
         }
-    
+        
     @property
     def current_group_config(self) -> PhaseGroup:
         return self.groups[self.current_group]
