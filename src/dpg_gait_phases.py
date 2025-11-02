@@ -1726,9 +1726,6 @@ class GaitPhaseDPG:
             print("   ESTATÍSTICAS DO APRENDIZADO:")
             print(f"     📊 Total de episódios: {len(self.performance_history)}")
             print(f"     🎯 Episódios na fase anterior: {episodes_in_old_phase}")
-            print(f"     🎯 Sucessos consecutivos: {self.consecutive_successes}")
-            print(f"     💀 Falhas consecutivas: {self.consecutive_failures}")
-            print(f"     🌀 Contador de estagnação: {self.stagnation_counter}")
             print(f"     📦 Amostras DASS: {len(self.dass_samples)}")
             
             if self.learned_reward_model:
@@ -1750,10 +1747,10 @@ class GaitPhaseDPG:
                     buffer = self.reward_system.agent.model.replay_buffer
                     buffer_size_before = len(buffer)
                     
-                    if self.current_phase <= 1:
-                        buffer.clear()
+                    if self.current_phase <= 3:
+                        self._recalculate_buffer_rewards(buffer, preserve_ratio=0.6)
                     else:
-                        preserved_count = self._preserve_high_value_experiences(buffer, preserve_ratio=0.3)
+                        self._recalculate_buffer_rewards(buffer, preserve_ratio=0.8)
                     
                     self._refill_replay_buffer()
                     
@@ -1761,53 +1758,144 @@ class GaitPhaseDPG:
             self.logger.warning(f"⚠️ Erro na transição do buffer: {e}")
             self._clear_agent_replay_buffer()
 
-    def _preserve_high_value_experiences(self, buffer, preserve_ratio=0.3) -> int:
-        """Preserva as melhores experiências do buffer baseado em qualidade"""
+    def _recalculate_buffer_rewards(self, buffer, preserve_ratio=0.6):
+        """Recalcula recompensas do buffer com o sistema atual"""
         try:
             if not hasattr(buffer, 'buffer') or len(buffer) == 0:
                 return 0
             
-            experiences = []
-            for i in range(len(buffer)):
-                experience = buffer.buffer[i]
-                quality_score = self._calculate_experience_quality(experience)
-                experiences.append((quality_score, experience))
+            experiences_with_new_rewards = []
             
-            experiences.sort(key=lambda x: x[0], reverse=True)
+            for i, experience in enumerate(buffer.buffer):
+                obs, next_obs, action, old_reward, done, info = experience
+                new_reward = self._estimate_reward_from_experience(obs, action, next_obs, done, info)
+                experience_quality = self._calculate_experience_quality(
+                    obs, action, new_reward, next_obs, done, info
+                )
+                
+                experiences_with_new_rewards.append({
+                    'experience': (obs, next_obs, action, new_reward, done, info),
+                    'quality': experience_quality,
+                    'old_reward': old_reward,
+                    'new_reward': new_reward
+                })
             
-            preserve_count = int(len(experiences) * preserve_ratio)
-            preserved_experiences = experiences[:preserve_count]
+            experiences_with_new_rewards.sort(key=lambda x: x['quality'], reverse=True)
+            preserve_count = int(len(experiences_with_new_rewards) * preserve_ratio)
+            best_experiences = experiences_with_new_rewards[:preserve_count]
             
+            # Log das mudanças
+            if best_experiences:
+                np.mean([e['old_reward'] for e in best_experiences])
+                np.mean([e['new_reward'] for e in best_experiences])
+            
+            # Reconstruir buffer com novas experiências
             buffer.clear()
-            for quality_score, experience in preserved_experiences:
-                buffer.add(*experience)
+            for item in best_experiences:
+                buffer.add(*item['experience'])
             
-            return preserve_count
+            return len(best_experiences)
             
         except Exception as e:
-            self.logger.warning(f"⚠️ Erro ao preservar experiências: {e}")
+            self.logger.warning(f"⚠️ Erro ao recalcular recompensas: {e}")
             return 0
         
-    def _calculate_experience_quality(self, experience) -> float:
-        """Calcula qualidade de uma experiência baseado em estabilidade e progresso"""
+    def _estimate_reward_from_experience(self, obs, action, next_obs, done, info) -> float:
+        """Estima recompensa para uma experiência baseada no estado e ação"""
         try:
-            obs, next_obs, action, reward, done, info = experience
+            reward_estimate = 0.0
             
-            quality_score = 0.0
+            # 1. Progresso (posição x)
+            if len(obs) > 0:
+                progress = obs[0] if abs(obs[0]) < 10 else 0  
+                if progress > 0:
+                    reward_estimate += progress * 2.0
             
-            quality_score += min(abs(reward) * 0.1, 1.0)
+            # 2. Estabilidade (roll/pitch)
+            if len(obs) > 2:
+                stability_penalty = abs(obs[1]) + abs(obs[2])  
+                reward_estimate -= min(stability_penalty * 0.5, 2.0)
             
-            if not done:
-                quality_score += 0.5
+            # 3. Velocidade (derivada da posição)
+            if len(obs) > 0 and len(next_obs) > 0:
+                velocity = (next_obs[0] - obs[0]) / self.time_step_s
+                if velocity > 0.05:  
+                    reward_estimate += min(velocity * 1.0, 1.0)
+                elif velocity < -0.05:  
+                    reward_estimate -= min(abs(velocity) * 2.0, 1.0)
             
-            if hasattr(action, '__len__'):
+            # 4. Ação suave (penalidade por ações bruscas)
+            if hasattr(action, '__len__') and len(action) > 1:
                 action_smoothness = 1.0 - min(np.std(action) * 2.0, 1.0)
-                quality_score += action_smoothness * 0.3
+                reward_estimate += action_smoothness * 0.3
             
-            return min(quality_score, 1.0)
+            # 5. Fase específica - ajustar recompensa baseado na fase atual
+            phase_bonus = self._get_phase_specific_bonus(obs, action, done)
+            reward_estimate += phase_bonus
+            
+            # 6. Terminação (bonus/penalidade)
+            if done:
+                if len(next_obs) > 0 and next_obs[0] > 1.0:  
+                    reward_estimate += 5.0
+                else:  
+                    reward_estimate -= 2.0
+            
+            return reward_estimate
             
         except Exception as e:
-            return 0.5  
+            self.logger.debug(f"Erro na estimativa de recompensa: {e}")
+            return 0.0  
+        
+    def _get_phase_specific_bonus(self, obs, action, done) -> float:
+        """Bônus específico para a fase atual"""
+        bonus = 0.0
+        
+        if self.current_phase == 0:  
+            if len(obs) > 2 and abs(obs[1]) < 0.5:  
+                bonus += 0.5
+            if len(obs) > 0 and obs[0] > 0.1:  
+                bonus += 1.0
+                
+        elif self.current_phase == 1:    
+            if len(obs) > 0 and obs[0] > 0.3:
+                bonus += 1.5
+            if hasattr(action, '__len__') and np.mean(action) > 0.1:
+                bonus += 0.5
+                
+        elif self.current_phase >= 2:  
+            if len(obs) > 0 and obs[0] > 0.8:
+                bonus += 2.0
+        
+        return bonus
+    
+    def _calculate_experience_quality(self, obs, action, reward, next_obs, done, info) -> float:
+        """Calcula qualidade da experiência para priorização"""
+        quality = 0.0
+        
+        # 1. Recompensa alta
+        quality += min(abs(reward) * 0.2, 1.0)
+        
+        # 2. Progresso positivo
+        if len(obs) > 0 and len(next_obs) > 0:
+            progress = next_obs[0] - obs[0]
+            if progress > 0:
+                quality += min(progress * 3.0, 1.0)
+        
+        # 3. Estabilidade
+        if len(obs) > 2:
+            stability = 1.0 - min(abs(obs[1]) + abs(obs[2]), 2.0) / 2.0
+            quality += stability * 0.3
+        
+        # 4. Ação suave
+        if hasattr(action, '__len__') and len(action) > 1:
+            smoothness = 1.0 - min(np.std(action) * 3.0, 1.0)
+            quality += smoothness * 0.2
+        
+        # 5. Não-terminação (experiências que continuam são valiosas)
+        if not done:
+            quality += 0.5
+        
+        return min(quality, 1.0)
         
     def _cancel_current_transition(self):
         """Cancela transição atual e restaura estado anterior"""
