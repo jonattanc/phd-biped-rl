@@ -450,6 +450,11 @@ class PhaseManager:
 
         if should_regress:
             return self._start_regression()
+        
+        # DEBUG: Log de progresso
+        if self.episodes_in_sub_phase % 10 == 0:
+            self.logger.info(f"📊 PhaseManager: Grupo={self.current_group}, Sub-fase={self.current_sub_phase}, Episódios={self.episodes_in_sub_phase}")
+            self.logger.info(f"📊 Métricas: SuccessRate={self._calculate_success_rate():.3f}, Distance={self._calculate_avg_distance():.3f}")
 
         return PhaseTransitionResult.SUCCESS
     
@@ -832,8 +837,9 @@ class PhaseManager:
         group_config = self.current_group_config
         sub_phase_config = self.current_sub_phase_config
         
-        return {
+        info = {
             'group': self.current_group,
+            'group_level': self.current_group,
             'group_name': group_config.name,
             'sub_phase': self.current_sub_phase,
             'sub_phase_name': sub_phase_config.name,
@@ -845,6 +851,8 @@ class PhaseManager:
             'group_level': group_config.group_level,
             'adaptive_config': group_config.adaptive_config
         }
+
+        return info
     
     def get_status(self) -> Dict:
         """Retorna status com informações de validação"""

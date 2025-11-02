@@ -17,7 +17,7 @@ class Experience:
     group: int
     sub_phase: int
     quality: float
-    skills: Dict[str, float]  # Habilidades demonstradas
+    skills: Dict[str, float] 
 
 
 class SkillTransferMap:
@@ -27,35 +27,49 @@ class SkillTransferMap:
         self.skill_transfer_rules = {
             # Fundação → Desenvolvimento
             (1, 2): {
-                "transferable_skills": ["estabilidade", "controle_postural", "progresso_basico"],
-                "skill_weights": {"estabilidade": 0.6, "controle_postural": 0.3, "progresso_basico": 0.1},
-                "relevance_threshold": 0.7
+                "transferable_skills": ["estabilidade", "controle_postural", "progresso_basico", "coordenação"],
+                "skill_weights": {"estabilidade": 0.4, "controle_postural": 0.3, "progresso_basico": 0.2, "coordenação": 0.1},
+                "relevance_threshold": 0.5
             },
             # Desenvolvimento → Domínio
             (2, 3): {
-                "transferable_skills": ["coordenação", "controle_velocidade", "eficiência"],
-                "skill_weights": {"coordenação": 0.4, "controle_velocidade": 0.4, "eficiência": 0.2},
-                "relevance_threshold": 0.8
+                "transferable_skills": ["coordenação", "controle_velocidade", "eficiência", "estabilidade"],
+                "skill_weights": {"coordenação": 0.3, "controle_velocidade": 0.3, "eficiência": 0.2, "estabilidade": 0.1},
+                "relevance_threshold": 0.6
             },
             # Regressões
             (2, 1): {
-                "transferable_skills": ["estabilidade", "controle_postural"],
-                "skill_weights": {"estabilidade": 0.7, "controle_postural": 0.3},
-                "relevance_threshold": 0.6
+                "transferable_skills": ["estabilidade", "controle_postural", "progresso_basico"],
+                "skill_weights": {"estabilidade": 0.5, "controle_postural": 0.3, "progresso_basico": 0.2},
+                "relevance_threshold": 0.5 
             },
             (3, 2): {
-                "transferable_skills": ["coordenação", "eficiência"],
-                "skill_weights": {"coordenação": 0.6, "eficiência": 0.4},
-                "relevance_threshold": 0.7
+                "transferable_skills": ["coordenação", "eficiência", "estabilidade"],
+                "skill_weights": {"coordenação": 0.4, "eficiência": 0.3, "estabilidade": 0.3},
+                "relevance_threshold": 0.6 
             }
         }
     
     def get_transfer_rules(self, old_group: int, new_group: int) -> Dict:
         """Obtém regras de transferência para transição"""
+        if old_group == new_group:
+            return {
+                "transferable_skills": ["estabilidade", "controle_postural", "progresso_basico", "coordenação", "eficiência", "controle_velocidade"],
+                "skill_weights": {
+                    "estabilidade": 0.2, 
+                    "controle_postural": 0.2, 
+                    "progresso_basico": 0.2, 
+                    "coordenação": 0.15, 
+                    "eficiência": 0.15,
+                    "controle_velocidade": 0.1
+                },
+                "relevance_threshold": 0.3  
+            }
+        
         return self.skill_transfer_rules.get((old_group, new_group), {
-            "transferable_skills": [],
-            "skill_weights": {},
-            "relevance_threshold": 0.5
+            "transferable_skills": ["estabilidade", "controle_postural", "progresso_basico"],
+            "skill_weights": {"estabilidade": 0.4, "controle_postural": 0.4, "progresso_basico": 0.2},
+            "relevance_threshold": 0.5  
         })
     
     def calculate_skill_relevance(self, experience: Experience, target_group: int) -> float:
@@ -70,7 +84,12 @@ class SkillTransferMap:
             skill_value = experience.skills.get(skill, 0.0)
             relevance += skill_value * weight
         
-        return relevance
+        if experience.quality > 0.8:
+            relevance *= 1.3  
+        elif experience.quality > 0.6:
+            relevance *= 1.1  
+            
+        return min(relevance, 1.0)
 
 
 class SmartBufferManager:
@@ -78,13 +97,13 @@ class SmartBufferManager:
     ESPECIALISTA EM MEMÓRIA com Preservação Inteligente
     """
     
-    def __init__(self, logger, config, max_core_experiences=1000):
+    def __init__(self, logger, config, max_core_experiences=2000):
         self.logger = logger
         self.config = config
         self.max_core_experiences = max_core_experiences
         
         # Sistema de memória hierárquico
-        self.group_buffers = {}
+        self.group_buffers = {0: []}
         self.core_buffer = deque(maxlen=max_core_experiences)
         self.current_group_buffer = []
         
@@ -102,20 +121,54 @@ class SmartBufferManager:
     
     def store_experience(self, experience_data: Dict):
         """Armazena experiência com análise de habilidades"""
-        experience = self._create_enhanced_experience(experience_data)
+        phase_info = experience_data.get("phase_info", {})
+        # Obter grupo REAL do PhaseManager através do DPGManager
+        dpg_manager = getattr(self, '_dpg_manager', None)
+        if dpg_manager and hasattr(dpg_manager, 'phase_manager'):
+            group = dpg_manager.phase_manager.current_group
+        else:
+            group = 0  # Fallback seguro
         
-        group = experience_data.get("group_level", 1)
-        sub_phase = experience_data["phase_info"].get("sub_phase", 0)
+        # FORÇAR grupo correto no phase_info
+        phase_info['group_level'] = group
+        phase_info['group'] = group
+        experience = self._create_enhanced_experience(experience_data)
+        sub_phase = phase_info.get('sub_phase', 0)
+
+        # DEBUG EXPANDIDO
+        current_buffer_group = self.get_current_group()
+        if group != current_buffer_group:
+            self.logger.warning(f"🚨 INCONSISTÊNCIA: Exp_group={group}, Buffer_group={current_buffer_group}")
+            if group not in self.group_buffers:
+                self.group_buffers[group] = []
+            self.current_group_buffer = self.group_buffers[group]
         
         # Armazenar hierarquicamente
         self._store_hierarchical(experience, group, sub_phase)
-        
+
         # Armazenar no core se for fundamental
-        if self._is_fundamental_experience(experience):
-            self.core_buffer.append(experience)
-        
+        if self._is_fundamental_experience(experience) or experience.quality > 0.7:
+            if len(self.core_buffer) < self.max_core_experiences:
+                self.core_buffer.append(experience)
+            else:
+                # Substituir pior experiência do core
+                self.core_buffer = sorted(self.core_buffer, key=lambda x: x.quality)
+                if experience.quality > self.core_buffer[0].quality:
+                    self.core_buffer[0] = experience
+
         self.experience_count += 1
     
+    def get_current_group(self) -> int:
+        """Retorna o grupo atual baseado no buffer atual"""
+        if not hasattr(self, 'current_group_buffer') or self.current_group_buffer is None:
+            return 1  
+
+        for group, buffer in self.group_buffers.items():
+            if buffer and len(buffer) > 0 and buffer is self.current_group_buffer:
+                return group
+
+        return getattr(self, '_last_known_group', 1)
+
     def _create_enhanced_experience(self, data: Dict) -> Experience:
         """Cria experiência com análise de habilidades"""
         state = data["state"]
@@ -170,40 +223,69 @@ class SmartBufferManager:
         
         # Habilidade de controle postural
         skills["controle_postural"] = 1.0 - min(abs(pitch) * 2.0, 1.0)
-        
+
         return skills
-    
+
     def transition_with_preservation(self, old_group: int, new_group: int, adaptive_config: Dict):
-        """Transição inteligente com preservação de aprendizado"""
+        """Transição inteligente com preservação de aprendizado - DEBUG EXPANDIDO"""
         self.group_transitions += 1
-        
+
+        self.logger.info(f"🔄 INICIANDO TRANSIÇÃO: {old_group}→{new_group}")
+        self.logger.info(f"   Antes: { {f'group_{k}': len(v) for k, v in self.group_buffers.items()} }")
+
+        # Garantir que ambos os grupos existem
+        if old_group not in self.group_buffers:
+            self.logger.warning(f"🚨 Grupo antigo {old_group} não existe! Criando...")
+            self.group_buffers[old_group] = []
+
+        if new_group not in self.group_buffers:
+            self.logger.info(f"📁 Criando novo grupo {new_group}")
+            self.group_buffers[new_group] = []
+
         # 1. Coletar experiências do grupo antigo
         old_experiences = self.group_buffers.get(old_group, [])
-        
-        # 2. Filtrar experiências relevantes
-        relevant_experiences = self._filter_relevant_experiences(old_experiences, new_group)
-        
-        # 3. Combinar com experiências fundamentais
-        preserved_experiences = relevant_experiences + list(self.core_buffer)
-        
+        self.logger.info(f"   Experiências no grupo {old_group}: {len(old_experiences)}")
+
+        # Se for mesma transição de grupo, preservar MUITO mais
+        if old_group == new_group:
+            self.logger.info(f"🔄 Transição interna no grupo {old_group}")
+            # Preservar praticamente tudo para transições internas
+            preserved_experiences = old_experiences + list(self.core_buffer)
+        else:
+            # 2. Filtrar experiências relevantes
+            relevant_experiences = self._filter_relevant_experiences(old_experiences, new_group)
+            self.logger.info(f"   Experiências relevantes: {len(relevant_experiences)}/{len(old_experiences)}")
+
+            # 3. Combinar com experiências fundamentais
+            preserved_experiences = relevant_experiences + list(self.core_buffer)
+
         # 4. Aplicar política de preservação
-        preservation_policy = adaptive_config.get("learning_preservation", "medium")
+        preservation_policy = adaptive_config.get("learning_preservation", "high")
         final_experiences = self._apply_preservation_policy(preserved_experiences, preservation_policy)
-        
+
         # 5. Atualizar buffers
         self.group_buffers[new_group] = final_experiences
         self.current_group_buffer = final_experiences
-        
+
+        # Log final
+        total_old = len(old_experiences)
+        total_preserved = len(final_experiences)
+        preservation_percent = (total_preserved / total_old * 100) if total_old > 0 else 0
+
+        self.logger.info(f"🔄 TRANSIÇÃO CONCLUÍDA: {old_group}→{new_group}")
+        self.logger.info(f"   Preservação: {total_preserved}/{total_old} ({preservation_percent:.1f}%)")
+        self.logger.info(f"   Depois: { {f'group_{k}': len(v) for k, v in self.group_buffers.items()} }")
+
         # Atualizar estatísticas
         self.preservation_stats["total_transitions"] += 1
         self.preservation_stats["experiences_preserved"] += len(final_experiences)
-        self.preservation_stats["preservation_rate"] = (
-            self.preservation_stats["experiences_preserved"] / 
-            (self.preservation_stats["total_transitions"] * 1000 + 1e-8)
-        )
-        
-        self.logger.info(f"🔄 Preservação: {old_group}→{new_group}, "
-                        f"Experiências: {len(final_experiences)}")
+
+        # Calcular taxa de preservação
+        if self.preservation_stats["total_transitions"] > 0:
+            total_preserved_all = sum(len(buf) for buf in self.group_buffers.values())
+            total_possible = self.experience_count
+            if total_possible > 0:
+                self.preservation_stats["preservation_rate"] = total_preserved_all / total_possible
     
     def _filter_relevant_experiences(self, experiences: List[Experience], new_group: int) -> List[Experience]:
         """Filtra experiências relevantes para o novo grupo"""
@@ -213,32 +295,62 @@ class SmartBufferManager:
             relevance = self.skill_map.calculate_skill_relevance(exp, new_group)
             rules = self.skill_map.get_transfer_rules(exp.group, new_group)
             
-            if relevance >= rules["relevance_threshold"]:
+            if relevance >= rules["relevance_threshold"] or exp.quality > 0.8:
                 relevant.append(exp)
         
-        # Ordenar por relevância
-        relevant.sort(key=lambda x: self.skill_map.calculate_skill_relevance(x, new_group), 
-                     reverse=True)
+        relevant.sort(key=lambda x: self.skill_map.calculate_skill_relevance(x, new_group) * 0.7 + x.quality * 0.3, reverse=True)
         
         return relevant
     
     def _apply_preservation_policy(self, experiences: List[Experience], policy: str) -> List[Experience]:
         """Aplica política de preservação"""
         policy_limits = {
-            "high": 800,    # Alta preservação
-            "medium": 500,  # Preservação média
-            "low": 300      # Baixa preservação
+            "high": 2000,    
+            "medium": 1500,  
+            "low": 1000     
         }
         
-        limit = policy_limits.get(policy, 500)
-        return experiences[:limit]
+        limit = policy_limits.get(policy, 1500)
+        if len(experiences) <= limit:
+            return experiences
+        high_quality = [exp for exp in experiences if exp.quality > 0.7]
+        medium_quality = [exp for exp in experiences if 0.4 <= exp.quality <= 0.7]
+        low_quality = [exp for exp in experiences if exp.quality < 0.4]
+        
+        preserved = []
+        
+        high_limit = int(limit * 0.7)
+        if len(high_quality) > high_limit:
+            high_quality.sort(key=lambda x: x.quality, reverse=True)
+            preserved.extend(high_quality[:high_limit])
+        else:
+            preserved.extend(high_quality)
+        
+        remaining_slots = limit - len(preserved)
+        medium_limit = int(remaining_slots * 0.9)  
+        
+        if len(medium_quality) > medium_limit:
+            medium_quality.sort(key=lambda x: x.quality, reverse=True)
+            preserved.extend(medium_quality[:medium_limit])
+        else:
+            preserved.extend(medium_quality)
+        
+        remaining_slots = limit - len(preserved)
+        if remaining_slots > 0 and low_quality:
+            low_quality.sort(key=lambda x: x.reward, reverse=True)
+            preserved.extend(low_quality[:remaining_slots])
+        
+        self.logger.info(f"📦 Preservação: {len(preserved)}/{len(experiences)} "
+                        f"(High: {len(high_quality)}, Med: {len(medium_quality)}, Low: {len(low_quality)})")
+        
+        return preserved
     
     def _calculate_experience_quality(self, state, action, reward, metrics) -> float:
         """Calcula qualidade da experiência"""
         quality = 0.0
         
         # Fator de recompensa
-        quality += min(abs(reward) * 0.2, 1.0)
+        quality += min(abs(reward) * 0.3, 1.0)
         
         # Fator de progresso
         progress = metrics.get("distance", 0)
@@ -247,27 +359,34 @@ class SmartBufferManager:
         
         # Fator de estabilidade
         stability = 1.0 - min(metrics.get("roll", 0) + metrics.get("pitch", 0), 1.0)
-        quality += stability * 0.3
+        quality += stability * 0.4
+
+        # Fator de sucesso
+        success = metrics.get("success", False)
+        if success:
+            quality += 0.5
         
         return min(quality, 1.0)
     
     def _is_fundamental_experience(self, experience: Experience) -> bool:
         """Verifica se experiência é fundamental"""
-        return (experience.quality > 0.7 and 
-                experience.reward > 0.5 and
-                experience.skills.get("estabilidade", 0) > 0.6)
+        return (experience.quality > 0.6 and 
+                experience.reward > 0.3 and
+                experience.skills.get("estabilidade", 0) > 0.5)
     
     def _store_hierarchical(self, experience: Experience, group: int, sub_phase: int):
         """Armazena experiência na hierarquia"""
         if group not in self.group_buffers:
             self.group_buffers[group] = []
+            self.logger.info(f"📁 Criado novo grupo {group} no buffer")
+
         self.group_buffers[group].append(experience)
-        
-        self.current_group_buffer.append(experience)
-        
-        # Limitar tamanho
-        if len(self.current_group_buffer) > 2000:
-            self.current_group_buffer = self.current_group_buffer[-1500:]
+        self.current_group_buffer = self.group_buffers[group]
+
+        if len(self.group_buffers[group]) > 3000:
+            self.group_buffers[group].sort(key=lambda x: x.quality, reverse=True)
+            self.group_buffers[group] = self.group_buffers[group][:2500]
+            self.current_group_buffer = self.group_buffers[group]
     
     def get_training_batch(self, batch_size=32):
         """Retorna batch para treinamento"""
@@ -281,10 +400,20 @@ class SmartBufferManager:
         
         # Amostragem por qualidade
         qualities = [exp.quality for exp in available]
-        probabilities = np.array(qualities) / sum(qualities)
+        max_quality = max(qualities) if qualities else 1.0
+        normalized_qualities = [q / max_quality for q in qualities]
         
-        indices = np.random.choice(len(available), size=batch_size, p=probabilities, replace=False)
-        return [available[i] for i in indices]
+        # Suavizar probabilidades para evitar extremos
+        smoothed_qualities = [q ** 0.7 for q in normalized_qualities] 
+        total = sum(smoothed_qualities)
+        
+        if total > 0:
+            probabilities = np.array(smoothed_qualities) / total
+            indices = np.random.choice(len(available), size=batch_size, p=probabilities, replace=False)
+            return [available[i] for i in indices]
+        else:
+            indices = np.random.choice(len(available), size=batch_size, replace=False)
+            return [available[i] for i in indices]
     
     def get_status(self):
         """Retorna status com estatísticas de preservação"""
@@ -317,6 +446,6 @@ class SmartBufferManager:
             "buffer_avg_reward": avg_reward,
             "core_buffer_size": len(self.core_buffer),
             "current_buffer_size": len(self.current_group_buffer),
-            "learning_convergence": 0.5,  # Placeholder
+            "learning_convergence": 0.5,  
             "memory_efficiency": self.preservation_stats.get("preservation_rate", 0.0),
         }

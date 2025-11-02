@@ -231,6 +231,9 @@ class DPGManager:
         
         # Obter contexto atual
         phase_info = self.phase_manager.get_current_phase_info()
+        current_group = self.phase_manager.current_group
+        phase_info['group_level'] = current_group
+        phase_info['group_name'] = self.phase_manager.current_group_config.name
         
         # Calcular recompensa
         reward = self.reward_calculator.calculate(sim, action, phase_info)
@@ -390,6 +393,15 @@ class DPGManager:
         group_changed = old_group != current_group
         sub_phase_changed = old_sub_phase != current_sub_phase
 
+        # Chamar debug do buffer em mudanças importantes
+        if group_changed or sub_phase_changed:
+            self.logger.info(f"🔄 Mudança detectada - Executando preservação")
+            self.buffer_manager.transition_with_preservation(
+                old_group, 
+                current_group,  
+                self.phase_manager.current_group_config.adaptive_config
+            )
+
         # Lógica inteligente para relatórios
         should_report = False
         report_reason = ""
@@ -413,10 +425,10 @@ class DPGManager:
 
         # Gerar relatório se necessário
         if should_report:
-            self.logger.info("="*50)
+            self.logger.info("="*60)
             self.logger.info(f"📊: {report_reason}")
             self.print_dpg_diagnostic(self.episode_count)
-            self.logger.info("="*50)
+            self.logger.info("="*60)
 
         # Executar validação se necessária
         if result == PhaseTransitionResult.VALIDATION_REQUIRED:
@@ -424,8 +436,6 @@ class DPGManager:
 
         # Preservação de aprendizado em mudanças de grupo
         if hasattr(self, 'last_group') and self.last_group != current_group:
-            self.logger.info(f"✅ Mudança de grupo detectada: {self.last_group} → {current_group}")
-
             self.buffer_manager.transition_with_preservation(
                 self.last_group,
                 current_group,
@@ -560,11 +570,8 @@ class DPGManager:
             return
 
         # Formatar relatório
-        self.logger.info(f"   Episódio: {episode_number}")
-        self.logger.info(f"   Grupo: {report['current_group']} ({report['group_name']})")
-        self.logger.info(f"   Sub-fase: {report['current_sub_phase']} ({report['sub_phase_name']})")
-        self.logger.info(f"   Episódios na sub-fase: {report['episodes_in_sub_phase']}")
-        self.logger.info(f"   Taxa de sucesso: {report['success_rate']:.1%}")
+        self.logger.info(f"   Episódio: {episode_number} - Na sub-fase: {report['episodes_in_sub_phase']}")
+        self.logger.info(f"   Grupo: {report['current_group']} ({report['group_name']}) - Sub-fase: {report['current_sub_phase']} ({report['sub_phase_name']})")
         self.logger.info(f"   Velocidade alvo: {report['target_speed']} m/s")
 
         self.logger.info("   REQUISITOS:")
@@ -581,8 +588,7 @@ class DPGManager:
             self.logger.info(f"     {icon} {condition_name}: {required} (Atual: {current_str})")
 
         self.logger.info("   HABILIDADES FOCADAS:")
-        for skill in report['focus_skills']:
-            self.logger.info(f"     📍 {skill}")
+        self.logger.info(f"     {', '.join(report['focus_skills'])}")
 
         self.logger.info("   COMPONENTES ATIVOS:")
         self.logger.info(f"     {', '.join(report['enabled_components'])}")
