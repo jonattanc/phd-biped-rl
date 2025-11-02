@@ -352,12 +352,12 @@ class Simulation(gym.Env):
                         "dpg_phase_index": phase_info['phase'],
                         "target_speed": phase_info['target_speed'],
                         "dpg_episodes_in_phase": phase_info['episodes_in_phase'],
-                        "phase_name": phase_info['name']
+                        "phase_name": phase_info['name'],
+                        "dpg_success_rate": advanced_metrics.get("success_rate", 0.0),
+                        "dpg_avg_distance": advanced_metrics.get("avg_distance", 0.0),
                     })
                 
                 episode_data.update({
-                    "dpg_success_rate": advanced_metrics.get("success_rate", 0.0),
-                    "dpg_avg_distance": advanced_metrics.get("avg_distance", 0.0),
                     "dass_samples": advanced_metrics.get("dass_samples", 0),
                     "irl_confidence": advanced_metrics.get("irl_confidence", 0.0),
                     "hdpg_convergence": advanced_metrics.get("hdpg_convergence", 0.0),
@@ -370,16 +370,17 @@ class Simulation(gym.Env):
                 try:
                     dpg_system = self.reward_system.dpg_manager
                     if dpg_manager and dpg_manager.phase_manager:
+                        phase_manager = dpg_manager.phase_manager
                         current_phase = dpg_manager.phase_manager.current_phase
                         phase_config = dpg_manager.phase_manager.current_phase_config
                         detailed_status = dpg_manager.phase_manager.get_status()
-    
+
                         print(f"\nDPG DIAGNÓSTICO - Ep: {self.episode_count}")
                         print(f"   Fase: {current_phase} ({phase_config.name})")
                         print(f"   Episódios na fase: {detailed_status['episodes_in_phase']}")
                         print(f"   Taxa de sucesso: {detailed_status.get('success_rate', 0):.1%}")
-                        print(f"   Transições: {detailed_status['phase_transitions']}")
-    
+                        print(f"   Transições: {detailed_status.get('phase_transitions', 0)}")
+
                         # Condições de transição
                         print(f"   REQUISITOS FASE {current_phase}:")
                         conditions = phase_config.transition_conditions
@@ -392,7 +393,12 @@ class Simulation(gym.Env):
                             else:
                                 formatted_current = str(current_value)
                             print(f"     {icon} {condition_name}: {required_value} (Atual: {formatted_current})")
-    
+                        # Habilidades focadas
+                        print("   HABILIDADES FOCADAS:")
+                        focus_skills = phase_config.focus_skills
+                        for skill in focus_skills:
+                            print(f"     📍 {skill}")
+
                 except Exception as e:
                     print(f"Erro no relatório DPG detalhado: {e}")
                     import traceback
@@ -409,7 +415,7 @@ class Simulation(gym.Env):
         if self.episode_count % 10 == 0:
             self.logger.info(f"Episódio {self.episode_count} concluído")
 
-    def _get_current_condition_value(self, condition_name, detailed_status, dpg_system):
+    def _get_current_condition_value(self, condition_name, detailed_status, phase_manager):
         """Obtém o valor atual para uma condição específica"""
         try:
             if condition_name == "min_success_rate":
@@ -417,23 +423,23 @@ class Simulation(gym.Env):
             elif condition_name == "min_avg_distance":
                 return detailed_status["performance_metrics"]["avg_distance"]
             elif condition_name == "max_avg_roll":
-                return detailed_status["performance_metrics"]["avg_roll"]
+                return phase_manager._calculate_avg_roll()
             elif condition_name == "min_avg_speed":
-                return detailed_status["performance_metrics"]["avg_speed"]
+                return phase_manager._calculate_avg_speed()
             elif condition_name == "min_avg_steps":
-                return float(self._calculate_avg_steps(dpg_system))
+                return float(self._calculate_avg_steps(phase_manager))
             elif condition_name == "min_alternating_score":
-                return float(self._calculate_alternating_score(dpg_system))
+                return float(self._calculate_alternating_score(phase_manager))
             elif condition_name == "min_gait_coordination":
-                return float(self._calculate_gait_coordination(dpg_system))
+                return float(self._calculate_gait_coordination(phase_manager))
             elif condition_name == "min_propulsion_efficiency":
-                return float(self._calculate_propulsion_efficiency(dpg_system))
+                return float(self._calculate_propulsion_efficiency(phase_manager))
             elif condition_name == "consistency_count":
-                return int(self._calculate_consistency_count(dpg_system))
+                return int(self._calculate_consistency_count(phase_manager))
             elif condition_name == "min_positive_distance_rate":
-                return detailed_status['performance_metrics'].get('positive_movement_rate', 0)
+                return phase_manager._calculate_positive_movement_rate()
             elif condition_name == "max_avg_pitch":
-                return float(self._calculate_avg_pitch(dpg_system))
+                return float(self._calculate_avg_pitch(phase_manager))
             else:
                 return "N/A"
         except:
@@ -451,59 +457,76 @@ class Simulation(gym.Env):
         except:
             return False
 
-    def _calculate_avg_steps(self, dpg_system):
+    def _calculate_positive_movement_rate(self):
+        """Calcula taxa de movimento positivo"""
+        if not self.performance_history:
+            return 0.0
+        positive_movements = sum(1 for r in self.performance_history if r.get("distance", 0) > 0.1)
+        return positive_movements / len(self.performance_history)
+
+    def _calculate_avg_steps(self, phase_manager):
         """Calcula média de passos"""
-        if not dpg_system.progression_history:
+        if not phase_manager.performance_history:
             return 0.0
         try:
-            recent_steps = [r.get("steps", 0) for r in dpg_system.progression_history[-5:]]
+            recent_steps = [r.get("steps", 0) for r in phase_manager.performance_history[-5:]]
             return np.mean(recent_steps) if recent_steps else 0.0
         except:
             return 0.0
 
-    def _calculate_alternating_score(self, dpg_system):
+    def _calculate_alternating_score(self, phase_manager):
         """Calcula score de alternância"""
-        if len(dpg_system.progression_history) < 8:
+        if len(phase_manager.performance_history) < 8:
             return 0.0
         try:
-            recent_history = dpg_system.progression_history[-8:]
-            return dpg_system._calculate_gait_coordination(recent_history)
+            alternations = sum(1 for r in phase_manager.performance_history[-8:] 
+                              if r.get("alternating", False))
+            return alternations / len(phase_manager.performance_history[-8:])
         except:
             return 0.0
 
-    def _calculate_gait_coordination(self, dpg_system):
+    def _calculate_gait_coordination(self, phase_manager):
         """Calcula coordenação de marcha"""
-        if not dpg_system.progression_history:
+        if not phase_manager.performance_history:
             return 0.3
         try:
-            recent_history = dpg_system.progression_history[-10:]
-            return dpg_system._calculate_gait_coordination(recent_history)
+            # Implementação simplificada - baseada em contato alternado dos pés
+            recent_history = phase_manager.performance_history[-10:]
+            alternations = sum(1 for r in recent_history 
+                              if r.get("left_contact", False) != r.get("right_contact", False))
+            return alternations / len(recent_history) if recent_history else 0.3
         except:
             return 0.3
 
-    def _calculate_propulsion_efficiency(self, dpg_system):
+    def _calculate_propulsion_efficiency(self, phase_manager):
         """Calcula eficiência propulsiva"""
         try:
-            return dpg_system._calculate_propulsion_efficiency()
+            # Implementação simplificada - baseada em velocidade vs esforço
+            if not phase_manager.performance_history:
+                return 0.3
+            recent_history = phase_manager.performance_history[-5:]
+            avg_speed = np.mean([r.get("speed", 0) for r in recent_history])
+            return min(avg_speed / 1.0, 1.0)  # Normalizado para velocidade máxima de 1.0 m/s
         except:
             return 0.3
 
-    def _calculate_consistency_count(self, dpg_system):
+    def _calculate_consistency_count(self, phase_manager):
         """Calcula contagem de consistência"""
-        if len(dpg_system.progression_history) < 5:
+        if len(phase_manager.performance_history) < 5:
             return 0
         try:
-            recent_successes = sum(1 for r in dpg_system.progression_history[-5:] if r.get("phase_success", False))
+            recent_successes = sum(1 for r in phase_manager.performance_history[-5:] 
+                                  if r.get("success", False))
             return recent_successes
         except:
             return 0
 
-    def _calculate_avg_pitch(self, dpg_system):
+    def _calculate_avg_pitch(self, phase_manager):
         """Calcula pitch médio"""
-        if not dpg_system.progression_history:
+        if not phase_manager.performance_history:
             return 0.0
         try:
-            return np.mean([abs(r.get("pitch", 0)) for r in dpg_system.progression_history])
+            return np.mean([abs(r.get("pitch", 0)) for r in phase_manager.performance_history[-10:]])
         except:
             return 0.0
 

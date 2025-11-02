@@ -228,10 +228,10 @@ class PhaseManager:
             'focus_skills': config.focus_skills,
             'episodes_in_phase': self.episodes_in_phase
         }
-    
+
     def get_status(self):
         """Retorna status do gerenciador de fases"""
-        return {
+        status = {
             "current_phase": self.current_phase,
             "phase_name": self.current_phase_config.name,
             "episodes_in_phase": self.episodes_in_phase,
@@ -239,8 +239,72 @@ class PhaseManager:
             "consecutive_successes": self.consecutive_successes,
             "consecutive_failures": self.consecutive_failures,
             "stagnation_counter": self.stagnation_counter,
-            "performance_history_size": len(self.performance_history)
+            "performance_history_size": len(self.performance_history),
+            "phase_transitions": self._calculate_phase_transitions(),
         }
+
+        # Adicionar métricas calculadas
+        try:
+            status["success_rate"] = self._calculate_success_rate()
+            status["avg_distance"] = self._calculate_avg_distance()
+            status["avg_roll"] = self._calculate_avg_roll()
+            status["avg_speed"] = self._calculate_avg_speed()
+            status["performance_metrics"] = {
+                "success_rate": status["success_rate"],
+                "avg_distance": status["avg_distance"],
+                "avg_roll": status["avg_roll"],
+                "avg_speed": status["avg_speed"],
+            }
+        except Exception as e:
+            self.logger.warning(f"Erro ao calcular métricas de status: {e}")
+            status["success_rate"] = 0.0
+            status["avg_distance"] = 0.0
+            status["avg_roll"] = 0.0
+            status["avg_speed"] = 0.0
+            status["performance_metrics"] = {
+                "success_rate": 0.0,
+                "avg_distance": 0.0,
+                "avg_roll": 0.0,
+                "avg_speed": 0.0,
+            }
+
+        return status
+
+    def _calculate_phase_transitions(self):
+        """Calcula número de transições de fase"""
+        return max(0, self.current_phase)  # Número de fases que já passamos
+
+    def _calculate_success_rate(self):
+        """Taxa de sucesso dos episódios"""
+        if not self.performance_history:
+            return 0.0
+        successes = sum(1 for r in self.performance_history if r.get("success", False))
+        return successes / len(self.performance_history)
+
+    def _calculate_avg_distance(self):
+        """Distância média dos episódios"""
+        if not self.performance_history:
+            return 0.0
+        return np.mean([r.get("distance", 0) for r in self.performance_history])
+
+    def _calculate_avg_roll(self):
+        """Roll médio dos episódios"""
+        if not self.performance_history:
+            return 0.0
+        return np.mean([abs(r.get("roll", 0)) for r in self.performance_history])
+
+    def _calculate_avg_speed(self):
+        """Velocidade média dos episódios"""
+        if not self.performance_history:
+            return 0.0
+        return np.mean([r.get("speed", 0) for r in self.performance_history])
+    
+    def _calculate_positive_movement_rate(self):
+        """Calcula taxa de movimento positivo"""
+        if not self.performance_history:
+            return 0.0
+        positive_movements = sum(1 for r in self.performance_history if r.get("distance", 0) > 0.1)
+        return positive_movements / len(self.performance_history)
     
     def get_phase_name(self):
         """Retorna nome da fase atual"""

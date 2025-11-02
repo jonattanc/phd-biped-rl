@@ -218,8 +218,16 @@ class BufferManager:
     
     def get_metrics(self):
         """Retorna métricas para monitoramento"""
-        avg_quality = np.mean([exp.quality for exp in self.current_phase_buffer]) if self.current_phase_buffer else 0
-        avg_reward = np.mean([exp.reward for exp in self.current_phase_buffer]) if self.current_phase_buffer else 0
+        if not self.current_phase_buffer:
+            return {
+                "buffer_avg_quality": 0,
+                "buffer_avg_reward": 0,
+                "core_buffer_size": len(self.core_buffer),
+                "current_buffer_size": len(self.current_phase_buffer)
+            }
+        
+        avg_quality = np.mean([exp.quality for exp in self.current_phase_buffer])
+        avg_reward = np.mean([exp.reward for exp in self.current_phase_buffer])
         
         return {
             "buffer_avg_quality": avg_quality,
@@ -227,7 +235,7 @@ class BufferManager:
             "core_buffer_size": len(self.core_buffer),
             "current_buffer_size": len(self.current_phase_buffer)
         }
-    
+        
     def clear_phase_buffer(self, phase):
         """Limpa buffer de uma fase específica"""
         if phase in self.phase_buffers:
