@@ -62,7 +62,6 @@ def process_runner(
             dpg_manager = DPGManager(logger, robot, reward_system)
             dpg_manager.enable(True)
             reward_system.set_dpg_manager(dpg_manager)
-            dpg_manager.setup_advanced_dpg_components()
             logger.info("Sistema DPG configurado e ativado")
         else:
             logger.info("Usando sistema de recompensa padrão (sem DPG)")

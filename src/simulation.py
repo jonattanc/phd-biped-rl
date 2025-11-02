@@ -8,7 +8,7 @@ import math
 import queue
 import os
 import torch
-from dpg_gait_phases import PhaseTransitionResult
+from dpg_phase import PhaseTransitionResult
 import best_model_tracker
 import utils
 
@@ -340,68 +340,59 @@ class Simulation(gym.Env):
         # Adicionar informações de fase DPG se disponível
         if hasattr(self.reward_system, "dpg_manager") and self.reward_system.dpg_manager is not None:
             try:
-                dpg_status = self.reward_system.dpg_manager.gait_phase_dpg.get_detailed_status()
-                advanced_metrics = self.reward_system.dpg_manager.get_advanced_metrics()
-                episode_data.update(
-                    {
-                        "dpg_phase": dpg_status["current_phase"],
-                        "dpg_phase_index": dpg_status["phase_index"],
-                        "target_speed": dpg_status["target_speed"],
-                        "dpg_episodes_in_phase": dpg_status["episodes_in_phase"],
-                        "dpg_success_rate": dpg_status["performance_metrics"]["success_rate"],
-                        "dpg_avg_distance": dpg_status["performance_metrics"]["avg_distance"],
-                        "dass_samples": advanced_metrics.get("dass_samples", 0),
-                        "irl_confidence": advanced_metrics.get("irl_confidence", 0.0),
-                        "hdpg_convergence": advanced_metrics.get("hdpg_convergence", 0.0),
-                        "hdpg_active": advanced_metrics.get("hdpg_active", False),
-                        "phase_name": advanced_metrics.get("phase_name", "unknown"),
-                    }
-                )
+                dpg_manager = self.reward_system.dpg_manager
+                dpg_status = dpg_manager.get_status()
+                advanced_metrics = dpg_manager.get_advanced_metrics()
+
+                # Obter informações da fase atual
+                if dpg_manager.phase_manager:
+                    phase_info = dpg_manager.phase_manager.get_current_phase_info()
+                    episode_data.update({
+                        "dpg_phase": phase_info['phase'],
+                        "dpg_phase_index": phase_info['phase'],
+                        "target_speed": phase_info['target_speed'],
+                        "dpg_episodes_in_phase": phase_info['episodes_in_phase'],
+                        "phase_name": phase_info['name']
+                    })
+                
+                episode_data.update({
+                    "dpg_success_rate": advanced_metrics.get("success_rate", 0.0),
+                    "dpg_avg_distance": advanced_metrics.get("avg_distance", 0.0),
+                    "dass_samples": advanced_metrics.get("dass_samples", 0),
+                    "irl_confidence": advanced_metrics.get("irl_confidence", 0.0),
+                    "hdpg_convergence": advanced_metrics.get("hdpg_convergence", 0.0),
+                    "hdpg_active": advanced_metrics.get("hdpg_active", False),
+                })
             except Exception as e:
                 self.logger.warning(f"Erro ao obter status DPG detalhado: {e}")
 
             if self.episode_count % 100 == 0:
                 try:
-                    dpg_system = self.reward_system.dpg_manager.gait_phase_dpg
-                    current_phase = dpg_system.current_phase
-                    detailed_status = dpg_system.get_detailed_status()
-                    current_phase_config = dpg_system.phases[current_phase]
-
-                    print(f"\nDPG DIAGNÓSTICO - Ep: {self.episode_count}")
-                    print(f"   Fase: {current_phase} ({dpg_system.phases[current_phase].name})")
-                    print(f"   Episódios na fase: {detailed_status['episodes_in_phase']}")
-                    print(f"   Taxa no diagnóstico: {detailed_status['performance_metrics']['success_rate']:.1%}")
-                    print(f"   Distância média: {detailed_status['performance_metrics']['avg_distance']:.2f}m")
-                    print(f"   Velocidade alvo: {detailed_status['target_speed']} m/s")
-
-                    # 1. Condições de transição
-                    print(f"   REQUISITOS FASE {current_phase}:")
-                    conditions = current_phase_config.transition_conditions
-                    for condition_name, required_value in conditions.items():
-                        current_value = self._get_current_condition_value(condition_name, detailed_status, dpg_system)
-                        met = self._is_condition_met(condition_name, current_value, required_value)
-                        icon = "✅" if met else "❌"
-                        if isinstance(current_value, float):
-                            formatted_current = f"{current_value:.3f}"
-                        else:
-                            formatted_current = str(current_value)
-                        print(f"     {icon} {condition_name}: {required_value} (Atual: {formatted_current})")
-
-                    # 2. Habilidades requeridas
-                    print("   HABILIDADES:")
-                    skills = dpg_system._assess_phase_skills()
-                    skill_requirements = current_phase_config.skill_requirements
-                    # DEBUG: Verificar quais habilidades estão disponíveis
-                    if not skills:
-                        print("     ⚠️ Nenhuma habilidade calculada")
-                    elif not skill_requirements:
-                        print("     ⚠️ Nenhum requisito de habilidade definido")
-                    else:
-                        for skill_name, required_value in skill_requirements.items():
-                            current_skill = skills.get(skill_name, 0)
-                            status_icon = "✅" if current_skill >= required_value else "❌"
-                            print(f"     {status_icon} {skill_name}: {current_skill:.3f} / {required_value:.3f}")
-
+                    dpg_system = self.reward_system.dpg_manager
+                    if dpg_manager and dpg_manager.phase_manager:
+                        current_phase = dpg_manager.phase_manager.current_phase
+                        phase_config = dpg_manager.phase_manager.current_phase_config
+                        detailed_status = dpg_manager.phase_manager.get_status()
+    
+                        print(f"\nDPG DIAGNÓSTICO - Ep: {self.episode_count}")
+                        print(f"   Fase: {current_phase} ({phase_config.name})")
+                        print(f"   Episódios na fase: {detailed_status['episodes_in_phase']}")
+                        print(f"   Taxa de sucesso: {detailed_status.get('success_rate', 0):.1%}")
+                        print(f"   Transições: {detailed_status['phase_transitions']}")
+    
+                        # Condições de transição
+                        print(f"   REQUISITOS FASE {current_phase}:")
+                        conditions = phase_config.transition_conditions
+                        for condition_name, required_value in conditions.items():
+                            current_value = self._get_current_condition_value(condition_name, detailed_status, dpg_manager.phase_manager)
+                            met = self._is_condition_met(condition_name, current_value, required_value)
+                            icon = "✅" if met else "❌"
+                            if isinstance(current_value, float):
+                                formatted_current = f"{current_value:.3f}"
+                            else:
+                                formatted_current = str(current_value)
+                            print(f"     {icon} {condition_name}: {required_value} (Atual: {formatted_current})")
+    
                 except Exception as e:
                     print(f"Erro no relatório DPG detalhado: {e}")
                     import traceback
@@ -644,7 +635,7 @@ class Simulation(gym.Env):
 
         # Coletar info final quando o episódio terminar
         if self.episode_done:
-            if hasattr(self.reward_system, "dpg_manager") and self.reward_system.dpg_manager and hasattr(self.reward_system.dpg_manager, "gait_phase_dpg"):
+            if hasattr(self.reward_system, "dpg_manager") and self.reward_system.dpg_manager:
 
                 episode_results = {
                     "distance": self.episode_distance,
@@ -661,9 +652,10 @@ class Simulation(gym.Env):
                     "flight_quality": self.robot.get_flight_phase_quality(),
                     "clearance_score": self.robot.get_clearance_score(),
                     "propulsion_efficiency": self.robot.get_propulsion_efficiency(),
+                    "alternating": self.robot_left_foot_contact != self.robot_right_foot_contact,
                 }
                 try:
-                    transition_result = self.reward_system.dpg_manager.gait_phase_dpg.update_phase(episode_results)
+                    self.reward_system.dpg_manager.update_phase_progression(episode_results)
                 except Exception as e:
                     self.logger.error(f"Erro ao chamar update_phase: {e}")
 
