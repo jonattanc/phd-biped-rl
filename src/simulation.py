@@ -3,12 +3,9 @@ import pybullet as p
 import gymnasium as gym
 import time
 import numpy as np
-import random
 import math
 import queue
 import os
-import torch
-from dpg_phase import PhaseTransitionResult
 import best_model_tracker
 import utils
 
@@ -28,15 +25,10 @@ class Simulation(gym.Env):
         enable_real_time_value,
         camera_selecion_value,
         config_changed_value,
-        seed,
         num_episodes=1,
         initial_episode=0,
     ):
         super(Simulation, self).__init__()
-        np.random.seed(seed)
-        random.seed(seed)
-        torch.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)
 
         self.robot = robot
         self.environment = environment
@@ -348,9 +340,8 @@ class Simulation(gym.Env):
         if self.episode_count % 10 == 0:
             self.logger.info(f"Episódio {self.episode_count} concluído")
 
-
     def apply_action(self, action):
-        action = np.clip(action, -1.0, 1.0) 
+        action = np.clip(action, -1.0, 1.0)
 
         joint_positions, joint_velocities = self.robot.get_joint_states()
 

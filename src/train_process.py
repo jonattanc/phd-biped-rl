@@ -5,8 +5,9 @@ from environment import Environment
 from agent import Agent, TrainingCallback
 from dpg_manager import DPGManager
 import utils
-import time
-import os
+import numpy as np
+import random
+import torch
 
 
 def process_runner(
@@ -38,6 +39,11 @@ def process_runner(
     logger.info(f"Dynamic Policy Gradient: {enable_dpg}")
 
     try:
+        np.random.seed(seed)
+        random.seed(seed)
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+
         # Criar componentes
         environment = Environment(logger, name=selected_environment)
         robot = Robot(logger, name=selected_robot)
@@ -54,7 +60,6 @@ def process_runner(
             enable_real_time_value,
             camera_selection_value,
             config_changed_value,
-            seed,
             initial_episode=initial_episode,
         )
 
@@ -66,7 +71,7 @@ def process_runner(
         else:
             logger.info("Usando sistema de recompensa padrão (sem DPG)")
 
-        agent = Agent(logger, env=sim, model_path=model_path, algorithm=algorithm, device=device, initial_episode=initial_episode)
+        agent = Agent(logger, env=sim, model_path=model_path, algorithm=algorithm, device=device, initial_episode=initial_episode, seed=seed)
         sim.set_agent(agent)
 
         callback = TrainingCallback(logger)

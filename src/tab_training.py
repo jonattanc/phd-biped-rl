@@ -172,8 +172,8 @@ class TrainingTab:
         # Input para random seed
         self.seed_var = tk.IntVar(value=42)
         seed_input = ttk.Spinbox(row1_frame, from_=0, to=100000, textvariable=self.seed_var, width=8)
-        # ttk.Label(row1_frame, text="Seed:").grid(row=0, column=9, sticky=tk.W, padx=1)
-        # seed_input.grid(row=0, column=10, padx=5) # TODO: Trocar seed não funciona
+        ttk.Label(row1_frame, text="Seed:").grid(row=0, column=9, sticky=tk.W, padx=1)
+        seed_input.grid(row=0, column=10, padx=5)
 
         # Linha 2: Botões secundários e checkboxes
         row2_frame = ttk.Frame(control_frame)
@@ -587,6 +587,7 @@ class TrainingTab:
                     "total_steps": self.total_steps,
                     "total_episodes": total_episodes,
                     "device": self.device,
+                    "seed": self.seed_var.get(),
                 },
                 "tracker_status": tracker_status,
                 "episode_data": self.episode_data,

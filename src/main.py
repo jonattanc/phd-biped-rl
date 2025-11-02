@@ -6,6 +6,7 @@ import tkinter as tk
 from tkinter import ttk
 import utils
 import environment
+import multiprocessing
 
 # Importar as tabs
 from tab_training import TrainingTab
@@ -125,6 +126,8 @@ if __name__ == "__main__":
         logger.info("\n".join(folder_logs))
 
     logger.info(f"Executando em {utils.PROJECT_ROOT}")
+
+    multiprocessing.set_start_method("spawn")
 
     # Verificar GPU
     device = check_gpu()

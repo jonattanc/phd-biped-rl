@@ -57,7 +57,7 @@ class TrainingCallback(BaseCallback):
 
 
 class Agent:
-    def __init__(self, logger, env=None, model_path=None, algorithm="PPO", device="cpu", initial_episode=0):
+    def __init__(self, logger, env=None, model_path=None, algorithm="PPO", device="cpu", initial_episode=0, seed=42):
         self.logger = logger
         self.model = None
         self.algorithm = algorithm
@@ -73,13 +73,13 @@ class Agent:
             dummy_env = DummyVecEnv([lambda: env])
             self.env = VecNormalize(dummy_env, norm_obs=True, norm_reward=True)
             self.action_dim = env.action_dim
-            self.model = self._create_model(algorithm, device)
+            self.model = self._create_model(algorithm, device, seed)
 
         else:
             self._load_model(model_path)
             self.set_env(env)
 
-    def _create_model(self, algorithm, device="cpu"):
+    def _create_model(self, algorithm, device="cpu", seed=42):
         # Criar modelo baseado no algoritmo selecionado
         if algorithm.upper() == "PPO":
             return PPO(
@@ -119,7 +119,7 @@ class Agent:
                 target_noise_clip=0.5,
                 tensorboard_log="./logs/",
                 device=device,
-                seed=42,
+                seed=seed,
             )
         elif algorithm.upper() == "FASTTD3":
             return FastTD3(
