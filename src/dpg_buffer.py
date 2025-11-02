@@ -122,14 +122,13 @@ class SmartBufferManager:
     def store_experience(self, experience_data: Dict):
         """Armazena experiência com análise de habilidades"""
         phase_info = experience_data.get("phase_info", {})
-        # Obter grupo REAL do PhaseManager através do DPGManager
+        
         dpg_manager = getattr(self, '_dpg_manager', None)
         if dpg_manager and hasattr(dpg_manager, 'phase_manager'):
             group = dpg_manager.phase_manager.current_group
         else:
-            group = 0  # Fallback seguro
-        
-        # FORÇAR grupo correto no phase_info
+            group = 0  
+
         phase_info['group_level'] = group
         phase_info['group'] = group
         experience = self._create_enhanced_experience(experience_data)
