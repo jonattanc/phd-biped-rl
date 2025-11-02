@@ -381,20 +381,31 @@ class Simulation(gym.Env):
                         current_value = self._get_current_condition_value(condition_name, detailed_status, dpg_system)
                         met = self._is_condition_met(condition_name, current_value, required_value)
                         icon = "✅" if met else "❌"
-                        print(f"     {icon} {condition_name}: {required_value} (Atual: {current_value})")
+                        if isinstance(current_value, float):
+                            formatted_current = f"{current_value:.3f}"
+                        else:
+                            formatted_current = str(current_value)
+                        print(f"     {icon} {condition_name}: {required_value} (Atual: {formatted_current})")
 
                     # 2. Habilidades requeridas
                     print("   HABILIDADES:")
                     skills = dpg_system._assess_phase_skills()
                     skill_requirements = current_phase_config.skill_requirements
-                    for skill_name, required_skill in skill_requirements.items():
-                        current_skill = skills.get(skill_name, 0)
-                    met = current_skill >= required_skill
-                    icon = "✅" if met else "❌"
-                    print(f"     {icon} {skill_name}: {current_skill:.3f} / {required_skill:.3f}")
+                    # DEBUG: Verificar quais habilidades estão disponíveis
+                    if not skills:
+                        print("     ⚠️ Nenhuma habilidade calculada")
+                    elif not skill_requirements:
+                        print("     ⚠️ Nenhum requisito de habilidade definido")
+                    else:
+                        for skill_name, required_value in skill_requirements.items():
+                            current_skill = skills.get(skill_name, 0)
+                            status_icon = "✅" if current_skill >= required_value else "❌"
+                            print(f"     {status_icon} {skill_name}: {current_skill:.3f} / {required_value:.3f}")
 
                 except Exception as e:
                     print(f"Erro no relatório DPG detalhado: {e}")
+                    import traceback
+                    traceback.print_exc()
 
         # Enviar para ipc_queue
         try:
@@ -419,19 +430,19 @@ class Simulation(gym.Env):
             elif condition_name == "min_avg_speed":
                 return detailed_status["performance_metrics"]["avg_speed"]
             elif condition_name == "min_avg_steps":
-                return self._calculate_avg_steps(dpg_system)
+                return float(self._calculate_avg_steps(dpg_system))
             elif condition_name == "min_alternating_score":
-                return self._calculate_alternating_score(dpg_system)
+                return float(self._calculate_alternating_score(dpg_system))
             elif condition_name == "min_gait_coordination":
-                return self._calculate_gait_coordination(dpg_system)
+                return float(self._calculate_gait_coordination(dpg_system))
             elif condition_name == "min_propulsion_efficiency":
-                return self._calculate_propulsion_efficiency(dpg_system)
+                return float(self._calculate_propulsion_efficiency(dpg_system))
             elif condition_name == "consistency_count":
-                return self._calculate_consistency_count(dpg_system)
+                return int(self._calculate_consistency_count(dpg_system))
             elif condition_name == "min_positive_distance_rate":
-                return detailed_status["performance_metrics"].get("positive_movement_rate", 0)
+                return detailed_status['performance_metrics'].get('positive_movement_rate', 0)
             elif condition_name == "max_avg_pitch":
-                return self._calculate_avg_pitch(dpg_system)
+                return float(self._calculate_avg_pitch(dpg_system))
             else:
                 return "N/A"
         except:
@@ -452,40 +463,58 @@ class Simulation(gym.Env):
     def _calculate_avg_steps(self, dpg_system):
         """Calcula média de passos"""
         if not dpg_system.progression_history:
-            return 0
-        recent_steps = [r.get("steps", 0) for r in dpg_system.progression_history[-5:]]
-        return np.mean(recent_steps) if recent_steps else 0
+            return 0.0
+        try:
+            recent_steps = [r.get("steps", 0) for r in dpg_system.progression_history[-5:]]
+            return np.mean(recent_steps) if recent_steps else 0.0
+        except:
+            return 0.0
 
     def _calculate_alternating_score(self, dpg_system):
         """Calcula score de alternância"""
         if len(dpg_system.progression_history) < 8:
             return 0.0
-        recent_history = dpg_system.progression_history[-8:]
-        return dpg_system._calculate_gait_coordination(recent_history)
+        try:
+            recent_history = dpg_system.progression_history[-8:]
+            return dpg_system._calculate_gait_coordination(recent_history)
+        except:
+            return 0.0
 
     def _calculate_gait_coordination(self, dpg_system):
         """Calcula coordenação de marcha"""
         if not dpg_system.progression_history:
             return 0.3
-        recent_history = dpg_system.progression_history[-10:]
-        return dpg_system._calculate_gait_coordination(recent_history)
+        try:
+            recent_history = dpg_system.progression_history[-10:]
+            return dpg_system._calculate_gait_coordination(recent_history)
+        except:
+            return 0.3
 
     def _calculate_propulsion_efficiency(self, dpg_system):
         """Calcula eficiência propulsiva"""
-        return dpg_system._calculate_propulsion_efficiency()
+        try:
+            return dpg_system._calculate_propulsion_efficiency()
+        except:
+            return 0.3
 
     def _calculate_consistency_count(self, dpg_system):
         """Calcula contagem de consistência"""
         if len(dpg_system.progression_history) < 5:
             return 0
-        recent_successes = sum(1 for r in dpg_system.progression_history[-5:] if r.get("phase_success", False))
-        return recent_successes
+        try:
+            recent_successes = sum(1 for r in dpg_system.progression_history[-5:] if r.get("phase_success", False))
+            return recent_successes
+        except:
+            return 0
 
     def _calculate_avg_pitch(self, dpg_system):
         """Calcula pitch médio"""
         if not dpg_system.progression_history:
             return 0.0
-        return np.mean([abs(r.get("pitch", 0)) for r in dpg_system.progression_history])
+        try:
+            return np.mean([abs(r.get("pitch", 0)) for r in dpg_system.progression_history])
+        except:
+            return 0.0
 
     def apply_action(self, action):
         action = np.clip(action, -1.0, 1.0)  # Normalizar ação para evitar valores extremos
