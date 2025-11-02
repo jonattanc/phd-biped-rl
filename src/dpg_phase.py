@@ -574,9 +574,6 @@ class PhaseManager:
         self.current_sub_phase += 1
         self.episodes_in_sub_phase = 0
         
-        self.logger.info(f"🔄 Avanço de sub-fase: {old_sub_phase} → {self.current_sub_phase} "
-                        f"no grupo {self.current_group_config.name}")
-        
         return PhaseTransitionResult.SUCCESS
     
     def _start_group_advancement(self) -> PhaseTransitionResult:

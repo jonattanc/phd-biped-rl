@@ -370,65 +370,68 @@ class DPGManager:
         """Atualiza progressão com relatório inteligente"""
         if not self.enabled:
             return
-        
+
         # Atualizar contador de episódios
         if not hasattr(self, 'episode_count'):
             self.episode_count = 0
         self.episode_count += 1
-        
+
         # Guardar estado anterior para detectar mudanças
         old_group = self.phase_manager.current_group
         old_sub_phase = self.phase_manager.current_sub_phase
-        
+
         # Executar atualização normal
         result = self.phase_manager.update_phase(episode_results)
-        
+
         # Detectar mudanças reais
         current_group = self.phase_manager.current_group
         current_sub_phase = self.phase_manager.current_sub_phase
-        
+
         group_changed = old_group != current_group
         sub_phase_changed = old_sub_phase != current_sub_phase
-        
+
         # Lógica inteligente para relatórios
         should_report = False
         report_reason = ""
-        
+
         if group_changed:
             should_report = True
-            report_reason = f"mudança de grupo {old_group}→{current_group}"
+            if old_group > current_group:
+                report_reason = f"Regressão de grupo {old_group} → {current_group}"
+            else:
+                report_reason = f"Avanço de grupo {old_group} → {current_group}"
         elif sub_phase_changed:
             should_report = True
-            report_reason = f"mudança de sub-fase {old_sub_phase}→{current_sub_phase}"
+            if old_sub_phase > current_sub_phase:
+                report_reason = f"Regressão de sub-fase {old_sub_phase} → {current_sub_phase}"
+            else:
+                report_reason = f"Avanço de sub-fase {old_sub_phase} → {current_sub_phase}"
+
         elif self.episode_count % 100 == 0:
             should_report = True
-            report_reason = "checkpoint de 100 episódios"
-        elif result == PhaseTransitionResult.REGRESSION:
-            should_report = True
-            report_reason = "regressão detectada"
-        elif self.phase_manager.episodes_in_sub_phase == 1:
-            should_report = True
-            report_reason = "início de nova sub-fase"
-        
+            report_reason = "Checkpoint de 100 episódios"
+
         # Gerar relatório se necessário
         if should_report:
-            self.logger.info(f"📊 Gerando relatório DPG: {report_reason}")
+            self.logger.info("="*50)
+            self.logger.info(f"📊: {report_reason}")
             self.print_dpg_diagnostic(self.episode_count)
-        
+            self.logger.info("="*50)
+
         # Executar validação se necessária
         if result == PhaseTransitionResult.VALIDATION_REQUIRED:
             self.phase_manager.execute_validation()
-    
+
         # Preservação de aprendizado em mudanças de grupo
         if hasattr(self, 'last_group') and self.last_group != current_group:
             self.logger.info(f"✅ Mudança de grupo detectada: {self.last_group} → {current_group}")
-            
+
             self.buffer_manager.transition_with_preservation(
                 self.last_group,
                 current_group,
                 self.phase_manager.current_group_config.adaptive_config
             )
-        
+
         self.last_group = current_group
         return result
     
@@ -557,7 +560,6 @@ class DPGManager:
             return
 
         # Formatar relatório
-        self.logger.info("🎯 DPG DIAGNÓSTICO")
         self.logger.info(f"   Episódio: {episode_number}")
         self.logger.info(f"   Grupo: {report['current_group']} ({report['group_name']})")
         self.logger.info(f"   Sub-fase: {report['current_sub_phase']} ({report['sub_phase_name']})")
