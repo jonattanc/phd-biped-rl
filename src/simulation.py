@@ -382,7 +382,7 @@ class Simulation(gym.Env):
                         met = self._is_condition_met(condition_name, current_value, required_value)
                         icon = "✅" if met else "❌"
                         print(f"     {icon} {condition_name}: {required_value} (Atual: {current_value})")
-                    
+
                     # 2. Habilidades requeridas
                     print("   HABILIDADES:")
                     skills = dpg_system._assess_phase_skills()
@@ -411,13 +411,13 @@ class Simulation(gym.Env):
         """Obtém o valor atual para uma condição específica"""
         try:
             if condition_name == "min_success_rate":
-                return detailed_status['performance_metrics']['success_rate']
+                return detailed_status["performance_metrics"]["success_rate"]
             elif condition_name == "min_avg_distance":
-                return detailed_status['performance_metrics']['avg_distance']
+                return detailed_status["performance_metrics"]["avg_distance"]
             elif condition_name == "max_avg_roll":
-                return detailed_status['performance_metrics']['avg_roll']
+                return detailed_status["performance_metrics"]["avg_roll"]
             elif condition_name == "min_avg_speed":
-                return detailed_status['performance_metrics']['avg_speed']
+                return detailed_status["performance_metrics"]["avg_speed"]
             elif condition_name == "min_avg_steps":
                 return self._calculate_avg_steps(dpg_system)
             elif condition_name == "min_alternating_score":
@@ -429,7 +429,7 @@ class Simulation(gym.Env):
             elif condition_name == "consistency_count":
                 return self._calculate_consistency_count(dpg_system)
             elif condition_name == "min_positive_distance_rate":
-                return detailed_status['performance_metrics'].get('positive_movement_rate', 0)
+                return detailed_status["performance_metrics"].get("positive_movement_rate", 0)
             elif condition_name == "max_avg_pitch":
                 return self._calculate_avg_pitch(dpg_system)
             else:
@@ -437,12 +437,12 @@ class Simulation(gym.Env):
         except:
             return "N/A"
 
-    def _check_condition_met(self, condition_name, current_value, required_value):
+    def _is_condition_met(self, condition_name, current_value, required_value):
         """Verifica se uma condição está sendo atendida"""
         try:
-            if condition_name.startswith('min_'):
+            if condition_name.startswith("min_"):
                 return current_value >= required_value
-            elif condition_name.startswith('max_'):
+            elif condition_name.startswith("max_"):
                 return current_value <= required_value
             else:
                 return True  # Para condições não comparativas
