@@ -135,17 +135,26 @@ class DPGManager:
     def _calculate_dpg_reward(self, sim, action):
         """Recompensas mais focadas no aprendizado gradual"""
         total_reward = 0.0
+        w = self.config.phase_weights
 
         # BÔNUS MASSIVO PARA FASE INICIAL
         if hasattr(self, 'gait_phase_dpg') and self.gait_phase_dpg:
             current_phase = self.gait_phase_dpg.current_phase
 
             if current_phase == 0:
-                # Bônus generoso por qualquer progresso
-                if sim.episode_distance > 0.1:
-                    progress_bonus = min(sim.episode_distance * 10, 5.0)
+                # Bônus por qualquer progresso
+                if sim.episode_distance > 0:
+                    progress_bonus = min(sim.episode_distance * 5.0, 3.0)
                     total_reward += progress_bonus
+                elif sim.episode_distance < -0.05:
+                    backward_penalty = abs(sim.episode_distance) * 2.0
+                    total_reward -= backward_penalty
 
+                # Bônus por velocidade positiva
+                if hasattr(sim, 'robot_x_velocity') and sim.robot_x_velocity > 0.05:
+                    velocity_bonus = min(sim.robot_x_velocity * 0.5, 1.0)
+                    total_reward += velocity_bonus
+            
                 # Bônus por estabilidade básica
                 if abs(sim.robot_roll) < 0.5 and abs(sim.robot_pitch) < 0.4:
                     stability_bonus = 2.0
@@ -259,15 +268,14 @@ class DPGManager:
         speed = episode_results.get('speed', 0)
         distance = episode_results.get('distance', 0)
     
-        # Pitch ideal para geração de propulsão: entre -0.4 e -0.1 radianos
+        if distance <= 0:
+            return 0.0
+        
         if pitch < -0.1 and pitch > -0.4:
-            # Base bonus on actual progress
             pitch_bonus = 0.5 + min(abs(pitch) * 2.0, 0.5)  
-            # Scale by actual forward progress
             progress_factor = min(distance / 0.5, 1.0)  
             return pitch_bonus * progress_factor
     
-        # Penalize excessive pitching 
         elif pitch < -0.6:
             return -0.2
     
@@ -277,12 +285,15 @@ class DPGManager:
         """Recompensa de velocidade adaptada para DPG"""
         vx = getattr(sim, "robot_x_velocity", 0)
         
+        if vx < -0.05:  # Se está se movendo significativamente para trás
+            return -0.5 * min(abs(vx), 1.0)  
+        
         if self.gait_phase_dpg and self.gait_phase_dpg.current_phase == 0:
-            v_min, v_max = 0.1, 1.0
+            v_min, v_max = 0.05, 0.3  # Valores mais baixos para fase 0
             gamma = 1.0
         else:
-            v_min, v_max = 1.2, 2.8
-            gamma = 1.4
+            v_min, v_max = 0.1, 0.8   # Valores mais conservadores
+            gamma = 1.2
         
         if v_max - v_min > 0:
             normalized_vel = (vx - v_min) / (v_max - v_min)
@@ -358,10 +369,18 @@ class DPGManager:
         return clearance_reward
     
     def _calculate_stability_reward(self, sim):
-        """Recompensa de estabilidade"""
+        """Recompensa de estabilidade mais permissiva para inclinação frontal"""
         pitch, roll = getattr(sim, "robot_pitch", 0), getattr(sim, "robot_roll", 0)
-        stability_penalty = abs(pitch) + abs(roll)
-        return np.exp(-stability_penalty / 0.35)
+        
+        if pitch < -0.1: 
+            pitch_penalty = max(0, abs(pitch) - 0.1) * 0.5 
+        else:  
+            pitch_penalty = abs(pitch) * 1.0  
+            
+        roll_penalty = abs(roll) * 0.8  
+        
+        stability_penalty = pitch_penalty + roll_penalty
+        return np.exp(-stability_penalty / 0.5)
     
     def _(self, episode_results: Dict) -> float:
         """Recompensa inclinação frontal proposital para gerar propulsão"""

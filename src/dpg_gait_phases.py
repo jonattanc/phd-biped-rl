@@ -173,23 +173,26 @@ class GaitPhaseDPG:
         phase0 = GaitPhaseConfig(
             name="estabilidade_postural",
             target_speed=0.2,
-            enabled_components=["stability_roll", "stability_pitch", "center_bonus", "success_bonus"],
+            enabled_components=["stability_roll", "stability_pitch", "center_bonus", "success_bonus", "forward_progress"],
             component_weights={
-                "stability_roll": 0.6,
+                "stability_roll": 0.3,
                 "stability_pitch": 0.3,
-                "center_bonus": 0.08,
-                "success_bonus": 0.02,
+                "center_bonus": 0.1,
+                "success_bonus": 0.05,
+                "forward_progress": 0.25,
             },
             phase_duration=15,
             transition_conditions={
                 "min_success_rate": 0.15,
-                "min_avg_distance": 0.1,
-                "max_avg_roll": 0.8,
+                "min_avg_distance": 0.05,
+                "min_positive_distance_rate": 0.6,
+                "max_avg_roll": 1.2,
+                "max_avg_pitch": 0.6,
                 "min_avg_steps": 3,
             },
             skill_requirements={
-                "basic_balance": 0.3,
-                "postural_stability": 0.2,
+                "basic_balance": 0.25,
+                "postural_stability": 0.15,
                 "gait_initiation": 0.1,
             },
             regression_thresholds={
@@ -233,8 +236,8 @@ class GaitPhaseDPG:
                 "step_consistency": 0.1,    
             },
             regression_thresholds={
-                "max_failures": 30,
-                "min_success_rate": 0.1,
+                "max_failures": 40,
+                "min_success_rate": 0.05,
                 "stagnation_episodes": 50,
             },
             dass_samples_required=800,
@@ -274,9 +277,9 @@ class GaitPhaseDPG:
                 "step_consistency": 0.3,
             },
             regression_thresholds={
-                "max_failures": 20,
-                "min_success_rate": 0.15,
-                "stagnation_episodes": 30,
+                "max_failures": 30,
+                "min_success_rate": 0.10,
+                "stagnation_episodes": 40,
             },
             dass_samples_required=1200,
             transfer_learning_enabled=True
@@ -593,6 +596,7 @@ class GaitPhaseDPG:
         steps = episode_results.get("steps", 0)
         speed = episode_results.get("speed", 0)
         success = episode_results.get("success", False)
+        effective_distance = max(distance, 0)
 
         # Calcular sucesso da fase atual
         current_config = self.phases[self.current_phase]
@@ -603,9 +607,9 @@ class GaitPhaseDPG:
         # Verificar condições básicas
         if "min_avg_distance" in conditions:
             min_episode_distance = conditions["min_avg_distance"] * 0.3
-            if distance < min_episode_distance:
+            if effective_distance < min_episode_distance:
                 episode_success = False
-
+            
         if "max_avg_roll" in conditions:
             max_episode_roll = conditions["max_avg_roll"] * 1.5
             if roll > max_episode_roll:
@@ -627,6 +631,7 @@ class GaitPhaseDPG:
 
         enhanced["phase_success"] = episode_success
         enhanced["phase"] = self.current_phase
+        enhanced["effective_distance"] = effective_distance 
 
         # Adicionar métricas padrão se não existirem
         if "total_reward" not in enhanced:
@@ -1037,12 +1042,17 @@ class GaitPhaseDPG:
         
         elif component == "balance_stability":
             roll = abs(episode_results.get('roll', 0))
-            pitch = abs(episode_results.get('pitch', 0))
-            ideal_pitch = -0.1  
-            pitch_error = abs(pitch - ideal_pitch)
-            pitch_stability = 1.0 - min(pitch_error / 0.5, 1.0)
-            roll_stability = 1.0 - min(roll / 1.0, 1.0)
-            stability = (roll_stability * 0.7 + pitch_stability * 0.3)
+            pitch = episode_results.get('pitch', 0)
+
+            if pitch < -0.1:  
+                pitch_stability = 1.0 - min(abs(pitch + 0.1) / 0.5, 1.0)  
+                pitch_stability = min(pitch_stability * 1.2, 1.0) 
+            else:  
+                pitch_stability = 1.0 - min(abs(pitch) / 0.5, 1.0)
+            
+            roll_stability = 1.0 - min(roll / 1.5, 1.0)  
+            
+            stability = (roll_stability * 0.5 + pitch_stability * 0.5)  
             return {'reward': stability, 'score': stability}
         
         elif component == "energy_efficiency":
@@ -1272,30 +1282,42 @@ class GaitPhaseDPG:
             current_success = self._calculate_success_rate()
             if current_success < conditions["min_success_rate"]:
                 mandatory_conditions_met = False
-                self.logger.debug(f"Condição de sucesso não atendida: {current_success:.3f} < {conditions['min_success_rate']}")
 
         # 2. Distância média mínima
         if "min_avg_distance" in conditions:
-            current_avg_distance = self._calculate_average_distance()
+            current_avg_distance = self._calculate_average_distance()  
             if current_avg_distance < conditions["min_avg_distance"]:
                 mandatory_conditions_met = False
-                self.logger.debug(f"Condição de distância não atendida: {current_avg_distance:.3f} < {conditions['min_avg_distance']}")
 
         # 3. Estabilidade máxima (roll)
         if "max_avg_roll" in conditions:
             current_avg_roll = self._calculate_average_roll()
             if current_avg_roll > conditions["max_avg_roll"]:
                 mandatory_conditions_met = False
-                self.logger.debug(f"Condição de estabilidade não atendida: {current_avg_roll:.3f} > {conditions['max_avg_roll']}")
 
-        # 4. Velocidade mínima (se aplicável)
+        # 4. Pitch máximo
+        if "max_avg_pitch" in conditions and self.current_phase == 0:
+            current_avg_pitch = self._calculate_average_pitch()
+            if abs(current_avg_pitch) > conditions["max_avg_pitch"]:
+                mandatory_conditions_met = False
+                
+        # 5. Velocidade mínima (se aplicável)
         if "min_avg_speed" in conditions:
             current_avg_speed = self._calculate_average_speed()
             if current_avg_speed < conditions["min_avg_speed"]:
                 mandatory_conditions_met = False
                 self.logger.debug(f"Condição de velocidade não atendida: {current_avg_speed:.3f} < {conditions['min_avg_speed']}")
 
-        # 5. Passos mínimos (fases iniciais)
+        # 6. Taxa mínima de movimento positivo (apenas para fase 0)
+        if self.current_phase == 0:
+            positive_movements = sum(1 for r in self.progression_history if r.get("positive_movement", 0))
+            total_movements = len(self.progression_history)
+            positive_rate = positive_movements / total_movements if total_movements > 0 else 0
+            
+            if positive_rate < 0.4:
+                mandatory_conditions_met = False
+                
+        # 7. Passos mínimos (fases iniciais)
         if "min_avg_steps" in conditions:
             recent_steps = [r.get("steps", 0) for r in self.progression_history[-5:]]
             avg_steps = np.mean(recent_steps) if recent_steps else 0
@@ -1303,7 +1325,7 @@ class GaitPhaseDPG:
                 mandatory_conditions_met = False
                 self.logger.debug(f"Condição de passos não atendida: {avg_steps:.1f} < {conditions['min_avg_steps']}")
 
-        # 6. Condições específicas por fase
+        # 8. Condições específicas por fase
         phase_specific_conditions = True
 
         if self.current_phase == 2:
@@ -1336,7 +1358,7 @@ class GaitPhaseDPG:
                     phase_specific_conditions = False
                     self.logger.debug(f"Coordenação insuficiente: {coordination:.3f} < {conditions['min_gait_coordination']}")
 
-        # 7. Consistência (para fases avançadas)
+        # 9. Consistência (para fases avançadas)
         if self.current_phase >= 4 and "consistency_count" in conditions:
             recent_successes = sum(1 for r in self.progression_history[-conditions["consistency_count"]:] 
                                   if r.get("phase_success", False))
@@ -1347,6 +1369,12 @@ class GaitPhaseDPG:
                 self.logger.debug(f"Consistência insuficiente: {recent_successes}/{conditions['consistency_count']}")
 
         return mandatory_conditions_met and phase_specific_conditions
+    
+    def _calculate_average_pitch(self) -> float:
+        """Calcula pitch médio (considerando sinal para frontal/traseira)"""
+        if not self.progression_history:
+            return 0.0
+        return np.mean([r.get("pitch", 0) for r in self.progression_history])
     
     def _check_actor_improvement(self) -> float:
         """Verifica se o actor está melhorando consistentemente"""
@@ -2018,6 +2046,10 @@ class GaitPhaseDPG:
         avg_speed = self._calculate_average_speed()
         avg_roll = self._calculate_average_roll()
 
+        positive_movements = sum(1 for r in self.progression_history if r.get("positive_movement", 0))
+        total_movements = len(self.progression_history)
+        positive_rate = positive_movements / total_movements if total_movements > 0 else 0
+
         status = {
             "current_phase": current_phase.name,
             "phase_index": self.current_phase,
@@ -2029,6 +2061,7 @@ class GaitPhaseDPG:
                 "avg_distance": avg_distance,
                 "avg_speed": avg_speed,
                 "avg_roll": avg_roll,
+                "positive_movement_rate": positive_rate,
                 "progression_history_size": len(self.progression_history),  
                 "full_history_size": len(self.performance_history)         
             },
@@ -2069,10 +2102,17 @@ class GaitPhaseDPG:
         return successes / len(self.progression_history)
 
     def _calculate_average_distance(self) -> float:
+        """Calcula distância média APENAS considerando valores positivos"""
         if not self.progression_history:  
             return 0.0
             
-        return np.mean([r.get("distance", 0) for r in self.progression_history])
+        positive_distances = [r.get("effective_distance", 0) for r in self.progression_history 
+                             if r.get("effective_distance", 0) > 0]
+        
+        if positive_distances:
+            return np.mean(positive_distances)
+        else:
+            return 0.0
 
     def _calculate_average_speed(self) -> float:
         if not self.progression_history:  
