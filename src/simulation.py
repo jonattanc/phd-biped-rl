@@ -16,6 +16,7 @@ class Simulation(gym.Env):
         logger,
         robot,
         environment,
+        environment_settings,
         reward_system,
         ipc_queue,
         ipc_queue_main_to_process,
@@ -32,6 +33,7 @@ class Simulation(gym.Env):
 
         self.robot = robot
         self.environment = environment
+        self.environment_settings = environment_settings
         self.ipc_queue = ipc_queue
         self.ipc_queue_main_to_process = ipc_queue_main_to_process
         self.pause_value = pause_value
@@ -73,11 +75,6 @@ class Simulation(gym.Env):
         self.max_training_steps = int(self.episode_training_timeout_s / self.time_step_s)
         self.max_pre_fill_steps = int(self.episode_pre_fill_timeout_s / self.time_step_s)
         self.max_steps = self.max_training_steps
-
-        self.lateral_friction = 2.0
-        self.spinning_friction = 1.0
-        self.rolling_friction = 0.001
-        self.restitution = 0.0
 
         # Configurar ambiente de simulação PRIMEIRO
         self.setup_sim_env()
@@ -283,12 +280,30 @@ class Simulation(gym.Env):
 
         for link_index in range(-1, self.robot.get_num_joints()):
             p.changeDynamics(
-                self.robot.id, link_index, lateralFriction=self.lateral_friction, spinningFriction=self.spinning_friction, rollingFriction=self.rolling_friction, restitution=self.restitution
+                self.robot.id,
+                link_index,
+                lateralFriction=self.environment_settings["default"]["lateral_friction"],
+                spinningFriction=self.environment_settings["default"]["spinning_friction"],
+                rollingFriction=self.environment_settings["default"]["rolling_friction"],
+                restitution=self.environment_settings["default"]["restitution"],
             )
 
-        for link_index in range(-1, self.environment.get_num_joints()):
+        link_map = self.environment.get_link_indices_by_name()
+
+        for link_name, link_index in link_map.items():
+            if link_name in self.environment_settings:
+                key = link_name
+
+            else:
+                key = "default"
+
             p.changeDynamics(
-                self.environment.id, link_index, lateralFriction=self.lateral_friction, spinningFriction=self.spinning_friction, rollingFriction=self.rolling_friction, restitution=self.restitution
+                self.environment.id,
+                link_index,
+                lateralFriction=self.environment_settings[key]["lateral_friction"],
+                spinningFriction=self.environment_settings[key]["spinning_friction"],
+                rollingFriction=self.environment_settings[key]["rolling_friction"],
+                restitution=self.environment_settings[key]["restitution"],
             )
 
         # Reduzir damping para menos oscilação

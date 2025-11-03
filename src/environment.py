@@ -85,3 +85,12 @@ class Environment:
 
     def get_num_joints(self):
         return p.getNumJoints(self.id)
+
+    def get_link_indices_by_name(self):
+        name_to_index = {"base_link": -1}
+
+        for i in range(p.getNumJoints(self.id)):
+            name = p.getJointInfo(self.id, i)[12].decode("utf-8")
+            name_to_index[name] = i
+
+        return name_to_index

@@ -12,6 +12,7 @@ import torch
 
 def process_runner(
     selected_environment,
+    environment_settings,
     selected_robot,
     algorithm,
     ipc_queue,
@@ -51,6 +52,7 @@ def process_runner(
             logger,
             robot,
             environment,
+            environment_settings,
             reward_system,
             ipc_queue,
             ipc_queue_main_to_process,

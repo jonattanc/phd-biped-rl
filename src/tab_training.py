@@ -445,11 +445,19 @@ class TrainingTab:
             self.camera_selection_values.append(camera_selection_val)
             self.config_changed_values.append(config_changed_val)
 
+            environment_settings = {"default": {"lateral_friction": 2.0, "spinning_friction": 1.0, "rolling_friction": 0.001, "restitution": 0.0}}
+
+            if self.env_var.get() == "PBA":
+                environment_settings["middle_link"] = {"lateral_friction": 1.0, "spinning_friction": 0.5, "rolling_friction": 0.001, "restitution": 0.0}
+
+            self.logger.info(f"environment_settings: {environment_settings}")
+
             # Iniciar processo com config
             p = multiprocessing.Process(
                 target=train_process.process_runner,
                 args=(
                     self.current_env,
+                    environment_settings,
                     self.current_robot,
                     self.current_algorithm,
                     self.ipc_queue,
