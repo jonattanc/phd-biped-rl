@@ -133,7 +133,7 @@ class AdaptiveValidator:
         avg_distance = np.mean([r.get("distance", 0) for r in recent])
 
         # Condições mais flexíveis para fase inicial
-        return success_rate > 0.1 and avg_distance > 0.05
+        return success_rate > 0.05 and avg_distance > 0.02
     
     def _stability_validation(self, performance_history: List[Dict]) -> bool:
         """Validação de estabilidade """
@@ -267,16 +267,16 @@ class PhaseManager:
                     # Sub-fase 1.1: Estabilidade Inicial
                     SubPhaseConfig(
                         name="estabilidade_inicial",
-                        target_speed=0.3,
+                        target_speed=0.1,
                         enabled_components=["stability", "basic_progress", "posture"],
-                        component_weights={"stability": 0.6, "basic_progress": 0.3, "posture": 0.1},
+                        component_weights={"stability": 0.5, "basic_progress": 0.3, "posture": 0.2},
                         min_episodes=8,
                         transition_conditions={
-                            "min_success_rate": 0.4,
-                            "min_avg_distance": 0.2,
-                            "max_avg_roll": 1.0,
-                            "min_avg_steps": 3,
-                            "min_positive_movement_rate": 0.6
+                            "min_success_rate": 0.2,
+                            "min_avg_distance": 0.1,
+                            "max_avg_roll": 1.5,
+                            "min_avg_steps": 2,
+                            "min_positive_movement_rate": 0.4
                         },
                         focus_skills=["basic_balance", "postural_stability"],
                         validation_requirements={},
@@ -587,14 +587,14 @@ class PhaseManager:
     def _should_regress(self) -> bool:
         """Verifica se precisa regredir (sub-fase ou grupo)"""
         regression_thresholds = {
-            1: {"max_failures": 300, "min_success_rate": 0.005, "stagnation_episodes": 100},
-            2: {"max_failures": 225, "min_success_rate": 0.01, "stagnation_episodes": 80},
-            3: {"max_failures": 150, "min_success_rate": 0.02, "stagnation_episodes": 60}
+            1: {"max_failures": 400, "min_success_rate": 0.005, "stagnation_episodes": 100},
+            2: {"max_failures": 350, "min_success_rate": 0.010, "stagnation_episodes": 90},
+            3: {"max_failures": 300, "min_success_rate": 0.015, "stagnation_episodes": 80}
         }
         
         thresholds = regression_thresholds.get(self.current_group_config.group_level, regression_thresholds[1])
         
-        if self.episodes_in_sub_phase < 200: 
+        if self.episodes_in_sub_phase < 300: 
             return False
         
         if self.consecutive_failures > thresholds["max_failures"]:
@@ -604,7 +604,7 @@ class PhaseManager:
             return True
 
         success_rate = self._calculate_success_rate()
-        if success_rate < thresholds["min_success_rate"] and self.episodes_in_sub_phase > 200:
+        if success_rate < thresholds["min_success_rate"] and self.episodes_in_sub_phase > 300:
             return True
 
         return False
@@ -674,7 +674,7 @@ class PhaseManager:
         return (self.current_group == len(self.groups) - 1 and 
                 self.current_sub_phase == len(self.current_group_config.sub_phases) - 1)
     
-    # Métricas de performance (mantidas do original)
+    # Métricas de performance
     def _update_success_counters(self, episode_results: Dict):
         """Atualiza contadores de sucesso e estagnação"""
         success = episode_results.get("success", False)
@@ -688,7 +688,7 @@ class PhaseManager:
             self.consecutive_successes = max(0, self.consecutive_successes - 0.5)
         
         # Detectar estagnação
-        if len(self.performance_history) >= 40: 
+        if len(self.performance_history) >= 50: 
             recent_distances = [r.get("distance", 0) for r in self.performance_history[-40:]]
             current_distance = episode_results.get("distance", 0)
 
@@ -701,7 +701,7 @@ class PhaseManager:
                 self.episodes_in_sub_phase > 100):  
                 self.stagnation_counter += 1
             else:
-                self.stagnation_counter = max(0, self.stagnation_counter - 4)
+                self.stagnation_counter = max(0, self.stagnation_counter - 1)
     
     def _check_basic_conditions(self, conditions: Dict) -> bool:
         """Verifica condições básicas obrigatórias"""

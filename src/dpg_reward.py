@@ -403,33 +403,33 @@ class RewardCalculator:
     def _calculate_stability_reward(self, sim, phase_info) -> float:
         roll = abs(getattr(sim, "robot_roll", 0))
         pitch = abs(getattr(sim, "robot_pitch", 0))
-        roll_penalty = min(roll * 3.0, 1.0)
-        pitch_penalty = min(pitch * 1.5, 1.0)
-        total_penalty = (roll_penalty * 0.7) + (pitch_penalty * 0.3)
+        roll_penalty = min(roll * 1.5, 0.8)
+        pitch_penalty = min(pitch * 1.0, 0.6)
+        total_penalty = (roll_penalty * 0.6) + (pitch_penalty * 0.4)
     
         return 1.0 - total_penalty
     
     def _calculate_basic_progress_reward(self, sim, phase_info) -> float:
         distance = getattr(sim, "episode_distance", 0)
         velocity = getattr(sim, "robot_x_velocity", 0)
-        distance_reward = min(distance / 1.0, 2.0)  
+        distance_reward = min(distance / 0.5, 3.0)  
         if velocity > 0.1:
-            velocity_reward = min(velocity * 0.5, 1.0)
+            velocity_reward = min(velocity * 2.0, 2.0)
         else:
             velocity_reward = 0.0
-        total_reward = (distance_reward * 0.6) + (velocity_reward * 0.4)
+        total_reward = (distance_reward * 0.8) + (velocity_reward * 0.2)
 
-        return min(total_reward, 2.0)
+        return min(total_reward, 3.0)
     
     def _calculate_direction_reward(self, sim, phase_info) -> float:
         """Recompensa por manter direção correta"""
         y_velocity = abs(getattr(sim, "robot_y_velocity", 0))
         y_position = abs(getattr(sim, "robot_y_position", 0))
-        lateral_penalty = min(y_velocity * 2.0, 1.0)
-        position_penalty = min(y_position * 1.0, 0.5)
+        lateral_penalty = min(y_velocity * 0.5, 0.3)
+        position_penalty = min(y_position * 0.3, 0.2)
         total_penalty = lateral_penalty + position_penalty
 
-        return 1.0 - min(total_penalty, 1.0)
+        return 1.0 - min(total_penalty, 0.5)
 
     def _calculate_posture_reward(self, sim, phase_info) -> float:
         pitch = getattr(sim, "robot_pitch", 0)
@@ -528,24 +528,24 @@ class RewardCalculator:
         
         # Penalidade de ação extrema 
         if hasattr(action, '__len__'):
-            action_penalty = np.sum(np.abs(action)) * 0.02
+            action_penalty = np.sum(np.abs(action)) * 0.005
             group_tolerance = 1.0 - (group_level * 0.2) 
-            penalties += min(action_penalty * group_tolerance, 1.5)
+            penalties += min(action_penalty * group_tolerance, 0.5)
         
         # Penalidade por queda iminente
         height = getattr(sim, "robot_z_position", 0.8)
-        if height < 0.6:
-            penalties += (0.6 - height) * 5.0
+        if height < 0.5:
+            penalties += (0.5 - height) * 2.0
 
         # Penalidade por movimento lateral excessivo
         y_velocity = abs(getattr(sim, "robot_y_velocity", 0))
-        if y_velocity > 0.2:
-            penalties += y_velocity * 2.0
+        if y_velocity > 0.3:
+            penalties += (y_velocity - 0.3) * 1.0
 
         # Penalidade por inclinação excessiva
         roll = abs(getattr(sim, "robot_roll", 0))
         if roll > 0.5:
-            penalties += (roll - 0.5) * 3.0
+            penalties += (roll - 0.5) * 1.0
         
         return penalties
     
