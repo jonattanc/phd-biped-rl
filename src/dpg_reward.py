@@ -1,5 +1,7 @@
 # dpg_reward.py
+import time
 import numpy as np
+import pybullet as p
 from typing import Dict, List, Callable, Tuple
 from dataclasses import dataclass
 
@@ -303,6 +305,9 @@ class RewardCalculator:
             "efficiency": RewardComponent("efficiency", 0.8, self._calculate_efficiency_reward),
             "success_bonus": RewardComponent("success_bonus", 5.0, self._calculate_success_bonus),
             "effort_penalty": RewardComponent("effort_penalty", 0.008, self._calculate_effort_penalty),
+            "weight_transfer": RewardComponent("weight_transfer", 2.0, self._calculate_weight_transfer_reward),
+        "forward_progress": RewardComponent("forward_progress", 3.0, self._calculate_gait_rhythm),
+        "gait_pattern": RewardComponent("gait_pattern", 1.5, self._calculate_cross_gait_pattern),
         }
     
     def calculate(self, sim, action, phase_info: Dict) -> float:
@@ -478,16 +483,104 @@ class RewardCalculator:
             right_contact = getattr(sim, "robot_right_foot_contact", False)
             clearance_reward = 0.0
             if not left_contact:
-                left_height = getattr(sim, "robot_left_foot_height", 0)
-                if left_height > 0.03:
-                    clearance_reward += 0.7
+                left_knee_angle = abs(getattr(sim, "robot_left_knee_angle", 0))
+                left_foot_height = getattr(sim, "robot_left_foot_height", 0)
+                knee_bend_bonus = min(left_knee_angle * 2.0, 1.0) 
+                height_bonus = min(left_foot_height * 5.0, 1.0)   
+                clearance_reward += (knee_bend_bonus * 0.6 + height_bonus * 0.4)
             if not right_contact:
-                right_height = getattr(sim, "robot_right_foot_height", 0)
-                if right_height > 0.03:
-                    clearance_reward += 0.7
+                right_knee_angle = abs(getattr(sim, "robot_right_knee_angle", 0))
+                right_foot_height = getattr(sim, "robot_right_foot_height", 0)
+                knee_bend_bonus = min(right_knee_angle * 2.0, 1.0)
+                height_bonus = min(right_foot_height * 5.0, 1.0)
+                clearance_reward += (knee_bend_bonus * 0.6 + height_bonus * 0.4)
             return clearance_reward / 2.0
         except:
             return 0.0
+    
+    def _calculate_cross_gait_pattern(self, sim):
+        """Calcula recompensa por padrão de marcha cruzada"""
+
+        left_foot_contact = sim.robot_left_foot_contact
+        right_foot_contact = sim.robot_right_foot_contact
+
+        try:
+            right_arm_angle = getattr(sim, "robot_right_shoulder_front_angle", 0)
+            left_arm_angle = getattr(sim, "robot_left_shoulder_front_angle", 0)
+        except:
+            return 0.0
+
+        cross_gait_score = 0.0
+
+        if not right_foot_contact and left_arm_angle > 0:
+            cross_gait_score += 0.5
+        if not left_foot_contact and right_arm_angle > 0:
+            cross_gait_score += 0.5
+        if not right_foot_contact and right_arm_angle > 0:
+            cross_gait_score -= 0.3
+        if not left_foot_contact and left_arm_angle > 0:
+            cross_gait_score -= 0.3
+
+        return max(0.0, cross_gait_score)
+    
+    def _calculate_gait_rhythm(self, sim):
+        """Calcula regularidade rítmica da marcha"""
+        if not hasattr(self, "last_step_time"):
+            self.last_step_time = time.time()
+            self.step_intervals = []
+            return 0.5 
+
+        current_time = time.time()
+        step_interval = current_time - self.last_step_time
+        foot_state_changed = sim.robot_left_foot_contact != getattr(self, "last_left_contact", False) or sim.robot_right_foot_contact != getattr(self, "last_right_contact", False)
+
+        if foot_state_changed and step_interval > 0.1:  
+            self.step_intervals.append(step_interval)
+            self.last_step_time = current_time
+            if len(self.step_intervals) > 10:
+                self.step_intervals.pop(0)
+
+        self.last_left_contact = sim.robot_left_foot_contact
+        self.last_right_contact = sim.robot_right_foot_contact
+
+        if len(self.step_intervals) >= 3:
+            rhythm_std = np.std(self.step_intervals)
+            rhythm_score = max(0, 1.0 - rhythm_std * 10)  
+            return rhythm_score
+
+        return 0.5
+    
+    def _calculate_weight_transfer_reward(self, sim, phase_info) -> float:
+        """Recompensa por transferência adequada do centro de massa"""
+        try:
+            left_contact = getattr(sim, "robot_left_foot_contact", False)
+            right_contact = getattr(sim, "robot_right_foot_contact", False)
+
+            com_pos = sim.robot.get_center_of_mass()
+
+            right_foot_state = p.getLinkState(sim.robot.id, sim.robot.get_link_index("right_foot_link"))
+            left_foot_state = p.getLinkState(sim.robot.id, sim.robot.get_link_index("left_foot_link"))
+            right_foot_pos = right_foot_state[0]
+            left_foot_pos = left_foot_state[0]
+
+            weight_transfer_score = 0.0
+
+            if not left_contact and right_contact: 
+                distance_to_support = abs(com_pos[0] - right_foot_pos[0])
+                weight_transfer_score = 1.0 - min(distance_to_support * 3.0, 1.0)
+            elif not right_contact and left_contact: 
+                distance_to_support = abs(com_pos[0] - left_foot_pos[0])
+                weight_transfer_score = 1.0 - min(distance_to_support * 3.0, 1.0)
+            elif not left_contact and not right_contact:  
+                weight_transfer_score = 0.3  
+            else:
+                com_between_feet = (left_foot_pos[0] + right_foot_pos[0]) / 2
+                distance_to_center = abs(com_pos[0] - com_between_feet)
+                weight_transfer_score = 1.0 - min(distance_to_center * 2.0, 1.0)
+
+            return weight_transfer_score
+        except:
+            return 0.5
     
     def _calculate_coordination_reward(self, sim, phase_info) -> float:
         try:
