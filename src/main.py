@@ -7,6 +7,7 @@ from tkinter import ttk
 import utils
 import environment
 import multiprocessing
+import matplotlib
 
 # Importar as tabs
 from tab_training import TrainingTab
@@ -120,6 +121,8 @@ if __name__ == "__main__":
     # Configurar ambiente
     folder_logs = setup_folders()
     logger = utils.get_logger()
+    matplotlib.use("Agg")
+
     environment.create_ramp_stl("ramp_up.stl", ascending=True)
     environment.create_ramp_stl("ramp_down.stl", ascending=False)
 
