@@ -542,10 +542,7 @@ class DPGManager:
             "min_avg_speed": "avg_speed",
             "min_alternating_score": "alternating_score",
             "min_gait_coordination": "gait_coordination",
-            "min_positive_movement_rate": "positive_movement_rate",
-            "min_clearance_score": "clearance_score",  
-            "min_weight_transfer_score": "weight_transfer_score",  
-            "min_forward_progress": "forward_progress"
+            "min_positive_movement_rate": "positive_movement_rate"
         }
 
         metric_name = metric_map.get(condition_name)

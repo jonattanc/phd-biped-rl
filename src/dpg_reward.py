@@ -1,7 +1,5 @@
 # dpg_reward.py
-import time
 import numpy as np
-import pybullet as p
 from typing import Dict, List, Callable, Tuple
 from dataclasses import dataclass
 
@@ -300,14 +298,11 @@ class RewardCalculator:
             "velocity": RewardComponent("velocity", 1.5, self._calculate_velocity_reward),
             "phase_angles": RewardComponent("phase_angles", 1.0, self._calculate_phase_angles_reward),
             "propulsion": RewardComponent("propulsion", 0.5, self._calculate_propulsion_reward),
-            "clearance_score": RewardComponent("clearance_score", 0.5, self._calculate_clearance_score),
+            "clearance": RewardComponent("clearance", 0.5, self._calculate_clearance_reward),
             "coordination": RewardComponent("coordination", 1.0, self._calculate_coordination_reward),
             "efficiency": RewardComponent("efficiency", 0.8, self._calculate_efficiency_reward),
             "success_bonus": RewardComponent("success_bonus", 5.0, self._calculate_success_bonus),
             "effort_penalty": RewardComponent("effort_penalty", 0.008, self._calculate_effort_penalty),
-            "weight_transfer_score": RewardComponent("weight_transfer_score", 2.0, self._calculate_weight_transfer_score),
-            "forward_progress": RewardComponent("forward_progress", 3.0, self._calculate_gait_rhythm),
-            "gait_pattern": RewardComponent("gait_pattern", 1.5, self._calculate_cross_gait_pattern),
         }
     
     def calculate(self, sim, action, phase_info: Dict) -> float:
@@ -360,17 +355,17 @@ class RewardCalculator:
         for feature, weight in irl_weights.items():
             # Mapear features IRL para componentes de recompensa
             component_map = {
-                "progress": ["basic_progress", "distance_bonus"],
+                "progress": ["basic_progress", "velocity", "propulsion"],
                 "stability": ["stability", "posture"],
                 "efficiency": ["efficiency", "effort_penalty"],
-                "coordination": ["coordination", "alternating_foot_contact"]
+                "coordination": ["coordination", "clearance", "phase_angles"]
             }
             
             for component_name in component_map.get(feature, []):
                 if component_name in self.components:
                     # Ajuste suave baseado no IRL
                     current_weight = self.components[component_name].adaptive_weight
-                    new_weight = 0.8 * current_weight + 0.2 * weight
+                    new_weight = 0.7 * current_weight + 0.3 * weight
                     self.components[component_name].adaptive_weight = new_weight
     
     def _extract_experience_metrics(self, sim) -> Dict:
@@ -399,8 +394,16 @@ class RewardCalculator:
         elif distance > 0.1:
             quality += 0.3
         
-        stability = 1.0 - min(metrics.get("roll", 0) + metrics.get("pitch", 0), 1.0)
+        stability = 1.0 - min(metrics.get("roll", 0), 0.8)
         quality += stability * 0.4
+
+        alternating = metrics.get("left_contact", False) != metrics.get("right_contact", False)
+        if alternating:
+            quality += 0.2
+        
+        speed = metrics.get("speed", 0)
+        if 0.1 < speed < 1.0:
+            quality += 0.2
         
         return min(quality, 1.0)
     
@@ -410,7 +413,7 @@ class RewardCalculator:
         pitch = abs(getattr(sim, "robot_pitch", 0))
         roll_penalty = min(roll * 1.5, 0.8)
         pitch_penalty = min(pitch * 1.0, 0.6)
-        total_penalty = (roll_penalty * 0.6) + (pitch_penalty * 0.4)
+        total_penalty = (roll_penalty * 0.8) + (pitch_penalty * 0.2)
     
         return 1.0 - total_penalty
     
@@ -438,10 +441,7 @@ class RewardCalculator:
 
     def _calculate_posture_reward(self, sim, phase_info) -> float:
         pitch = getattr(sim, "robot_pitch", 0)
-        if pitch < -0.1: 
-            penalty = min(abs(pitch) * 4.0, 2.0)  
-            return max(0.0, 1.0 - penalty)
-        elif pitch > 0.3: 
+        if pitch > 0.3: 
             penalty = min(pitch * 2.0, 1.0)
             return 1.0 - penalty
         else:
@@ -463,116 +463,39 @@ class RewardCalculator:
         try:
             left_knee = abs(getattr(sim, "robot_left_knee_angle", 0))
             right_knee = abs(getattr(sim, "robot_right_knee_angle", 0))
-            ideal_knee = 0.3
-            knee_reward = np.exp(-0.5 * (left_knee - ideal_knee)**2 / 0.2**2)
-            knee_reward += np.exp(-0.5 * (right_knee - ideal_knee)**2 / 0.2**2)
-            return knee_reward / 2.0
+            ideal_knee = 0.4
+            knee_reward = np.exp(-0.5 * (left_knee - ideal_knee)**2 / 0.25**2)
+            knee_reward += np.exp(-0.5 * (right_knee - ideal_knee)**2 / 0.25**2)
+            if left_knee > 0.3 and right_knee > 0.3:
+                knee_reward += 0.3
+            
+            return min(knee_reward / 2.0, 1.0)
         except:
             return 0.5
     
     def _calculate_propulsion_reward(self, sim, phase_info) -> float:
         pitch = getattr(sim, "robot_pitch", 0)
         velocity = getattr(sim, "robot_x_velocity", 0)
-        if pitch < -0.1 and velocity > 0.1:
-            return min(abs(pitch) * velocity * 2.0, 1.0)
+        if pitch < -0.05 and velocity > 0.1:
+            return min(abs(pitch) * velocity * 3.0, 1.0)
+        elif pitch < -0.1:
+            return 0.3
         return 0.0
     
-    def _calculate_cross_gait_pattern(self, sim, phase_info):
-        """Calcula recompensa por padrão de marcha cruzada"""
-
-        left_foot_contact = sim.robot_left_foot_contact
-        right_foot_contact = sim.robot_right_foot_contact
-
-        try:
-            right_arm_angle = getattr(sim, "robot_right_shoulder_front_angle", 0)
-            left_arm_angle = getattr(sim, "robot_left_shoulder_front_angle", 0)
-        except:
-            return 0.0
-
-        cross_gait_score = 0.0
-
-        if not right_foot_contact and left_arm_angle > 0:
-            cross_gait_score += 0.5
-        if not left_foot_contact and right_arm_angle > 0:
-            cross_gait_score += 0.5
-        if not right_foot_contact and right_arm_angle > 0:
-            cross_gait_score -= 0.3
-        if not left_foot_contact and left_arm_angle > 0:
-            cross_gait_score -= 0.3
-
-        return max(0.0, cross_gait_score)
-    
-    def _calculate_gait_rhythm(self, sim, phase_info):
-        """Calcula regularidade rítmica da marcha"""
-        if not hasattr(self, "last_step_time"):
-            self.last_step_time = time.time()
-            self.step_intervals = []
-            return 0.5 
-
-        current_time = time.time()
-        step_interval = current_time - self.last_step_time
-        foot_state_changed = sim.robot_left_foot_contact != getattr(self, "last_left_contact", False) or sim.robot_right_foot_contact != getattr(self, "last_right_contact", False)
-
-        if foot_state_changed and step_interval > 0.1:  
-            self.step_intervals.append(step_interval)
-            self.last_step_time = current_time
-            if len(self.step_intervals) > 10:
-                self.step_intervals.pop(0)
-
-        self.last_left_contact = sim.robot_left_foot_contact
-        self.last_right_contact = sim.robot_right_foot_contact
-
-        if len(self.step_intervals) >= 3:
-            rhythm_std = np.std(self.step_intervals)
-            rhythm_score = max(0, 1.0 - rhythm_std * 10)  
-            return rhythm_score
-
-        return 0.5
-    
-    def _calculate_clearance_score(self, sim, phase_info) -> float:
-        """Calcula score de clearance (altura dos pés durante a marcha)"""
-        try:
-            left_foot_height = getattr(sim, "robot_left_foot_height", 0)
-            right_foot_height = getattr(sim, "robot_right_foot_height", 0)
-            left_contact = getattr(sim, "robot_left_foot_contact", False)
-            right_contact = getattr(sim, "robot_right_foot_contact", False)
-
-            clearance_score = 0.0
-            count = 0
-
-            if not left_contact and left_foot_height > 0.02:
-                clearance_score += min(left_foot_height * 10, 1.0)
-                count += 1
-            if not right_contact and right_foot_height > 0.02:
-                clearance_score += min(right_foot_height * 10, 1.0)
-                count += 1
-
-            return clearance_score / max(count, 1)
-        except:
-            return 0.0
-
-    def _calculate_weight_transfer_score(self, sim, phase_info) -> float:
-        """Calcula score de transferência de peso"""
+    def _calculate_clearance_reward(self, sim, phase_info) -> float:
         try:
             left_contact = getattr(sim, "robot_left_foot_contact", False)
             right_contact = getattr(sim, "robot_right_foot_contact", False)
-
-            if left_contact != right_contact: 
-                return 0.8
-            elif not left_contact and not right_contact: 
-                return 0.6
-            else: 
-                return 0.3
-        except:
-            return 0.0
-
-    def _calculate_forward_progress(self, sim, phase_info) -> float:
-        """Calcula progresso para frente normalizado"""
-        try:
-            distance = getattr(sim, "episode_distance", 0)
-            steps = getattr(sim, "episode_steps", 1)
-            progress_per_step = distance / steps
-            return min(progress_per_step * 5.0, 1.0) 
+            clearance_reward = 0.0
+            if not left_contact:
+                left_height = getattr(sim, "robot_left_foot_height", 0)
+                if left_height > 0.05:
+                    clearance_reward += 0.9
+            if not right_contact:
+                right_height = getattr(sim, "robot_right_foot_height", 0)
+                if right_height > 0.05:
+                    clearance_reward += 0.7
+            return clearance_reward / 2.0
         except:
             return 0.0
     
@@ -583,11 +506,14 @@ class RewardCalculator:
             left_arm = getattr(sim, "robot_left_shoulder_front_angle", 0)
             right_arm = getattr(sim, "robot_right_shoulder_front_angle", 0)
             coordination = 0.0
-            if not right_contact and left_arm > 0.1:
-                coordination += 0.5
-            if not left_contact and right_arm > 0.1:
-                coordination += 0.5
-            return coordination
+            if not right_contact and left_arm > 0.15:
+                coordination += 0.7
+            if not left_contact and right_arm > 0.15:
+                coordination += 0.7
+            if left_contact != right_contact:
+                coordination += 0.3
+            
+            return min(coordination, 1.0)
         except:
             return 0.0
     
@@ -631,8 +557,8 @@ class RewardCalculator:
 
         # Penalidade por inclinação excessiva
         roll = abs(getattr(sim, "robot_roll", 0))
-        if roll > 0.5:
-            penalties += (roll - 0.5) * 1.0
+        if roll > 0.8:
+            penalties += (roll - 0.8) * 0.5
         
         return penalties
     
