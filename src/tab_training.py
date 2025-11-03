@@ -582,22 +582,22 @@ class TrainingTab(common_tab.GUITab):
 
             training_data_path = os.path.join(save_path, "training_data.json")
 
-            with open(training_data_path, "w", encoding="utf-8") as f:
-                json.dump(training_data, f, indent=4, ensure_ascii=False)
+            # with open(training_data_path, "w", encoding="utf-8") as f:
+            #     json.dump(training_data, f, indent=4, ensure_ascii=False)
 
-            self._save_additional_data(save_path)
+            # self._save_additional_data(save_path)
 
-            if is_autosave:
-                self.last_autosave_folder = save_path
+            # if is_autosave:
+            #    self.last_autosave_folder = save_path
 
-            else:
-                if self.last_autosave_folder is None:
-                    messagebox.showwarning("Aviso", f"Treinamento salvo com sucesso, porém não há histórico de salvamento automático por melhoria de recompensa\nDiretório: {save_path}")
+            #else:
+            #    if self.last_autosave_folder is None:
+            #        messagebox.showwarning("Aviso", f"Treinamento salvo com sucesso, porém não há histórico de salvamento automático por melhoria de recompensa\nDiretório: {save_path}")
 
-                else:
-                    autosave_copy_path = os.path.join(save_path, "last_autosave")
-                    shutil.copytree(self.last_autosave_folder, autosave_copy_path, dirs_exist_ok=True)
-                    messagebox.showinfo("Sucesso", f"Treinamento salvo com sucesso!\nDiretório: {save_path}")
+            #    else:
+            #        autosave_copy_path = os.path.join(save_path, "last_autosave")
+            #        shutil.copytree(self.last_autosave_folder, autosave_copy_path, dirs_exist_ok=True)
+            #        messagebox.showinfo("Sucesso", f"Treinamento salvo com sucesso!\nDiretório: {save_path}")
 
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao salvar treinamento: {e}")
