@@ -133,14 +133,6 @@ class SmartBufferManager:
         phase_info['group'] = group
         experience = self._create_enhanced_experience(experience_data)
         sub_phase = phase_info.get('sub_phase', 0)
-
-        # DEBUG EXPANDIDO
-        current_buffer_group = self.get_current_group()
-        if group != current_buffer_group:
-            self.logger.warning(f"🚨 INCONSISTÊNCIA: Exp_group={group}, Buffer_group={current_buffer_group}")
-            if group not in self.group_buffers:
-                self.group_buffers[group] = []
-            self.current_group_buffer = self.group_buffers[group]
         
         # Armazenar hierarquicamente
         self._store_hierarchical(experience, group, sub_phase)

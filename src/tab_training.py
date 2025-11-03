@@ -517,6 +517,23 @@ class TrainingTab(common_tab.GUITab):
         try:
             total_episodes = len(self.episode_data["episodes"])
 
+            serializable_episode_data = {}
+            for key, value_list in self.episode_data.items():
+                if isinstance(value_list, list) and len(value_list) > 0 and hasattr(value_list[0], 'dtype'):
+                    # Se for uma lista de arrays numpy, converter para lista de floats
+                    serializable_episode_data[key] = [float(x) if hasattr(x, 'item') else x for x in value_list]
+                else:
+                    serializable_episode_data[key] = value_list
+
+            # Converter tracker_status para tipos serializáveis
+            serializable_tracker_status = {}
+            if tracker_status:
+                for key, value in tracker_status.items():
+                    if hasattr(value, 'dtype'):
+                        serializable_tracker_status[key] = float(value)
+                    else:
+                        serializable_tracker_status[key] = value
+                        
             training_data = {
                 "session_info": {
                     "is_autosave": is_autosave,
@@ -539,7 +556,7 @@ class TrainingTab(common_tab.GUITab):
             with open(training_data_path, "w", encoding="utf-8") as f:
                 json.dump(training_data, f, indent=4, ensure_ascii=False)
 
-            # self._save_additional_data(save_path) dando erro
+            self._save_additional_data(save_path)
 
             if is_autosave:
                 self.last_autosave_folder = save_path
