@@ -257,7 +257,7 @@ class TrainingTab(common_tab.GUITab):
                 x_min, x_max = 1, 2
             else:
                 x_min, x_max = 1, episodes[-1] if episodes else 2
-            
+
             # Principais: Recompensa, Tempo, Distância
             titles_main = self.plot_titles[:3]
             ylabels_main = self.plot_ylabels[:3]
@@ -524,6 +524,8 @@ class TrainingTab(common_tab.GUITab):
 
     def save_training_callback_btn(self):
         """Salva todos os dados do treinamento atual incluindo o modelo"""
+        self.logger.info("Botão de salvar treinamento pressionado")
+
         if self.training_start_time is None:
             messagebox.showwarning("Aviso", "Nenhum treinamento em andamento para salvar.")
             return
@@ -535,35 +537,29 @@ class TrainingTab(common_tab.GUITab):
         self.ipc_queue_main_to_process.put({"type": "save_request", "save_session_path": save_session_path})
         self.config_changed_values[-1].value = 1
 
+    def make_serializable(self, obj):
+        """Converte objetos em tipos compatíveis com JSON."""
+        if isinstance(obj, dict):
+            return {str(k): self.make_serializable(v) for k, v in obj.items()}
+        elif isinstance(obj, (list, tuple, set)):
+            return [self.make_serializable(v) for v in obj]
+        elif isinstance(obj, np.ndarray):
+            # self.logger.warning(f"Making {obj} of type np.ndarray serializable")
+            return obj.tolist()
+        elif isinstance(obj, np.generic):
+            # self.logger.warning(f"Making {obj} of type np.generic serializable")
+            return obj.item()
+        elif isinstance(obj, (datetime,)):
+            # self.logger.warning(f"Making {obj} of type datetime serializable")
+            return obj.isoformat()
+        else:
+            return obj
+
     def save_training_data(self, is_autosave, save_path, tracker_status):
         try:
             total_episodes = len(self.episode_data["episodes"])
 
-            serializable_episode_data = {}
-            for key, value_list in self.episode_data.items():
-                if isinstance(value_list, list) and len(value_list) > 0:
-                    # Se for uma lista de arrays numpy, converter para lista de floats
-                    serializable_episode_data[key] = []
-                    for item in value_list:
-                        if hasattr(item, 'item'):  
-                            serializable_episode_data[key].append(float(item))
-                        else:
-                            serializable_episode_data[key].append(item)
-                else:
-                    serializable_episode_data[key] = value_list
-
-            # Converter tracker_status para tipos serializáveis
-            serializable_tracker_status = {}
-            if tracker_status:
-                for key, value in tracker_status.items():
-                    if hasattr(value, 'item'):  # É um array/scalar NumPy
-                        serializable_tracker_status[key] = float(value)
-                    elif isinstance(value, (np.integer, np.floating)):
-                        serializable_tracker_status[key] = float(value)
-                    else:
-                        serializable_tracker_status[key] = value
-                        
-            training_data = {
+            training_raw_data = {
                 "session_info": {
                     "is_autosave": is_autosave,
                     "environment": self.current_env,
@@ -580,24 +576,27 @@ class TrainingTab(common_tab.GUITab):
                 "episode_data": self.episode_data,
             }
 
+            training_serializable_data = self.make_serializable(training_raw_data)
             training_data_path = os.path.join(save_path, "training_data.json")
 
-            # with open(training_data_path, "w", encoding="utf-8") as f:
-            #     json.dump(training_data, f, indent=4, ensure_ascii=False)
+            # self.logger.warning(f"Salvando training_serializable_data:\n{training_serializable_data}")
 
-            # self._save_additional_data(save_path)
+            with open(training_data_path, "w", encoding="utf-8") as f:
+                json.dump(training_serializable_data, f, indent=4, ensure_ascii=False)
 
-            # if is_autosave:
-            #    self.last_autosave_folder = save_path
+            self._save_additional_data(save_path)
 
-            #else:
-            #    if self.last_autosave_folder is None:
-            #        messagebox.showwarning("Aviso", f"Treinamento salvo com sucesso, porém não há histórico de salvamento automático por melhoria de recompensa\nDiretório: {save_path}")
+            if is_autosave:
+                self.last_autosave_folder = save_path
 
-            #    else:
-            #        autosave_copy_path = os.path.join(save_path, "last_autosave")
-            #        shutil.copytree(self.last_autosave_folder, autosave_copy_path, dirs_exist_ok=True)
-            #        messagebox.showinfo("Sucesso", f"Treinamento salvo com sucesso!\nDiretório: {save_path}")
+            else:
+                if self.last_autosave_folder is None:
+                    messagebox.showwarning("Aviso", f"Treinamento salvo com sucesso, porém não há histórico de salvamento automático por melhoria de recompensa\nDiretório: {save_path}")
+
+                else:
+                    autosave_copy_path = os.path.join(save_path, "last_autosave")
+                    shutil.copytree(self.last_autosave_folder, autosave_copy_path, dirs_exist_ok=True)
+                    messagebox.showinfo("Sucesso", f"Treinamento salvo com sucesso!\nDiretório: {save_path}")
 
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao salvar treinamento: {e}")
@@ -846,7 +845,7 @@ class TrainingTab(common_tab.GUITab):
 
             with self.plot_data_lock:
                 current_tab = self.graph_notebook.index(self.graph_notebook.select())
-                
+
                 # Verificar se temos dados suficientes para definir limites
                 episodes = self.episode_data["episodes"]
                 if len(episodes) < 2:
@@ -1044,10 +1043,10 @@ class TrainingTab(common_tab.GUITab):
             data = self.episode_data[key]
 
             if len(data) < 5:
-                self.episode_data[filtered_key].append(np.mean(data))
+                self.episode_data[filtered_key].append(float(np.mean(data)))
 
             else:
-                self.episode_data[filtered_key].append(np.mean(data[-window_size:]))
+                self.episode_data[filtered_key].append(float(np.mean(data[-window_size:])))
 
     def ipc_runner(self):
         """Thread para monitorar a fila IPC e atualizar logs"""
@@ -1095,6 +1094,7 @@ class TrainingTab(common_tab.GUITab):
 
                     elif data_type == "agent_model_saved":
                         # O modelo do agente foi salvo
+                        self.logger.info("Salvamento de modelo de RL confirmado. Salvando dados em processo principal.")
                         self.save_training_data(msg["autosave"], msg["save_path"], msg["tracker_status"])  # Salvar dados da gui na mesma pasta do modelo do agente
                         self.pause_values[-1].value = self.last_pause_value  # Restaurar pause, pois o treinamento é pausado ao salvar o modelo do agente
                         self.config_changed_values[-1].value = 1  # Ativa verificação de pause value pelo processo de treinamento
