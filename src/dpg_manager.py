@@ -395,7 +395,6 @@ class DPGManager:
 
         # Chamar debug do buffer em mudanças importantes
         if group_changed or sub_phase_changed:
-            self.logger.info(f"🔄 Mudança detectada - Executando preservação")
             self.buffer_manager.transition_with_preservation(
                 old_group, 
                 current_group,  
