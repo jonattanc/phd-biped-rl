@@ -300,7 +300,6 @@ class RewardCalculator:
             "velocity": RewardComponent("velocity", 1.5, self._calculate_velocity_reward),
             "phase_angles": RewardComponent("phase_angles", 1.0, self._calculate_phase_angles_reward),
             "propulsion": RewardComponent("propulsion", 0.5, self._calculate_propulsion_reward),
-            "clearance": RewardComponent("clearance", 0.5, self._calculate_clearance_reward),
             "clearance_score": RewardComponent("clearance_score", 0.5, self._calculate_clearance_score),
             "coordination": RewardComponent("coordination", 1.0, self._calculate_coordination_reward),
             "efficiency": RewardComponent("efficiency", 0.8, self._calculate_efficiency_reward),
@@ -477,27 +476,6 @@ class RewardCalculator:
         if pitch < -0.1 and velocity > 0.1:
             return min(abs(pitch) * velocity * 2.0, 1.0)
         return 0.0
-    
-    def _calculate_clearance_reward(self, sim, phase_info) -> float:
-        try:
-            left_contact = getattr(sim, "robot_left_foot_contact", False)
-            right_contact = getattr(sim, "robot_right_foot_contact", False)
-            clearance_reward = 0.0
-            if not left_contact:
-                left_knee_angle = abs(getattr(sim, "robot_left_knee_angle", 0))
-                left_foot_height = getattr(sim, "robot_left_foot_height", 0)
-                knee_bend_bonus = min(left_knee_angle * 2.0, 1.0) 
-                height_bonus = min(left_foot_height * 5.0, 1.0)   
-                clearance_reward += (knee_bend_bonus * 0.6 + height_bonus * 0.4)
-            if not right_contact:
-                right_knee_angle = abs(getattr(sim, "robot_right_knee_angle", 0))
-                right_foot_height = getattr(sim, "robot_right_foot_height", 0)
-                knee_bend_bonus = min(right_knee_angle * 2.0, 1.0)
-                height_bonus = min(right_foot_height * 5.0, 1.0)
-                clearance_reward += (knee_bend_bonus * 0.6 + height_bonus * 0.4)
-            return clearance_reward / 2.0
-        except:
-            return 0.0
     
     def _calculate_cross_gait_pattern(self, sim, phase_info):
         """Calcula recompensa por padrão de marcha cruzada"""

@@ -779,10 +779,70 @@ class PhaseManager:
         recent_history = self.performance_history[-10:]
         steps = [r.get("steps", 0) for r in recent_history]
         return np.mean(steps) if steps else 0.0
+    
+    def _calculate_clearance_score(self) -> float:
+        """Calcula score de clearance baseado no histórico"""
+        if not self.performance_history:
+            return 0.0
+
+        recent_history = self.performance_history[-10:]
+        clearance_scores = []
+
+        for result in recent_history:
+            left_contact = result.get("left_contact", False)
+            right_contact = result.get("right_contact", False)
+            score = 0.0
+            if not left_contact:
+                score += 0.5
+            if not right_contact:
+                score += 0.5
+
+            clearance_scores.append(score)
+
+        return np.mean(clearance_scores) if clearance_scores else 0.0
+
+    def _calculate_weight_transfer_score(self) -> float:
+        """Calcula score de transferência de peso baseado no histórico"""
+        if not self.performance_history:
+            return 0.0
+
+        recent_history = self.performance_history[-10:]
+        transfer_scores = []
+
+        for result in recent_history:
+            left_contact = result.get("left_contact", False)
+            right_contact = result.get("right_contact", False)
+            if left_contact != right_contact:
+                transfer_scores.append(0.8)  
+            elif not left_contact and not right_contact:
+                transfer_scores.append(0.6) 
+            else:
+                transfer_scores.append(0.3) 
+
+        return np.mean(transfer_scores) if transfer_scores else 0.0
+
+    def _calculate_forward_progress(self) -> float:
+        """Calcula progresso para frente normalizado"""
+        if not self.performance_history:
+            return 0.0
+
+        recent_history = self.performance_history[-10:]
+        progress_scores = []
+
+        for result in recent_history:
+            distance = result.get("distance", 0)
+            steps = result.get("steps", 1)
+
+            if steps > 0:
+                progress_per_step = distance / steps
+                normalized = min(progress_per_step / 0.15, 1.0)
+                progress_scores.append(normalized)
+
+        return np.mean(progress_scores) if progress_scores else 0.0
 
     def get_performance_metrics(self) -> Dict:
         """Retorna métricas de performance consolidadas"""
-        return {
+        base_metrics = {
             "success_rate": self._calculate_success_rate(),
             "avg_distance": self._calculate_avg_distance(),
             "avg_roll": self._calculate_avg_roll(),
@@ -792,6 +852,12 @@ class PhaseManager:
             "alternating_score": self._calculate_alternating_score(),
             "gait_coordination": self._calculate_gait_coordination(),
         }
+        additional_metrics = {
+            "clearance_score": self._calculate_clearance_score(),
+            "weight_transfer_score": self._calculate_weight_transfer_score(),
+            "forward_progress": self._calculate_forward_progress(),
+        }
+        return {**base_metrics, **additional_metrics}
 
     def get_current_phase_info(self) -> Dict:
         """Retorna informações da sub-fase atual"""
