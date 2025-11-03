@@ -419,9 +419,9 @@ class DPGManager:
             else:
                 report_reason = f"Avanço de sub-fase {old_sub_phase} → {current_sub_phase}"
 
-        elif self.episode_count % 100 == 0:
+        elif self.episode_count % 200 == 0:
             should_report = True
-            report_reason = "Checkpoint de 100 episódios"
+            report_reason = "Checkpoint de 200 episódios"
 
         # Gerar relatório se necessário
         if should_report:

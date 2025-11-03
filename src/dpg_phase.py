@@ -480,7 +480,7 @@ class PhaseManager:
         """Verifica se pode avançar para próxima sub-fase"""
         current_sub_phase = self.current_sub_phase_config
 
-        if self.episodes_in_sub_phase < current_sub_phase.min_episodes:
+        if self.episodes_in_sub_phase < current_sub_phase.min_episodes * 2:
             return False
 
         if self.current_sub_phase >= len(self.current_group_config.sub_phases) - 1:
@@ -587,14 +587,14 @@ class PhaseManager:
     def _should_regress(self) -> bool:
         """Verifica se precisa regredir (sub-fase ou grupo)"""
         regression_thresholds = {
-            1: {"max_failures": 50, "min_success_rate": 0.1, "stagnation_episodes": 10},
-            2: {"max_failures": 40, "min_success_rate": 0.15, "stagnation_episodes": 8},
-            3: {"max_failures": 30, "min_success_rate": 0.2, "stagnation_episodes": 6}
+            1: {"max_failures": 80, "min_success_rate": 0.05, "stagnation_episodes": 20},
+            2: {"max_failures": 60, "min_success_rate": 0.1, "stagnation_episodes": 15},
+            3: {"max_failures": 45, "min_success_rate": 0.15, "stagnation_episodes": 12}
         }
         
         thresholds = regression_thresholds.get(self.current_group_config.group_level, regression_thresholds[1])
         
-        if self.episodes_in_sub_phase < 20: 
+        if self.episodes_in_sub_phase < 30: 
             return False
         
         if self.consecutive_failures > thresholds["max_failures"]:
@@ -604,7 +604,7 @@ class PhaseManager:
             return True
 
         success_rate = self._calculate_success_rate()
-        if success_rate < thresholds["min_success_rate"] and self.episodes_in_sub_phase > 30:
+        if success_rate < thresholds["min_success_rate"] and self.episodes_in_sub_phase > 45:
             return True
 
         return False
@@ -680,7 +680,7 @@ class PhaseManager:
         success = episode_results.get("success", False)
         distance = episode_results.get("distance", 0)
         
-        if success and distance > 0.1:
+        if success and distance > 0.05:
             self.consecutive_successes += 1
             self.consecutive_failures = 0
         else:
@@ -688,20 +688,19 @@ class PhaseManager:
             self.consecutive_successes = 0
         
         # Detectar estagnação
-        if len(self.performance_history) >= 10:  # Aumentado de 5 para 10
-            recent_distances = [r.get("distance", 0) for r in self.performance_history[-10:]]
+        if len(self.performance_history) >= 12: 
+            recent_distances = [r.get("distance", 0) for r in self.performance_history[-12:]]
             current_distance = episode_results.get("distance", 0)
 
             avg_recent = np.mean(recent_distances)
             std_recent = np.std(recent_distances)
 
-            # Condições mais relaxadas para estagnação
-            if (std_recent < 0.1 and  # Aumentado de 0.05 para 0.1
-                abs(current_distance - avg_recent) < 0.2 and  # Aumentado de 0.1 para 0.2
-                current_distance < 1.0):  # Aumentado de 0.5 para 1.0
+            if (std_recent < 0.15 and  
+                abs(current_distance - avg_recent) < 0.25 and  
+                current_distance < 1.2):  
                 self.stagnation_counter += 1
             else:
-                self.stagnation_counter = max(0, self.stagnation_counter - 2)
+                self.stagnation_counter = max(0, self.stagnation_counter - 1)
     
     def _check_basic_conditions(self, conditions: Dict) -> bool:
         """Verifica condições básicas obrigatórias"""

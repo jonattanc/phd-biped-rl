@@ -251,6 +251,13 @@ class TrainingTab(common_tab.GUITab):
     def _initialize_plots(self):
         """Inicializa os gráficos com títulos e configurações"""
         try:
+            # Verificar se temos dados para definir limites
+            episodes = self.episode_data["episodes"]
+            if len(episodes) < 2:
+                x_min, x_max = 1, 2
+            else:
+                x_min, x_max = 1, episodes[-1] if episodes else 2
+            
             # Principais: Recompensa, Tempo, Distância
             titles_main = self.plot_titles[:3]
             ylabels_main = self.plot_ylabels[:3]
@@ -264,7 +271,10 @@ class TrainingTab(common_tab.GUITab):
                 self.axs_main[i].set_ylabel(ylabel)
                 self.axs_main[i].grid(True, alpha=0.3)
                 self.axs_main[i].legend(loc="upper left")
-                self.axs_main[i].set_xlim(1, 2)
+                if x_min != x_max:
+                    self.axs_main[i].set_xlim(x_min, x_max)
+                else:
+                    self.axs_main[i].set_xlim(x_min - 0.5, x_max + 0.5)
 
             self.axs_main[-1].set_xlabel("Episódio")
             self.canvas_main.draw_idle()
@@ -278,7 +288,10 @@ class TrainingTab(common_tab.GUITab):
                 self.axs_pos[i].set_ylabel(f"{label} (m)")
                 self.axs_pos[i].grid(True, alpha=0.3)
                 self.axs_pos[i].legend(loc="upper left")
-                self.axs_pos[i].set_xlim(1, None)
+                if x_min != x_max:
+                    self.axs_pos[i].set_xlim(x_min, x_max)
+                else:
+                    self.axs_pos[i].set_xlim(x_min - 0.5, x_max + 0.5)
             self.axs_pos[-1].set_xlabel("Episódio")
             self.canvas_pos.draw_idle()
 
@@ -291,7 +304,10 @@ class TrainingTab(common_tab.GUITab):
                 self.axs_ori[i].set_ylabel(f"{label} (°)")
                 self.axs_ori[i].grid(True, alpha=0.3)
                 self.axs_ori[i].legend(loc="upper left")
-                self.axs_ori[i].set_xlim(1, None)
+                if x_min != x_max:
+                    self.axs_pos[i].set_xlim(x_min, x_max)
+                else:
+                    self.axs_pos[i].set_xlim(x_min - 0.5, x_max + 0.5)
             self.axs_ori[-1].set_xlabel("Episódio")
             self.canvas_ori.draw_idle()
 
@@ -304,7 +320,10 @@ class TrainingTab(common_tab.GUITab):
                 self.axs_vel[i].set_ylabel(f"{label} (m/s)")
                 self.axs_vel[i].grid(True, alpha=0.3)
                 self.axs_vel[i].legend(loc="upper left")
-                self.axs_vel[i].set_xlim(1, None)
+                if x_min != x_max:
+                    self.axs_pos[i].set_xlim(x_min, x_max)
+                else:
+                    self.axs_pos[i].set_xlim(x_min - 0.5, x_max + 0.5)
             self.axs_vel[-1].set_xlabel("Episódio")
             self.canvas_vel.draw_idle()
 
@@ -317,7 +336,10 @@ class TrainingTab(common_tab.GUITab):
                 self.axs_angvel[i].set_ylabel(f"{label} (°/s)")
                 self.axs_angvel[i].grid(True, alpha=0.3)
                 self.axs_angvel[i].legend(loc="upper left")
-                self.axs_angvel[i].set_xlim(1, None)
+                if x_min != x_max:
+                    self.axs_pos[i].set_xlim(x_min, x_max)
+                else:
+                    self.axs_pos[i].set_xlim(x_min - 0.5, x_max + 0.5)
             self.axs_angvel[-1].set_xlabel("Episódio")
             self.canvas_angvel.draw_idle()
 
@@ -519,9 +541,14 @@ class TrainingTab(common_tab.GUITab):
 
             serializable_episode_data = {}
             for key, value_list in self.episode_data.items():
-                if isinstance(value_list, list) and len(value_list) > 0 and hasattr(value_list[0], 'dtype'):
+                if isinstance(value_list, list) and len(value_list) > 0:
                     # Se for uma lista de arrays numpy, converter para lista de floats
-                    serializable_episode_data[key] = [float(x) if hasattr(x, 'item') else x for x in value_list]
+                    serializable_episode_data[key] = []
+                    for item in value_list:
+                        if hasattr(item, 'item'):  
+                            serializable_episode_data[key].append(float(item))
+                        else:
+                            serializable_episode_data[key].append(item)
                 else:
                     serializable_episode_data[key] = value_list
 
@@ -529,7 +556,9 @@ class TrainingTab(common_tab.GUITab):
             serializable_tracker_status = {}
             if tracker_status:
                 for key, value in tracker_status.items():
-                    if hasattr(value, 'dtype'):
+                    if hasattr(value, 'item'):  # É um array/scalar NumPy
+                        serializable_tracker_status[key] = float(value)
+                    elif isinstance(value, (np.integer, np.floating)):
                         serializable_tracker_status[key] = float(value)
                     else:
                         serializable_tracker_status[key] = value
@@ -817,6 +846,14 @@ class TrainingTab(common_tab.GUITab):
 
             with self.plot_data_lock:
                 current_tab = self.graph_notebook.index(self.graph_notebook.select())
+                
+                # Verificar se temos dados suficientes para definir limites
+                episodes = self.episode_data["episodes"]
+                if len(episodes) < 2:
+                    x_min, x_max = 1, 2
+                else:
+                    x_min, x_max = 1, episodes[-1]
+
                 if current_tab == 0:
                     titles_main = self.plot_titles[:3]
                     ylabels_main = self.plot_ylabels[:3]
@@ -829,7 +866,10 @@ class TrainingTab(common_tab.GUITab):
                         self.axs_main[i].set_ylabel(ylabel)
                         self.axs_main[i].grid(True, alpha=0.3)
                         self.axs_main[i].legend(loc="upper left")
-                        self.axs_main[i].set_xlim(1, self.episode_data["episodes"][-1])
+                        if x_min != x_max:
+                            self.axs_main[i].set_xlim(x_min, x_max)
+                        else:
+                            self.axs_main[i].set_xlim(x_min - 0.5, x_max + 0.5)
                         if i == 2:
                             self.axs_main[i].set_ylim(-1.5, 10)
                     self.axs_main[-1].set_xlabel("Episódio")
@@ -842,7 +882,10 @@ class TrainingTab(common_tab.GUITab):
                         self.axs_pos[i].set_ylabel(f"{label} (m)")
                         self.axs_pos[i].grid(True, alpha=0.3)
                         self.axs_pos[i].legend(loc="upper left")
-                        self.axs_pos[i].set_xlim(1, self.episode_data["episodes"][-1])
+                        if x_min != x_max:
+                            self.axs_pos[i].set_xlim(x_min, x_max)
+                        else:
+                            self.axs_pos[i].set_xlim(x_min - 0.5, x_max + 0.5)
                     self.axs_pos[-1].set_xlabel("Episódio")
                     self.canvas_pos.draw()
                 elif current_tab == 2:
@@ -853,7 +896,10 @@ class TrainingTab(common_tab.GUITab):
                         self.axs_ori[i].set_ylabel(f"{label} (°)")
                         self.axs_ori[i].grid(True, alpha=0.3)
                         self.axs_ori[i].legend(loc="upper left")
-                        self.axs_ori[i].set_xlim(1, self.episode_data["episodes"][-1])
+                        if x_min != x_max:
+                            self.axs_ori[i].set_xlim(x_min, x_max)
+                        else:
+                            self.axs_ori[i].set_xlim(x_min - 0.5, x_max + 0.5)
                     self.axs_ori[-1].set_xlabel("Episódio")
                     self.canvas_ori.draw()
                 elif current_tab == 3:
@@ -864,7 +910,10 @@ class TrainingTab(common_tab.GUITab):
                         self.axs_vel[i].set_ylabel(f"{label} (m/s)")
                         self.axs_vel[i].grid(True, alpha=0.3)
                         self.axs_vel[i].legend(loc="upper left")
-                        self.axs_vel[i].set_xlim(1, self.episode_data["episodes"][-1])
+                        if x_min != x_max:
+                            self.axs_vel[i].set_xlim(x_min, x_max)
+                        else:
+                            self.axs_vel[i].set_xlim(x_min - 0.5, x_max + 0.5)
                     self.axs_vel[-1].set_xlabel("Episódio")
                     self.canvas_vel.draw()
                 elif current_tab == 4:
@@ -875,7 +924,10 @@ class TrainingTab(common_tab.GUITab):
                         self.axs_angvel[i].set_ylabel(f"{label} (°/s)")
                         self.axs_angvel[i].grid(True, alpha=0.3)
                         self.axs_angvel[i].legend(loc="upper left")
-                        self.axs_angvel[i].set_xlim(1, self.episode_data["episodes"][-1])
+                        if x_min != x_max:
+                            self.axs_angvel[i].set_xlim(x_min, x_max)
+                        else:
+                            self.axs_angvel[i].set_xlim(x_min - 0.5, x_max + 0.5)
                     self.axs_angvel[-1].set_xlabel("Episódio")
                     self.canvas_angvel.draw()
 

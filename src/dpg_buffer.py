@@ -221,31 +221,22 @@ class SmartBufferManager:
         """Transição inteligente com preservação de aprendizado - DEBUG EXPANDIDO"""
         self.group_transitions += 1
 
-        self.logger.info(f"🔄 INICIANDO TRANSIÇÃO: {old_group}→{new_group}")
-        self.logger.info(f"   Antes: { {f'group_{k}': len(v) for k, v in self.group_buffers.items()} }")
-
         # Garantir que ambos os grupos existem
         if old_group not in self.group_buffers:
-            self.logger.warning(f"🚨 Grupo antigo {old_group} não existe! Criando...")
             self.group_buffers[old_group] = []
 
         if new_group not in self.group_buffers:
-            self.logger.info(f"📁 Criando novo grupo {new_group}")
             self.group_buffers[new_group] = []
 
         # 1. Coletar experiências do grupo antigo
         old_experiences = self.group_buffers.get(old_group, [])
         self.logger.info(f"   Experiências no grupo {old_group}: {len(old_experiences)}")
 
-        # Se for mesma transição de grupo, preservar MUITO mais
         if old_group == new_group:
-            self.logger.info(f"🔄 Transição interna no grupo {old_group}")
-            # Preservar praticamente tudo para transições internas
             preserved_experiences = old_experiences + list(self.core_buffer)
         else:
             # 2. Filtrar experiências relevantes
             relevant_experiences = self._filter_relevant_experiences(old_experiences, new_group)
-            self.logger.info(f"   Experiências relevantes: {len(relevant_experiences)}/{len(old_experiences)}")
 
             # 3. Combinar com experiências fundamentais
             preserved_experiences = relevant_experiences + list(self.core_buffer)
@@ -296,12 +287,12 @@ class SmartBufferManager:
     def _apply_preservation_policy(self, experiences: List[Experience], policy: str) -> List[Experience]:
         """Aplica política de preservação"""
         policy_limits = {
-            "high": 2000,    
-            "medium": 1500,  
-            "low": 1000     
+            "high": 3000,    
+            "medium": 2000,  
+            "low": 1500     
         }
         
-        limit = policy_limits.get(policy, 1500)
+        limit = policy_limits.get(policy, 2000)
         if len(experiences) <= limit:
             return experiences
         high_quality = [exp for exp in experiences if exp.quality > 0.7]
