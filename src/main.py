@@ -26,6 +26,7 @@ class TrainingGUI:
         self.logger = utils.get_logger()
         self.reward_system = RewardSystem(self.logger)
 
+        self.settings = utils.load_default_settings()
         self.setup_ui()
 
         # Configurar o handler para fechar a janela
@@ -38,8 +39,8 @@ class TrainingGUI:
 
         # Criar abas
         self.reward_tab = RewardTab(notebook, self.device, self.logger, self.reward_system)
-        self.training_tab = TrainingTab(notebook, self.device, self.logger, self.reward_system, notebook)
-        self.evaluation_tab = EvaluationTab(notebook, self.device, self.logger)
+        self.training_tab = TrainingTab(self, notebook, self.device, self.logger, self.reward_system, notebook)
+        self.evaluation_tab = EvaluationTab(self, notebook, self.device, self.logger)
         self.comparison_tab = ComparisonTab(notebook, self.device, self.logger)
 
         # Adicionar abas ao notebook

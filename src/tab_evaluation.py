@@ -13,13 +13,15 @@ import pandas as pd
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import utils
 from utils import validate_episodes_count, ensure_directory
+import common_tab
 
 
-class EvaluationTab:
-    def __init__(self, parent, device, logger):
+class EvaluationTab(common_tab.GUITab):
+    def __init__(self, gui, parent, device, logger):
+        super().__init__(gui, logger)
+
         self.frame = ttk.Frame(parent)
         self.device = device
-        self.logger = logger
 
         # IPC Queue para comunicação
         self.ipc_queue = queue.Queue()
@@ -56,9 +58,9 @@ class EvaluationTab:
 
         # Linha 1: Seleção de modelo
         row1_frame = ttk.Frame(control_frame)
-        row1_frame.pack(fill=tk.X, pady=5)
+        row1_frame.pack(fill=tk.X)
 
-        ttk.Label(row1_frame, text="Modelo para Avaliar:").grid(row=0, column=0, sticky=tk.W, padx=5)
+        ttk.Label(row1_frame, text="Modelo para Avaliar:").grid(row=0, column=0, sticky=tk.W)
         self.eval_model_path = tk.StringVar()
         ttk.Entry(row1_frame, textvariable=self.eval_model_path, width=50).grid(row=0, column=1, padx=5)
         ttk.Button(row1_frame, text="Procurar", command=self.browse_evaluation_model).grid(row=0, column=2, padx=5)
@@ -67,37 +69,34 @@ class EvaluationTab:
         row2_frame = ttk.Frame(control_frame)
         row2_frame.pack(fill=tk.X, pady=5)
 
-        ttk.Label(row2_frame, text="Ambiente:").grid(row=0, column=0, sticky=tk.W, padx=5)
-        self.eval_env_var = tk.StringVar(value="PR")
-        env_combo = ttk.Combobox(row2_frame, textvariable=self.eval_env_var, values=["PR", "Pmu", "RamA", "RamD", "PG", "PRB"], width=10)
-        env_combo.grid(row=0, column=1, padx=5)
+        self.create_environment_selector(row2_frame, column=0)
 
-        ttk.Label(row2_frame, text="Robô:").grid(row=0, column=2, sticky=tk.W, padx=5)
-        self.eval_robot_var = tk.StringVar(value="robot_stage1")
-        robot_combo = ttk.Combobox(row2_frame, textvariable=self.eval_robot_var, values=["robot_stage1", "robot_stage2", "robot_stage3"], width=12)
-        robot_combo.grid(row=0, column=3, padx=5)
+        self.create_robot_selector(row2_frame, column=2)
 
         ttk.Label(row2_frame, text="Episódios:").grid(row=0, column=4, sticky=tk.W, padx=5)
         self.eval_episodes_var = tk.StringVar(value="20")
         ttk.Entry(row2_frame, textvariable=self.eval_episodes_var, width=8).grid(row=0, column=5, padx=5)
 
+        self.create_seed_selector(row2_frame, column=6)
+
         # Linha 3: Botões de controle
         row3_frame = ttk.Frame(control_frame)
-        row3_frame.pack(fill=tk.X, pady=5)
+        row3_frame.pack(fill=tk.X)
 
         self.eval_start_btn = ttk.Button(row3_frame, text="Executar Avaliação", command=self.start_evaluation, width=20)
-        self.eval_start_btn.grid(row=0, column=0, padx=5)
+        self.eval_start_btn.grid(row=0, column=0)
 
         self.eval_deterministic_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(row3_frame, text="Modo Determinístico", variable=self.eval_deterministic_var).grid(row=0, column=1, padx=5)
 
-        self.enable_visualization_var = tk.BooleanVar(value=False)
-        self.enable_visualization_check = ttk.Checkbutton(row3_frame, text="Visualizar Robô", variable=self.enable_visualization_var, width=15)
-        self.enable_visualization_check.grid(row=0, column=2, padx=5)
+        self.create_dpg_selector(row3_frame, column=3)
+        self.create_enable_visualization_selector(row3_frame, column=4)
+        self.create_real_time_selector(row3_frame, column=5)
+        self.create_camera_selector(row3_frame, column=6)
 
         # Botões de exportação
-        ttk.Button(row3_frame, text="Exportar Resultados", command=self.export_evaluation_results).grid(row=0, column=3, padx=5)
-        ttk.Button(row3_frame, text="Salvar Gráficos", command=self.export_evaluation_plots).grid(row=0, column=4, padx=5)
+        ttk.Button(row3_frame, text="Exportar Resultados", command=self.export_evaluation_results).grid(row=0, column=8, padx=5)
+        ttk.Button(row3_frame, text="Salvar Gráficos", command=self.export_evaluation_plots).grid(row=0, column=9, padx=5)
 
         # Resultados da avaliação
         results_frame = ttk.LabelFrame(main_frame, text="Resultados da Avaliação", padding="10")
