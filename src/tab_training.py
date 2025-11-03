@@ -20,14 +20,15 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import train_process
 import utils
-from utils import ENVIRONMENT_PATH, ROBOTS_PATH
+import common_tab
 
 
-class TrainingTab:
-    def __init__(self, parent, device, logger, reward_system, notebook):
+class TrainingTab(common_tab.GUITab):
+    def __init__(self, gui, parent, device, logger, reward_system, notebook):
+        super().__init__(gui, logger)
+
         self.frame = ttk.Frame(parent, padding="10")
         self.device = device
-        self.logger = logger
         self.reward_system = reward_system
         self.notebook = notebook
 
@@ -77,13 +78,6 @@ class TrainingTab:
             self.episode_data[f"filtered_{key}"] = []
 
         # Controle de processos
-        self.processes = []
-        self.pause_values = []
-        self.exit_values = []
-        self.enable_real_time_values = []
-        self.enable_visualization_values = []
-        self.camera_selection_values = []
-        self.config_changed_values = []
         self.gui_log_queue = queue.Queue()
         self.ipc_queue = multiprocessing.Queue()
         self.ipc_queue_main_to_process = multiprocessing.Queue()
@@ -112,7 +106,6 @@ class TrainingTab:
         # Configurar IPC logging
         utils.add_queue_handler_to_logger(self.logger, self.ipc_queue)
 
-        self.settings = utils.load_default_settings()
         self.setup_ui()
         self.setup_ipc()
 
@@ -138,26 +131,10 @@ class TrainingTab:
         algorithm_combo.grid(row=0, column=1, padx=1)
 
         # Seleção de ambiente
-        xacro_env_files = self._get_xacro_files(ENVIRONMENT_PATH)
-        if not xacro_env_files:
-            messagebox.showerror("Erro", f"Nenhum arquivo .xacro encontrado em {ENVIRONMENT_PATH}.")
-            return
-
-        ttk.Label(row1_frame, text="Ambiente:").grid(row=0, column=2, sticky=tk.W, padx=1)
-        self.env_var = tk.StringVar(value=xacro_env_files[0])
-        env_combo = ttk.Combobox(row1_frame, textvariable=self.env_var, values=xacro_env_files, width=10)
-        env_combo.grid(row=0, column=3, padx=5)
+        self.create_environment_selector(row1_frame, column=2)
 
         # Seleção de robô
-        xacro_robot_files = self._get_xacro_files(ROBOTS_PATH)
-        if not xacro_robot_files:
-            messagebox.showerror("Erro", f"Nenhum arquivo .xacro encontrado em {ROBOTS_PATH}.")
-            return
-
-        ttk.Label(row1_frame, text="Robô:").grid(row=0, column=4, sticky=tk.W, padx=1)
-        self.robot_var = tk.StringVar(value=self.settings.get("default_robot", xacro_robot_files[-1]))
-        robot_combo = ttk.Combobox(row1_frame, textvariable=self.robot_var, values=xacro_robot_files, width=12)
-        robot_combo.grid(row=0, column=5, padx=5)
+        self.create_robot_selector(row1_frame, column=4)
 
         # Botões de controle
         self.start_btn = ttk.Button(row1_frame, text="Iniciar Treino", command=self.start_training, width=15)
@@ -170,10 +147,7 @@ class TrainingTab:
         self.stop_btn.grid(row=0, column=8, padx=1)
 
         # Input para random seed
-        self.seed_var = tk.IntVar(value=42)
-        self.seed_input = ttk.Spinbox(row1_frame, from_=0, to=100000, textvariable=self.seed_var, width=8)
-        ttk.Label(row1_frame, text="Seed:").grid(row=0, column=9, sticky=tk.W, padx=1)
-        self.seed_input.grid(row=0, column=10, padx=5)
+        self.create_seed_selector(row1_frame, column=9)
 
         # Linha 2: Botões secundários e checkboxes
         row2_frame = ttk.Frame(control_frame)
@@ -188,34 +162,10 @@ class TrainingTab:
         self.export_plots_btn = ttk.Button(row2_frame, text="Exportar Gráficos", command=self.export_plots, width=15)
         self.export_plots_btn.grid(row=0, column=2, padx=1)
 
-        self.enable_dpg_var = tk.BooleanVar(value=self.settings.get("enable_dynamic_policy_gradient", True))
-        self.enable_dpg_check = ttk.Checkbutton(row2_frame, text="Dynamic Policy Gradient", variable=self.enable_dpg_var, width=22)
-        self.enable_dpg_check.grid(row=0, column=3, padx=1)
-
-        self.enable_visualization_var = tk.BooleanVar(value=self.settings.get("enable_visualize_robot", False))
-        self.enable_visualization_check = ttk.Checkbutton(row2_frame, text="Visualizar Robô", variable=self.enable_visualization_var, command=self.toggle_visualization, width=15)
-        self.enable_visualization_check.grid(row=0, column=4, padx=1)
-
-        self.real_time_var = tk.BooleanVar(value=self.settings.get("enable_real_time", True))
-        self.real_time_check = ttk.Checkbutton(row2_frame, text="Tempo Real", variable=self.real_time_var, command=self.toggle_real_time, width=15)
-        self.real_time_check.grid(row=0, column=5, padx=5)
-
-        ttk.Label(row2_frame, text="Câmera:").grid(row=0, column=6, sticky=tk.W, padx=5)
-
-        camera_options = {
-            1: "Ambiente geral",
-            2: "Robô - Diagonal direita",
-            3: "Robô - Diagonal esquerda",
-            4: "Robô - Lateral direita",
-            5: "Robô - Lateral esquerda",
-            6: "Robô - Frontal",
-            7: "Robô - Traseira",
-        }
-        self.camera_selection_int = self.settings.get("camera_index", 1)
-        self.camera_selection_var = tk.StringVar(value=camera_options[self.camera_selection_int])
-        self.camera_selection_combobox = ttk.Combobox(row2_frame, textvariable=self.camera_selection_var, values=list(camera_options.values()), state="readonly", width=25)
-        self.camera_selection_combobox.grid(row=0, column=7, padx=5)
-        self.camera_selection_combobox.bind("<<ComboboxSelected>>", lambda event: self.update_camera_selection(event, camera_options))
+        self.create_dpg_selector(row2_frame, column=3)
+        self.create_enable_visualization_selector(row2_frame, column=4)
+        self.create_real_time_selector(row2_frame, column=5)
+        self.create_camera_selector(row2_frame, column=6)
 
         # Gráficos
         graph_frame = ttk.LabelFrame(main_frame, text="Desempenho em Tempo Real", padding="1")
@@ -292,26 +242,6 @@ class TrainingTab:
         main_frame.rowconfigure(2, weight=1)  # Logs expandem
 
         control_frame.columnconfigure(0, weight=1)
-
-    def _get_xacro_files(self, directory):
-        """Obtém lista de arquivos .xacro de um diretório usando utils"""
-        try:
-            if not os.path.exists(directory):
-                self.logger.error(f"Diretório não encontrado: {directory}")
-                return []
-
-            files = [file.replace(".xacro", "") for file in os.listdir(directory) if file.endswith(".xacro")]
-
-            # Ordenar com PR primeiro se existir
-            if "PR" in files:
-                files.remove("PR")
-                files.insert(0, "PR")
-
-            return files
-
-        except Exception as e:
-            self.logger.exception("Erro ao listar arquivos .xacro")
-            return []
 
     def setup_ipc(self):
         """Configura IPC para comunicação entre processos"""
@@ -812,54 +742,6 @@ class TrainingTab:
             axs[i].set_xlim(1, self.episode_data["episodes"][-1])
 
         axs[-1].set_xlabel("Episódio")
-
-    def toggle_visualization(self):
-        """Alterna entre visualizar ou não o robô durante o treinamento"""
-        new_value = self.enable_visualization_var.get()
-
-        if new_value:
-            self.logger.info("Visualização do robô ativada")
-        else:
-            self.logger.info("Visualização do robô desativada")
-
-        if self.enable_visualization_values:
-            self.enable_visualization_values[-1].value = new_value
-            self.config_changed_values[-1].value = 1
-
-        else:
-            self.logger.info("toggle_visualization: Nenhum processo de treinamento ativo.")
-
-    def toggle_real_time(self):
-        """Alterna o modo tempo real da simulação"""
-        new_value = self.real_time_var.get()
-
-        if new_value:
-            self.logger.info("Modo tempo real ativado")
-        else:
-            self.logger.info("Modo tempo real desativado")
-
-        if self.enable_real_time_values:
-            self.enable_real_time_values[-1].value = new_value
-            self.config_changed_values[-1].value = 1
-
-        else:
-            self.logger.info("toggle_real_time: Nenhum processo de treinamento ativo.")
-
-    def update_camera_selection(self, event, camera_options):
-        """Atualiza o valor da câmera selecionada no multiprocessing com base no nome exibido"""
-        selected_name = self.camera_selection_combobox.get()
-        self.logger.info(f"Câmera selecionada: {selected_name}")
-        selected_value = next((key for key, value in camera_options.items() if value == selected_name), None)
-
-        self.camera_selection_var.set(selected_name)
-        self.camera_selection_int = selected_value
-
-        if self.camera_selection_values:
-            self.camera_selection_values[-1].value = selected_value
-            self.config_changed_values[-1].value = 1
-
-        else:
-            self.logger.info("update_camera_selection: Nenhum processo de treinamento ativo.")
 
     def _on_graph_tab_changed(self, event):
         try:
