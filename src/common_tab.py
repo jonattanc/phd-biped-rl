@@ -3,6 +3,7 @@ import utils
 import tkinter as tk
 from tkinter import ttk, messagebox
 import os
+import json
 
 
 class GUITab:
@@ -30,7 +31,7 @@ class GUITab:
         env_combo = ttk.Combobox(frame, textvariable=self.env_var, values=xacro_env_files, width=10)
         env_combo.grid(row=0, column=column + 1, padx=5)
 
-    def create_robot_selector(self, frame, column):
+    def create_robot_selector(self, frame, column, enabled=True):
         xacro_robot_files = self._get_xacro_files(utils.ROBOTS_PATH)
 
         if not xacro_robot_files:
@@ -41,6 +42,9 @@ class GUITab:
         self.robot_var = tk.StringVar(value=self.gui.settings.get("default_robot", xacro_robot_files[-1]))
         robot_combo = ttk.Combobox(frame, textvariable=self.robot_var, values=xacro_robot_files, width=12)
         robot_combo.grid(row=0, column=column + 1, padx=5)
+
+        if not enabled:
+            robot_combo.config(state=tk.DISABLED)
 
     def create_seed_selector(self, frame, column):
         self.seed_var = tk.IntVar(value=42)
@@ -148,3 +152,12 @@ class GUITab:
 
         else:
             self.logger.info("update_camera_selection: Nenhum processo de treinamento ativo.")
+
+    def _load_training_data_file(self, session_dir):
+        """Carrega arquivo de dados de treinamento"""
+        data_file = os.path.join(session_dir, "training_data.json")
+        if not os.path.exists(data_file):
+            raise FileNotFoundError("Arquivo de dados não encontrado.")
+
+        with open(data_file, "r") as f:
+            return json.load(f)

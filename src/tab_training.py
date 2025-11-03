@@ -640,15 +640,6 @@ class TrainingTab(common_tab.GUITab):
             messagebox.showerror("Erro", f"Erro ao carregar treinamento: {e}")
             self.logger.exception("Erro ao carregar treinamento")
 
-    def _load_training_data_file(self, session_dir):
-        """Carrega arquivo de dados de treinamento"""
-        data_file = os.path.join(session_dir, "training_data.json")
-        if not os.path.exists(data_file):
-            raise FileNotFoundError("Arquivo de dados não encontrado.")
-
-        with open(data_file, "r") as f:
-            return json.load(f)
-
     def _restore_training_data(self, training_data, session_dir):
         """Restaura dados do treinamento carregado"""
         session_info = training_data["session_info"]

@@ -29,8 +29,10 @@ class EvaluationTab(common_tab.GUITab):
         # Dados de avaliação
         self.evaluation_data = {"current_evaluation": None, "evaluation_history": [], "comparison_data": []}
 
+        self.current_env = ""
+        self.current_robot = ""
+
         # Componentes da UI
-        self.eval_model_path = None
         self.eval_env_var = None
         self.eval_robot_var = None
         self.eval_episodes_var = None
@@ -62,8 +64,14 @@ class EvaluationTab(common_tab.GUITab):
 
         ttk.Label(row1_frame, text="Modelo para Avaliar:").grid(row=0, column=0, sticky=tk.W)
         self.eval_model_path = tk.StringVar()
-        ttk.Entry(row1_frame, textvariable=self.eval_model_path, width=50).grid(row=0, column=1, padx=5)
-        ttk.Button(row1_frame, text="Procurar", command=self.browse_evaluation_model).grid(row=0, column=2, padx=5)
+        ttk.Entry(row1_frame, textvariable=self.eval_model_path, width=120).grid(row=0, column=1, padx=5)
+        ttk.Button(row1_frame, text="Carregar modelo", command=self.browse_evaluation_model).grid(row=0, column=2, padx=5)
+
+        # Linha 1.5: Descrição
+        description_frame = ttk.Frame(control_frame)
+        description_frame.pack(fill=tk.X)
+        self.model_description_label = ttk.Label(description_frame, text="Nenhum modelo carregado")
+        self.model_description_label.grid(row=0, column=0, sticky=tk.W)
 
         # Linha 2: Configurações de avaliação
         row2_frame = ttk.Frame(control_frame)
@@ -71,11 +79,11 @@ class EvaluationTab(common_tab.GUITab):
 
         self.create_environment_selector(row2_frame, column=0)
 
-        self.create_robot_selector(row2_frame, column=2)
+        self.create_robot_selector(row2_frame, column=2, enabled=False)
 
         ttk.Label(row2_frame, text="Episódios:").grid(row=0, column=4, sticky=tk.W, padx=5)
         self.eval_episodes_var = tk.StringVar(value="20")
-        ttk.Entry(row2_frame, textvariable=self.eval_episodes_var, width=8).grid(row=0, column=5, padx=5)
+        ttk.Spinbox(row2_frame, from_=0, to=1e7, textvariable=self.eval_episodes_var, width=8).grid(row=0, column=5, padx=5)
 
         self.create_seed_selector(row2_frame, column=6)
 
@@ -178,10 +186,38 @@ class EvaluationTab(common_tab.GUITab):
 
     def browse_evaluation_model(self):
         """Abre diálogo para selecionar modelo para avaliação"""
-        filename = filedialog.askopenfilename(title="Selecionar Modelo para Avaliação", filetypes=[("Zip files", "*.zip"), ("All files", "*.*")], initialdir=utils.TRAINING_DATA_PATH)
-        if filename:
-            self.eval_model_path.set(filename)
-            self.logger.info(f"Modelo selecionado para avaliação: {os.path.basename(filename)}")
+        session_dir = filedialog.askdirectory(title="Selecione a pasta do treinamento", initialdir=utils.TRAINING_DATA_PATH)
+
+        if not session_dir:
+            return
+
+        self.eval_model_path.set(session_dir)
+        self.logger.info(f"Modelo selecionado para avaliação: {os.path.basename(session_dir)}")
+
+        # Carregar dados do treinamento
+        training_data = self._load_training_data_file(session_dir)
+
+        # Restaurar dados do treinamento
+        self._restore_training_data(training_data, session_dir)
+
+    def _restore_training_data(self, training_data, session_dir):
+        """Restaura dados do treinamento carregado"""
+        session_info = training_data["session_info"]
+        self.logger.info(f"Treinamento carregado:\n{session_info}")
+
+        self.current_robot = session_info["robot"]
+        self.robot_var.set(self.current_robot)
+
+        model_description = (
+            f"Agente {session_info['algorithm']}"
+            f" | Ambiente: {session_info['environment']}"
+            f" | Steps: {session_info['total_steps']}"
+            f" | Seed: {session_info['seed']}"
+            f" | Episódios: {session_info['total_episodes']}"
+            f" | Salvo em: {datetime.fromisoformat(session_info['save_time']).strftime("%d/%m/%Y %H:%M:%S")}"
+        )
+
+        self.model_description_label.config(text=model_description)
 
     def start_evaluation(self):
         """Inicia a avaliação do modelo selecionado usando validação do utils"""
