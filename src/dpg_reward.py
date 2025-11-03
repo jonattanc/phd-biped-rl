@@ -301,13 +301,14 @@ class RewardCalculator:
             "phase_angles": RewardComponent("phase_angles", 1.0, self._calculate_phase_angles_reward),
             "propulsion": RewardComponent("propulsion", 0.5, self._calculate_propulsion_reward),
             "clearance": RewardComponent("clearance", 0.5, self._calculate_clearance_reward),
+            "clearance_score": RewardComponent("clearance_score", 0.5, self._calculate_clearance_score),
             "coordination": RewardComponent("coordination", 1.0, self._calculate_coordination_reward),
             "efficiency": RewardComponent("efficiency", 0.8, self._calculate_efficiency_reward),
             "success_bonus": RewardComponent("success_bonus", 5.0, self._calculate_success_bonus),
             "effort_penalty": RewardComponent("effort_penalty", 0.008, self._calculate_effort_penalty),
-            "weight_transfer": RewardComponent("weight_transfer", 2.0, self._calculate_weight_transfer_reward),
-        "forward_progress": RewardComponent("forward_progress", 3.0, self._calculate_gait_rhythm),
-        "gait_pattern": RewardComponent("gait_pattern", 1.5, self._calculate_cross_gait_pattern),
+            "weight_transfer_score": RewardComponent("weight_transfer_score", 2.0, self._calculate_weight_transfer_score),
+            "forward_progress": RewardComponent("forward_progress", 3.0, self._calculate_gait_rhythm),
+            "gait_pattern": RewardComponent("gait_pattern", 1.5, self._calculate_cross_gait_pattern),
         }
     
     def calculate(self, sim, action, phase_info: Dict) -> float:
@@ -498,7 +499,7 @@ class RewardCalculator:
         except:
             return 0.0
     
-    def _calculate_cross_gait_pattern(self, sim):
+    def _calculate_cross_gait_pattern(self, sim, phase_info):
         """Calcula recompensa por padrão de marcha cruzada"""
 
         left_foot_contact = sim.robot_left_foot_contact
@@ -523,7 +524,7 @@ class RewardCalculator:
 
         return max(0.0, cross_gait_score)
     
-    def _calculate_gait_rhythm(self, sim):
+    def _calculate_gait_rhythm(self, sim, phase_info):
         """Calcula regularidade rítmica da marcha"""
         if not hasattr(self, "last_step_time"):
             self.last_step_time = time.time()
@@ -550,37 +551,52 @@ class RewardCalculator:
 
         return 0.5
     
-    def _calculate_weight_transfer_reward(self, sim, phase_info) -> float:
-        """Recompensa por transferência adequada do centro de massa"""
+    def _calculate_clearance_score(self, sim, phase_info) -> float:
+        """Calcula score de clearance (altura dos pés durante a marcha)"""
+        try:
+            left_foot_height = getattr(sim, "robot_left_foot_height", 0)
+            right_foot_height = getattr(sim, "robot_right_foot_height", 0)
+            left_contact = getattr(sim, "robot_left_foot_contact", False)
+            right_contact = getattr(sim, "robot_right_foot_contact", False)
+
+            clearance_score = 0.0
+            count = 0
+
+            if not left_contact and left_foot_height > 0.02:
+                clearance_score += min(left_foot_height * 10, 1.0)
+                count += 1
+            if not right_contact and right_foot_height > 0.02:
+                clearance_score += min(right_foot_height * 10, 1.0)
+                count += 1
+
+            return clearance_score / max(count, 1)
+        except:
+            return 0.0
+
+    def _calculate_weight_transfer_score(self, sim, phase_info) -> float:
+        """Calcula score de transferência de peso"""
         try:
             left_contact = getattr(sim, "robot_left_foot_contact", False)
             right_contact = getattr(sim, "robot_right_foot_contact", False)
 
-            com_pos = sim.robot.get_center_of_mass()
-
-            right_foot_state = p.getLinkState(sim.robot.id, sim.robot.get_link_index("right_foot_link"))
-            left_foot_state = p.getLinkState(sim.robot.id, sim.robot.get_link_index("left_foot_link"))
-            right_foot_pos = right_foot_state[0]
-            left_foot_pos = left_foot_state[0]
-
-            weight_transfer_score = 0.0
-
-            if not left_contact and right_contact: 
-                distance_to_support = abs(com_pos[0] - right_foot_pos[0])
-                weight_transfer_score = 1.0 - min(distance_to_support * 3.0, 1.0)
-            elif not right_contact and left_contact: 
-                distance_to_support = abs(com_pos[0] - left_foot_pos[0])
-                weight_transfer_score = 1.0 - min(distance_to_support * 3.0, 1.0)
-            elif not left_contact and not right_contact:  
-                weight_transfer_score = 0.3  
-            else:
-                com_between_feet = (left_foot_pos[0] + right_foot_pos[0]) / 2
-                distance_to_center = abs(com_pos[0] - com_between_feet)
-                weight_transfer_score = 1.0 - min(distance_to_center * 2.0, 1.0)
-
-            return weight_transfer_score
+            if left_contact != right_contact: 
+                return 0.8
+            elif not left_contact and not right_contact: 
+                return 0.6
+            else: 
+                return 0.3
         except:
-            return 0.5
+            return 0.0
+
+    def _calculate_forward_progress(self, sim, phase_info) -> float:
+        """Calcula progresso para frente normalizado"""
+        try:
+            distance = getattr(sim, "episode_distance", 0)
+            steps = getattr(sim, "episode_steps", 1)
+            progress_per_step = distance / steps
+            return min(progress_per_step * 5.0, 1.0) 
+        except:
+            return 0.0
     
     def _calculate_coordination_reward(self, sim, phase_info) -> float:
         try:

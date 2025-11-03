@@ -393,6 +393,11 @@ class PhaseManager:
             "left_contact": episode_results.get("left_contact", False),
             "right_contact": episode_results.get("right_contact", False),
             "alternating": episode_results.get("alternating", False),
+            "clearance_score": episode_results.get("clearance_score", 0.3),
+            "gait_pattern_score": episode_results.get("gait_pattern_score", 0.5),
+            "propulsion_efficiency": episode_results.get("propulsion_efficiency", 0.5),
+            "flight_quality": episode_results.get("flight_quality", 0.0),
+            "energy_used": episode_results.get("energy_used", 1.0)
         }
 
         self.performance_history.append(essential_data)
