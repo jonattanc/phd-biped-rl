@@ -7,10 +7,10 @@ import multiprocessing
 import utils
 
 
-def evaluate_and_save(model_path, seed, circuit_name="PR", avatar_name="robot_stage1", role="AE", num_episodes=5, deterministic=True, enable_visualization=False):
+def evaluate_and_save(model_path, seed, environment, robot, num_episodes, deterministic, enable_visualization):
     """Avalia um modelo e salva as métricas"""
 
-    logging.info(f"Avaliando {avatar_name} no circuito {circuit_name}...")
+    logging.info(f"Avaliando {robot} no circuito {environment}...")
 
     if not os.path.exists(model_path):
         logging.error(f"Arquivo do modelo não existe: {model_path}")
@@ -31,9 +31,9 @@ def evaluate_and_save(model_path, seed, circuit_name="PR", avatar_name="robot_st
 
     try:
         # Criar ambiente de avaliação
-        logger = utils.get_logger(["evaluation", circuit_name, avatar_name])
-        robot = Robot(logger, name=avatar_name)
-        env_obj = Environment(logger, name=circuit_name)
+        logger = utils.get_logger(["evaluation", environment, robot])
+        robot = Robot(logger, name=robot)
+        env_obj = Environment(logger, name=environment)
         env = Simulation(logger, robot, env_obj, None, None, ipc_queue, None, pause_val, exit_val, enable_visualization_val, realtime_val, camera_selection_val, config_changed_value, num_episodes)
         agent = Agent(logger, env=env, model_path=model_path)  # TODO: Passar algoritmo
 
@@ -57,7 +57,7 @@ def evaluate_and_save(model_path, seed, circuit_name="PR", avatar_name="robot_st
         hyperparams = {"algorithm": agent.algorithm, "num_episodes": num_episodes, "seed": seed, "deterministic": deterministic, "model_path": model_path, "enable_visualization": enable_visualization}
 
         os.makedirs("logs/data", exist_ok=True)
-        saved_files = metrics_saver.save_complexity_metrics(metrics=metrics, circuit_name=circuit_name, avatar_name=avatar_name, role=role, seed=seed, hyperparams=hyperparams)
+        saved_files = metrics_saver.save_complexity_metrics(metrics=metrics, environment=environment, robot=robot, role=role, seed=seed, hyperparams=hyperparams)
 
         if saved_files and saved_files[0] is not None:
             logging.info(f"CSV salvo com sucesso: {saved_files[0]}")

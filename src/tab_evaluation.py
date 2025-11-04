@@ -9,18 +9,19 @@ import os
 from datetime import datetime
 import sys
 import pandas as pd
+import multiprocessing
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import utils
-from utils import validate_episodes_count, ensure_directory
 import common_tab
+import evaluate_model
 
 
 class EvaluationTab(common_tab.GUITab):
-    def __init__(self, gui, parent, device, logger):
-        super().__init__(gui, logger)
+    def __init__(self, gui, device, logger, reward_system, notebook):
+        super().__init__(gui, device, logger, reward_system, notebook)
 
-        self.frame = ttk.Frame(parent)
+        self.frame = ttk.Frame(notebook)
         self.device = device
 
         # IPC Queue para comunicação
@@ -29,15 +30,7 @@ class EvaluationTab(common_tab.GUITab):
         # Dados de avaliação
         self.evaluation_data = {"current_evaluation": None, "evaluation_history": [], "comparison_data": []}
 
-        self.current_env = ""
-        self.current_robot = ""
-
         # Componentes da UI
-        self.eval_env_var = None
-        self.eval_robot_var = None
-        self.eval_episodes_var = None
-        self.eval_deterministic_var = None
-        self.eval_start_btn = None
         self.metrics_text = None
         self.fig_evaluation = None
         self.axs_evaluation = None
@@ -65,7 +58,8 @@ class EvaluationTab(common_tab.GUITab):
         ttk.Label(row1_frame, text="Modelo para Avaliar:").grid(row=0, column=0, sticky=tk.W)
         self.eval_model_path = tk.StringVar()
         ttk.Entry(row1_frame, textvariable=self.eval_model_path, width=120).grid(row=0, column=1, padx=5)
-        ttk.Button(row1_frame, text="Carregar modelo", command=self.browse_evaluation_model).grid(row=0, column=2, padx=5)
+        self.load_model_btn = ttk.Button(row1_frame, text="Carregar modelo", command=self.browse_evaluation_model)
+        self.load_model_btn.grid(row=0, column=2, padx=5)
 
         # Linha 1.5: Descrição
         description_frame = ttk.Frame(control_frame)
@@ -83,15 +77,18 @@ class EvaluationTab(common_tab.GUITab):
 
         ttk.Label(row2_frame, text="Episódios:").grid(row=0, column=4, sticky=tk.W, padx=5)
         self.eval_episodes_var = tk.StringVar(value="20")
-        ttk.Spinbox(row2_frame, from_=0, to=1e7, textvariable=self.eval_episodes_var, width=8).grid(row=0, column=5, padx=5)
+        self.episodes_spinbox = ttk.Spinbox(row2_frame, from_=0, to=1e7, textvariable=self.eval_episodes_var, width=8)
+        self.episodes_spinbox.grid(row=0, column=5, padx=5)
 
-        self.create_seed_selector(row2_frame, column=6)
+        self.create_pause_btn(row2_frame, 6)
+        self.create_stop_btn(row2_frame, 7)
+        self.create_seed_selector(row2_frame, column=8)
 
         # Linha 3: Botões de controle
         row3_frame = ttk.Frame(control_frame)
         row3_frame.pack(fill=tk.X)
 
-        self.eval_start_btn = ttk.Button(row3_frame, text="Executar Avaliação", command=self.start_evaluation, width=20)
+        self.eval_start_btn = ttk.Button(row3_frame, text="Executar Avaliação", command=self.start_evaluation, width=20, state=tk.DISABLED)
         self.eval_start_btn.grid(row=0, column=0)
 
         self.eval_deterministic_var = tk.BooleanVar(value=True)
@@ -200,6 +197,8 @@ class EvaluationTab(common_tab.GUITab):
         # Restaurar dados do treinamento
         self._restore_training_data(training_data, session_dir)
 
+        self.unlock_gui()
+
     def _restore_training_data(self, training_data, session_dir):
         """Restaura dados do treinamento carregado"""
         session_info = training_data["session_info"]
@@ -228,14 +227,11 @@ class EvaluationTab(common_tab.GUITab):
             if not model_path or not os.path.exists(model_path):
                 raise ValueError("Selecione um modelo válido para avaliação.")
 
-            episodes = validate_episodes_count(self.eval_episodes_var.get())
-
         except ValueError as e:
             messagebox.showerror("Erro", str(e))
             return
 
-        # Desabilitar botão durante avaliação
-        self.eval_start_btn.config(state=tk.DISABLED, text="Avaliando...")
+        self.lock_gui()
 
         # Executar avaliação em thread separada
         eval_thread = threading.Thread(target=self._run_evaluation, daemon=True)
@@ -244,48 +240,69 @@ class EvaluationTab(common_tab.GUITab):
     def _run_evaluation(self):
         """Executa a avaliação em thread separada"""
         try:
-            # Importação dinâmica para evitar dependência circular
-            from evaluate_model import evaluate_and_save
+            self.current_env = self.env_var.get()
+            self.current_robot = self.robot_var.get()
 
             model_path = self.eval_model_path.get()
-            environment = self.eval_env_var.get()
-            robot = self.eval_robot_var.get()
             episodes = int(self.eval_episodes_var.get())
             deterministic = self.eval_deterministic_var.get()
-            enable_visualization = self.enable_visualization_var.get()
+            seed = self.seed_var.get()
+            enable_dpg = self.enable_dpg_var.get()
 
-            self.logger.info(f"Iniciando avaliação: {model_path} no ambiente {environment}")
+            pause_val = multiprocessing.Value("b", 0)
+            exit_val = multiprocessing.Value("b", 0)
+            enable_visualization_val = multiprocessing.Value("b", self.enable_visualization_var.get())
+            realtime_val = multiprocessing.Value("b", self.real_time_var.get())
+            camera_selection_val = multiprocessing.Value("i", self.camera_selection_int)
+            config_changed_val = multiprocessing.Value("b", 0)
+
+            self.pause_values.append(pause_val)
+            self.exit_values.append(exit_val)
+            self.enable_visualization_values.append(enable_visualization_val)
+            self.enable_real_time_values.append(realtime_val)
+            self.camera_selection_values.append(camera_selection_val)
+            self.config_changed_values.append(config_changed_val)
+
+            environment_settings = self.get_environment_settings(self.env_var.get())
+
+            self.logger.info(f"Iniciando avaliação: {model_path} no ambiente {self.current_env}")
             self.logger.info(f"Configuração: {episodes} episódios, modo {'determinístico' if deterministic else 'estocástico'}")
 
-            # Verificar se o arquivo do modelo existe
-            if not os.path.exists(model_path):
-                error_msg = f"Arquivo do modelo não encontrado: {model_path}"
-                self.logger.error(error_msg)
-                self.root.after(0, lambda: messagebox.showerror("Erro", error_msg))
-                return
+            # # Executar avaliação
+            # metrics = evaluate_model.evaluate_and_save(
+            #     self.current_env,
+            #     environment_settings,
+            #     self.current_robot,
+            #     self.ipc_queue,
+            #     self.ipc_queue_main_to_process,
+            #     self.reward_system,
+            #     pause_val,
+            #     exit_val,
+            #     enable_visualization_val,
+            #     realtime_val,
+            #     camera_selection_val,
+            #     config_changed_val,
+            #     seed,
+            #     self.device,
+            #     0,
+            #     model_path,
+            #     enable_dpg,
+            #     episodes,
+            #     deterministic,
+            # )
 
-            # Executar avaliação
-            metrics = evaluate_and_save(
-                model_path, self.seed, circuit_name=environment, avatar_name=robot, num_episodes=episodes, deterministic=deterministic, seed=42, enable_visualization=enable_visualization
-            )
+            # if metrics:
+            #     # Atualizar interface com resultados
+            #     self.root.after(0, lambda: self._display_evaluation_results(metrics))
+            # else:
+            #     error_msg = "Falha na avaliação - o método evaluate_and_save retornou None"
+            #     self.logger.error(error_msg)
+            #     self.root.after(0, lambda: messagebox.showerror("Erro", error_msg))
 
-            if metrics:
-                # Atualizar interface com resultados
-                self.root.after(0, lambda: self._display_evaluation_results(metrics))
-            else:
-                error_msg = "Falha na avaliação - o método evaluate_and_save retornou None"
-                self.logger.error(error_msg)
-                self.root.after(0, lambda: messagebox.showerror("Erro", error_msg))
-
-        except ImportError as e:
-            error_msg = f"Módulo evaluate_model não encontrado: {e}"
-            self.logger.error(error_msg)
-            self.root.after(0, lambda: messagebox.showerror("Erro", error_msg))
         except Exception as e:
             self.logger.exception("Erro na avaliação")
             self.root.after(0, lambda: messagebox.showerror("Erro", f"Erro na avaliação: {e}"))
-        finally:
-            self.root.after(0, lambda: self.eval_start_btn.config(state=tk.NORMAL, text="Executar Avaliação"))
+            self.unlock_gui()
 
     def _display_evaluation_results(self, metrics):
         """Exibe os resultados da avaliação na interface"""
@@ -305,8 +322,8 @@ class EvaluationTab(common_tab.GUITab):
 
 Estatísticas Gerais:
 • Modelo: {os.path.basename(self.eval_model_path.get())}
-• Ambiente: {self.eval_env_var.get()}
-• Robô: {self.eval_robot_var.get()}
+• Ambiente: {self.env_var.get()}
+• Robô: {self.robot_var.get()}
 • Episódios executados: {num_episodes}
 • Modo: {'Determinístico' if self.eval_deterministic_var.get() else 'Estocástico'}
 
@@ -344,8 +361,8 @@ Análise:
                 "metrics": metrics,
                 "timestamp": datetime.now(),
                 "model_path": self.eval_model_path.get(),
-                "environment": self.eval_env_var.get(),
-                "robot": self.eval_robot_var.get(),
+                "environment": self.env_var.get(),
+                "robot": self.robot_var.get(),
                 "episodes": int(self.eval_episodes_var.get()),
                 "deterministic": self.eval_deterministic_var.get(),
             }
@@ -471,7 +488,7 @@ Análise:
 
             if filename:
                 # Garantir que o diretório existe
-                ensure_directory(os.path.dirname(filename))
+                utils.ensure_directory(os.path.dirname(filename))
 
                 # Exportar para CSV
                 evaluation = self.evaluation_data["current_evaluation"]
@@ -515,7 +532,7 @@ Análise:
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             model_name = os.path.basename(self.evaluation_data["current_evaluation"]["model_path"])
-            environment = self.eval_env_var.get()
+            environment = self.env_var.get()
 
             metrics = self.evaluation_data["current_evaluation"]["metrics"]
             times = metrics.get("total_times", [])
@@ -601,6 +618,29 @@ Análise:
         axs[0, 0].set_xlabel("Tempo (s)")
         axs[0, 0].legend()
         axs[0, 0].grid(True, alpha=0.3)
+
+    def pause_training(self, force_pause=False):
+        """Pausa ou retoma o treinamento"""
+        if not self.pause_values:
+            self.logger.warning("Nenhum processo de treinamento ativo.")
+            return
+
+        try:
+            if self.pause_values[-1].value and not force_pause:
+                self.logger.info("Retomando treinamento.")
+                self.pause_values[-1].value = 0
+                self.pause_btn.config(text="Pausar")
+
+            else:
+                self.logger.info("Pausando treinamento.")
+                self.pause_values[-1].value = 1
+                self.pause_btn.config(text="Retomar")
+
+            self.last_pause_value = self.pause_values[-1].value
+            self.config_changed_values[-1].value = 1
+
+        except Exception as e:
+            self.logger.exception("Erro ao pausar/retomar treinamento")
 
     def start(self):
         """Inicializa a aba de avaliação"""

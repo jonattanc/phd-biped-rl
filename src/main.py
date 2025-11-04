@@ -39,10 +39,10 @@ class TrainingGUI:
         notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
         # Criar abas
-        self.reward_tab = RewardTab(notebook, self.device, self.logger, self.reward_system)
-        self.training_tab = TrainingTab(self, notebook, self.device, self.logger, self.reward_system, notebook)
-        self.evaluation_tab = EvaluationTab(self, notebook, self.device, self.logger)
+        self.training_tab = TrainingTab(self, self.device, self.logger, self.reward_system, notebook)
+        self.evaluation_tab = EvaluationTab(self, self.device, self.logger, self.reward_system, notebook)
         self.comparison_tab = ComparisonTab(notebook, self.device, self.logger)
+        self.reward_tab = RewardTab(notebook, self.device, self.logger, self.reward_system)
 
         # Adicionar abas ao notebook
         notebook.add(self.training_tab.frame, text="Treinamento")

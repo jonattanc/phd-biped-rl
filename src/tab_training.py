@@ -24,13 +24,10 @@ import common_tab
 
 
 class TrainingTab(common_tab.GUITab):
-    def __init__(self, gui, parent, device, logger, reward_system, notebook):
-        super().__init__(gui, logger)
+    def __init__(self, gui, device, logger, reward_system, notebook):
+        super().__init__(gui, device, logger, reward_system, notebook)
 
-        self.frame = ttk.Frame(parent, padding="10")
-        self.device = device
-        self.reward_system = reward_system
-        self.notebook = notebook
+        self.frame = ttk.Frame(notebook, padding="10")
 
         # Dados de treinamento
         self.current_env = ""
@@ -127,8 +124,8 @@ class TrainingTab(common_tab.GUITab):
         ttk.Label(row1_frame, text="Algoritmo:").grid(row=0, column=0, sticky=tk.W, padx=1)
         algorithms = ["TD3", "FastTD3", "PPO"]
         self.algorithm_var = tk.StringVar(value=algorithms[0])
-        algorithm_combo = ttk.Combobox(row1_frame, textvariable=self.algorithm_var, values=algorithms, width=10)
-        algorithm_combo.grid(row=0, column=1, padx=1)
+        self.algorithm_combo = ttk.Combobox(row1_frame, textvariable=self.algorithm_var, values=algorithms, width=10)
+        self.algorithm_combo.grid(row=0, column=1, padx=1)
 
         # Seleção de ambiente
         self.create_environment_selector(row1_frame, column=2)
@@ -140,11 +137,8 @@ class TrainingTab(common_tab.GUITab):
         self.start_btn = ttk.Button(row1_frame, text="Iniciar Treino", command=self.start_training, width=15)
         self.start_btn.grid(row=0, column=6, padx=1)
 
-        self.pause_btn = ttk.Button(row1_frame, text="Pausar", command=self.pause_training, state=tk.DISABLED, width=10)
-        self.pause_btn.grid(row=0, column=7, padx=1)
-
-        self.stop_btn = ttk.Button(row1_frame, text="Finalizar", command=self.stop_training, state=tk.DISABLED, width=10)
-        self.stop_btn.grid(row=0, column=8, padx=1)
+        self.create_pause_btn(row1_frame, 7)
+        self.create_stop_btn(row1_frame, 8)
 
         # Input para random seed
         self.create_seed_selector(row1_frame, column=9)
@@ -350,20 +344,13 @@ class TrainingTab(common_tab.GUITab):
 
     def start_training(self):
         """Inicia um novo treinamento do zero"""
-        self.start_btn.config(state=tk.DISABLED, text="Iniciando...")
-        self.seed_input.config(state=tk.DISABLED)
-        self.disable_other_tabs()
+        self.lock_gui()
         self.logger.info(f"Iniciando NOVO treinamento")
         self._start_new_training()
-        self.start_btn.config(text="Iniciar Treino")
 
     def _start_new_training(self):
         """Inicia um novo treinamento do zero"""
         try:
-            # Validar seleções
-            if not self.env_var.get() or not self.robot_var.get() or not self.algorithm_var.get():
-                raise ValueError("Selecione ambiente, robô e algoritmo antes de iniciar o treinamento.")
-
             self.current_env = self.env_var.get()
             self.current_robot = self.robot_var.get()
             self.current_algorithm = self.algorithm_var.get()
@@ -397,12 +384,7 @@ class TrainingTab(common_tab.GUITab):
             self.camera_selection_values.append(camera_selection_val)
             self.config_changed_values.append(config_changed_val)
 
-            environment_settings = {"default": {"lateral_friction": 2.0, "spinning_friction": 1.0, "rolling_friction": 0.001, "restitution": 0.0}}
-
-            if self.env_var.get() == "PBA":
-                environment_settings["middle_link"] = {"lateral_friction": 1.0, "spinning_friction": 0.5, "rolling_friction": 0.001, "restitution": 0.0}
-
-            self.logger.info(f"environment_settings: {environment_settings}")
+            environment_settings = self.get_environment_settings(self.env_var.get())
 
             # Iniciar processo com config
             p = multiprocessing.Process(
@@ -435,19 +417,10 @@ class TrainingTab(common_tab.GUITab):
 
             self.logger.info(f"Processo de treinamento iniciado: {self.current_env} + {self.current_robot} + {self.current_algorithm}")
 
-            # Habilitar botões
-            self.save_training_btn.config(state=tk.NORMAL)
-            self.load_training_btn.config(state=tk.DISABLED)
-            self.pause_btn.config(state=tk.NORMAL)
-            self.stop_btn.config(state=tk.NORMAL)
-            self.pause_btn.config(text="Pausar")
-
         except Exception as e:
             self.logger.exception("Erro ao iniciar treinamento")
             messagebox.showerror("Erro", f"Erro ao iniciar treinamento: {e}")
-            self.start_btn.config(state=tk.NORMAL)
-            self.seed_input.config(state=tk.NORMAL)
-            self.enable_other_tabs()
+            self.unlock_gui()
 
     def _find_model_for_resume(self, path):
         """Encontra modelo para carregamento usando busca flexível"""
@@ -489,38 +462,6 @@ class TrainingTab(common_tab.GUITab):
 
         except Exception as e:
             self.logger.exception("Erro ao pausar/retomar treinamento")
-
-    def disable_other_tabs(self):
-        current = self.notebook.select()
-
-        for tab_id in self.notebook.tabs():
-            if tab_id != current:
-                self.notebook.tab(tab_id, state="disabled")
-
-    def enable_other_tabs(self):
-        current = self.notebook.select()
-
-        for tab_id in self.notebook.tabs():
-            if tab_id != current:
-                self.notebook.tab(tab_id, state="normal")
-
-    def stop_training(self):
-        """Finaliza o treinamento"""
-
-        if self.exit_values:
-            self.exit_values[-1].value = 1
-            self.config_changed_values[-1].value = 1
-
-        # Atualizar estado dos botões
-        self.start_btn.config(state=tk.NORMAL)
-        self.seed_input.config(state=tk.NORMAL)
-        self.pause_btn.config(state=tk.DISABLED)
-        self.stop_btn.config(state=tk.DISABLED)
-        self.save_training_btn.config(state=tk.DISABLED)
-        self.load_training_btn.config(state=tk.NORMAL)
-        self.enable_other_tabs()
-
-        self.logger.info("Treinamento finalizado pelo usuário")
 
     def save_training_callback_btn(self):
         """Salva todos os dados do treinamento atual incluindo o modelo"""
@@ -1096,13 +1037,7 @@ class TrainingTab(common_tab.GUITab):
 
                     elif data_type == "done":
                         self.logger.info("Processo de treinamento finalizado.")
-                        self.start_btn.config(state=tk.NORMAL)
-                        self.seed_input.config(state=tk.NORMAL)
-                        self.pause_btn.config(state=tk.DISABLED)
-                        self.stop_btn.config(state=tk.DISABLED)
-                        self.save_training_btn.config(state=tk.DISABLED)
-                        self.load_training_btn.config(state=tk.NORMAL)
-                        self.enable_other_tabs()
+                        self.unlock_gui()
 
                     else:
                         self.logger.error(f"Tipo de dados desconhecido: {data_type} - Conteúdo: {msg}")

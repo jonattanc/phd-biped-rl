@@ -95,18 +95,6 @@ def find_model_files(directory):
     return model_files
 
 
-# Funções de Validação:
-def validate_episodes_count(episodes_str):
-    """Valida e converte número de episódios"""
-    try:
-        episodes = int(episodes_str)
-        if episodes <= 0:
-            raise ValueError("Número de episódios deve ser positivo")
-        return episodes
-    except ValueError:
-        raise ValueError("Número de episódios deve ser um inteiro positivo")
-
-
 def load_default_settings():
     """Carrega as configurações padrão do arquivo JSON"""
     default_settings_path = os.path.join(PROJECT_ROOT, "default_settings.json")
