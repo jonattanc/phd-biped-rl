@@ -29,9 +29,11 @@ def process_runner(
     initial_episode=0,
     model_path=None,
     enable_dpg=True,
+    episodes=1000,
+    deterministic=False,
 ):
     logger = utils.get_logger([selected_environment, selected_robot, algorithm], ipc_queue)
-    logger.info(f"Iniciando treinamento: {selected_environment} + {selected_robot} + {algorithm}")
+    logger.info(f"Iniciando simulação: {selected_environment} + {selected_robot} + {algorithm}")
     logger.info(f"Visualização: {enable_visualization_value.value}")
     logger.info(f"Tempo Real: {enable_real_time_value.value}")
     logger.info(f"Câmera: {camera_selection_value.value}")
@@ -78,26 +80,29 @@ def process_runner(
 
         callback = TrainingCallback(logger)
 
-        # Iniciar treinamento
-        logger.info(f"Iniciando treinamento {algorithm} no episódio {initial_episode}...")
+        if algorithm is None:
+            logger.info("Modo de avaliação")
 
-        # Loop principal do treinamento
-        timesteps_completed = 0
-        timesteps_batch_size = 1000
+        else:
+            logger.info("Modo de treinamento")
 
-        sim.pre_fill_buffer()
+            timesteps_completed = 0
+            timesteps_batch_size = 1000
 
-        while not exit_value.value:
-            timesteps_completed += timesteps_batch_size
-            agent.model.learn(total_timesteps=timesteps_batch_size, reset_num_timesteps=False, callback=callback)
+            sim.pre_fill_buffer()
 
-            # Enviar progresso para GUI
-            if timesteps_completed % 10000 == 0:
-                logger.info(f"Progresso: {timesteps_completed} timesteps com aprendizagem")
+            while not exit_value.value:
+                timesteps_completed += timesteps_batch_size
+                agent.model.learn(total_timesteps=timesteps_batch_size, reset_num_timesteps=False, callback=callback)
 
-        logger.info("Treinamento concluído!")
+                # Enviar progresso para GUI
+                if timesteps_completed % 10000 == 0:
+                    logger.info(f"Progresso: {timesteps_completed} timesteps com aprendizagem")
+
+            logger.info("Treinamento concluído!")
 
     except Exception as e:
         logger.exception("Erro em process_runner")
 
-    ipc_queue.put({"type": "done"})
+    finally:
+        ipc_queue.put({"type": "done"})

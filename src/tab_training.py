@@ -76,9 +76,6 @@ class TrainingTab(common_tab.GUITab):
 
         # Controle de processos
         self.gui_log_queue = queue.Queue()
-        self.ipc_queue = multiprocessing.Queue()
-        self.ipc_queue_main_to_process = multiprocessing.Queue()
-        self.ipc_thread = None
         self.plot_data_lock = threading.Lock()
         self.gui_closed = False
         self.after_ids = {}
@@ -237,11 +234,6 @@ class TrainingTab(common_tab.GUITab):
 
         control_frame.columnconfigure(0, weight=1)
 
-    def setup_ipc(self):
-        """Configura IPC para comunicação entre processos"""
-        self.ipc_thread = threading.Thread(target=self.ipc_runner, daemon=True)
-        self.ipc_thread.start()
-
     def _initialize_plots(self):
         """Inicializa os gráficos com títulos e configurações"""
         try:
@@ -385,8 +377,9 @@ class TrainingTab(common_tab.GUITab):
             self.config_changed_values.append(config_changed_val)
 
             environment_settings = self.get_environment_settings(self.env_var.get())
+            initial_episode = 0
+            model_path = None
 
-            # Iniciar processo com config
             p = multiprocessing.Process(
                 target=train_process.process_runner,
                 args=(
@@ -405,8 +398,8 @@ class TrainingTab(common_tab.GUITab):
                     config_changed_val,
                     self.seed_var.get(),
                     self.device,
-                    0,
-                    None,
+                    initial_episode,
+                    model_path,
                     self.enable_dpg_var.get(),
                 ),
             )
@@ -421,18 +414,6 @@ class TrainingTab(common_tab.GUITab):
             self.logger.exception("Erro ao iniciar treinamento")
             messagebox.showerror("Erro", f"Erro ao iniciar treinamento: {e}")
             self.unlock_gui()
-
-    def _find_model_for_resume(self, path):
-        """Encontra modelo para carregamento usando busca flexível"""
-
-        if os.path.exists(path):
-            for file in os.listdir(path):
-                if file.endswith(".zip"):
-                    model_path = os.path.join(path, file)
-                    self.logger.info(f"Modelo encontrado para carregamento: {file}")
-                    return model_path
-
-        raise FileNotFoundError(f"Nenhum modelo (.zip) encontrado em {path}")
 
     def pause_training(self, force_pause=False):
         """Pausa ou retoma o treinamento"""

@@ -4,6 +4,8 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import os
 import json
+import multiprocessing
+import threading
 
 
 class GUITab:
@@ -21,6 +23,10 @@ class GUITab:
         self.enable_visualization_values = []
         self.camera_selection_values = []
         self.config_changed_values = []
+
+        self.ipc_queue = multiprocessing.Queue()
+        self.ipc_queue_main_to_process = multiprocessing.Queue()
+        self.ipc_thread = None
 
     def create_environment_selector(self, frame, column):
         xacro_env_files = self._get_xacro_files(utils.ENVIRONMENT_PATH)
@@ -259,3 +265,20 @@ class GUITab:
     def unlock_gui(self):
         self.enable_other_tabs()
         self.set_gui_state(tk.DISABLED)
+
+    def _find_agent_model(self, path):
+        """Encontra modelo usando busca flexível"""
+
+        if os.path.exists(path):
+            for file in os.listdir(path):
+                if file.endswith(".zip"):
+                    model_path = os.path.join(path, file)
+                    self.logger.info(f"Modelo encontrado: {file}")
+                    return model_path
+
+        raise FileNotFoundError(f"Nenhum modelo (.zip) encontrado em {path}")
+
+    def setup_ipc(self):
+        """Configura IPC para comunicação entre processos"""
+        self.ipc_thread = threading.Thread(target=self.ipc_runner, daemon=True)
+        self.ipc_thread.start()

@@ -4,7 +4,6 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import threading
 import os
 from datetime import datetime
 import sys
@@ -14,7 +13,7 @@ import multiprocessing
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import utils
 import common_tab
-import evaluate_model
+import train_process
 
 
 class EvaluationTab(common_tab.GUITab):
@@ -23,9 +22,6 @@ class EvaluationTab(common_tab.GUITab):
 
         self.frame = ttk.Frame(notebook)
         self.device = device
-
-        # IPC Queue para comunicação
-        self.ipc_queue = queue.Queue()
 
         # Dados de avaliação
         self.evaluation_data = {"current_evaluation": None, "evaluation_history": [], "comparison_data": []}
@@ -40,6 +36,7 @@ class EvaluationTab(common_tab.GUITab):
         utils.add_queue_handler_to_logger(self.logger, self.ipc_queue)
 
         self.setup_ui()
+        self.setup_ipc()
 
     def setup_ui(self):
         """Configura a interface da aba de avaliação"""
@@ -220,34 +217,30 @@ class EvaluationTab(common_tab.GUITab):
 
     def start_evaluation(self):
         """Inicia a avaliação do modelo selecionado usando validação do utils"""
-        model_path = self.eval_model_path.get()
+        agent_model_folder = self.eval_model_path.get()
 
-        # Validações usando funções do utils
         try:
-            if not model_path or not os.path.exists(model_path):
+            if not agent_model_folder or not os.path.exists(agent_model_folder):
                 raise ValueError("Selecione um modelo válido para avaliação.")
 
+            agent_model_path = self._find_agent_model(agent_model_folder)
+
         except ValueError as e:
+            self.logger.exception("Erro ao iniciar avaliação")
             messagebox.showerror("Erro", str(e))
             return
 
         self.lock_gui()
+        self._run_evaluation(agent_model_path)
 
-        # Executar avaliação em thread separada
-        eval_thread = threading.Thread(target=self._run_evaluation, daemon=True)
-        eval_thread.start()
-
-    def _run_evaluation(self):
+    def _run_evaluation(self, agent_model_path):
         """Executa a avaliação em thread separada"""
         try:
             self.current_env = self.env_var.get()
             self.current_robot = self.robot_var.get()
 
-            model_path = self.eval_model_path.get()
             episodes = int(self.eval_episodes_var.get())
             deterministic = self.eval_deterministic_var.get()
-            seed = self.seed_var.get()
-            enable_dpg = self.enable_dpg_var.get()
 
             pause_val = multiprocessing.Value("b", 0)
             exit_val = multiprocessing.Value("b", 0)
@@ -264,44 +257,44 @@ class EvaluationTab(common_tab.GUITab):
             self.config_changed_values.append(config_changed_val)
 
             environment_settings = self.get_environment_settings(self.env_var.get())
+            initial_episode = 0
 
-            self.logger.info(f"Iniciando avaliação: {model_path} no ambiente {self.current_env}")
+            self.logger.info(f"Iniciando avaliação: {agent_model_path} no ambiente {self.current_env}")
             self.logger.info(f"Configuração: {episodes} episódios, modo {'determinístico' if deterministic else 'estocástico'}")
 
-            # # Executar avaliação
-            # metrics = evaluate_model.evaluate_and_save(
-            #     self.current_env,
-            #     environment_settings,
-            #     self.current_robot,
-            #     self.ipc_queue,
-            #     self.ipc_queue_main_to_process,
-            #     self.reward_system,
-            #     pause_val,
-            #     exit_val,
-            #     enable_visualization_val,
-            #     realtime_val,
-            #     camera_selection_val,
-            #     config_changed_val,
-            #     seed,
-            #     self.device,
-            #     0,
-            #     model_path,
-            #     enable_dpg,
-            #     episodes,
-            #     deterministic,
-            # )
+            p = multiprocessing.Process(
+                target=train_process.process_runner,
+                args=(
+                    self.current_env,
+                    environment_settings,
+                    self.current_robot,
+                    None,
+                    self.ipc_queue,
+                    self.ipc_queue_main_to_process,
+                    self.reward_system,
+                    pause_val,
+                    exit_val,
+                    enable_visualization_val,
+                    realtime_val,
+                    camera_selection_val,
+                    config_changed_val,
+                    self.seed_var.get(),
+                    self.device,
+                    initial_episode,
+                    agent_model_path,
+                    self.enable_dpg_var.get(),
+                    episodes,
+                    deterministic,
+                ),
+            )
+            p.start()
+            self.processes.append(p)
 
-            # if metrics:
-            #     # Atualizar interface com resultados
-            #     self.root.after(0, lambda: self._display_evaluation_results(metrics))
-            # else:
-            #     error_msg = "Falha na avaliação - o método evaluate_and_save retornou None"
-            #     self.logger.error(error_msg)
-            #     self.root.after(0, lambda: messagebox.showerror("Erro", error_msg))
+            self.logger.info(f"Processo de avaliação iniciado: {self.current_env} + {self.current_robot}")
 
         except Exception as e:
             self.logger.exception("Erro na avaliação")
-            self.root.after(0, lambda: messagebox.showerror("Erro", f"Erro na avaliação: {e}"))
+            messagebox.showerror("Erro", f"Erro na avaliação: {e}")
             self.unlock_gui()
 
     def _display_evaluation_results(self, metrics):
@@ -641,6 +634,40 @@ Análise:
 
         except Exception as e:
             self.logger.exception("Erro ao pausar/retomar treinamento")
+
+    def ipc_runner(self):
+        """Thread para monitorar a fila IPC e atualizar logs"""
+        try:
+            while True:
+                try:
+                    msg = self.ipc_queue.get(timeout=1.0)
+                    if msg is None:
+                        self.logger.info("ipc_runner finalizando")
+                        break
+
+                    if isinstance(msg, str):
+                        continue
+
+                    data_type = msg.pop("type")
+
+                    if data_type == "done":
+                        self.logger.info("Processo de avaliação finalizado.")
+                        self.unlock_gui()
+
+                except queue.Empty:
+                    # Timeout normal, continuar loop
+                    continue
+                except EOFError:
+                    self.logger.info("IPC queue fechada (EOFError)")
+                    break
+                except Exception as e:
+                    self.logger.exception("Erro ao receber mensagem IPC")
+                    continue
+        except Exception as e:
+            self.logger.exception("Erro em ipc_runner")
+
+            if not self.gui_closed:
+                self.on_closing()
 
     def start(self):
         """Inicializa a aba de avaliação"""

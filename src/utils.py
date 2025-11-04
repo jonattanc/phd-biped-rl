@@ -34,7 +34,7 @@ TEMP_MODEL_SAVE_PATH = os.path.join(TMP_PATH, "improvement_models")
 def get_logger(description=["main"], ipc_queue=None):
     proc = multiprocessing.current_process()
     proc_num = proc._identity[0] if proc._identity else os.getpid()
-    log_name = "__".join(description)
+    log_name = "__".join([str(item) for item in description])
 
     logger = logging.getLogger(log_name)
 
