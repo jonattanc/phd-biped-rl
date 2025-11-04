@@ -279,94 +279,96 @@ class RewardComponent:
 
 class RewardCalculator:
     """
-    ESPECIALISTA EM RECOMPENSAS com IRL Adaptável
+    ESPECIALISTA EM RECOMPENSAS - Versão Otimizada
     """
     
     def __init__(self, logger, config):
         self.logger = logger
         self.config = config
         self.components = self._initialize_components()
-        self.irl_system = AdaptiveIRL(logger)
-        
+    
     def _initialize_components(self) -> Dict[str, RewardComponent]:
         """Inicializa componentes de recompensa"""
         return {
-            "stability": RewardComponent("stability", 4.0, self._calculate_stability_reward),
-            "basic_progress": RewardComponent("basic_progress", 3.0, self._calculate_basic_progress_reward),
-            "posture": RewardComponent("posture", 3.5, self._calculate_posture_reward),
-            "direction": RewardComponent("direction", 2.0, self._calculate_direction_reward),
+            "stability": RewardComponent("stability", 3.0, self._calculate_stability_reward),
+            "basic_progress": RewardComponent("basic_progress", 2.0, self._calculate_basic_progress_reward),
+            "posture": RewardComponent("posture", 2.5, self._calculate_posture_reward),
             "velocity": RewardComponent("velocity", 1.5, self._calculate_velocity_reward),
             "phase_angles": RewardComponent("phase_angles", 1.0, self._calculate_phase_angles_reward),
-            "propulsion": RewardComponent("propulsion", 0.5, self._calculate_propulsion_reward),
-            "clearance": RewardComponent("clearance", 0.5, self._calculate_clearance_reward),
-            "coordination": RewardComponent("coordination", 1.0, self._calculate_coordination_reward),
+            "propulsion": RewardComponent("propulsion", 1.0, self._calculate_propulsion_reward),
+            "clearance": RewardComponent("clearance", 0.8, self._calculate_clearance_reward),
+            "coordination": RewardComponent("coordination", 1.2, self._calculate_coordination_reward),
             "efficiency": RewardComponent("efficiency", 0.8, self._calculate_efficiency_reward),
             "success_bonus": RewardComponent("success_bonus", 5.0, self._calculate_success_bonus),
-            "effort_penalty": RewardComponent("effort_penalty", 0.008, self._calculate_effort_penalty),
+            "effort_penalty": RewardComponent("effort_penalty", 0.005, self._calculate_effort_penalty),
         }
     
     def calculate(self, sim, action, phase_info: Dict) -> float:
-        """Calcula recompensa com influência do IRL"""
+        """Calcula recompensa usando sistema de valências com cache"""
         total_reward = 0.0
+
         enabled_components = phase_info['enabled_components']
-        group_level = phase_info.get('group_level', 1)
+        valence_weights = phase_info.get('valence_weights', {})
+        irl_weights = phase_info.get('irl_weights', {})
+        use_irl = len(irl_weights) > 0
         
-        # Coletar demonstração para IRL
-        experience_metrics = self._extract_experience_metrics(sim)
-        experience_quality = self._estimate_experience_quality(experience_metrics)
-        
-        # Coletar para IRL se qualidade suficiente
-        if experience_quality > 0.5:
-            self.irl_system.collect_demonstration({
-                'metrics': experience_metrics,
-                'reward': 0.0,  # Será calculado
-                'phase_info': phase_info
-            }, experience_quality)
-        
-        # Executar IRL se necessário
-        irl_mode = self.irl_system.get_irl_mode(
-            group_level,
-            phase_info.get('learning_progress', 0.5),
-            len(self.irl_system.demonstration_buffer)
-        )
-        
-        if irl_mode != "disabled":
-            irl_model = self.irl_system.execute_irl_learning(irl_mode, group_level)
-            if irl_model and irl_model['confidence'] > 0.6:
-                self._apply_irl_weights(irl_model['weights'])
-        
-        # Calcular recompensa base
         for component_name in enabled_components:
             if component_name in self.components:
                 component = self.components[component_name]
-                if component.enabled:
-                    component_reward = component.calculator(sim, phase_info)
-                    weighted_reward = component.weight * component.adaptive_weight * component_reward
-                    total_reward += weighted_reward
+                component_reward = component.calculator(sim, phase_info)
+                
+                if use_irl and component_name in irl_weights:
+                    weight = irl_weights[component_name]
+                    irl_bonus = 0.2  
+                elif valence_weights and component_name in valence_weights:
+                    weight = valence_weights[component_name]
+                    irl_bonus = 0.0
+                else:
+                    weight = component.weight * component.adaptive_weight
+                    irl_bonus = 0.0
+                
+                weighted_reward = weight * component_reward * (1.0 + irl_bonus)
+                total_reward += weighted_reward
         
-        # Aplicar penalidades
-        penalties = self._calculate_global_penalties(sim, action, group_level)
+        penalties = self._calculate_global_penalties(sim, action)
         total_reward -= penalties
         
-        return total_reward
+        return max(total_reward, -0.5)
     
-    def _apply_irl_weights(self, irl_weights: Dict[str, float]):
-        """Aplica pesos aprendidos pelo IRL aos componentes"""
-        for feature, weight in irl_weights.items():
-            # Mapear features IRL para componentes de recompensa
-            component_map = {
-                "progress": ["basic_progress", "velocity", "propulsion"],
-                "stability": ["stability", "posture"],
-                "efficiency": ["efficiency", "effort_penalty"],
-                "coordination": ["coordination", "clearance", "phase_angles"]
-            }
-            
-            for component_name in component_map.get(feature, []):
-                if component_name in self.components:
-                    # Ajuste suave baseado no IRL
-                    current_weight = self.components[component_name].adaptive_weight
-                    new_weight = 0.7 * current_weight + 0.3 * weight
-                    self.components[component_name].adaptive_weight = new_weight
+    def _calculate_global_penalties(self, sim, action) -> float:
+        """Calcula penalidades globais mais balanceadas"""
+        penalties = 0.0
+
+        # 1. Penalidade de ação extrema 
+        if hasattr(action, '__len__'):
+            action_magnitude = np.sqrt(np.sum(np.square(action)))
+            action_penalty = action_magnitude * 0.005  
+            penalties += min(action_penalty, 0.3)  
+
+        # 2. Penalidade por queda iminente 
+        height = getattr(sim, "robot_z_position", 0.8)
+        if height < 0.5:
+            fall_penalty = (0.5 - height) * 1.5 
+            penalties += min(fall_penalty, 0.8)  
+
+        # 3. Penalidade por movimento lateral excessivo 
+        y_velocity = abs(getattr(sim, "robot_y_velocity", 0))
+        if y_velocity > 0.3:  
+            lateral_penalty = (y_velocity - 0.3) * 1.0  
+            penalties += min(lateral_penalty, 0.5)  
+
+        # 4. Penalidade por inclinação excessiva 
+        roll = abs(getattr(sim, "robot_roll", 0))
+        if roll > 0.7:  
+            roll_penalty = (roll - 0.7) * 0.8  
+            penalties += min(roll_penalty, 0.4)  
+
+        pitch = abs(getattr(sim, "robot_pitch", 0))
+        if pitch > 0.7:  
+            pitch_penalty = (pitch - 0.7) * 0.6  
+            penalties += min(pitch_penalty, 0.3)  
+
+        return penalties
     
     def _extract_experience_metrics(self, sim) -> Dict:
         """Extrai métricas da experiência para IRL"""
@@ -378,98 +380,90 @@ class RewardCalculator:
             "steps": getattr(sim, "episode_steps", 0),
             "left_contact": getattr(sim, "robot_left_foot_contact", False),
             "right_contact": getattr(sim, "robot_right_foot_contact", False),
-            "success": getattr(sim, "episode_success", False)
+            "success": getattr(sim, "episode_success", False),
+            "energy_used": getattr(sim, "robot_energy_used", 1.0),
+            "gait_score": getattr(sim, "robot_gait_pattern_score", 0.5),
         }
     
     def _estimate_experience_quality(self, metrics: Dict) -> float:
         """Estima qualidade da experiência para IRL"""
         quality = 0.0
         
+        # Sucesso é muito importante
         if metrics.get("success", False):
-            quality += 0.8
-        
-        distance = metrics.get("distance", 0)
-        if distance > 0.5:
             quality += 0.6
-        elif distance > 0.1:
-            quality += 0.3
         
-        stability = 1.0 - min(metrics.get("roll", 0), 0.8)
-        quality += stability * 0.4
-
+        # Progresso em distância
+        distance = metrics.get("distance", 0)
+        if distance > 1.0:
+            quality += 0.3
+        elif distance > 0.5:
+            quality += 0.2
+        elif distance > 0.1:
+            quality += 0.1
+        
+        # Estabilidade
+        roll = metrics.get("roll", 0)
+        pitch = metrics.get("pitch", 0)
+        stability = 1.0 - min((roll + pitch) / 2.0, 1.0)
+        quality += stability * 0.3
+        
+        # Coordenação
         alternating = metrics.get("left_contact", False) != metrics.get("right_contact", False)
         if alternating:
             quality += 0.2
         
+        # Velocidade adequada
         speed = metrics.get("speed", 0)
-        if 0.1 < speed < 1.0:
-            quality += 0.2
+        if 0.1 < speed < 2.0:
+            quality += 0.1
         
         return min(quality, 1.0)
     
-    # Implementações dos componentes de recompensa 
     def _calculate_stability_reward(self, sim, phase_info) -> float:
         roll = abs(getattr(sim, "robot_roll", 0))
         pitch = abs(getattr(sim, "robot_pitch", 0))
-        roll_penalty = min(roll * 1.5, 0.8)
-        pitch_penalty = min(pitch * 1.0, 0.6)
-        total_penalty = (roll_penalty * 0.8) + (pitch_penalty * 0.2)
-    
-        return 1.0 - total_penalty
+        stability = 1.0 - min((roll * 1.2 + pitch * 0.8) / 2.0, 1.0)
+        return stability
     
     def _calculate_basic_progress_reward(self, sim, phase_info) -> float:
         distance = getattr(sim, "episode_distance", 0)
         velocity = getattr(sim, "robot_x_velocity", 0)
-        distance_reward = min(distance / 0.5, 3.0)  
-        if velocity > 0.1:
-            velocity_reward = min(velocity * 2.0, 2.0)
-        else:
-            velocity_reward = 0.0
-        total_reward = (distance_reward * 0.8) + (velocity_reward * 0.2)
-
-        return min(total_reward, 3.0)
+        distance_reward = min(distance / 2.0, 1.0)
+        velocity_reward = min(abs(velocity) / 1.5, 1.0) if velocity > 0 else 0.0
+        
+        return (distance_reward * 0.7 + velocity_reward * 0.3)
     
-    def _calculate_direction_reward(self, sim, phase_info) -> float:
-        """Recompensa por manter direção correta"""
-        y_velocity = abs(getattr(sim, "robot_y_velocity", 0))
-        y_position = abs(getattr(sim, "robot_y_position", 0))
-        lateral_penalty = min(y_velocity * 0.5, 0.3)
-        position_penalty = min(y_position * 0.3, 0.2)
-        total_penalty = lateral_penalty + position_penalty
-
-        return 1.0 - min(total_penalty, 0.5)
-
     def _calculate_posture_reward(self, sim, phase_info) -> float:
         pitch = getattr(sim, "robot_pitch", 0)
-        if pitch > 0.3: 
-            penalty = min(pitch * 2.0, 1.0)
-            return 1.0 - penalty
+        if pitch < -0.1:
+            return min(abs(pitch) * 2.0, 1.0)
+        elif pitch > 0.3:  
+            return 1.0 - min((pitch - 0.3) * 2.0, 1.0)
         else:
-            return 1.0
+            return 0.8  
     
     def _calculate_velocity_reward(self, sim, phase_info) -> float:
-        vx = getattr(sim, "robot_x_velocity", 0)
-        target_speed = phase_info['target_speed']
-        if vx < -0.1:
-            return -0.5
-        v_min = target_speed * 0.1
-        v_max = target_speed * 1.5
-        if v_max - v_min > 0:
-            normalized_vel = (vx - v_min) / (v_max - v_min)
-            return np.clip(normalized_vel, 0.0, 1.0)
-        return 0.0
+        target_speed = phase_info.get('target_speed', 1.0)
+        current_speed = getattr(sim, "robot_x_velocity", 0)
+        if current_speed < 0:
+            return -0.2  
+        speed_ratio = current_speed / target_speed if target_speed > 0 else 0
+        if 0.8 <= speed_ratio <= 1.2:
+            return 1.0 
+        elif 0.5 <= speed_ratio < 0.8 or 1.2 < speed_ratio <= 1.5:
+            return 0.5  
+        else:
+            return 0.1 
     
     def _calculate_phase_angles_reward(self, sim, phase_info) -> float:
         try:
             left_knee = abs(getattr(sim, "robot_left_knee_angle", 0))
             right_knee = abs(getattr(sim, "robot_right_knee_angle", 0))
             ideal_knee = 0.4
-            knee_reward = np.exp(-0.5 * (left_knee - ideal_knee)**2 / 0.25**2)
-            knee_reward += np.exp(-0.5 * (right_knee - ideal_knee)**2 / 0.25**2)
-            if left_knee > 0.3 and right_knee > 0.3:
-                knee_reward += 0.3
-            
-            return min(knee_reward / 2.0, 1.0)
+            left_score = np.exp(-2.0 * (left_knee - ideal_knee)**2)
+            right_score = np.exp(-2.0 * (right_knee - ideal_knee)**2)
+            return (left_score + right_score) / 2.0
         except:
             return 0.5
     
@@ -477,25 +471,21 @@ class RewardCalculator:
         pitch = getattr(sim, "robot_pitch", 0)
         velocity = getattr(sim, "robot_x_velocity", 0)
         if pitch < -0.05 and velocity > 0.1:
-            return min(abs(pitch) * velocity * 3.0, 1.0)
-        elif pitch < -0.1:
-            return 0.3
+            return min(abs(pitch) * velocity * 4.0, 1.0)
         return 0.0
     
     def _calculate_clearance_reward(self, sim, phase_info) -> float:
         try:
             left_contact = getattr(sim, "robot_left_foot_contact", False)
             right_contact = getattr(sim, "robot_right_foot_contact", False)
+            left_height = getattr(sim, "robot_left_foot_height", 0)
+            right_height = getattr(sim, "robot_right_foot_height", 0)
             clearance_reward = 0.0
-            if not left_contact:
-                left_height = getattr(sim, "robot_left_foot_height", 0)
-                if left_height > 0.05:
-                    clearance_reward += 0.9
-            if not right_contact:
-                right_height = getattr(sim, "robot_right_foot_height", 0)
-                if right_height > 0.05:
-                    clearance_reward += 0.7
-            return clearance_reward / 2.0
+            if not left_contact and left_height > 0.05:
+                clearance_reward += 0.6
+            if not right_contact and right_height > 0.05:
+                clearance_reward += 0.6
+            return min(clearance_reward, 1.0)
         except:
             return 0.0
     
@@ -503,25 +493,23 @@ class RewardCalculator:
         try:
             left_contact = getattr(sim, "robot_left_foot_contact", False)
             right_contact = getattr(sim, "robot_right_foot_contact", False)
-            left_arm = getattr(sim, "robot_left_shoulder_front_angle", 0)
-            right_arm = getattr(sim, "robot_right_shoulder_front_angle", 0)
-            coordination = 0.0
-            if not right_contact and left_arm > 0.15:
-                coordination += 0.7
-            if not left_contact and right_arm > 0.15:
-                coordination += 0.7
             if left_contact != right_contact:
-                coordination += 0.3
-            
-            return min(coordination, 1.0)
+                return 0.8
+            elif not left_contact and not right_contact:
+                return 0.5  
+            else:
+                return 0.2 
         except:
-            return 0.0
+            return 0.3
     
     def _calculate_efficiency_reward(self, sim, phase_info) -> float:
         distance = getattr(sim, "episode_distance", 0)
-        steps = getattr(sim, "episode_steps", 1)
-        efficiency = distance / steps
-        return min(efficiency * 3.0, 1.0)
+        steps = max(getattr(sim, "episode_steps", 1), 1)
+        energy = max(getattr(sim, "robot_energy_used", 1.0), 0.1)
+        steps_efficiency = distance / steps
+        energy_efficiency = distance / energy
+        combined_efficiency = (steps_efficiency * 0.6 + energy_efficiency * 0.4)
+        return min(combined_efficiency * 2.0, 1.0)
     
     def _calculate_success_bonus(self, sim, phase_info) -> float:
         success = getattr(sim, "episode_success", False)
@@ -530,87 +518,18 @@ class RewardCalculator:
     def _calculate_effort_penalty(self, sim, phase_info) -> float:
         try:
             joint_velocities = getattr(sim, "joint_velocities", [0])
-            effort = sum(v**2 for v in joint_velocities)
-            return min(effort * 0.1, 2.0)
+            effort = sum(v**2 for v in joint_velocities) / len(joint_velocities) if joint_velocities else 0
+            return min(effort * 0.1, 0.5)
         except:
             return 0.0
     
-    def _calculate_global_penalties(self, sim, action, group_level: int) -> float:
-        """Calcula penalidades globais adaptadas ao grupo"""
-        penalties = 0.0
-        
-        # Penalidade de ação extrema 
-        if hasattr(action, '__len__'):
-            action_penalty = np.sum(np.abs(action)) * 0.005
-            group_tolerance = 1.0 - (group_level * 0.2) 
-            penalties += min(action_penalty * group_tolerance, 0.5)
-        
-        # Penalidade por queda iminente
-        height = getattr(sim, "robot_z_position", 0.8)
-        if height < 0.5:
-            penalties += (0.5 - height) * 2.0
-
-        # Penalidade por movimento lateral excessivo
-        y_velocity = abs(getattr(sim, "robot_y_velocity", 0))
-        if y_velocity > 0.3:
-            penalties += (y_velocity - 0.3) * 1.0
-
-        # Penalidade por inclinação excessiva
-        roll = abs(getattr(sim, "robot_roll", 0))
-        if roll > 0.8:
-            penalties += (roll - 0.8) * 0.5
-        
-        return penalties
-    
-    def adjust_component_weights(self, weight_adjustments: Dict[str, float]):
-        """Ajusta pesos dos componentes baseado em feedback externo"""
-        for component_name, adjustment in weight_adjustments.items():
-            if component_name in self.components:
-                self.components[component_name].adaptive_weight = adjustment
-    
-    def enable_components(self, component_names: List[str]):
-        """Habilita componentes específicos"""
-        for name in self.components:
-            self.components[name].enabled = (name in component_names)
-    
-    def get_component_weights(self) -> Dict[str, float]:
-        """Retorna pesos atuais dos componentes"""
-        return {
-            name: component.weight * component.adaptive_weight
-            for name, component in self.components.items()
-            if component.enabled
-        }
-    
-    def get_component_performance(self, sim, phase_info) -> Dict[str, float]:
-        """Retorna performance individual de cada componente"""
-        performance = {}
-        group_level = phase_info.get('group_level', 1)
-        
-        for name, component in self.components.items():
-            if component.enabled and group_level in component.group_affinity:
-                raw_reward = component.calculator(sim, phase_info)
-                weighted_reward = self._adjust_component_weight(
-                    component, group_level, phase_info.get('sub_phase', 0)
-                ) * raw_reward
-                
-                performance[name] = {
-                    'raw': raw_reward,
-                    'weighted': weighted_reward,
-                    'weight': component.weight,
-                    'adaptive_weight': component.adaptive_weight,
-                    'group_affinity': component.group_affinity
-                }
-        
-        return performance
-    
     def get_reward_status(self) -> Dict:
-        """Retorna status do sistema de recompensa com IRL"""
+        """Retorna status do sistema de recompensa"""
+        active_components = [name for name, comp in self.components.items() if comp.enabled]
         status = {
-            "components_enabled": len([c for c in self.components.values() if c.enabled]),
-            "adaptive_weights": {name: c.adaptive_weight for name, c in self.components.items()}
+            "active_components": active_components,
+            "total_components": len(self.components),
+            "irl_demonstrations": len(self.irl_system.demonstration_buffer) if hasattr(self.irl_system, 'demonstration_buffer') else 0,
         }
-        
-        # Adicionar status IRL
-        status.update(self.irl_system.get_irl_status())
         
         return status

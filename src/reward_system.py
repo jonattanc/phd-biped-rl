@@ -50,7 +50,7 @@ class RewardSystem:
         self.dpg_enabled = enabled
         if enabled:
             if not hasattr(self, "gait_phase_dpg"):
-                from dpg_phase import GaitPhaseDPG
+                from dpg_valence import GaitPhaseDPG
 
                 self.gait_phase_dpg = GaitPhaseDPG(self.logger, self)
 

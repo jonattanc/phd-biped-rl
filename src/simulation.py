@@ -491,6 +491,7 @@ class Simulation(gym.Env):
                     "duration": self.episode_steps * self.time_step_s,
                     "reward": self.episode_reward,
                     "roll": abs(self.robot_roll),
+                    "pitch": abs(self.robot_pitch),
                     "steps": self.episode_steps,
                     "left_contact": self.robot_left_foot_contact,
                     "right_contact": self.robot_right_foot_contact,
