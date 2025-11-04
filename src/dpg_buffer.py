@@ -362,31 +362,29 @@ class SmartBufferManager:
             self.current_group_buffer = self.group_buffers[group]
     
     def get_training_batch(self, batch_size=32):
-        """Retorna batch para treinamento"""
+        """Retorna batch para treinamento - VERSÃO ESTABILIZADA"""
         if not self.current_group_buffer:
             return None
-        
+
         available = self.current_group_buffer + list(self.core_buffer)
-        
+
         if len(available) < batch_size:
             batch_size = len(available)
-        
-        # Amostragem por qualidade
-        qualities = [exp.quality for exp in available]
-        max_quality = max(qualities) if qualities else 1.0
-        normalized_qualities = [q / max_quality for q in qualities]
-        
-        # Suavizar probabilidades para evitar extremos
-        smoothed_qualities = [q ** 0.7 for q in normalized_qualities] 
-        total = sum(smoothed_qualities)
-        
-        if total > 0:
-            probabilities = np.array(smoothed_qualities) / total
-            indices = np.random.choice(len(available), size=batch_size, p=probabilities, replace=False)
-            return [available[i] for i in indices]
-        else:
-            indices = np.random.choice(len(available), size=batch_size, replace=False)
-            return [available[i] for i in indices]
+
+        scored_experiences = []
+        for exp in available:
+            stability_score = exp.skills.get("estabilidade", 0)
+            progress_score = exp.skills.get("progresso_basico", 0)
+            consistency_bonus = 1.0 if stability_score > 0.6 and progress_score > 0.3 else 0.5
+            final_score = exp.quality * consistency_bonus
+            scored_experiences.append((exp, final_score))
+
+        scored_experiences.sort(key=lambda x: x[1], reverse=True)
+
+        high_quality = [exp for exp, score in scored_experiences[:batch_size//2]]
+        diverse_sample = [exp for exp, score in scored_experiences[batch_size//2:batch_size]]
+
+        return high_quality + diverse_sample
     
     def get_status(self):
         """Retorna status com estatísticas de preservação"""

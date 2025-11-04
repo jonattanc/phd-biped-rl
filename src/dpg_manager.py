@@ -295,33 +295,6 @@ class DPGManager:
             base_speed *= 1.2
         
         return min(base_speed, 2.0)
-
-    def _on_valence_mastered(self, valence_name):
-        """Callback chamado quando uma valência atinge mastered"""        
-        valence_status = self.valence_manager.get_valence_status()
-        new_group = self._determine_group_from_valences(valence_status)
-        
-        if new_group != self.current_group:          
-            self.buffer_manager.transition_with_preservation(
-                self.current_group, new_group, self._get_adaptive_config()
-            )
-            self.group_transition_history.append({
-                'old_group': self.current_group,
-                'new_group': new_group,
-                'episode': self.episode_count,
-                'trigger_valence': valence_name,
-                'valence_status': valence_status
-            })
-            
-            self.current_group = new_group
-            
-    def _get_adaptive_config(self):
-        """Retorna configuração para preservação adaptativa"""
-        return {
-            "learning_preservation": "medium",
-            "skill_transfer": True,
-            "core_preservation": True
-        }
     
     def _extract_state(self, sim):
         """Extrai estado da simulação"""
@@ -331,15 +304,6 @@ class DPGManager:
             getattr(sim, "robot_pitch", 0),
             getattr(sim, "robot_z_position", 0.8),
         ], dtype=np.float32)
-
-    def _extract_metrics(self, sim):
-        """Extrai métricas básicas da simulação"""
-        return {
-            "distance": getattr(sim, "episode_distance", 0),
-            "speed": getattr(sim, "robot_x_velocity", 0),
-            "roll": abs(getattr(sim, "robot_roll", 0)),
-            "pitch": abs(getattr(sim, "robot_pitch", 0)),
-        }
 
     def _prepare_valence_metrics(self, episode_results):
         """Prepara métricas estendidas para o sistema de valências"""
@@ -558,40 +522,6 @@ class DPGManager:
             return
 
         self.episode_count += 1
-        if (self.episode_count == 1 or 
-        (self.episode_count % 100 == 0 and 
-         episode_results.get('reward', 0) < 10.0)):
-            if hasattr(self, 'emergency_movement_fix'):
-                self.emergency_movement_fix()
-            if hasattr(self, 'persistent_irl_activation'):
-                self.persistent_irl_activation()
-            if hasattr(self, 'fix_negative_propulsion'):
-                self.fix_negative_propulsion()
-            if hasattr(self, 'boost_movement_performance'):
-                self.boost_movement_performance()
-            if hasattr(self, 'aggressive_movement_training'):
-                self.aggressive_movement_training()
-        
-        if (self.episode_count > 50 and 
-            self.valence_manager.get_irl_weights() == {} and
-            episode_results.get('reward', 0) < -0.5):
-            self.activate_irl_guidance()
-
-        if (self.episode_count > 100 and 
-            episode_results.get('reward', 0) < -1.0):
-            self.emergency_reward_correction()
-
-        self.episode_metrics_history.append({
-            'reward': episode_results.get('reward', 0),
-            'distance': episode_results.get('distance', 0),
-            'speed': episode_results.get('speed', 0),
-            'success': episode_results.get('success', False)
-        })
-        
-        if len(self.episode_metrics_history) > 50:
-            self.episode_metrics_history.pop(0)
-
-        valence_status = None
 
         if (self.episode_count - self.last_valence_update_episode) >= self.valence_update_interval:
             extended_results = self._prepare_valence_metrics(episode_results)
@@ -605,18 +535,57 @@ class DPGManager:
             self.learning_progress = valence_status['overall_progress']
             self.last_valence_update_episode = self.episode_count
 
-        if valence_status is None:
-            valence_status = self.valence_manager.get_valence_status()
+            self._check_group_transition(valence_status)
+
+        if (self.episode_count == 1 or 
+            (self.episode_count % 200 == 0 and  
+             episode_results.get('reward', 0) < -5.0)): 
+
+            if hasattr(self, 'emergency_movement_fix'):
+                self.emergency_movement_fix()
+            if hasattr(self, 'boost_movement_performance'):
+                self.boost_movement_performance()
+
+        if (self.episode_count > 100 and 
+            self.valence_manager.get_irl_weights() == {} and
+            episode_results.get('reward', 0) < -2.0): 
+            self.activate_irl_guidance()
 
         if (self.episode_count - self.last_critic_update_episode) >= self.critic_update_interval:
+            valence_status = self.valence_manager.get_valence_status()
             self.critic.update_weights(valence_status)
             self.last_critic_update_episode = self.episode_count
+            self._stabilize_critic_weights()
 
         if (self.episode_count - self.last_report_episode) >= self.report_interval:
             self._generate_comprehensive_report()
             self.last_report_episode = self.episode_count
 
-        self._check_group_transition(valence_status)
+        self.episode_metrics_history.append({
+            'reward': episode_results.get('reward', 0),
+            'distance': episode_results.get('distance', 0),
+            'speed': episode_results.get('speed', 0),
+            'success': episode_results.get('success', False)
+        })
+
+        if len(self.episode_metrics_history) > 50:
+            self.episode_metrics_history.pop(0)
+
+    def _stabilize_critic_weights(self):
+        """Estabiliza pesos do critic para evitar oscilações"""
+        max_change = 0.05
+        total = (self.critic.weights.stability + 
+                 self.critic.weights.propulsion + 
+                 self.critic.weights.coordination + 
+                 self.critic.weights.efficiency)
+
+        if total > 0:
+            self.critic.weights.stability = max(0.2, min(0.4, self.critic.weights.stability))
+            self.critic.weights.propulsion = max(0.2, min(0.4, self.critic.weights.propulsion))
+            self.critic.weights.coordination = max(0.1, min(0.3, self.critic.weights.coordination))
+            self.critic.weights.efficiency = max(0.1, min(0.3, self.critic.weights.efficiency))
+        if self.critic.weights.irl_influence > 0.3:
+            self.critic.weights.irl_influence *= 0.95
 
     def _check_group_transition(self, valence_status):
         """Verifica e executa transição de grupo se necessário"""

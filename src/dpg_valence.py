@@ -289,38 +289,43 @@ class ValenceManager:
             self.mastery_callback(valence_name)
             
     def _update_valence_states(self, valence_levels: Dict[str, float]):
-        """Atualiza estados das valências e gerencia ativações"""
+        """Atualiza estados das valências com proteção contra regressão"""
         for valence_name, current_level in valence_levels.items():
             perf = self.valence_performance[valence_name]
             config = self.valences[valence_name]
             old_state = perf.state
-            
-            # Verificar dependências
+
+            if (old_state == ValenceState.MASTERED and 
+                current_level >= config.mastery_threshold - 0.1):  
+                perf.state = ValenceState.MASTERED
+                self.active_valences.add(valence_name)
+                continue
+
             dependencies_met = all(
                 self.valence_performance[dep].current_level >= config.activation_threshold
                 for dep in config.dependencies
             )
-            
-            # Atualizar estado
-            old_state = perf.state
-            
+
             if not dependencies_met:
                 perf.state = ValenceState.INACTIVE
                 self.active_valences.discard(valence_name)
             elif current_level >= config.mastery_threshold and perf.episodes_active >= config.min_episodes:
                 perf.state = ValenceState.MASTERED
                 self.active_valences.add(valence_name)
-            elif current_level < config.regression_threshold and perf.state == ValenceState.MASTERED:
-                perf.state = ValenceState.REGRESSING
-                self.active_valences.add(valence_name)
+            elif current_level < config.regression_threshold and old_state == ValenceState.MASTERED:
+                if current_level < config.regression_threshold - 0.15: 
+                    perf.state = ValenceState.REGRESSING
+                    self.active_valences.add(valence_name)
+                else:
+                    perf.state = ValenceState.MASTERED  
             elif dependencies_met and valence_name not in self.active_valences:
                 perf.state = ValenceState.LEARNING
                 self.active_valences.add(valence_name)
-            elif perf.state == ValenceState.LEARNING and perf.consistency_score > 0.7:
+            elif perf.state == ValenceState.LEARNING and perf.consistency_score > 0.6: 
                 perf.state = ValenceState.CONSOLIDATING
             elif perf.state == ValenceState.REGRESSING and current_level >= config.mastery_threshold:
                 perf.state = ValenceState.MASTERED
-            
+
             if perf.state != old_state:
                 if (old_state != ValenceState.MASTERED and 
                     perf.state == ValenceState.MASTERED):
@@ -512,37 +517,6 @@ class ValenceManager:
         
         return component_weights
     
-    def print_valence_report(self, episode_number: int):
-        """Imprime relatório formatado do sistema de valências"""
-        status = self.get_valence_status()
-        
-        self.logger.info("=" * 60)
-        self.logger.info(f"📊 RELATÓRIO DE VALÊNCIAS - Episódio {episode_number}")
-        self.logger.info(f"🎯 Progresso Geral: {status['overall_progress']:.1%}")
-        self.logger.info(f"🔧 Valências Ativas: {len(status['active_valences'])}")
-        
-        self.logger.info("\n📈 ESTADO DAS VALÊNCIAS:")
-        for valence_name, details in status["valence_details"].items():
-            state_icon = {
-                "inactive": "⚫", "learning": "🟡", "consolidating": "🟠",
-                "mastered": "🟢", "regressing": "🔴"
-            }.get(details["state"], "⚫")
-            
-            self.logger.info(
-                f"   {state_icon} {valence_name}: {details['current_level']:.1%} / "
-                f"{details['target_level']:.1%} ({details['state']})"
-            )
-        
-        if status["current_missions"]:
-            self.logger.info("\n🎯 MISSÕES ATIVAS:")
-            for mission in status["current_missions"]:
-                self.logger.info(
-                    f"   🎯 {mission['valence']}: +{mission['progress']} "
-                    f"({mission['episodes_remaining']} episódios restantes)"
-                )
-        
-        self.logger.info("=" * 60)
-
 
 class LightValenceIRL:
     """Sistema IRL leve integrado com valências"""

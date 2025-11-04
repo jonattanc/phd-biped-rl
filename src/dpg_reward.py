@@ -304,35 +304,34 @@ class RewardCalculator:
         }
     
     def calculate(self, sim, action, phase_info: Dict) -> float:
-        """Calcula recompensa usando sistema de valências com cache"""
+        """Calcula recompensa usando sistema de valências com cache - VERSÃO BALANCEADA"""
         total_reward = 0.0
 
         enabled_components = phase_info['enabled_components']
         valence_weights = phase_info.get('valence_weights', {})
         irl_weights = phase_info.get('irl_weights', {})
-        use_irl = len(irl_weights) > 0
-        
+
+        use_irl = len(irl_weights) > 0 and phase_info.get('learning_progress', 0) > 0.7
+        irl_bonus = 0.1 if use_irl else 0.0 
+
         for component_name in enabled_components:
             if component_name in self.components:
                 component = self.components[component_name]
                 component_reward = component.calculator(sim, phase_info)
-                
+
                 if use_irl and component_name in irl_weights:
                     weight = irl_weights[component_name]
-                    irl_bonus = 0.2  
                 elif valence_weights and component_name in valence_weights:
                     weight = valence_weights[component_name]
-                    irl_bonus = 0.0
                 else:
                     weight = component.weight * component.adaptive_weight
-                    irl_bonus = 0.0
-                
-                weighted_reward = weight * component_reward * (1.0 + irl_bonus)
+
+                weighted_reward = weight * component_reward
                 total_reward += weighted_reward
-        
+
         penalties = self._calculate_global_penalties(sim, action)
         total_reward -= penalties
-        
+
         return max(total_reward, -0.5)
     
     def _calculate_global_penalties(self, sim, action) -> float:
@@ -369,57 +368,7 @@ class RewardCalculator:
             penalties += min(pitch_penalty, 0.3)  
 
         return penalties
-    
-    def _extract_experience_metrics(self, sim) -> Dict:
-        """Extrai métricas da experiência para IRL"""
-        return {
-            "distance": getattr(sim, "episode_distance", 0),
-            "speed": getattr(sim, "robot_x_velocity", 0),
-            "roll": abs(getattr(sim, "robot_roll", 0)),
-            "pitch": abs(getattr(sim, "robot_pitch", 0)),
-            "steps": getattr(sim, "episode_steps", 0),
-            "left_contact": getattr(sim, "robot_left_foot_contact", False),
-            "right_contact": getattr(sim, "robot_right_foot_contact", False),
-            "success": getattr(sim, "episode_success", False),
-            "energy_used": getattr(sim, "robot_energy_used", 1.0),
-            "gait_score": getattr(sim, "robot_gait_pattern_score", 0.5),
-        }
-    
-    def _estimate_experience_quality(self, metrics: Dict) -> float:
-        """Estima qualidade da experiência para IRL"""
-        quality = 0.0
         
-        # Sucesso é muito importante
-        if metrics.get("success", False):
-            quality += 0.6
-        
-        # Progresso em distância
-        distance = metrics.get("distance", 0)
-        if distance > 1.0:
-            quality += 0.3
-        elif distance > 0.5:
-            quality += 0.2
-        elif distance > 0.1:
-            quality += 0.1
-        
-        # Estabilidade
-        roll = metrics.get("roll", 0)
-        pitch = metrics.get("pitch", 0)
-        stability = 1.0 - min((roll + pitch) / 2.0, 1.0)
-        quality += stability * 0.3
-        
-        # Coordenação
-        alternating = metrics.get("left_contact", False) != metrics.get("right_contact", False)
-        if alternating:
-            quality += 0.2
-        
-        # Velocidade adequada
-        speed = metrics.get("speed", 0)
-        if 0.1 < speed < 2.0:
-            quality += 0.1
-        
-        return min(quality, 1.0)
-    
     def _calculate_stability_reward(self, sim, phase_info) -> float:
         roll = abs(getattr(sim, "robot_roll", 0))
         pitch = abs(getattr(sim, "robot_pitch", 0))
@@ -529,7 +478,7 @@ class RewardCalculator:
         status = {
             "active_components": active_components,
             "total_components": len(self.components),
-            "irl_demonstrations": len(self.irl_system.demonstration_buffer) if hasattr(self.irl_system, 'demonstration_buffer') else 0,
+            "component_weights": {name: comp.weight for name, comp in self.components.items() if comp.enabled}
         }
         
         return status
