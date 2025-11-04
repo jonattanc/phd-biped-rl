@@ -98,9 +98,7 @@ class Mission:
 
 
 class ValenceManager:
-    """
-    SISTEMA DE VALÊNCIAS ADAPTATIVAS
-    """
+    """SISTEMA DE VALÊNCIAS ADAPTATIVAS"""
     
     def __init__(self, logger, config=None):
         self.logger = logger
@@ -111,6 +109,7 @@ class ValenceManager:
         self.valence_performance = {}
         self.active_valences = set()
         self.valence_weights = {}
+        self.mastery_callback = None
         
         # Sistema de missões
         self.current_missions = []
@@ -280,11 +279,21 @@ class ValenceManager:
         normalizer = normalization_rules.get(metric, lambda x: min(abs(x), 1.0))
         return normalizer(value)
     
+    def set_mastery_callback(self, callback):
+        """Define callback para quando valências atingem mastered"""
+        self.mastery_callback = callback
+        
+    def _notify_valence_mastered(self, valence_name):
+        """Notifica quando valência atinge mastered"""
+        if self.mastery_callback:
+            self.mastery_callback(valence_name)
+            
     def _update_valence_states(self, valence_levels: Dict[str, float]):
         """Atualiza estados das valências e gerencia ativações"""
         for valence_name, current_level in valence_levels.items():
             perf = self.valence_performance[valence_name]
             config = self.valences[valence_name]
+            old_state = perf.state
             
             # Verificar dependências
             dependencies_met = all(
@@ -312,9 +321,10 @@ class ValenceManager:
             elif perf.state == ValenceState.REGRESSING and current_level >= config.mastery_threshold:
                 perf.state = ValenceState.MASTERED
             
-            # Log de mudanças de estado
             if perf.state != old_state:
-                self.logger.info(f"🔄 Valência {valence_name}: {old_state.value} → {perf.state.value}")
+                if (old_state != ValenceState.MASTERED and 
+                    perf.state == ValenceState.MASTERED):
+                    self._notify_valence_mastered(valence_name)
     
     def _calculate_valence_weights(self, valence_levels: Dict[str, float]) -> Dict[str, float]:
         """Calcula pesos dinâmicos baseados em déficit de performance"""
@@ -381,6 +391,13 @@ class ValenceManager:
         candidate_valences = []
         
         for valence_name in self.active_valences:
+            existing_mission = any(
+                mission.valence_name == valence_name 
+                for mission in self.current_missions
+            )
+            if existing_mission:
+                continue
+
             perf = self.valence_performance[valence_name]
             config = self.valences[valence_name]
             current_level = valence_levels[valence_name]
@@ -537,14 +554,21 @@ class LightValenceIRL:
         self.sample_count = 0
         
     def should_activate(self, valence_status):
-        """Ativa apenas quando valências base estão consolidadas"""
-        base_valences = ['estabilidade_postural', 'propulsao_basica']
-        base_levels = [
-            valence_status['valence_details'][v]['current_level'] 
-            for v in base_valences 
-            if v in valence_status['valence_details']
-        ]
-        return len(base_levels) >= 2 and min(base_levels) > 0.5
+        """Ativa quando valências base estão consolidadas"""
+        try:
+            base_valences = ['estabilidade_postural', 'propulsao_basica']
+            base_levels = []
+            
+            for v in base_valences:
+                if v in valence_status['valence_details']:
+                    level = valence_status['valence_details'][v]['current_level']
+                    state = valence_status['valence_details'][v]['state']
+                    if level > 0.5 or state in ['consolidating', 'mastered']:
+                        base_levels.append(level)
+            
+            return len(base_levels) >= 2 and min(base_levels) > 0.4  
+        except Exception as e:
+            return False
     
     def collect_demonstration(self, episode_results, valence_status):
         """Coleta demonstrações apenas de episódios de alta qualidade"""
@@ -552,7 +576,7 @@ class LightValenceIRL:
             return
             
         quality = self._calculate_demo_quality(episode_results)
-        if quality > 0.7:  # Apenas demonstrações boas
+        if quality > 0.7:  
             self.demonstration_buffer.append({
                 'results': episode_results,
                 'quality': quality,
@@ -561,7 +585,6 @@ class LightValenceIRL:
             })
             self.sample_count += 1
             
-            # Limitar buffer
             if len(self.demonstration_buffer) > 200:
                 self.demonstration_buffer.pop(0)
     

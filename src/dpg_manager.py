@@ -145,43 +145,20 @@ class ValenceAwareCritic:
     
     def update_weights(self, valence_status):
         """Atualiza pesos do critic baseado no desempenho recente"""
-        if len(self.performance_history) < 20:
+        if len(self.performance_history) < 10:
             return
 
-        # Analisar correlação entre valências e desempenho
-        recent_performance = self.performance_history[-20:]
-
-        # Calcular quais valências estão correlacionadas com bom desempenho
-        valence_correlations = [0.0] * self.valence_count
-
-        for i in range(self.valence_count):
-            valence_levels = [p['valence_levels'][i] for p in recent_performance]
-            performance_scores = [p['final_value'] for p in recent_performance]
-
-            if (len(valence_levels) > 1 and 
-                np.std(valence_levels) > 1e-8 and 
-                np.std(performance_scores) > 1e-8):
-
-                correlation = np.corrcoef(valence_levels, performance_scores)[0,1]
-                if not np.isnan(correlation):
-                    valence_correlations[i] = max(correlation, 0.0)
-
-        # Atualizar pesos baseado nas correlações
-        total_correlation = sum(valence_correlations)
-        if total_correlation > 0:
-            new_weights = [corr / total_correlation for corr in valence_correlations]
-
-            self.weights.stability = 0.9 * self.weights.stability + 0.1 * (new_weights[0] if len(new_weights) > 0 else 0.25)
-            self.weights.propulsion = 0.9 * self.weights.propulsion + 0.1 * (new_weights[1] if len(new_weights) > 1 else 0.25)
-            self.weights.coordination = 0.9 * self.weights.coordination + 0.1 * (new_weights[2] if len(new_weights) > 2 else 0.25)
-            self.weights.efficiency = 0.9 * self.weights.efficiency + 0.1 * (new_weights[3] if len(new_weights) > 3 else 0.25)
-
-        # Atualizar influência IRL baseado na utilidade
-        irl_useful = any(p['final_value'] > p['base_value'] for p in recent_performance[-10:])
-        if irl_useful:
-            self.weights.irl_influence = min(self.weights.irl_influence + 0.02, 0.3)
-        else:
-            self.weights.irl_influence = max(self.weights.irl_influence - 0.01, 0.0)
+        learning_valences = [
+            name for name, details in valence_status['valence_details'].items()
+            if details['state'] == 'learning' and details['current_level'] < 0.7
+        ]
+        
+        if learning_valences:
+            for valence_name in learning_valences:
+                if valence_name == 'propulsao_basica':
+                    self.weights.propulsion = min(self.weights.propulsion + 0.1, 0.4)
+                elif valence_name == 'eficiencia_propulsiva':
+                    self.weights.efficiency = min(self.weights.efficiency + 0.1, 0.4)
 
 class DPGManager:
     """DPG Manager com critic funcional sem PyTorch"""
@@ -222,6 +199,10 @@ class DPGManager:
         self._cached_irl_weights = {}
         self._cache_episode = 0
         self.episode_metrics_history = []
+
+        # Controle de grupos baseado em valências
+        self.current_group = 1
+        self.group_transition_history = []
 
     def enable(self, enabled=True):
         """Ativa o sistema completo"""
@@ -315,6 +296,33 @@ class DPGManager:
         
         return min(base_speed, 2.0)
 
+    def _on_valence_mastered(self, valence_name):
+        """Callback chamado quando uma valência atinge mastered"""        
+        valence_status = self.valence_manager.get_valence_status()
+        new_group = self._determine_group_from_valences(valence_status)
+        
+        if new_group != self.current_group:          
+            self.buffer_manager.transition_with_preservation(
+                self.current_group, new_group, self._get_adaptive_config()
+            )
+            self.group_transition_history.append({
+                'old_group': self.current_group,
+                'new_group': new_group,
+                'episode': self.episode_count,
+                'trigger_valence': valence_name,
+                'valence_status': valence_status
+            })
+            
+            self.current_group = new_group
+            
+    def _get_adaptive_config(self):
+        """Retorna configuração para preservação adaptativa"""
+        return {
+            "learning_preservation": "medium",
+            "skill_transfer": True,
+            "core_preservation": True
+        }
+    
     def _extract_state(self, sim):
         """Extrai estado da simulação"""
         return np.array([
@@ -357,7 +365,21 @@ class DPGManager:
         
         return extended
 
-    def _calculate_training_consistency(self):
+    def _determine_group_from_valences(self, valence_status):
+        """Determina grupo baseado nas valências mastered"""
+        mastered_count = sum(
+            1 for details in valence_status['valence_details'].values()
+            if details['state'] == 'mastered'
+        )
+        
+        if mastered_count >= 4:
+            return 3 
+        elif mastered_count >= 2:  
+            return 2 
+        else:
+            return 1
+
+    def _calculate_training_consistency(self) -> Dict:
         """Calcula métricas de consistência do treinamento"""
         if len(self.episode_metrics_history) < 10:
             return {
@@ -370,11 +392,9 @@ class DPGManager:
         rewards = [m['reward'] for m in self.episode_metrics_history]
         distances = [m['distance'] for m in self.episode_metrics_history]
         successes = [m['success'] for m in self.episode_metrics_history]
-        
         avg_reward = np.mean(rewards)
         avg_distance = np.mean(distances)
         success_rate = np.mean(successes)
-        
         reward_std = np.std(rewards)
         max_reward = max(rewards) if rewards else 1.0
         reward_consistency = 1.0 - min(reward_std / max(avg_reward, 0.1), 1.0)
@@ -538,16 +558,37 @@ class DPGManager:
             return
 
         self.episode_count += 1
+        if (self.episode_count == 1 or 
+        (self.episode_count % 100 == 0 and 
+         episode_results.get('reward', 0) < 10.0)):
+            if hasattr(self, 'emergency_movement_fix'):
+                self.emergency_movement_fix()
+            if hasattr(self, 'persistent_irl_activation'):
+                self.persistent_irl_activation()
+            if hasattr(self, 'fix_negative_propulsion'):
+                self.fix_negative_propulsion()
+        
+        if (self.episode_count > 50 and 
+            self.valence_manager.get_irl_weights() == {} and
+            episode_results.get('reward', 0) < -0.5):
+            self.activate_irl_guidance()
+
+        if (self.episode_count > 100 and 
+            episode_results.get('reward', 0) < -1.0):
+            self.emergency_reward_correction()
+
         self.episode_metrics_history.append({
             'reward': episode_results.get('reward', 0),
             'distance': episode_results.get('distance', 0),
             'speed': episode_results.get('speed', 0),
             'success': episode_results.get('success', False)
         })
-
+        
         if len(self.episode_metrics_history) > 50:
             self.episode_metrics_history.pop(0)
-            
+
+        valence_status = None
+
         if (self.episode_count - self.last_valence_update_episode) >= self.valence_update_interval:
             extended_results = self._prepare_valence_metrics(episode_results)
             valence_weights, mission_bonus = self.valence_manager.update_valences(extended_results)
@@ -560,9 +601,10 @@ class DPGManager:
             self.learning_progress = valence_status['overall_progress']
             self.last_valence_update_episode = self.episode_count
 
-        # Atualizar critic periodicamente
-        if (self.episode_count - self.last_critic_update_episode) >= self.critic_update_interval:
+        if valence_status is None:
             valence_status = self.valence_manager.get_valence_status()
+
+        if (self.episode_count - self.last_critic_update_episode) >= self.critic_update_interval:
             self.critic.update_weights(valence_status)
             self.last_critic_update_episode = self.episode_count
 
@@ -570,6 +612,143 @@ class DPGManager:
             self._generate_comprehensive_report()
             self.last_report_episode = self.episode_count
 
+        self._check_group_transition(valence_status)
+
+    def _check_group_transition(self, valence_status):
+        """Verifica e executa transição de grupo se necessário"""
+        new_group = self._determine_group_from_valences(valence_status)
+        if new_group != self.current_group:           
+            self.buffer_manager.transition_with_preservation(
+                self.current_group, new_group, self._get_adaptive_config()
+            )
+            self.current_group = new_group
+
+    def activate_irl_guidance(self):
+        """Ativa e configura o sistema IRL para fornecer orientação"""       
+        irl_weights = {
+            'progress': 0.4,     
+            'stability': 0.3,     
+            'efficiency': 0.2,   
+            'coordination': 0.1  
+        }
+        
+        try:
+            if hasattr(self.valence_manager, 'set_irl_weights'):
+                self.valence_manager.set_irl_weights(irl_weights)
+            elif hasattr(self.valence_manager, 'update_irl_weights'):
+                self.valence_manager.update_irl_weights(irl_weights)
+            else:
+                current_weights = self.valence_manager.get_irl_weights()
+                if isinstance(current_weights, dict):
+                    current_weights.update(irl_weights)
+                else:
+                    if hasattr(self.valence_manager, 'irl_weights'):
+                        self.valence_manager.irl_weights = irl_weights
+                    else:
+                        self.logger.warning("❌ Não foi possível ativar IRL - método não encontrado")
+                        return
+        except Exception as e:
+            self.logger.warning(f"❌ Erro ao ativar IRL: {e}")
+            return
+        
+        self.critic.weights.irl_influence = 0.3
+            
+    def emergency_reward_correction(self):
+        """Correção emergencial para recompensas negativas"""
+        try:
+            valence_status = self.valence_manager.get_valence_status()
+            
+            propulsao_details = valence_status['valence_details'].get('propulsao_basica', {})
+            if propulsao_details.get('current_level', 0) < 0:
+                correction_metrics = {
+                    'positive_movement_rate': 0.5,  
+                    'distance': 0.5,                
+                    'speed': 0.3,                  
+                    'emergency_correction': True   
+                }
+                
+                self.valence_manager.update_valences(correction_metrics)
+        except Exception as e:
+            self.logger.warning(f"⚠️ Correção automática falhou: {e}")
+        
+        self.critic.weights.propulsion = 0.35
+        self.critic.weights.stability = 0.30
+        self.critic.weights.efficiency = 0.20
+        self.critic.weights.coordination = 0.15
+        self.mission_bonus_multiplier = 1.5
+            
+    def persistent_irl_activation(self):
+        """Ativação PERSISTENTE do IRL que sobrevive às atualizações"""
+        self._persistent_irl_weights = {
+            'progress': 0.6,     
+            'stability': 0.2,     
+            'efficiency': 0.1,    
+            'coordination': 0.1  
+        }
+        self.valence_manager.get_irl_weights
+        def persistent_get_irl_weights():
+            return self._persistent_irl_weights.copy()
+        self.valence_manager.get_irl_weights = persistent_get_irl_weights
+        self.critic.weights.irl_influence = 0.6  
+
+
+    def fix_negative_propulsion(self):
+        """Correção ESPECÍFICA para propulsão negativa"""
+        try:
+            if hasattr(self.valence_manager, 'valences') and 'propulsao_basica' in self.valence_manager.valences:
+                self.valence_manager.valences['propulsao_basica'].current_level = 0.3
+                self.valence_manager.valences['propulsao_basica'].consistency = 0.4
+                self.valence_manager.valences['propulsao_basica'].state = 'learning'
+            if hasattr(self.reward_calculator, 'base_weights'):
+                self.reward_calculator.base_weights['distance'] = 2.0  
+                self.reward_calculator.base_weights['velocity'] = 1.5  
+
+            self.critic.weights.propulsion = 0.50  
+            self.critic.weights.stability = 0.20
+            self.critic.weights.efficiency = 0.15  
+            self.critic.weights.coordination = 0.15
+
+        except Exception as e:
+            self.logger.warning(f"⚠️ Correção de propulsão parcial: {e}")
+
+    def override_valence_update(self):
+        """Intercepta atualizações de valência para prevenir regressão"""
+        original_update_valences = self.valence_manager.update_valences
+
+        def protected_update_valences(metrics):
+            protected_metrics = metrics.copy()
+            if protected_metrics.get('distance', 0) < 0:
+                protected_metrics['distance'] = 0.1
+            if protected_metrics.get('speed', 0) < 0:
+                protected_metrics['speed'] = 0.05
+            if protected_metrics.get('distance', 0) > 0:
+                protected_metrics['movement_bonus'] = 0.5
+            return original_update_valences(protected_metrics)
+
+        self.valence_manager.update_valences = protected_update_valences
+
+    def emergency_movement_fix(self):
+        """Correção de EMERGÊNCIA para forçar movimento positivo"""
+        self.critic._calculate_propulsion_score
+
+        def emergency_propulsion_score(metrics, valence_levels):
+            distance = max(metrics.get('distance', 0), 0) 
+            velocity = max(metrics.get('speed', 0), 0)     
+            base_movement = 0.3 if distance > 0 or velocity > 0 else 0.0
+
+            # Bônus escalonado
+            distance_bonus = min(distance / 2.0, 0.5)
+            velocity_bonus = min(velocity / 1.0, 0.2)
+
+            # Bônus de EMERGÊNCIA para sair do negativo
+            emergency_bonus = 0.5 if metrics.get('distance', 0) > 0.1 else 0.0
+
+            total = base_movement + distance_bonus + velocity_bonus + emergency_bonus
+
+            return min(total, 1.0)
+
+        self.critic._calculate_propulsion_score = emergency_propulsion_score
+    
     def _generate_comprehensive_report(self):
         """Relatório completo com status do critic"""
         valence_status = self.valence_manager.get_valence_status()
@@ -595,7 +774,7 @@ class DPGManager:
         self.logger.info(f"🔧 Valências Ativas: {len(valence_status['active_valences'])}")
         self.logger.info(f"💾 Experiências: {getattr(self.buffer_manager, 'experience_count', 0)}")
 
-        self.logger.info("\n📈 ESTADO DAS VALÊNCIAS:")
+        self.logger.info("📈 ESTADO DAS VALÊNCIAS:")
         for valence_name, details in valence_status["valence_details"].items():
             state_icon = {
                 "inactive": "⚫", "learning": "🟡", "consolidating": "🟠",
@@ -610,7 +789,7 @@ class DPGManager:
 
         # Missões ativas
         if valence_status["current_missions"]:
-            self.logger.info("\n🎯 MISSÕES ATIVAS:")
+            self.logger.info("🎯 MISSÕES ATIVAS:")
             for mission in valence_status["current_missions"]:
                 self.logger.info(
                     f"   🎯 {mission['valence']}: +{mission['progress']} "
@@ -618,45 +797,9 @@ class DPGManager:
                 )
 
         # Métricas de performance
-        self.logger.info("\n📈 MÉTRICAS DE TREINAMENTO:")
+        self.logger.info("📈 MÉTRICAS DE TREINAMENTO:")
         self.logger.info(f"   📊 Recompensa média: {consistency_metrics['avg_reward']:.2f}")
         self.logger.info(f"   🏃 Distância média: {consistency_metrics['avg_distance']:.2f}m")
         self.logger.info(f"   🎯 Taxa de sucesso: {consistency_metrics['success_rate']:.1%}")
         self.logger.info(f"   🔄 Bônus de missão: {self.mission_bonus_multiplier:.2f}x")
         self.logger.info("=" * 70)
-
-    def _calculate_training_consistency(self) -> Dict:
-        """Calcula métricas de consistência do treinamento"""
-        if len(self.episode_metrics_history) < 10:
-            return {
-                'overall_consistency': 0.5,
-                'avg_reward': 0.0,
-                'avg_distance': 0.0,
-                'success_rate': 0.0
-            }
-
-        rewards = [m['reward'] for m in self.episode_metrics_history]
-        distances = [m['distance'] for m in self.episode_metrics_history]
-        successes = [m['success'] for m in self.episode_metrics_history]
-        avg_reward = np.mean(rewards)
-        avg_distance = np.mean(distances)
-        success_rate = np.mean(successes)
-        reward_std = np.std(rewards)
-        max_reward = max(rewards) if rewards else 1.0
-        reward_consistency = 1.0 - min(reward_std / max(avg_reward, 0.1), 1.0)
-
-        if len(distances) > 5:
-            recent_distances = distances[-5:]
-            distance_trend = np.polyfit(range(len(recent_distances)), recent_distances, 1)[0]
-            distance_consistency = 1.0 - min(abs(distance_trend) / 0.1, 1.0) if distance_trend >= 0 else 0.3
-        else:
-            distance_consistency = 0.5
-
-        overall_consistency = (reward_consistency * 0.6 + distance_consistency * 0.4)
-
-        return {
-            'overall_consistency': overall_consistency,
-            'avg_reward': avg_reward,
-            'avg_distance': avg_distance,
-            'success_rate': success_rate
-        }

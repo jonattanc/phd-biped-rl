@@ -234,7 +234,6 @@ class SmartBufferManager:
 
         # 1. Coletar experiências do grupo antigo
         old_experiences = self.group_buffers.get(old_group, [])
-        self.logger.info(f"🔄 Experiências no grupo {old_group}: {len(old_experiences)}")
 
         if old_group == new_group:
             preserved_experiences = old_experiences + list(self.core_buffer)
@@ -252,13 +251,6 @@ class SmartBufferManager:
         # 5. Atualizar buffers
         self.group_buffers[new_group] = final_experiences
         self.current_group_buffer = final_experiences
-
-        # Log final
-        total_old = len(old_experiences)
-        total_preserved = len(final_experiences)
-        preservation_percent = (total_preserved / total_old * 100) if total_old > 0 else 0
-
-        self.logger.info(f"   Preservação: {total_preserved}/{total_old} ({preservation_percent:.1f}%)")
 
         # Atualizar estatísticas
         self.preservation_stats["total_transitions"] += 1
@@ -323,9 +315,6 @@ class SmartBufferManager:
         if remaining_slots > 0 and low_quality:
             low_quality.sort(key=lambda x: x.reward, reverse=True)
             preserved.extend(low_quality[:remaining_slots])
-        
-        self.logger.info(f"📦 Preservação: {len(preserved)}/{len(experiences)} "
-                        f"(High: {len(high_quality)}, Med: {len(medium_quality)}, Low: {len(low_quality)})")
         
         return preserved
     
