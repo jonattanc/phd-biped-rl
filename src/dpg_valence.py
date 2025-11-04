@@ -296,11 +296,16 @@ class ValenceManager:
             old_state = perf.state
 
             if (old_state == ValenceState.MASTERED and 
-                current_level >= config.mastery_threshold - 0.1):  
+                current_level >= config.mastery_threshold - 0.15):  
                 perf.state = ValenceState.MASTERED
                 self.active_valences.add(valence_name)
                 continue
 
+            if (old_state == ValenceState.MASTERED and 
+                current_level < perf.current_level - 0.3):
+                perf.state = ValenceState.MASTERED
+                continue
+        
             dependencies_met = all(
                 self.valence_performance[dep].current_level >= config.activation_threshold
                 for dep in config.dependencies
@@ -313,7 +318,7 @@ class ValenceManager:
                 perf.state = ValenceState.MASTERED
                 self.active_valences.add(valence_name)
             elif current_level < config.regression_threshold and old_state == ValenceState.MASTERED:
-                if current_level < config.regression_threshold - 0.15: 
+                if current_level < config.regression_threshold - 0.2: 
                     perf.state = ValenceState.REGRESSING
                     self.active_valences.add(valence_name)
                 else:

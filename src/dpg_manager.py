@@ -522,7 +522,13 @@ class DPGManager:
             return
 
         self.episode_count += 1
+        valence_status = self.valence_manager.get_valence_status()
 
+        if (valence_status['overall_progress'] > 0.6 and 
+            len(self.valence_manager.get_irl_weights()) == 0 and
+            self._calculate_instability(valence_status) > 0.3): 
+            self.activate_stabilization_irl()
+        
         if (self.episode_count - self.last_valence_update_episode) >= self.valence_update_interval:
             extended_results = self._prepare_valence_metrics(episode_results)
             valence_weights, mission_bonus = self.valence_manager.update_valences(extended_results)
@@ -571,20 +577,107 @@ class DPGManager:
         if len(self.episode_metrics_history) > 50:
             self.episode_metrics_history.pop(0)
 
+    def _get_adaptive_config(self):
+        """Retorna configuração para preservação adaptativa"""
+        valence_status = self.valence_manager.get_valence_status()
+        overall_progress = valence_status['overall_progress']
+
+        # Configuração baseada no progresso geral
+        if overall_progress > 0.8:
+            # Progresso alto: preservação conservadora
+            return {
+                "learning_preservation": "medium",
+                "skill_transfer": True,
+                "core_preservation": True,
+                "preservation_rate": 0.7
+            }
+        elif overall_progress > 0.5:
+            # Progresso médio: preservação balanceada
+            return {
+                "learning_preservation": "high", 
+                "skill_transfer": True,
+                "core_preservation": True,
+                "preservation_rate": 0.8
+            }
+        else:
+            # Progresso baixo: preservação máxima
+            return {
+                "learning_preservation": "high",
+                "skill_transfer": True, 
+                "core_preservation": True,
+                "preservation_rate": 0.9
+            }
+    
+    def activate_stabilization_irl(self):
+        """Ativa IRL específico para estabilização quando detectada instabilidade"""
+        valence_status = self.valence_manager.get_valence_status()
+
+        irl_weights = {
+            'progress': 0.3,     
+            'stability': 0.5,     
+            'efficiency': 0.1,    
+            'coordination': 0.1  
+        }
+
+        try:
+            if hasattr(self.valence_manager, 'set_irl_weights'):
+                self.valence_manager.set_irl_weights(irl_weights)
+            elif hasattr(self.valence_manager, 'update_irl_weights'):
+                self.valence_manager.update_irl_weights(irl_weights)
+        except Exception as e:
+            self.logger.warning(f"❌ Erro ao ativar IRL de estabilização: {e}")
+            return
+
+        self.critic.weights.irl_influence = min(self.critic.weights.irl_influence + 0.1, 0.4)
+
+    def _calculate_instability(self, valence_status) -> float:
+        """Calcula nível de instabilidade baseado nas oscilações das valências"""
+        instability = 0.0
+        regressing_count = 0
+        for valence_name, details in valence_status['valence_details'].items():
+            if details['state'] == 'regressing':
+                regressing_count += 1
+                deficit = details['target_level'] - details['current_level']
+                instability += min(deficit, 0.5)
+        if regressing_count >= 2:
+            instability += 0.3
+
+        return min(instability, 1.0)
+
     def _stabilize_critic_weights(self):
-        """Estabiliza pesos do critic para evitar oscilações"""
-        max_change = 0.05
-        total = (self.critic.weights.stability + 
-                 self.critic.weights.propulsion + 
-                 self.critic.weights.coordination + 
-                 self.critic.weights.efficiency)
+        """Estabiliza pesos do critic para evitar oscilações - VERSÃO MELHORADA"""
+        valence_status = self.valence_manager.get_valence_status()
+
+        regressing_valences = [
+            name for name, details in valence_status['valence_details'].items()
+            if details['state'] == 'regressing'
+        ]
+
+        # SE HÁ REGRESSÃO: Priorizar estabilidade
+        if any(v in ['estabilidade_postural', 'propulsao_basica'] for v in regressing_valences):
+            self.critic.weights.stability = max(0.3, min(0.5, self.critic.weights.stability))
+            self.critic.weights.propulsion = max(0.2, min(0.4, self.critic.weights.propulsion))
+        else:
+            # BALANCEAMENTO PADRÃO: Mais equilibrado
+            self.critic.weights.stability = max(0.25, min(0.35, self.critic.weights.stability))
+            self.critic.weights.propulsion = max(0.25, min(0.35, self.critic.weights.propulsion))
+
+        # SEMPRE manter balanceamento básico
+        self.critic.weights.coordination = max(0.15, min(0.25, self.critic.weights.coordination))
+        self.critic.weights.efficiency = max(0.15, min(0.25, self.critic.weights.efficiency))
+
+        # NORMALIZAR para garantir soma = 1.0
+        total = (self.critic.weights.stability + self.critic.weights.propulsion + 
+                 self.critic.weights.coordination + self.critic.weights.efficiency)
 
         if total > 0:
-            self.critic.weights.stability = max(0.2, min(0.4, self.critic.weights.stability))
-            self.critic.weights.propulsion = max(0.2, min(0.4, self.critic.weights.propulsion))
-            self.critic.weights.coordination = max(0.1, min(0.3, self.critic.weights.coordination))
-            self.critic.weights.efficiency = max(0.1, min(0.3, self.critic.weights.efficiency))
-        if self.critic.weights.irl_influence > 0.3:
+            self.critic.weights.stability /= total
+            self.critic.weights.propulsion /= total
+            self.critic.weights.coordination /= total
+            self.critic.weights.efficiency /= total
+
+        # REDUZIR IRL gradualmente se não está ajudando
+        if self.critic.weights.irl_influence > 0.3 and len(regressing_valences) > 1:
             self.critic.weights.irl_influence *= 0.95
 
     def _check_group_transition(self, valence_status):

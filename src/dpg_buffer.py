@@ -375,16 +375,32 @@ class SmartBufferManager:
         for exp in available:
             stability_score = exp.skills.get("estabilidade", 0)
             progress_score = exp.skills.get("progresso_basico", 0)
-            consistency_bonus = 1.0 if stability_score > 0.6 and progress_score > 0.3 else 0.5
-            final_score = exp.quality * consistency_bonus
-            scored_experiences.append((exp, final_score))
+            stability_penalty = 0.0
+            if stability_score < 0.4:  
+                stability_penalty = 0.5
+            balance_bonus = 1.0
+            if stability_score > 0.6 and progress_score > 0.4:
+                balance_bonus = 1.3
+            final_score = exp.quality * stability_penalty
+            scored_experiences.append((exp, max(final_score, 0.1)))
 
         scored_experiences.sort(key=lambda x: x[1], reverse=True)
 
-        high_quality = [exp for exp, score in scored_experiences[:batch_size//2]]
-        diverse_sample = [exp for exp, score in scored_experiences[batch_size//2:batch_size]]
+        stable_experiences = [exp for exp, score in scored_experiences if exp.skills.get("estabilidade", 0) > 0.5]
+        diverse_experiences = [exp for exp, score in scored_experiences if exp.skills.get("estabilidade", 0) <= 0.5]
 
-        return high_quality + diverse_sample
+        stable_count = min(len(stable_experiences), int(batch_size * 0.7))
+        diverse_count = batch_size - stable_count
+
+        if stable_count > 0:
+            selected = stable_experiences[:stable_count]
+        else:
+            selected = []
+
+        if diverse_count > 0 and len(diverse_experiences) > 0:
+            selected.extend(diverse_experiences[:diverse_count])
+
+        return selected
     
     def get_status(self):
         """Retorna status com estatísticas de preservação"""
