@@ -60,7 +60,7 @@ class Simulation(gym.Env):
 
         # Configurações de simulação
         self.target_pitch_rad = math.radians(1)  # rad
-        self.target_x_velocity = 2.0  # m/s
+        self.target_x_velocity = 1.0  # m/s
         self.fall_threshold = 0.5  # m
         self.success_distance = 9.0  # m
         self.yaw_threshold = math.radians(60)  # rad
@@ -491,6 +491,7 @@ class Simulation(gym.Env):
                     "duration": self.episode_steps * self.time_step_s,
                     "reward": self.episode_reward,
                     "roll": abs(self.robot_roll),
+                    "pitch": abs(self.robot_pitch),
                     "steps": self.episode_steps,
                     "left_contact": self.robot_left_foot_contact,
                     "right_contact": self.robot_right_foot_contact,

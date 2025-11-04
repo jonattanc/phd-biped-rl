@@ -115,6 +115,12 @@ class SmartBufferManager:
             "preservation_rate": 0.0
         }
         
+        # Otimizações
+        self._last_sort_episode = 0
+        self.sort_interval = 100  # Ordenar a cada 100 episódios
+        self._high_quality_cache = None
+        self._cache_valid = False
+    
         # Estatísticas
         self.experience_count = 0
         self.group_transitions = 0
@@ -122,7 +128,7 @@ class SmartBufferManager:
     def store_experience(self, experience_data: Dict):
         """Armazena experiência com análise de habilidades"""
         phase_info = experience_data.get("phase_info", {})
-        
+
         dpg_manager = getattr(self, '_dpg_manager', None)
         if dpg_manager and hasattr(dpg_manager, 'phase_manager'):
             group = dpg_manager.phase_manager.current_group
@@ -133,8 +139,6 @@ class SmartBufferManager:
         phase_info['group'] = group
         experience = self._create_enhanced_experience(experience_data)
         sub_phase = phase_info.get('sub_phase', 0)
-        
-        # Armazenar hierarquicamente
         self._store_hierarchical(experience, group, sub_phase)
 
         # Armazenar no core se for fundamental
@@ -218,7 +222,7 @@ class SmartBufferManager:
         return skills
 
     def transition_with_preservation(self, old_group: int, new_group: int, adaptive_config: Dict):
-        """Transição inteligente com preservação de aprendizado - DEBUG EXPANDIDO"""
+        """Transição inteligente com preservação de aprendizado """
         self.group_transitions += 1
 
         # Garantir que ambos os grupos existem
