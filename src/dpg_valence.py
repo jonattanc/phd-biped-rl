@@ -221,16 +221,37 @@ class ValenceManager:
         self.irl_system.collect_demonstration(episode_results, valence_status)
         
         if self.episode_count % 50 == 0:
-            self.irl_system.get_irl_weights(valence_status)
+            new_irl_weights = self.irl_system.get_irl_weights(valence_status)
+            if hasattr(self, 'irl_weights'):
+                if new_irl_weights: 
+                    self.irl_weights.update(new_irl_weights)
+            else:
+                self.irl_weights = {
+                'progress': 0.3,
+                'stability': 0.4, 
+                'efficiency': 0.2,
+                'coordination': 0.1
+                }
+                if new_irl_weights:  
+                    self.irl_weights.update(new_irl_weights)
 
     def get_irl_weights(self):
         """Retorna pesos IRL atuais"""
         try:
-            valence_status = self.get_valence_status()
-            return self.irl_system.get_irl_weights(valence_status)
+            if hasattr(self, 'irl_weights') and self.irl_weights:
+                return self.irl_weights
+            else:
+                self.irl_weights = {
+                    'progress': 0.3,
+                    'stability': 0.4, 
+                    'efficiency': 0.2,
+                    'coordination': 0.1
+                }
+                return self.irl_weights
+
         except Exception as e:
             self.logger.warning(f"Erro ao obter pesos IRL: {e}")
-            return {} 
+            return {'progress': 0.3, 'stability': 0.4, 'efficiency': 0.2, 'coordination': 0.1}
     
     def _calculate_valence_level(self, valence_name: str, results: Dict) -> float:
         """Calcula nível atual de uma valência específica"""
@@ -531,6 +552,7 @@ class LightValenceIRL:
         self.demonstration_buffer = []
         self.learned_weights = {}
         self.sample_count = 0
+        self._active = False
         
     def should_activate(self, valence_status):
         """Ativa quando valências base estão consolidadas"""
@@ -542,20 +564,23 @@ class LightValenceIRL:
                 if v in valence_status['valence_details']:
                     level = valence_status['valence_details'][v]['current_level']
                     state = valence_status['valence_details'][v]['state']
-                    if level > 0.5 or state in ['consolidating', 'mastered']:
-                        base_levels.append(level)
+                    if level > 0.3 or state in ['learning', 'consolidating', 'mastered']:
+                        activated_count += 1
             
-            return len(base_levels) >= 2 and min(base_levels) > 0.4  
+            should_activate = activated_count >= 1
+            if should_activate and not self._active:
+                self._active = True
+                
+            return should_activate
+            
         except Exception as e:
+            self.logger.warning(f"Erro ao verificar ativação IRL: {e}")
             return False
     
     def collect_demonstration(self, episode_results, valence_status):
         """Coleta demonstrações apenas de episódios de alta qualidade"""
-        if not self.should_activate(valence_status):
-            return
-            
         quality = self._calculate_demo_quality(episode_results)
-        if quality > 0.7:  
+        if quality > 0.5:  
             self.demonstration_buffer.append({
                 'results': episode_results,
                 'quality': quality,
@@ -570,27 +595,36 @@ class LightValenceIRL:
     def _calculate_demo_quality(self, results):
         """Calcula qualidade da demonstração"""
         quality = 0.0
+        
         if results.get('success', False):
             quality += 0.4
-        if results.get('distance', 0) > 1.0:
+        elif results.get('distance', 0) > 0.5:  
             quality += 0.3
-        if results.get('gait_pattern_score', 0) > 0.6:
-            quality += 0.3
+        elif results.get('speed', 0) > 0.2: 
+            quality += 0.2
+            
+        roll = abs(results.get('roll', 0))
+        pitch = abs(results.get('pitch', 0))
+        stability = 1.0 - min((roll + pitch) / 2.0, 1.0)
+        if stability > 0.6:
+            quality += 0.2
+            
         return min(quality, 1.0)
     
     def get_irl_weights(self, valence_status):
         """Retorna pesos IRL se disponíveis e relevantes"""
-        if (not self.should_activate(valence_status) or 
-            len(self.demonstration_buffer) < 20):
-            return {}
+        if len(self.demonstration_buffer) < 10:
+            return self.learned_weights
             
-        # Aprender pesos simples baseado nas melhores demonstrações
-        high_quality_demos = [d for d in self.demonstration_buffer if d['quality'] > 0.8]
+        high_quality_demos = [d for d in self.demonstration_buffer if d['quality'] > 0.6]
         if not high_quality_demos:
-            return {}
+            return self.learned_weights
             
-        weights = self._learn_simple_weights(high_quality_demos)
-        return weights
+        new_weights = self._learn_simple_weights(high_quality_demos)
+        if new_weights:
+            self.learned_weights = new_weights
+            
+        return self.learned_weights
     
     def _learn_simple_weights(self, demonstrations):
         """Aprendizado simples de pesos IRL"""

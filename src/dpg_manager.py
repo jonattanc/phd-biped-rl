@@ -524,10 +524,10 @@ class DPGManager:
         self.episode_count += 1
         valence_status = self.valence_manager.get_valence_status()
 
-        if (valence_status['overall_progress'] > 0.6 and 
+        if (self.episode_count > 50 and 
             len(self.valence_manager.get_irl_weights()) == 0 and
-            self._calculate_instability(valence_status) > 0.3): 
-            self.activate_stabilization_irl()
+            valence_status['overall_progress'] > 0.3):
+            self.activate_irl_guidance() 
         
         if (self.episode_count - self.last_valence_update_episode) >= self.valence_update_interval:
             extended_results = self._prepare_valence_metrics(episode_results)
@@ -691,7 +691,7 @@ class DPGManager:
 
     def activate_irl_guidance(self):
         """Ativa e configura o sistema IRL para fornecer orientação"""       
-        irl_weights = {
+        manual_irl_weights = {
             'progress': 0.4,     
             'stability': 0.3,     
             'efficiency': 0.2,   
@@ -699,25 +699,16 @@ class DPGManager:
         }
         
         try:
-            if hasattr(self.valence_manager, 'set_irl_weights'):
-                self.valence_manager.set_irl_weights(irl_weights)
-            elif hasattr(self.valence_manager, 'update_irl_weights'):
-                self.valence_manager.update_irl_weights(irl_weights)
-            else:
-                current_weights = self.valence_manager.get_irl_weights()
-                if isinstance(current_weights, dict):
-                    current_weights.update(irl_weights)
-                else:
-                    if hasattr(self.valence_manager, 'irl_weights'):
-                        self.valence_manager.irl_weights = irl_weights
-                    else:
-                        self.logger.warning("❌ Não foi possível ativar IRL - método não encontrado")
-                        return
+            if hasattr(self.valence_manager, 'irl_weights'):
+                self.valence_manager.irl_weights = manual_irl_weights
+            elif hasattr(self.valence_manager.irl_system, 'learned_weights'):
+                self.valence_manager.irl_system.learned_weights = manual_irl_weights
+        
+            self.valence_manager.irl_system._active = True
+            self.critic.weights.irl_influence = 0.3
+
         except Exception as e:
             self.logger.warning(f"❌ Erro ao ativar IRL: {e}")
-            return
-        
-        self.critic.weights.irl_influence = 0.3
             
     def emergency_reward_correction(self):
         """Correção emergencial para recompensas negativas"""
@@ -834,14 +825,14 @@ class DPGManager:
         """Relatório completo com status do critic"""
         valence_status = self.valence_manager.get_valence_status()
         consistency_metrics = self._calculate_training_consistency()
-        irl_weights = self.valence_manager.get_irl_weights()
+        current_irl_weights = self.valence_manager.get_irl_weights()
 
         self.logger.info("=" * 70)
         self.logger.info(f"📊 RELATÓRIO DPG - Episódio {self.episode_count}")
         self.logger.info(f"🎯 Progresso Geral: {valence_status['overall_progress']:.1%}")
         self.logger.info(f"📈 Consistência: {consistency_metrics['overall_consistency']:.1%}")
         
-        irl_active = len(irl_weights) > 0
+        irl_active = len(current_irl_weights) > 0 and any(w > 0 for w in current_irl_weights.values())
         irl_status = "🟢 ATIVO" if irl_active else "⚫ INATIVO"
         
         self.logger.info(f"🧠 IRL: {irl_status} | Critic Funcional: 🟢 ATIVO")
@@ -849,7 +840,7 @@ class DPGManager:
         self.logger.info(f"   Pesos Critic: S:{self.critic.weights.stability:.2f} P:{self.critic.weights.propulsion:.2f} C:{self.critic.weights.coordination:.2f} E:{self.critic.weights.efficiency:.2f}")
 
         if irl_active:
-            self.logger.info(f"   Pesos IRL: {irl_weights}")
+            self.activate_irl_guidance()
 
         self.logger.info(f"🔧 Valências Ativas: {len(valence_status['active_valences'])}")
         self.logger.info(f"💾 Experiências: {getattr(self.buffer_manager, 'experience_count', 0)}")
