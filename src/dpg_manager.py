@@ -567,6 +567,10 @@ class DPGManager:
                 self.persistent_irl_activation()
             if hasattr(self, 'fix_negative_propulsion'):
                 self.fix_negative_propulsion()
+            if hasattr(self, 'boost_movement_performance'):
+                self.boost_movement_performance()
+            if hasattr(self, 'aggressive_movement_training'):
+                self.aggressive_movement_training()
         
         if (self.episode_count > 50 and 
             self.valence_manager.get_irl_weights() == {} and
@@ -657,7 +661,6 @@ class DPGManager:
         """Correção emergencial para recompensas negativas"""
         try:
             valence_status = self.valence_manager.get_valence_status()
-            
             propulsao_details = valence_status['valence_details'].get('propulsao_basica', {})
             if propulsao_details.get('current_level', 0) < 0:
                 correction_metrics = {
@@ -666,11 +669,9 @@ class DPGManager:
                     'speed': 0.3,                  
                     'emergency_correction': True   
                 }
-                
                 self.valence_manager.update_valences(correction_metrics)
         except Exception as e:
             self.logger.warning(f"⚠️ Correção automática falhou: {e}")
-        
         self.critic.weights.propulsion = 0.35
         self.critic.weights.stability = 0.30
         self.critic.weights.efficiency = 0.20
@@ -691,7 +692,6 @@ class DPGManager:
         self.valence_manager.get_irl_weights = persistent_get_irl_weights
         self.critic.weights.irl_influence = 0.6  
 
-
     def fix_negative_propulsion(self):
         """Correção ESPECÍFICA para propulsão negativa"""
         try:
@@ -702,19 +702,16 @@ class DPGManager:
             if hasattr(self.reward_calculator, 'base_weights'):
                 self.reward_calculator.base_weights['distance'] = 2.0  
                 self.reward_calculator.base_weights['velocity'] = 1.5  
-
             self.critic.weights.propulsion = 0.50  
             self.critic.weights.stability = 0.20
             self.critic.weights.efficiency = 0.15  
             self.critic.weights.coordination = 0.15
-
         except Exception as e:
             self.logger.warning(f"⚠️ Correção de propulsão parcial: {e}")
 
     def override_valence_update(self):
         """Intercepta atualizações de valência para prevenir regressão"""
         original_update_valences = self.valence_manager.update_valences
-
         def protected_update_valences(metrics):
             protected_metrics = metrics.copy()
             if protected_metrics.get('distance', 0) < 0:
@@ -724,30 +721,52 @@ class DPGManager:
             if protected_metrics.get('distance', 0) > 0:
                 protected_metrics['movement_bonus'] = 0.5
             return original_update_valences(protected_metrics)
-
         self.valence_manager.update_valences = protected_update_valences
 
     def emergency_movement_fix(self):
         """Correção de EMERGÊNCIA para forçar movimento positivo"""
         self.critic._calculate_propulsion_score
-
         def emergency_propulsion_score(metrics, valence_levels):
             distance = max(metrics.get('distance', 0), 0) 
             velocity = max(metrics.get('speed', 0), 0)     
             base_movement = 0.3 if distance > 0 or velocity > 0 else 0.0
-
-            # Bônus escalonado
             distance_bonus = min(distance / 2.0, 0.5)
             velocity_bonus = min(velocity / 1.0, 0.2)
-
-            # Bônus de EMERGÊNCIA para sair do negativo
             emergency_bonus = 0.5 if metrics.get('distance', 0) > 0.1 else 0.0
-
             total = base_movement + distance_bonus + velocity_bonus + emergency_bonus
-
             return min(total, 1.0)
-
         self.critic._calculate_propulsion_score = emergency_propulsion_score
+    
+    def boost_movement_performance(self):
+        """Otimização final para aumentar distância percorrida"""        
+        if hasattr(self.reward_calculator, 'base_weights'):
+            self.reward_calculator.base_weights['distance'] = 5.0  
+            self.reward_calculator.base_weights['velocity'] = 3.0  
+        self._persistent_irl_weights = {
+            'progress': 0.8,      
+            'stability': 0.1,     
+            'efficiency': 0.05,   
+            'coordination': 0.05 
+        }
+        self.critic.weights.irl_influence = 0.8
+        self.critic.weights.propulsion = 0.60
+        self.critic.weights.stability = 0.15
+        self.critic.weights.efficiency = 0.15
+        self.critic.weights.coordination = 0.10
+
+    def aggressive_movement_training(self):
+        """Treinamento agressivo focado apenas em movimento"""
+        def super_propulsion_score(metrics, valence_levels):
+            distance = max(metrics.get('distance', 0), 0)
+            velocity = max(metrics.get('speed', 0), 0)
+            base_movement = 0.5 if distance > 0 or velocity > 0 else 0.0
+            distance_bonus = min(distance / 1.0, 0.8)  
+            velocity_bonus = min(velocity / 0.5, 0.5)  
+            performance_bonus = 0.3 if distance > 0.5 else 0.0
+            performance_bonus += 0.2 if velocity > 0.3 else 0.0
+            total = base_movement + distance_bonus + velocity_bonus + performance_bonus
+            return min(total, 1.0)
+        self.critic._calculate_propulsion_score = super_propulsion_score
     
     def _generate_comprehensive_report(self):
         """Relatório completo com status do critic"""
@@ -760,7 +779,6 @@ class DPGManager:
         self.logger.info(f"🎯 Progresso Geral: {valence_status['overall_progress']:.1%}")
         self.logger.info(f"📈 Consistência: {consistency_metrics['overall_consistency']:.1%}")
         
-        # Status IRL + Critic
         irl_active = len(irl_weights) > 0
         irl_status = "🟢 ATIVO" if irl_active else "⚫ INATIVO"
         
