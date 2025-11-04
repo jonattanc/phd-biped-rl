@@ -64,7 +64,7 @@ class Simulation(gym.Env):
         self.fall_threshold = 0.5  # m
         self.success_distance = 9.0  # m
         self.yaw_threshold = math.radians(60)  # rad
-        self.episode_training_timeout_s = 20  # s
+        self.episode_training_timeout_s = 15  # s
         self.episode_pre_fill_timeout_s = 10  # s
         self.episode_timeout_s = self.episode_training_timeout_s
         self.physics_step_s = 1 / 240.0  # 240 Hz, ~4.16 ms
