@@ -263,19 +263,18 @@ class ValenceManager:
             if metric in results:
                 raw_value = results[metric]
                 normalized_value = self._normalize_metric(metric, raw_value)
-                if self.episode_count < 1000 and normalized_value > 0.1:
-                    normalized_value = min(normalized_value * 1.5, 1.0)
                 level += normalized_value
                 metric_count += 1
         
         if metric_count > 0:
             level /= metric_count
         
-        if self.episode_count < 500:
-            if results.get("distance", 0) > 0.1:
-                level = min(level * 1.8, 1.0)
-            elif results.get("speed", 0) > 0.05:
-                level = min(level * 1.5, 1.0)
+        if results.get("success", False):
+            level = min(level * 1.2, 1.0)
+        elif results.get("distance", 0) > 2.0:
+            level = min(level * 1.1, 1.0)
+        if level > 0.9 and results.get("distance", 0) < 4.0:
+            level = 0.7
         
         return min(level, 1.0)
     

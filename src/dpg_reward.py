@@ -380,21 +380,18 @@ class RewardCalculator:
     def _calculate_basic_progress_reward(self, sim, phase_info) -> float:
         distance = getattr(sim, "episode_distance", 0)
         velocity = getattr(sim, "robot_x_velocity", 0)
-        learning_progress = phase_info.get('learning_progress', 0)
-        if learning_progress < 0.3:  
-            distance_boost = 3.0  
-            velocity_boost = 2.0  
-        elif learning_progress < 0.6:
-            distance_boost = 2.0
-            velocity_boost = 1.5
-        else:
-            distance_boost = 1.0
-            velocity_boost = 1.0
+        if distance > 4.0:  
+            distance_reward = 2.0
+        elif distance > 2.0:  
+            distance_reward = 1.0
+        elif distance > 0.5:  
+            distance_reward = 0.5
+        else:  
+            distance_reward = 0.1
 
-        distance_reward = min(distance / 2.0, 1.0) * distance_boost
-        velocity_reward = min(abs(velocity) / 1.5, 1.0) * velocity_boost if velocity > 0 else 0.0
+        velocity_reward = min(abs(velocity) / 1.5, 1.0) if velocity > 0.1 else 0.0
 
-        return (distance_reward * 0.7 + velocity_reward * 0.3)
+        return (distance_reward * 0.8 + velocity_reward * 0.2)
     
     def _calculate_posture_reward(self, sim, phase_info) -> float:
         pitch = getattr(sim, "robot_pitch", 0)
@@ -422,10 +419,13 @@ class RewardCalculator:
         try:
             left_knee = abs(getattr(sim, "robot_left_knee_angle", 0))
             right_knee = abs(getattr(sim, "robot_right_knee_angle", 0))
-            ideal_knee = 0.4
+            ideal_knee = 0.8
             left_score = np.exp(-2.0 * (left_knee - ideal_knee)**2)
             right_score = np.exp(-2.0 * (right_knee - ideal_knee)**2)
-            return (left_score + right_score) / 2.0
+            bonus = 0.0
+            if left_knee > 0.6 and right_knee > 0.6:
+                bonus = 0.3
+            return min((left_score + right_score) / 2.0 + bonus, 1.0)
         except:
             return 0.5
     
