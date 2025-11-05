@@ -455,8 +455,8 @@ class DPGManager:
         try:
             if hasattr(self, 'buffer_manager') and self.buffer_manager:
                 experience_data = {
-                    "state": np.zeros(10),  
-                    "action": np.zeros(6),  
+                    "state": np.zeros(10).tolist(), 
+                    "action": np.zeros(6).tolist(),  
                     "reward": episode_results.get('reward', 0),
                     "phase_info": {
                         'group_level': self.current_group,
@@ -474,12 +474,14 @@ class DPGManager:
             self.activate_irl_guidance()
         if self._last_distance < 2.0 and self.episode_count > 100:
             self.activate_propulsion_irl()
+            self.critic.weights.propulsion = 0.85
+            self.critic.weights.irl_influence = 0.95
         valence_status = self.valence_manager.get_valence_status()
         self._emergency_propulsion_fix(valence_status)
         if (valence_status['overall_progress'] > 0.8 and 
             self._last_distance < 1.0 and 
             self.episode_count > 500):
-            self.fix_negative_propulsion()
+            self._emergency_unstick_propulsion()
         extended_results = self._prepare_valence_metrics(episode_results)
         valence_weights, mission_bonus = self.valence_manager.update_valences(extended_results)
         regressing_count = sum(1 for details in valence_status['valence_details'].values() 
@@ -562,14 +564,14 @@ class DPGManager:
     def activate_propulsion_irl(self):
         """Ativar IRL ESPECÍFICO para movimento"""
         propulsion_irl_weights = {
-            'progress': 0.7,      
-            'stability': 0.2,    
-            'efficiency': 0.05,   
-            'coordination': 0.05  
+            'progress': 0.9,      
+            'stability': 0.05,    
+            'efficiency': 0.03,   
+            'coordination': 0.02  
         }
         try:
             self.valence_manager.irl_weights = propulsion_irl_weights
-            self.critic.weights.irl_influence = 0.5
+            self.critic.weights.irl_influence = 0.95
         except Exception as e:
             self.logger.warning(f"❌ Erro ao ativar IRL de propulsão: {e}")
         
@@ -609,18 +611,18 @@ class DPGManager:
     def _stabilize_critic_weights(self):
         """Estabiliza pesos do critic para evitar oscilações - VERSÃO MAIS CONSERVADORA"""
         distance = getattr(self, '_last_distance', 0)
-        if distance < 2.0: 
-            self.critic.weights.propulsion = 0.55
-            self.critic.weights.stability = 0.20
-            self.critic.weights.coordination = 0.15
-            self.critic.weights.efficiency = 0.10
+        if distance < 4.0: 
+            self.critic.weights.propulsion = 0.80
+            self.critic.weights.stability = 0.10
+            self.critic.weights.coordination = 0.05
+            self.critic.weights.efficiency = 0.04
         else:
-            self.critic.weights.stability = 0.25
-            self.critic.weights.propulsion = 0.35
-            self.critic.weights.coordination = 0.20
-            self.critic.weights.efficiency = 0.20
+            self.critic.weights.stability = 0.60
+            self.critic.weights.propulsion = 0.20
+            self.critic.weights.coordination = 0.10
+            self.critic.weights.efficiency = 0.10
         if distance < 3.0:
-            self.critic.weights.irl_influence = 0.4
+            self.critic.weights.irl_influence = 0.9
 
     def emergency_stabilization(self):
         """Ativação emergencial para estabilizar valências oscilantes"""
@@ -686,18 +688,17 @@ class DPGManager:
         self.critic.weights.coordination = 0.15
         self.mission_bonus_multiplier = 1.5
 
-    def fix_negative_propulsion(self):
-        """CORREÇÃO SIMPLES para propulsão negativa"""
-        try:
-            valence_status = self.valence_manager.get_valence_status()
-            if 'propulsao_basica' in valence_status['valence_details']:
-                details = valence_status['valence_details']['propulsao_basica']
-                current_level = details['current_level']
-                if current_level < 0.3:
-                    self.valence_manager.valence_performance['propulsao_basica'].current_level = 0.3
-        except Exception as e:
-            self.logger.warning(f"⚠️ Correção de propulsão: {e}")
-
+    def _emergency_unstick_propulsion(self, valence_status):
+        """Correção de emergência MAIS AGRESSIVA"""
+        if 'propulsao_basica' in valence_status['valence_details']:
+            details = valence_status['valence_details']['propulsao_basica']
+            if (details['current_level'] < 0.3 and 
+                self.episode_count > 300 and 
+                self.episode_count % 20 == 0): 
+                self.valence_manager.valence_performance['propulsao_basica'].current_level = 0.6
+                self.valence_manager.valence_performance['propulsao_basica'].state = ValenceState.LEARNING
+                self.valence_manager.active_valences.add('propulsao_basica')
+            
     def emergency_stabilization(self):
         """CORREÇÃO para estabilidade"""
         self.critic.weights.stability = 0.35

@@ -128,9 +128,14 @@ class SmartBufferManager:
     def store_experience(self, experience_data: Dict):
         """Armazena experiência com análise de habilidades"""
         try:
-            if not experience_data or "state" not in experience_data:
+            if not experience_data:
                 return
-
+            if "state" in experience_data and hasattr(experience_data["state"], 'tolist'):
+                experience_data["state"] = experience_data["state"].tolist()
+            if "action" in experience_data and hasattr(experience_data["action"], 'tolist'):
+                experience_data["action"] = experience_data["action"].tolist()
+            if "reward" in experience_data:
+                experience_data["reward"] = float(experience_data["reward"])
             phase_info = experience_data.get("phase_info", {})
             current_group = 1
             dpg_manager = getattr(self, '_dpg_manager', None)

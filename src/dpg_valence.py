@@ -277,8 +277,12 @@ class ValenceManager:
             level = min(level * 1.05, 1.0) 
 
         if valence_name == "propulsao_basica":
-            if results.get("distance", 0) > 0.1 or results.get("speed", 0) > 0.05:
-                level = max(level, 0.2) 
+            distance = results.get("distance", 0)
+            speed = results.get("speed", 0)
+            if level == 0.0 and (distance > 0 or speed > 0):
+                level = 0.4
+            elif level == 0.0 and self.episode_count > 200:
+                level = 0.3
 
         return min(level, 1.0)
     
@@ -317,14 +321,14 @@ class ValenceManager:
     def _update_valence_states(self, valence_levels: Dict[str, float]):
         """Atualiza estados das valências com proteção contra regressão"""
         for valence_name, current_level in valence_levels.items():
+            if valence_name == "propulsao_basica" and current_level > 0.2:
+                if valence_name not in self.active_valences:
+                    self.active_valences.add(valence_name)
+                    self.valence_performance[valence_name].state = ValenceState.LEARNING
+
             perf = self.valence_performance[valence_name]
             config = self.valences[valence_name]
             old_state = perf.state
-
-            if valence_name == "propulsao_basica" and current_level > 0.1:
-                if perf.state == ValenceState.INACTIVE:
-                    perf.state = ValenceState.LEARNING
-                    self.active_valences.add(valence_name)
 
             if (old_state == ValenceState.MASTERED and 
                 current_level >= config.mastery_threshold - 0.25):  
