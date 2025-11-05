@@ -152,19 +152,18 @@ class DPGManager:
         self.logger = logger
         self.robot = robot
         self.reward_system = reward_system
-        self.config = type('Config', (), {})()
-        self.config.enabled = True
+        self.enabled = True
+        self.config = type('Config', (), {'enabled': True})
         self.config.valence_system = True
+
         self.valence_manager = ValenceManager(logger, {})
         self.reward_calculator = RewardCalculator(logger, {})
         self.buffer_manager = SmartBufferManager(logger, {})
         self.buffer_manager._dpg_manager = self
         valence_count = len(self.valence_manager.valences)
         self.critic = ValenceAwareCritic(logger, valence_count)
-        self.enabled = False
-        self.learning_progress = 0.0
+
         self.performance_trend = 0.0
-        self.episode_count = 0
         self.mission_bonus_multiplier = 1.0
         self.last_valence_update_episode = 0
         self.valence_update_interval = 5
@@ -177,6 +176,7 @@ class DPGManager:
         self._cache_episode = 0
         self.episode_metrics_history = []
         self.current_group = 1
+        self._last_known_group = 1
         self.group_transition_history = []
         self.crutches = {
             "enabled": True,
@@ -474,14 +474,11 @@ class DPGManager:
             self.activate_irl_guidance()
         if self._last_distance < 2.0 and self.episode_count > 100:
             self.activate_propulsion_irl()
-            self.critic.weights.propulsion = 0.85
-            self.critic.weights.irl_influence = 0.95
         valence_status = self.valence_manager.get_valence_status()
-        self._emergency_propulsion_fix(valence_status)
         if (valence_status['overall_progress'] > 0.8 and 
             self._last_distance < 1.0 and 
             self.episode_count > 500):
-            self._emergency_unstick_propulsion()
+            self._emergency_unstick_propulsion(valence_status)
         extended_results = self._prepare_valence_metrics(episode_results)
         valence_weights, mission_bonus = self.valence_manager.update_valences(extended_results)
         regressing_count = sum(1 for details in valence_status['valence_details'].values() 
@@ -564,14 +561,14 @@ class DPGManager:
     def activate_propulsion_irl(self):
         """Ativar IRL ESPECÍFICO para movimento"""
         propulsion_irl_weights = {
-            'progress': 0.9,      
-            'stability': 0.05,    
-            'efficiency': 0.03,   
-            'coordination': 0.02  
+            'progress': 0.8,      
+            'stability': 0.2,    
+            'efficiency': 0.1,   
+            'coordination': 0.1  
         }
         try:
             self.valence_manager.irl_weights = propulsion_irl_weights
-            self.critic.weights.irl_influence = 0.95
+            self.critic.weights.irl_influence = 0.9
         except Exception as e:
             self.logger.warning(f"❌ Erro ao ativar IRL de propulsão: {e}")
         
@@ -689,13 +686,12 @@ class DPGManager:
         self.mission_bonus_multiplier = 1.5
 
     def _emergency_unstick_propulsion(self, valence_status):
-        """Correção de emergência MAIS AGRESSIVA"""
+        """Correção mais eficiente para propulsão travada"""
         if 'propulsao_basica' in valence_status['valence_details']:
             details = valence_status['valence_details']['propulsao_basica']
             if (details['current_level'] < 0.3 and 
-                self.episode_count > 300 and 
-                self.episode_count % 20 == 0): 
-                self.valence_manager.valence_performance['propulsao_basica'].current_level = 0.6
+                self.episode_count > 100):  
+                self.valence_manager.valence_performance['propulsao_basica'].current_level = 0.5
                 self.valence_manager.valence_performance['propulsao_basica'].state = ValenceState.LEARNING
                 self.valence_manager.active_valences.add('propulsao_basica')
             

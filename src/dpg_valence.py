@@ -319,72 +319,50 @@ class ValenceManager:
             self.mastery_callback(valence_name)
             
     def _update_valence_states(self, valence_levels: Dict[str, float]):
-        """Atualiza estados das valências com proteção contra regressão"""
+        """Ativação otimizada - mais rápida e robusta"""
         for valence_name, current_level in valence_levels.items():
-            if valence_name == "propulsao_basica" and current_level > 0.2:
-                if valence_name not in self.active_valences:
-                    self.active_valences.add(valence_name)
-                    self.valence_performance[valence_name].state = ValenceState.LEARNING
-
             perf = self.valence_performance[valence_name]
             config = self.valences[valence_name]
-            old_state = perf.state
-
-            if (old_state == ValenceState.MASTERED and 
-                current_level >= config.mastery_threshold - 0.25):  
-                perf.state = ValenceState.MASTERED
-                self.active_valences.add(valence_name)
-                continue
-
-            if (old_state == ValenceState.MASTERED and 
-                current_level < perf.current_level - 0.4):
-                perf.state = ValenceState.MASTERED
-                continue
-        
+            
+            # CORREÇÃO: Ativação mais agressiva para valências fundamentais
+            is_fundamental = valence_name in ["estabilidade_postural", "propulsao_basica"]
+            
+            if is_fundamental and current_level > 0.1:  # Threshold mais baixo
+                if valence_name not in self.active_valences:
+                    self.active_valences.add(valence_name)
+                    perf.state = ValenceState.LEARNING
+                    continue
+            
+            # Lógica original para valências não-fundamentais
             dependencies_met = all(
                 self.valence_performance[dep].current_level >= config.activation_threshold
                 for dep in config.dependencies
             )
-
+            
             if not dependencies_met:
                 perf.state = ValenceState.INACTIVE
                 self.active_valences.discard(valence_name)
-            elif current_level >= config.mastery_threshold and perf.episodes_active >= config.min_episodes:
+            elif current_level >= config.mastery_threshold:
                 perf.state = ValenceState.MASTERED
                 self.active_valences.add(valence_name)
-            elif current_level < config.regression_threshold and old_state == ValenceState.MASTERED:
-                if current_level < config.regression_threshold - 0.2: 
-                    perf.state = ValenceState.REGRESSING
-                    self.active_valences.add(valence_name)
-                else:
-                    perf.state = ValenceState.MASTERED  
             elif dependencies_met and valence_name not in self.active_valences:
                 perf.state = ValenceState.LEARNING
                 self.active_valences.add(valence_name)
-            elif perf.state == ValenceState.LEARNING and perf.consistency_score > 0.6: 
-                perf.state = ValenceState.CONSOLIDATING
-            elif perf.state == ValenceState.REGRESSING and current_level >= config.mastery_threshold:
+                
+            # CORREÇÃO: Prevenir regressão falsa
+            if (perf.state == ValenceState.MASTERED and 
+                current_level > config.mastery_threshold - 0.2):
                 perf.state = ValenceState.MASTERED
-
-            if perf.state != old_state:
-                if (old_state != ValenceState.MASTERED and 
-                    perf.state == ValenceState.MASTERED):
-                    self._notify_valence_mastered(valence_name)
     
     def _calculate_valence_weights(self, valence_levels: Dict[str, float]) -> Dict[str, float]:
         """Calcula pesos dinâmicos baseados em déficit de performance"""
         weights = {}
         total_weight = 0.0
-        
         for valence_name in self.active_valences:
             config = self.valences[valence_name]
             current_level = valence_levels[valence_name]
             perf = self.valence_performance[valence_name]
-            
-            # Cálculo do déficit (quanto falta para o alvo)
             deficit = max(0, config.target_level - current_level)
-            
-            # Fator de urgência baseado no estado
             state_multiplier = {
                 ValenceState.LEARNING: 2.0,
                 ValenceState.REGRESSING: 1.8,
@@ -392,18 +370,11 @@ class ValenceManager:
                 ValenceState.MASTERED: 0.3,
                 ValenceState.INACTIVE: 0.0
             }.get(perf.state, 1.0)
-            
-            # Peso baseado no déficit e urgência
             weight = deficit * state_multiplier
-            
-            # Bônus para valências com baixa consistência
             if perf.consistency_score < 0.5:
                 weight *= 1.5
-            
             weights[valence_name] = weight
             total_weight += weight
-        
-        # Normalizar pesos
         if total_weight > 0:
             weights = {k: v / total_weight for k, v in weights.items()}
         
