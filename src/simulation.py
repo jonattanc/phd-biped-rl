@@ -205,21 +205,24 @@ class Simulation(gym.Env):
         self.logger.info("Pré-preenchimento do buffer de replay concluído.")
 
     def evaluate(self, episodes, deterministic):
-        episode_count = 0
+        self.metrics = {}
         obs, _ = self.reset()
 
-        while episode_count < episodes:
+        while self.episode_count < episodes:
+            self.metrics[str(self.episode_count + 1)] = {"step_data": {}}
+
             action, _ = self.agent.model.predict(obs, deterministic=deterministic)
 
-            next_obs, reward, episode_terminated, episode_truncated, info = self.step(action)
+            next_obs, reward, episode_terminated, episode_truncated, info = self.step(action, evaluation=True)
             done = episode_terminated or episode_truncated
 
             if done:
                 obs, _ = self.reset()
-                episode_count += 1
 
             else:
                 obs = next_obs
+
+        return self.metrics
 
     def soft_env_reset(self):
         # Remover corpos antigos se existirem
@@ -318,14 +321,12 @@ class Simulation(gym.Env):
         # Reduzir damping para menos oscilação
         p.changeDynamics(self.robot.id, -1, linearDamping=0.04, angularDamping=0.04)
 
-    def transmit_episode_info(self):
+    def transmit_episode_info(self, evaluation):
         """Transmite informações do episódio via IPC"""
 
         if hasattr(self.agent, "model") and hasattr(self.agent.model, "ep_info_buffer"):
             if self.agent.model.ep_info_buffer is not None and len(self.agent.model.ep_info_buffer) > 0 and len(self.agent.model.ep_info_buffer[0]) > 0:
                 self.agent.model.ep_info_buffer = []
-
-        self.episode_count += 1
 
         self.ipc_queue.put({"type": "tracker_status", "tracker_status": self.tracker.get_status()})
 
@@ -353,13 +354,23 @@ class Simulation(gym.Env):
             "yaw_vel": self.robot_yaw_vel,
         }
 
+        if evaluation:
+            episode_extra_data = {
+                "episode_termination": self.episode_termination,
+                "episode_truncated": self.episode_truncated,
+                "episode_terminated": self.episode_terminated,
+                "episode_success": self.episode_success,
+            }
+
+            self.metrics[str(self.episode_count)]["episode_data"] = episode_data
+            self.metrics[str(self.episode_count)]["episode_extra_data"] = episode_extra_data
+
         # Enviar para ipc_queue
         try:
             self.ipc_queue.put_nowait(episode_data)
 
         except Exception as e:
             self.logger.exception("Erro ao transmitir dados do episódio")
-            # Ignorar erros de queue durante avaliação
 
         if self.episode_count % 10 == 0:
             self.logger.info(f"Episódio {self.episode_count} concluído")
@@ -383,11 +394,11 @@ class Simulation(gym.Env):
             positionGains=[0.5] * self.action_dim,
         )
 
-    def step(self, action):
+    def step(self, action, evaluation=False):
         """
         Executa uma ação e retorna (observação, recompensa, done, info).
         """
-        if self.should_save_model:
+        if self.should_save_model and not evaluation:
             self.ipc_queue.put({"type": "tracker_status", "tracker_status": self.tracker.get_status()})
             save_path = os.path.join(utils.TEMP_MODEL_SAVE_PATH, f"autosave_{self.tracker.auto_save_count}")
             utils.ensure_directory(save_path)
@@ -490,8 +501,39 @@ class Simulation(gym.Env):
 
         self.should_save_model = self.tracker.update()
 
+        if evaluation:
+            self.add_episode_metrics("action", action)
+            self.add_episode_metrics("obs", obs)
+            self.add_episode_metrics("reward", reward)
+            self.add_episode_metrics("has_gait_state_changed", self.has_gait_state_changed)
+            self.add_episode_metrics("robot_position", robot_position)
+            self.add_episode_metrics("robot_velocity", robot_velocity)
+            self.add_episode_metrics("robot_orientation", robot_orientation)
+            self.add_episode_metrics("robot_orientation_velocity", robot_orientation_velocity)
+            self.add_episode_metrics("robot_right_knee_angle", self.robot_right_knee_angle)
+            self.add_episode_metrics("robot_left_knee_angle", self.robot_left_knee_angle)
+            self.add_episode_metrics("robot_right_hip_frontal_angle", self.robot_right_hip_frontal_angle)
+            self.add_episode_metrics("robot_left_hip_frontal_angle", self.robot_left_hip_frontal_angle)
+            self.add_episode_metrics("robot_right_hip_lateral_angle", self.robot_right_hip_lateral_angle)
+            self.add_episode_metrics("robot_left_hip_lateral_angle", self.robot_left_hip_lateral_angle)
+            self.add_episode_metrics("robot_left_foot_contact", self.robot_left_foot_contact)
+            self.add_episode_metrics("robot_right_foot_contact", self.robot_right_foot_contact)
+            self.add_episode_metrics("robot_left_foot_height", self.robot_left_foot_height)
+            self.add_episode_metrics("robot_right_foot_height", self.robot_right_foot_height)
+            self.add_episode_metrics("robot_left_foot_x_velocity", self.robot_left_foot_x_velocity)
+            self.add_episode_metrics("robot_right_foot_x_velocity", self.robot_right_foot_x_velocity)
+            self.add_episode_metrics("robot_right_foot_roll", self.robot_right_foot_roll)
+            self.add_episode_metrics("robot_left_foot_roll", self.robot_left_foot_roll)
+            self.add_episode_metrics("robot_right_foot_pitch", self.robot_right_foot_pitch)
+            self.add_episode_metrics("robot_left_foot_pitch", self.robot_left_foot_pitch)
+            self.add_episode_metrics("joint_positions", self.joint_positions)
+            self.add_episode_metrics("joint_velocities", self.joint_velocities)
+            self.add_episode_metrics("episode_distance", self.episode_distance)
+
         # Coletar info final quando o episódio terminar
         if self.episode_done:
+            self.episode_count += 1
+
             if hasattr(self.reward_system, "dpg_manager") and self.reward_system.dpg_manager:
 
                 episode_results = {
@@ -517,11 +559,11 @@ class Simulation(gym.Env):
                 except Exception as e:
                     self.logger.error(f"Erro ao chamar update_phase: {e}")
 
-            self.transmit_episode_info()
+            self.transmit_episode_info(evaluation)
 
         self.episode_last_action = action
 
-        if self.tracker.should_pause():
+        if self.tracker.should_pause() and not evaluation:
             self.ipc_queue.put({"type": "autopause_request", "tracker_status": self.tracker.get_status()})
             self.tracker.patience_steps += self.tracker.original_patience
 
@@ -556,6 +598,15 @@ class Simulation(gym.Env):
         self.config_changed_value.value = True
         self.agent.save_model(model_full_path)
         self.ipc_queue.put({"type": "agent_model_saved", "save_path": save_path, "autosave": autosave, "tracker_status": self.tracker.get_status()})
+
+    def add_episode_metrics(self, key, value):
+        episode_key = str(self.episode_count + 1)
+
+        if key in self.metrics[episode_key]["step_data"]:
+            self.metrics[episode_key]["step_data"][key].append(value)
+
+        else:
+            self.metrics[episode_key]["step_data"][key] = [value]
 
     def close(self):
         p.disconnect()
