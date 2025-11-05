@@ -510,6 +510,13 @@ class DPGManager:
 
         self.episode_count += 1
         self._last_distance = episode_results.get('distance', 0)
+
+        if (self.episode_count > 50 and 
+            len(self.valence_manager.get_irl_weights()) == 0):
+            self.activate_irl_guidance()
+        if self._last_distance < 2.0 and self.episode_count > 100:
+            self.activate_propulsion_irl()
+
         valence_status = self.valence_manager.get_valence_status()
         if (valence_status['overall_progress'] > 0.8 and 
             self._last_distance < 1.0 and 
@@ -657,19 +664,19 @@ class DPGManager:
         """Estabiliza pesos do critic para evitar oscilações - VERSÃO MAIS CONSERVADORA"""
         distance = getattr(self, '_last_distance', 0)
 
-        if distance < 2.0: 
-            self.critic.weights.propulsion = 0.45
-            self.critic.weights.stability = 0.30
+        if distance < 1.0: 
+            self.critic.weights.propulsion = 0.50
+            self.critic.weights.stability = 0.25
             self.critic.weights.coordination = 0.15
             self.critic.weights.efficiency = 0.10
         else:
-            self.critic.weights.stability = 0.30
-            self.critic.weights.propulsion = 0.30
+            self.critic.weights.stability = 0.25
+            self.critic.weights.propulsion = 0.35
             self.critic.weights.coordination = 0.20
             self.critic.weights.efficiency = 0.20
 
-        if distance < 1.0:
-            self.critic.weights.irl_influence = 0.1
+        if distance < 1.0 and self.episode_count > 200:
+            self.critic.weights.irl_influence = 0.3
 
     def emergency_stabilization(self):
         """Ativação emergencial para estabilizar valências oscilantes"""
@@ -751,7 +758,6 @@ class DPGManager:
 
                 if current_level < 0.3:
                     self.valence_manager.valence_performance['propulsao_basica'].current_level = 0.3
-                    self.logger.info("🔧 Correção de propulsão aplicada: nível mínimo 0.3")
 
         except Exception as e:
             self.logger.warning(f"⚠️ Correção de propulsão: {e}")

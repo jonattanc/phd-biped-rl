@@ -127,31 +127,37 @@ class SmartBufferManager:
     
     def store_experience(self, experience_data: Dict):
         """Armazena experiência com análise de habilidades"""
-        phase_info = experience_data.get("phase_info", {})
+        try:
+            if not experience_data or "state" not in experience_data:
+                return
 
-        dpg_manager = getattr(self, '_dpg_manager', None)
-        if dpg_manager and hasattr(dpg_manager, 'phase_manager'):
-            group = dpg_manager.phase_manager.current_group
-        else:
-            group = 0  
+            phase_info = experience_data.get("phase_info", {})
+            current_group = 1
+            dpg_manager = getattr(self, '_dpg_manager', None)
+            if dpg_manager and hasattr(dpg_manager, 'current_group'):
+                current_group = dpg_manager.current_group
+            elif hasattr(self, 'current_group_buffer') and self.current_group_buffer:
+                current_group = self.get_current_group()
 
-        phase_info['group_level'] = group
-        phase_info['group'] = group
-        experience = self._create_enhanced_experience(experience_data)
-        sub_phase = phase_info.get('sub_phase', 0)
-        self._store_hierarchical(experience, group, sub_phase)
+            phase_info['group_level'] = current_group
+            phase_info['group'] = current_group
+            experience = self._create_enhanced_experience(experience_data)
+            experience.quality = max(0.0, experience.quality)
+            self._store_hierarchical(experience, current_group, phase_info.get('sub_phase', 0))
 
-        # Armazenar no core se for fundamental
-        if self._is_fundamental_experience(experience) or experience.quality > 0.7:
-            if len(self.core_buffer) < self.max_core_experiences:
-                self.core_buffer.append(experience)
-            else:
-                # Substituir pior experiência do core
-                self.core_buffer = sorted(self.core_buffer, key=lambda x: x.quality)
-                if experience.quality > self.core_buffer[0].quality:
-                    self.core_buffer[0] = experience
+            if self._is_fundamental_experience(experience) or experience.quality > 0.5:
+                if len(self.core_buffer) < self.max_core_experiences:
+                    self.core_buffer.append(experience)
+                else:
+                    min_quality_exp = min(self.core_buffer, key=lambda x: x.quality)
+                    if experience.quality > min_quality_exp.quality:
+                        self.core_buffer.remove(min_quality_exp)
+                        self.core_buffer.append(experience)
 
-        self.experience_count += 1
+            self.experience_count += 1
+
+        except Exception as e:
+            self.logger.warning(f"Erro ao armazenar experiência: {e}")
     
     def get_current_group(self) -> int:
         """Retorna o grupo atual baseado no buffer atual"""

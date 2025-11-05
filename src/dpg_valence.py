@@ -254,7 +254,7 @@ class ValenceManager:
             return {'progress': 0.3, 'stability': 0.4, 'efficiency': 0.2, 'coordination': 0.1}
     
     def _calculate_valence_level(self, valence_name: str, results: Dict) -> float:
-        """Calcula nível atual de uma valência específica"""
+        """Calcula nível atual de uma valência específica COM PROTEÇÃO"""
         valence_config = self.valences[valence_name]
         level = 0.0
         metric_count = 0
@@ -269,12 +269,12 @@ class ValenceManager:
         if metric_count > 0:
             level /= metric_count
         
+        level = max(0.0, level)  
+        
         if results.get("success", False):
-            level = min(level * 1.2, 1.0)
-        elif results.get("distance", 0) > 2.0:
-            level = min(level * 1.1, 1.0)
-        if level > 0.9 and results.get("distance", 0) < 4.0:
-            level = 0.7
+            level = min(level * 1.1, 1.0)  
+        elif results.get("distance", 0) > 1.0:  
+            level = min(level * 1.05, 1.0)  
         
         return min(level, 1.0)
     
