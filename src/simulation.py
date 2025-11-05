@@ -175,7 +175,7 @@ class Simulation(gym.Env):
         if dpg_enabled:
             return
 
-        obs = self.reset()
+        obs, _ = self.reset()
 
         self.episode_timeout_s = self.episode_pre_fill_timeout_s
         self.max_steps = self.max_pre_fill_steps
@@ -187,22 +187,14 @@ class Simulation(gym.Env):
             next_obs, reward, episode_terminated, episode_truncated, info = self.step(action)
             done = episode_terminated or episode_truncated
 
-            if isinstance(obs, (list, tuple)):
-                obs = np.concatenate([np.ravel(o) for o in obs if not isinstance(o, dict)])
-            else:
-                obs = np.array(obs).flatten()
-
-            if isinstance(next_obs, (list, tuple)):
-                next_obs = np.concatenate([np.ravel(o) for o in next_obs if not isinstance(o, dict)])
-            else:
-                next_obs = np.array(next_obs).flatten()
-
             action = np.array(action).flatten()
             self.agent.model.replay_buffer.add(obs, next_obs, action, reward, done, infos=[info])
-            obs = next_obs
 
             if done:
-                obs = self.reset()
+                obs, _ = self.reset()
+
+            else:
+                obs = next_obs
 
         if hasattr(self.reward_system, "dpg_manager") and self.reward_system.dpg_manager:
             self.reward_system.dpg_manager.config.enabled = dpg_enabled
@@ -211,6 +203,23 @@ class Simulation(gym.Env):
         self.max_steps = self.max_training_steps
 
         self.logger.info("Pré-preenchimento do buffer de replay concluído.")
+
+    def evaluate(self, episodes, deterministic):
+        episode_count = 0
+        obs, _ = self.reset()
+
+        while episode_count < episodes:
+            action, _ = self.agent.model.predict(obs, deterministic=deterministic)
+
+            next_obs, reward, episode_terminated, episode_truncated, info = self.step(action)
+            done = episode_terminated or episode_truncated
+
+            if done:
+                obs, _ = self.reset()
+                episode_count += 1
+
+            else:
+                obs = next_obs
 
     def soft_env_reset(self):
         # Remover corpos antigos se existirem

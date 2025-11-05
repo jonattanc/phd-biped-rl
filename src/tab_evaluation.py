@@ -32,9 +32,6 @@ class EvaluationTab(common_tab.GUITab):
         self.axs_evaluation = None
         self.canvas_evaluation = None
 
-        # Configurar IPC logging
-        utils.add_queue_handler_to_logger(self.logger, self.ipc_queue)
-
         self.setup_ui()
         self.setup_ipc()
 
@@ -641,6 +638,7 @@ Análise:
             while True:
                 try:
                     msg = self.ipc_queue.get(timeout=1.0)
+
                     if msg is None:
                         self.logger.info("ipc_runner finalizando")
                         break

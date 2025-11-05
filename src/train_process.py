@@ -82,6 +82,7 @@ def process_runner(
 
         if algorithm is None:
             logger.info("Modo de avaliação")
+            sim.evaluate(episodes, deterministic)
 
         else:
             logger.info("Modo de treinamento")
