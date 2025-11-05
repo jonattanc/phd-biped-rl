@@ -263,17 +263,19 @@ class ValenceManager:
             if metric in results:
                 raw_value = results[metric]
                 normalized_value = self._normalize_metric(metric, raw_value)
+                if self.episode_count < 1000 and normalized_value > 0.1:
+                    normalized_value = min(normalized_value * 1.5, 1.0)
                 level += normalized_value
                 metric_count += 1
         
         if metric_count > 0:
             level /= metric_count
         
-        # Aplicar fatores de qualidade
-        if results.get("success", False):
-            level *= 1.2  # Bônus por sucesso
-        elif results.get("distance", 0) > 0.5:
-            level *= 1.1  # Bônus por progresso
+        if self.episode_count < 500:
+            if results.get("distance", 0) > 0.1:
+                level = min(level * 1.8, 1.0)
+            elif results.get("speed", 0) > 0.05:
+                level = min(level * 1.5, 1.0)
         
         return min(level, 1.0)
     

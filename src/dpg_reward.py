@@ -337,34 +337,36 @@ class RewardCalculator:
     def _calculate_global_penalties(self, sim, action) -> float:
         """Calcula penalidades globais mais balanceadas"""
         penalties = 0.0
+        progress = getattr(sim, "learning_progress", 0.0)
+        penalty_multiplier = 1.0 - min(progress * 0.7, 0.6)
 
         # 1. Penalidade de ação extrema 
         if hasattr(action, '__len__'):
             action_magnitude = np.sqrt(np.sum(np.square(action)))
-            action_penalty = action_magnitude * 0.005  
+            action_penalty = action_magnitude * 0.005 * penalty_multiplier  
             penalties += min(action_penalty, 0.3)  
 
         # 2. Penalidade por queda iminente 
         height = getattr(sim, "robot_z_position", 0.8)
         if height < 0.5:
-            fall_penalty = (0.5 - height) * 1.5 
+            fall_penalty = (0.5 - height) * 1.5 * penalty_multiplier
             penalties += min(fall_penalty, 0.8)  
 
         # 3. Penalidade por movimento lateral excessivo 
         y_velocity = abs(getattr(sim, "robot_y_velocity", 0))
         if y_velocity > 0.3:  
-            lateral_penalty = (y_velocity - 0.3) * 1.0  
+            lateral_penalty = (y_velocity - 0.3) * 1.0 * penalty_multiplier 
             penalties += min(lateral_penalty, 0.5)  
 
         # 4. Penalidade por inclinação excessiva 
         roll = abs(getattr(sim, "robot_roll", 0))
         if roll > 0.7:  
-            roll_penalty = (roll - 0.7) * 0.8  
+            roll_penalty = (roll - 0.7) * 0.8 * penalty_multiplier
             penalties += min(roll_penalty, 0.4)  
 
         pitch = abs(getattr(sim, "robot_pitch", 0))
         if pitch > 0.7:  
-            pitch_penalty = (pitch - 0.7) * 0.6  
+            pitch_penalty = (pitch - 0.7) * 0.6 * penalty_multiplier
             penalties += min(pitch_penalty, 0.3)  
 
         return penalties
@@ -378,9 +380,20 @@ class RewardCalculator:
     def _calculate_basic_progress_reward(self, sim, phase_info) -> float:
         distance = getattr(sim, "episode_distance", 0)
         velocity = getattr(sim, "robot_x_velocity", 0)
-        distance_reward = min(distance / 2.0, 1.0)
-        velocity_reward = min(abs(velocity) / 1.5, 1.0) if velocity > 0 else 0.0
-        
+        learning_progress = phase_info.get('learning_progress', 0)
+        if learning_progress < 0.3:  
+            distance_boost = 3.0  
+            velocity_boost = 2.0  
+        elif learning_progress < 0.6:
+            distance_boost = 2.0
+            velocity_boost = 1.5
+        else:
+            distance_boost = 1.0
+            velocity_boost = 1.0
+
+        distance_reward = min(distance / 2.0, 1.0) * distance_boost
+        velocity_reward = min(abs(velocity) / 1.5, 1.0) * velocity_boost if velocity > 0 else 0.0
+
         return (distance_reward * 0.7 + velocity_reward * 0.3)
     
     def _calculate_posture_reward(self, sim, phase_info) -> float:
