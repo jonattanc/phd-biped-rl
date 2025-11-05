@@ -4,6 +4,7 @@ from simulation import Simulation
 from environment import Environment
 from agent import Agent, TrainingCallback
 from dpg_manager import DPGManager
+import metrics_saver
 import utils
 import numpy as np
 import random
@@ -83,6 +84,7 @@ def process_runner(
         if algorithm is None:
             logger.info("Modo de avaliação")
             metrics = sim.evaluate(episodes, deterministic)
+            metrics = metrics_saver.calculate_extra_metrics(metrics)
 
         else:
             logger.info("Modo de treinamento")

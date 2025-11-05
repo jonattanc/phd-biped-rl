@@ -8,6 +8,38 @@ from datetime import datetime
 import pandas as pd
 
 
+def calculate_extra_metrics(metrics):
+    num_episodes = len(metrics)
+    success_count = 0
+    total_times = []
+    total_rewards = []
+
+    for episode, episode_data in metrics.items():
+        total_times.append(episode_data["episode_data"]["times"])
+        total_rewards.append(episode_data["episode_data"]["rewards"])
+
+        if episode_data["episode_data"]["success"]:
+            success_count += 1
+
+    avg_time = np.mean(total_times)
+    std_time = np.std(total_times)
+    success_rate = success_count / num_episodes
+
+    extra_metrics = {
+        "avg_time": avg_time,
+        "std_time": std_time,
+        "success_rate": success_rate,
+        "success_count": success_count,
+        "total_times": total_times,
+        "total_rewards": total_rewards,
+        "num_episodes": num_episodes,
+    }
+
+    metrics["extra_metrics"] = extra_metrics
+
+    return metrics
+
+
 def save_complexity_metrics(metrics, circuit_name, avatar_name, role="AE", seed=42, hyperparams=None, output_dir="logs/data"):
     """
     Salva as métricas de complexidade em um arquivo CSV.
