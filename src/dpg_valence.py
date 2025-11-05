@@ -258,24 +258,28 @@ class ValenceManager:
         valence_config = self.valences[valence_name]
         level = 0.0
         metric_count = 0
-        
+
         for metric in valence_config.metrics:
             if metric in results:
                 raw_value = results[metric]
                 normalized_value = self._normalize_metric(metric, raw_value)
                 level += normalized_value
                 metric_count += 1
-        
+
         if metric_count > 0:
             level /= metric_count
-        
+
         level = max(0.0, level)  
-        
+
         if results.get("success", False):
             level = min(level * 1.1, 1.0)  
         elif results.get("distance", 0) > 1.0:  
-            level = min(level * 1.05, 1.0)  
-        
+            level = min(level * 1.05, 1.0) 
+
+        if valence_name == "propulsao_basica":
+            if results.get("distance", 0) > 0.1 or results.get("speed", 0) > 0.05:
+                level = max(level, 0.2) 
+
         return min(level, 1.0)
     
     def _normalize_metric(self, metric: str, value: float) -> float:
@@ -316,6 +320,11 @@ class ValenceManager:
             perf = self.valence_performance[valence_name]
             config = self.valences[valence_name]
             old_state = perf.state
+
+            if valence_name == "propulsao_basica" and current_level > 0.1:
+                if perf.state == ValenceState.INACTIVE:
+                    perf.state = ValenceState.LEARNING
+                    self.active_valences.add(valence_name)
 
             if (old_state == ValenceState.MASTERED and 
                 current_level >= config.mastery_threshold - 0.25):  
