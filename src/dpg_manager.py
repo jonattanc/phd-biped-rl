@@ -218,16 +218,12 @@ class DPGManager:
         }
 
         base_reward = self.reward_calculator.calculate(sim, action, phase_info)
-
-        progress = valence_status['overall_progress']
-        if progress < 0.3: 
-            boosted_reward = base_reward * 2.0  
-        elif progress < 0.6: 
-            boosted_reward = base_reward * 1.5  
-        else:  
-            boosted_reward = base_reward        
-
-        if self.episode_count < 300:
+        crutch_level = self.crutches["level"]
+        crutch_stage = self.crutches["current_stage"]
+        crutch_multipliers = [2.0, 1.8, 1.5, 1.2, 1.0]  
+        crutch_multiplier = crutch_multipliers[crutch_stage]
+        boosted_reward = base_reward * crutch_multiplier
+        if self.episode_count < 300 and valence_status['overall_progress'] < 0.3:
             distance = getattr(sim, "episode_distance", 0)
             if distance > 0.1:
                 boosted_reward += min(distance * 1.0, 2.0)
@@ -387,6 +383,10 @@ class DPGManager:
             "critic_propulsion_weight": self.critic.weights.propulsion,
             "critic_coordination_weight": self.critic.weights.coordination,
             "critic_efficiency_weight": self.critic.weights.efficiency,
+            "crutch_level": self.crutches["level"],
+            "crutch_stage": self.crutches["current_stage"],
+            "crutch_enabled": self.crutches["enabled"],
+            "crutch_reward_boost": self.crutches["base_reward_boost"] * self.crutches["level"]
         })
         if hasattr(self, 'buffer_manager') and self.buffer_manager:
             try:
@@ -454,6 +454,7 @@ class DPGManager:
         if not self.enabled:
             return
         self.episode_count += 1
+        self.update_crutch_system(episode_results)
         try:
             if hasattr(self, 'buffer_manager') and self.buffer_manager:
                 experience_data = {
@@ -608,20 +609,26 @@ class DPGManager:
         return min(instability, 1.0)
 
     def _stabilize_critic_weights(self):
-        """Estabiliza pesos do critic para evitar oscilações - VERSÃO MAIS CONSERVADORA"""
+        """Estabiliza pesos do critic para evitar oscilações"""
         distance = getattr(self, '_last_distance', 0)
-        if distance < 4.0: 
+        if distance < 1.0:  # Fase inicial 
             self.critic.weights.propulsion = 0.80
             self.critic.weights.stability = 0.10
             self.critic.weights.coordination = 0.05
-            self.critic.weights.efficiency = 0.04
-        else:
-            self.critic.weights.stability = 0.60
-            self.critic.weights.propulsion = 0.20
+            self.critic.weights.efficiency = 0.05
+            self.critic.weights.irl_influence = 0.9
+        elif distance < 3.0:  # Fase intermediária
+            self.critic.weights.propulsion = 0.50
+            self.critic.weights.stability = 0.30
             self.critic.weights.coordination = 0.10
             self.critic.weights.efficiency = 0.10
-        if distance < 3.0:
-            self.critic.weights.irl_influence = 0.9
+            self.critic.weights.irl_influence = 0.6
+        else:  # Fase avançada
+            self.critic.weights.stability = 0.40
+            self.critic.weights.propulsion = 0.30
+            self.critic.weights.coordination = 0.15
+            self.critic.weights.efficiency = 0.15
+            self.critic.weights.irl_influence = 0.3
 
     def emergency_stabilization(self):
         """Ativação emergencial para estabilizar valências oscilantes"""
@@ -697,13 +704,6 @@ class DPGManager:
                 self.valence_manager.valence_performance['propulsao_basica'].state = ValenceState.LEARNING
                 self.valence_manager.active_valences.add('propulsao_basica')
             
-    def emergency_stabilization(self):
-        """CORREÇÃO para estabilidade"""
-        self.critic.weights.stability = 0.35
-        self.critic.weights.propulsion = 0.30
-        self.critic.weights.coordination = 0.18
-        self.critic.weights.efficiency = 0.17
-    
     def override_valence_update(self):
         """Intercepta atualizações de valência para prevenir regressão"""
         original_update_valences = self.valence_manager.update_valences
@@ -718,6 +718,68 @@ class DPGManager:
             return original_update_valences(protected_metrics)
         self.valence_manager.update_valences = protected_update_valences
     
+    def update_crutch_system(self, episode_results):
+        """Atualiza nível de ajuda baseado em performance REAL"""
+        success = episode_results.get('success', False)
+        distance = episode_results.get('distance', 0)
+        reward = episode_results.get('reward', 0)
+        recent_metrics = self.episode_metrics_history[-20:] if self.episode_metrics_history else []
+        if recent_metrics:
+            recent_success_rate = np.mean([m.get('success', False) for m in recent_metrics])
+            recent_avg_distance = np.mean([m.get('distance', 0) for m in recent_metrics])
+            recent_avg_reward = np.mean([m.get('reward', 0) for m in recent_metrics])
+        else:
+            recent_success_rate = 0.0
+            recent_avg_distance = 0.0
+            recent_avg_reward = 0.0
+        new_crutch_level = self._calculate_adaptive_crutch_level(
+            success, distance, reward, recent_success_rate, recent_avg_distance, recent_avg_reward
+        )
+        smoothing_factor = 0.3
+        self.crutches["level"] = (
+            smoothing_factor * new_crutch_level + 
+            (1 - smoothing_factor) * self.crutches["level"]
+        )
+        self._update_crutch_stage()
+
+
+    def _calculate_adaptive_crutch_level(self, success, distance, reward, success_rate, avg_distance, avg_reward):
+        """Calcula nível de crutch baseado em múltiplas métricas"""
+        episode_factor = max(0, 1.0 - (self.episode_count / 1000))
+        success_factor = 1.0 - min(success_rate * 1.5, 1.0)
+        distance_factor = 1.0 - min(avg_distance / 3.0, 1.0)
+        reward_factor = 1.0 - min(max(avg_reward, 0) / 5.0, 1.0)
+        valence_status = self.valence_manager.get_valence_status()
+        stability_factor = 0.0
+        if 'estabilidade_postural' in valence_status['valence_details']:
+            stability_level = valence_status['valence_details']['estabilidade_postural']['current_level']
+            stability_factor = 1.0 - stability_level  
+        crutch_level = (
+            episode_factor * 0.2 +
+            success_factor * 0.3 +
+            distance_factor * 0.25 +
+            reward_factor * 0.15 +
+            stability_factor * 0.1
+        )
+
+        return max(0.0, min(crutch_level, 1.0))
+
+    def _update_crutch_stage(self):
+        """Atualiza estágio do crutch system baseado no nível atual"""
+        crutch_level = self.crutches["level"]
+        thresholds = self.crutches["progress_thresholds"]
+
+        if crutch_level > thresholds[0]: 
+            self.crutches["current_stage"] = 0  
+        elif crutch_level > thresholds[1]:  
+            self.crutches["current_stage"] = 1  
+        elif crutch_level > thresholds[2]: 
+            self.crutches["current_stage"] = 2  
+        elif crutch_level > thresholds[3]: 
+            self.crutches["current_stage"] = 3  
+        else:
+            self.crutches["current_stage"] = 4
+            
     def _generate_comprehensive_report(self):
         """Relatório completo com status do critic"""
         valence_status = self.valence_manager.get_valence_status()

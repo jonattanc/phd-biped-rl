@@ -150,12 +150,8 @@ class SmartBufferManager:
         """Retorna o grupo atual baseado no buffer atual"""
         if hasattr(self, '_dpg_manager') and self._dpg_manager:
             return getattr(self._dpg_manager, 'current_group', 1)
-        if hasattr(self, 'current_group_buffer') and self.current_group_buffer:
-            for group, buffer in self.group_buffers.items():
-                if buffer is self.current_group_buffer:
-                    return group
 
-        return 1 
+        return getattr(self, '_current_group', 1) 
 
     def _create_enhanced_experience(self, data: Dict) -> Experience:
         """Cria experiência com análise de habilidades"""

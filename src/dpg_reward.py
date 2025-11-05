@@ -237,10 +237,8 @@ class AdaptiveIRL:
         """Calcula confiança no modelo aprendido"""
         if not demonstrations:
             return 0.0
-        
-        # Confiança baseada na consistência das demonstrações
         consistencies = []
-        for demo in demonstrations[:50]:  # Amostrar primeiras 50
+        for demo in demonstrations[:50]: 
             predicted_score = 0.0
             for feature, weight in weights.items():
                 feature_score = self._calculate_feature_score(feature, demo['experience'])
