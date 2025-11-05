@@ -163,6 +163,8 @@ class DPGManager:
         valence_count = len(self.valence_manager.valences)
         self.critic = ValenceAwareCritic(logger, valence_count)
 
+        self.learning_progress = 0.0
+        self.episode_count = 0
         self.performance_trend = 0.0
         self.mission_bonus_multiplier = 1.0
         self.last_valence_update_episode = 0

@@ -131,15 +131,17 @@ class SmartBufferManager:
             if not experience_data:
                 return
             current_group = self.get_current_group()
-            if "state" not in experience_data:
-                experience_data["state"] = []
-            if "action" not in experience_data:
-                experience_data["action"] = []
             experience_data["group_level"] = current_group
             experience = self._create_enhanced_experience(experience_data)
             self._store_hierarchical(experience, current_group, 0)
             if self._is_fundamental_experience(experience):
-                self._add_to_core_buffer(experience)
+                if len(self.core_buffer) < self.max_core_experiences:
+                    self.core_buffer.append(experience)
+                else:
+                    min_quality_exp = min(self.core_buffer, key=lambda x: x.quality)
+                    if experience.quality > min_quality_exp.quality:
+                        self.core_buffer.remove(min_quality_exp)
+                        self.core_buffer.append(experience)
             self.experience_count += 1
         except Exception as e:
             self.logger.warning(f"Erro ao armazenar experiência: {e}")
@@ -147,8 +149,13 @@ class SmartBufferManager:
     def get_current_group(self) -> int:
         """Retorna o grupo atual baseado no buffer atual"""
         if hasattr(self, '_dpg_manager') and self._dpg_manager:
-            return self._dpg_manager.current_group
-        return 1
+            return getattr(self._dpg_manager, 'current_group', 1)
+        if hasattr(self, 'current_group_buffer') and self.current_group_buffer:
+            for group, buffer in self.group_buffers.items():
+                if buffer is self.current_group_buffer:
+                    return group
+
+        return 1 
 
     def _create_enhanced_experience(self, data: Dict) -> Experience:
         """Cria experiência com análise de habilidades"""
