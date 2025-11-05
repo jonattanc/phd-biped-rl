@@ -203,6 +203,7 @@ class DPGManager:
         # Controle de grupos baseado em valências
         self.current_group = 1
         self.group_transition_history = []
+        
 
     def enable(self, enabled=True):
         """Ativa o sistema completo"""
@@ -523,6 +524,11 @@ class DPGManager:
 
         self.episode_count += 1
         valence_status = self.valence_manager.get_valence_status()
+        regressing_count = sum(1 for details in valence_status['valence_details'].values() 
+        if details['state'] == 'regressing')
+    
+        if regressing_count >= 2 and self.episode_count % 50 == 0:
+            self.emergency_stabilization()
 
         if (self.episode_count > 50 and 
             len(self.valence_manager.get_irl_weights()) == 0 and
@@ -645,7 +651,7 @@ class DPGManager:
         return min(instability, 1.0)
 
     def _stabilize_critic_weights(self):
-        """Estabiliza pesos do critic para evitar oscilações - VERSÃO MELHORADA"""
+        """Estabiliza pesos do critic para evitar oscilações - VERSÃO MAIS CONSERVADORA"""
         valence_status = self.valence_manager.get_valence_status()
 
         regressing_valences = [
@@ -653,33 +659,43 @@ class DPGManager:
             if details['state'] == 'regressing'
         ]
 
-        # SE HÁ REGRESSÃO: Priorizar estabilidade
-        if any(v in ['estabilidade_postural', 'propulsao_basica'] for v in regressing_valences):
-            self.critic.weights.stability = max(0.3, min(0.5, self.critic.weights.stability))
-            self.critic.weights.propulsion = max(0.2, min(0.4, self.critic.weights.propulsion))
+        if len(regressing_valences) >= 2:
+            self.critic.weights.stability = 0.45
+            self.critic.weights.propulsion = 0.25
+            self.critic.weights.coordination = 0.15
+            self.critic.weights.efficiency = 0.15
+        elif len(regressing_valences) == 1:
+            self.critic.weights.stability = 0.35
+            self.critic.weights.propulsion = 0.30
+            self.critic.weights.coordination = 0.17
+            self.critic.weights.efficiency = 0.18
         else:
-            # BALANCEAMENTO PADRÃO: Mais equilibrado
-            self.critic.weights.stability = max(0.25, min(0.35, self.critic.weights.stability))
-            self.critic.weights.propulsion = max(0.25, min(0.35, self.critic.weights.propulsion))
+            self.critic.weights.stability = 0.30
+            self.critic.weights.propulsion = 0.30
+            self.critic.weights.coordination = 0.20
+            self.critic.weights.efficiency = 0.20
 
-        # SEMPRE manter balanceamento básico
-        self.critic.weights.coordination = max(0.15, min(0.25, self.critic.weights.coordination))
-        self.critic.weights.efficiency = max(0.15, min(0.25, self.critic.weights.efficiency))
+        if len(regressing_valences) >= 1:
+            self.critic.weights.irl_influence = max(0.1, self.critic.weights.irl_influence * 0.7)
 
-        # NORMALIZAR para garantir soma = 1.0
-        total = (self.critic.weights.stability + self.critic.weights.propulsion + 
-                 self.critic.weights.coordination + self.critic.weights.efficiency)
+    def emergency_stabilization(self):
+        """Ativação emergencial para estabilizar valências oscilantes"""
+        valence_status = self.valence_manager.get_valence_status()
 
-        if total > 0:
-            self.critic.weights.stability /= total
-            self.critic.weights.propulsion /= total
-            self.critic.weights.coordination /= total
-            self.critic.weights.efficiency /= total
+        fundamental_valences = ['estabilidade_postural', 'propulsao_basica']
+        for valence_name in fundamental_valences:
+            if valence_name in self.valence_manager.valence_performance:
+                perf = self.valence_manager.valence_performance[valence_name]
+                if perf.state == ValenceState.REGRESSING:
+                    perf.state = ValenceState.LEARNING
+                    perf.current_level = max(perf.current_level, 0.3) 
 
-        # REDUZIR IRL gradualmente se não está ajudando
-        if self.critic.weights.irl_influence > 0.3 and len(regressing_valences) > 1:
-            self.critic.weights.irl_influence *= 0.95
-
+        self.critic.weights.stability = 0.40
+        self.critic.weights.propulsion = 0.30
+        self.critic.weights.coordination = 0.15
+        self.critic.weights.efficiency = 0.15
+        self.critic.weights.irl_influence = 0.1
+    
     def _check_group_transition(self, valence_status):
         """Verifica e executa transição de grupo se necessário"""
         new_group = self._determine_group_from_valences(valence_status)

@@ -317,13 +317,13 @@ class ValenceManager:
             old_state = perf.state
 
             if (old_state == ValenceState.MASTERED and 
-                current_level >= config.mastery_threshold - 0.15):  
+                current_level >= config.mastery_threshold - 0.25):  
                 perf.state = ValenceState.MASTERED
                 self.active_valences.add(valence_name)
                 continue
 
             if (old_state == ValenceState.MASTERED and 
-                current_level < perf.current_level - 0.3):
+                current_level < perf.current_level - 0.4):
                 perf.state = ValenceState.MASTERED
                 continue
         
