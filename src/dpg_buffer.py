@@ -126,26 +126,15 @@ class SmartBufferManager:
         self.group_transitions = 0
     
     def store_experience(self, experience_data: Dict):
-        """Armazena experiência com análise de habilidades"""
+        """Armazenamento simplificado e consistente"""
         try:
-            if not experience_data or "state" not in experience_data:
+            if not experience_data:
                 return
-
-            phase_info = experience_data.get("phase_info", {})
-            current_group = 1
-            dpg_manager = getattr(self, '_dpg_manager', None)
-            if dpg_manager and hasattr(dpg_manager, 'current_group'):
-                current_group = dpg_manager.current_group
-            elif hasattr(self, 'current_group_buffer') and self.current_group_buffer:
-                current_group = self.get_current_group()
-
-            phase_info['group_level'] = current_group
-            phase_info['group'] = current_group
+            current_group = self.get_current_group()
+            experience_data["group_level"] = current_group
             experience = self._create_enhanced_experience(experience_data)
-            experience.quality = max(0.0, experience.quality)
-            self._store_hierarchical(experience, current_group, phase_info.get('sub_phase', 0))
-
-            if self._is_fundamental_experience(experience) or experience.quality > 0.5:
+            self._store_hierarchical(experience, current_group, 0)
+            if self._is_fundamental_experience(experience):
                 if len(self.core_buffer) < self.max_core_experiences:
                     self.core_buffer.append(experience)
                 else:
@@ -153,22 +142,20 @@ class SmartBufferManager:
                     if experience.quality > min_quality_exp.quality:
                         self.core_buffer.remove(min_quality_exp)
                         self.core_buffer.append(experience)
-
             self.experience_count += 1
-
         except Exception as e:
             self.logger.warning(f"Erro ao armazenar experiência: {e}")
     
     def get_current_group(self) -> int:
         """Retorna o grupo atual baseado no buffer atual"""
-        if not hasattr(self, 'current_group_buffer') or self.current_group_buffer is None:
-            return 1  
+        if hasattr(self, '_dpg_manager') and self._dpg_manager:
+            return getattr(self._dpg_manager, 'current_group', 1)
+        if hasattr(self, 'current_group_buffer') and self.current_group_buffer:
+            for group, buffer in self.group_buffers.items():
+                if buffer is self.current_group_buffer:
+                    return group
 
-        for group, buffer in self.group_buffers.items():
-            if buffer and len(buffer) > 0 and buffer is self.current_group_buffer:
-                return group
-
-        return getattr(self, '_last_known_group', 1)
+        return 1 
 
     def _create_enhanced_experience(self, data: Dict) -> Experience:
         """Cria experiência com análise de habilidades"""
@@ -230,45 +217,22 @@ class SmartBufferManager:
     def transition_with_preservation(self, old_group: int, new_group: int, adaptive_config: Dict):
         """Transição inteligente com preservação de aprendizado """
         self.group_transitions += 1
-
-        # Garantir que ambos os grupos existem
         if old_group not in self.group_buffers:
             self.group_buffers[old_group] = []
-
         if new_group not in self.group_buffers:
             self.group_buffers[new_group] = []
-
-        # 1. Coletar experiências do grupo antigo
-        old_experiences = self.group_buffers.get(old_group, [])
-
         if old_group == new_group:
-            preserved_experiences = old_experiences + list(self.core_buffer)
+            preserved_experiences = self.group_buffers[old_group] + list(self.core_buffer)
         else:
-            # 2. Filtrar experiências relevantes
-            relevant_experiences = self._filter_relevant_experiences(old_experiences, new_group)
-
-            # 3. Combinar com experiências fundamentais
-            preserved_experiences = relevant_experiences + list(self.core_buffer)
-
-        # 4. Aplicar política de preservação
-        preservation_policy = adaptive_config.get("learning_preservation", "high")
-        final_experiences = self._apply_preservation_policy(preserved_experiences, preservation_policy)
-
-        # 5. Atualizar buffers
-        self.group_buffers[new_group] = final_experiences
-        self.current_group_buffer = final_experiences
-
-        # Atualizar estatísticas
-        self.preservation_stats["total_transitions"] += 1
-        self.preservation_stats["experiences_preserved"] += len(final_experiences)
-
-        # Calcular taxa de preservação
-        if self.preservation_stats["total_transitions"] > 0:
-            total_preserved_all = sum(len(buf) for buf in self.group_buffers.values())
-            total_possible = self.experience_count
-            if total_possible > 0:
-                self.preservation_stats["preservation_rate"] = total_preserved_all / total_possible
-    
+            relevant = self._filter_relevant_experiences(self.group_buffers[old_group], new_group)
+            preserved_experiences = relevant + list(self.core_buffer)
+        max_preserved = 2000 
+        if len(preserved_experiences) > max_preserved:
+            preserved_experiences.sort(key=lambda x: (x.quality, x.reward), reverse=True)
+            preserved_experiences = preserved_experiences[:max_preserved]
+        self.group_buffers[new_group] = preserved_experiences
+        self.current_group_buffer = preserved_experiences
+            
     def _filter_relevant_experiences(self, experiences: List[Experience], new_group: int) -> List[Experience]:
         """Filtra experiências relevantes para o novo grupo"""
         relevant = []
@@ -368,45 +332,42 @@ class SmartBufferManager:
             self.current_group_buffer = self.group_buffers[group]
     
     def get_training_batch(self, batch_size=32):
-        """Retorna batch para treinamento - VERSÃO ESTABILIZADA"""
+        """Retorna batch para treinamento"""
         if not self.current_group_buffer:
             return None
-
-        available = self.current_group_buffer + list(self.core_buffer)
-
+        available = []
+        group_experiences = self.current_group_buffer[:]
+        available.extend(group_experiences)
+        core_experiences = [exp for exp in self.core_buffer 
+                          if self._is_relevant_for_current_group(exp)]
+        available.extend(core_experiences[:len(core_experiences)//3])
         if len(available) < batch_size:
             batch_size = len(available)
-
-        scored_experiences = []
-        for exp in available:
-            stability_score = exp.skills.get("estabilidade", 0)
-            progress_score = exp.skills.get("progresso_basico", 0)
-            stability_penalty = 0.0
-            if stability_score < 0.4:  
-                stability_penalty = 0.5
-            balance_bonus = 1.0
-            if stability_score > 0.6 and progress_score > 0.4:
-                balance_bonus = 1.3
-            final_score = exp.quality * stability_penalty
-            scored_experiences.append((exp, max(final_score, 0.1)))
-
-        scored_experiences.sort(key=lambda x: x[1], reverse=True)
-
-        stable_experiences = [exp for exp, score in scored_experiences if exp.skills.get("estabilidade", 0) > 0.5]
-        diverse_experiences = [exp for exp, score in scored_experiences if exp.skills.get("estabilidade", 0) <= 0.5]
-
-        stable_count = min(len(stable_experiences), int(batch_size * 0.7))
-        diverse_count = batch_size - stable_count
-
-        if stable_count > 0:
-            selected = stable_experiences[:stable_count]
-        else:
-            selected = []
-
-        if diverse_count > 0 and len(diverse_experiences) > 0:
-            selected.extend(diverse_experiences[:diverse_count])
-
+        high_quality = [exp for exp in available if exp.quality > 0.7]
+        medium_quality = [exp for exp in available if 0.4 <= exp.quality <= 0.7]
+        low_quality = [exp for exp in available if exp.quality < 0.4]
+        selected = []
+        hq_count = min(len(high_quality), int(batch_size * 0.6))
+        mq_count = min(len(medium_quality), int(batch_size * 0.3))
+        lq_count = batch_size - hq_count - mq_count
+        if hq_count > 0:
+            selected.extend(high_quality[:hq_count])
+        if mq_count > 0:
+            selected.extend(medium_quality[:mq_count])
+        if lq_count > 0 and len(low_quality) > 0:
+            positive_low = [exp for exp in low_quality if exp.reward > 0]
+            selected.extend(positive_low[:lq_count])
+            
         return selected
+    
+    def _is_relevant_for_current_group(self, experience: Experience) -> bool:
+        """Verifica se experiência do core é relevante para grupo atual"""
+        current_group = self.get_current_group()
+        if self._is_fundamental_experience(experience):
+            return True
+        relevance = self.skill_map.calculate_skill_relevance(experience, current_group)
+        
+        return relevance > 0.5
     
     def get_status(self):
         """Retorna status com estatísticas de preservação"""
