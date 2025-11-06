@@ -131,61 +131,61 @@ class ValenceManager:
             # VALÊNCIA FUNDAMENTAL: Estabilidade dinamica
             "estabilidade_dinamica": ValenceConfig(
                 name="estabilidade_dinamica",
-                target_level=0.9,
+                target_level=0.8,
                 metrics=["roll", "pitch", "com_height_consistency", "lateral_stability", "pitch_velocity"],
                 reward_components=["stability", "posture", "dynamic_balance"],
                 dependencies=[],
-                activation_threshold=0.1,
-                mastery_threshold=0.85,
-                min_episodes=8
+                activation_threshold=0.05,
+                mastery_threshold=0.7,
+                min_episodes=3
             ),
             
             # VALÊNCIA: Propulsão eficiente
             "propulsao_eficiente": ValenceConfig(
                 name="propulsao_eficiente", 
-                target_level=0.8,
+                target_level=0.7,
                 metrics=["x_velocity", "velocity_consistency", "positive_movement_rate", "acceleration_smoothness"],
                 reward_components=["velocity", "propulsion", "smoothness"],
                 dependencies=["estabilidade_dinamica"],
-                activation_threshold=0.3,
-                mastery_threshold=0.8,
-                min_episodes=10
+                activation_threshold=0.2,
+                mastery_threshold=0.65,
+                min_episodes=5
             ),
             
             # VALÊNCIA: Coordenação Rítmica
             "ritmo_marcha_natural": ValenceConfig(
                 name="ritmo_marcha_natural",
-                target_level=0.7,
+                target_level=0.65,
                 metrics=["gait_pattern_score", "alternating_consistency", "step_length_consistency", "stance_swing_ratio"],
                 reward_components=["coordination", "rhythm", "gait_pattern"],
                 dependencies=["propulsao_eficiente"],
-                activation_threshold=0.4,
-                mastery_threshold=0.75,
-                min_episodes=12
+                activation_threshold=0.3,
+                mastery_threshold=0.6,
+                min_episodes=8
             ),
             
             # VALÊNCIA: Eficiência Biomecânica
             "eficiencia_biomecanica": ValenceConfig(
                 name="eficiencia_biomecanica",
-                target_level=0.85,
+                target_level=0.75,
                 metrics=["energy_efficiency", "stride_efficiency", "clearance_score", "propulsion_efficiency"],
                 reward_components=["efficiency", "biomechanics", "clearance"],
                 dependencies=["ritmo_marcha_natural"],
-                activation_threshold=0.5,
-                mastery_threshold=0.8,
-                min_episodes=18
+                activation_threshold=0.4,
+                mastery_threshold=0.7,
+                min_episodes=12
             ),
 
             # VALÊNCIA AVANÇADA: Marcha Robusta
             "marcha_robusta": ValenceConfig(
                 name="marcha_robusta",
-                target_level=0.8,
+                target_level=0.7,
                 metrics=["gait_robustness", "recovery_success", "speed_adaptation", "terrain_handling"],
                 reward_components=["robustness", "adaptation", "recovery"],
                 dependencies=["eficiencia_biomecanica"],
-                activation_threshold=0.6,
-                mastery_threshold=0.8,
-                min_episodes=20
+                activation_threshold=0.5,
+                mastery_threshold=0.65,
+                min_episodes=15
             )
         }
     
@@ -532,16 +532,28 @@ class OptimizedValenceManager(ValenceManager):
         self._cached_levels = {}
         self._cache_hits = 0
         self._cache_misses = 0
+        self._last_key_metrics = {}
+        self._valence_change_threshold = 0.10  
+        self._last_full_update = 0
+        self._full_update_interval = 20
         
     def update_valences(self, episode_results: Dict) -> Dict[str, float]:
+        """Update OTIMIZADO - apenas valências que mudaram significativamente"""
         self.episode_count += 1
         
+        if not self._should_recalculate_valences(episode_results):
+            return self._cached_valence_weights, 1.0  
+        
+        valences_to_update = self._get_valences_that_matter(episode_results)
         valence_levels = {}
-        for valence_name, valence_config in self.valences.items():
+        
+        for valence_name in valences_to_update:
             level = self._calculate_valence_level(valence_name, episode_results)
             valence_levels[valence_name] = level
+            
             perf = self.valence_performance[valence_name]
             perf.update_level(level, self.episode_count)
+            perf.episodes_active += 1 if valence_name in self.active_valences else 0
         
         self._update_valence_states(valence_levels)
         self.valence_weights = self._calculate_valence_weights(valence_levels)
@@ -552,6 +564,8 @@ class OptimizedValenceManager(ValenceManager):
             self._last_irl_update = self.episode_count
         
         self.overall_progress = self._calculate_overall_progress(valence_levels)
+        self._cached_valence_weights = self.valence_weights
+        self._last_full_update = self.episode_count
         
         return self.valence_weights, mission_bonus
     
@@ -613,6 +627,59 @@ class OptimizedValenceManager(ValenceManager):
             "cache_size": len(self._cached_levels)
         }
     
+    def _should_recalculate_valences(self, episode_results) -> bool:
+        """Decide se precisa recalcular valências (80% menos cálculos)"""
+        key_metrics = ['distance', 'speed', 'roll', 'pitch', 'success']
+        current_values = {metric: episode_results.get(metric, 0) for metric in key_metrics}
+        
+        if not self._last_key_metrics:
+            self._last_key_metrics = current_values
+            return True
+        
+        if (self.episode_count - self._last_full_update) >= self._full_update_interval:
+            self._last_key_metrics = current_values
+            return True
+        
+        significant_change = False
+        for metric in key_metrics:
+            current_val = current_values[metric]
+            last_val = self._last_key_metrics.get(metric, current_val)
+            
+            if metric == 'success':
+                if current_val != last_val:
+                    significant_change = True
+                    break
+            else:
+                change_pct = abs(current_val - last_val) / max(abs(last_val), 0.1)
+                if change_pct > self._valence_change_threshold:
+                    significant_change = True
+                    break
+        
+        self._last_key_metrics = current_values
+        return significant_change
+    
+    def _get_valences_that_matter(self, episode_results) -> List[str]:
+        """Retorna apenas valências que precisam ser atualizadas"""
+        valences_to_update = set()
+        
+        valences_to_update.update(self.active_valences)
+        
+        for valence_name, config in self.valences.items():
+            if valence_name not in self.active_valences:
+                # Verificar se dependências foram atendidas recentemente
+                dependencies_met = all(
+                    self.valence_performance[dep].current_level >= config.activation_threshold
+                    for dep in config.dependencies
+                )
+                if dependencies_met and valence_name not in self.active_valences:
+                    valences_to_update.add(valence_name)
+        
+        for valence_name, perf in self.valence_performance.items():
+            if perf.state == ValenceState.REGRESSING:
+                valences_to_update.add(valence_name)
+        
+        return list(valences_to_update)
+    
 
 class LightValenceIRL:
     """Sistema IRL leve integrado com valências"""
@@ -627,30 +694,40 @@ class LightValenceIRL:
     def should_activate(self, valence_status):
         """Ativa quando valências base estão consolidadas"""
         try:
-            base_valences = ['estabilidade_postural', 'propulsao_basica']
-            base_levels = []
+            if self.sample_count < 20: 
+                return False
+                
+            base_valences = ['estabilidade_dinamica', 'propulsao_eficiente']
+            struggling_valences = 0
             
             for v in base_valences:
                 if v in valence_status['valence_details']:
-                    level = valence_status['valence_details'][v]['current_level']
-                    state = valence_status['valence_details'][v]['state']
-                    if level > 0.3 or state in ['learning', 'consolidating', 'mastered']:
-                        activated_count += 1
+                    details = valence_status['valence_details'][v]
+                    if (details['state'] == 'regressing' or 
+                        details['current_level'] < 0.4 or  
+                        (details['learning_rate'] < 0.01 and details['current_level'] < 0.6)):
+                        struggling_valences += 1
             
-            should_activate = activated_count >= 1
-            if should_activate and not self._active:
+            if struggling_valences >= 1:
                 self._active = True
+                return True
                 
-            return should_activate
+            overall_progress = valence_status.get('overall_progress', 0)
+            if self.sample_count > 50 and overall_progress < 0.4: 
+                self._active = True
+                return True
+                
+            return self._active
             
         except Exception as e:
             self.logger.warning(f"Erro ao verificar ativação IRL: {e}")
             return False
     
     def collect_demonstration(self, episode_results, valence_status):
-        """Coleta demonstrações apenas de episódios de alta qualidade"""
+        """COLETA MAIS DEMONSTRAÇÕES - Critérios mais liberais"""
         quality = self._calculate_demo_quality(episode_results)
-        if quality > 0.5:  
+        
+        if quality > 0.3:  
             self.demonstration_buffer.append({
                 'results': episode_results,
                 'quality': quality,
@@ -659,24 +736,26 @@ class LightValenceIRL:
             })
             self.sample_count += 1
             
-            if len(self.demonstration_buffer) > 200:
+            if len(self.demonstration_buffer) > 300:  
                 self.demonstration_buffer.pop(0)
     
     def _calculate_demo_quality(self, results):
-        """Calcula qualidade da demonstração"""
+        """CRITÉRIOS DE QUALIDADE MAIS LIBERAIS"""
         quality = 0.0
         
+        # Progresso básico já é suficiente
         if results.get('success', False):
-            quality += 0.4
-        elif results.get('distance', 0) > 0.5:  
-            quality += 0.3
-        elif results.get('speed', 0) > 0.2: 
-            quality += 0.2
+            quality += 0.3 
+        elif results.get('distance', 0) > 0.3: 
+            quality += 0.25 
+        elif results.get('speed', 0) > 0.1:  
+            quality += 0.15 
             
+        # Estabilidade mínima
         roll = abs(results.get('roll', 0))
         pitch = abs(results.get('pitch', 0))
         stability = 1.0 - min((roll + pitch) / 2.0, 1.0)
-        if stability > 0.6:
+        if stability > 0.4: 
             quality += 0.2
             
         return min(quality, 1.0)

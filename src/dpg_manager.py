@@ -243,15 +243,20 @@ class DPGManager:
         base_reward = self.reward_calculator.calculate(sim, action, phase_info)
         crutch_level = self.crutches["level"]
         crutch_stage = self.crutches["current_stage"]
-        crutch_multipliers = [2.0, 1.8, 1.5, 1.2, 1.0]  
+        crutch_multipliers = [4.0, 3.0, 2.0, 1.5, 1.0]  
         crutch_multiplier = crutch_multipliers[crutch_stage]
         boosted_reward = base_reward * crutch_multiplier
-        if self.episode_count < 300 and valence_status['overall_progress'] < 0.3:
+        if self.episode_count < 500: 
             distance = getattr(sim, "episode_distance", 0)
-            if distance > 0.1:
-                boosted_reward += min(distance * 1.0, 2.0)
+            if distance > 0.05:  
+                distance_bonus = min(distance * 5.0, 8.0) 
+                boosted_reward += distance_bonus
+            
+            if not getattr(sim, "episode_terminated", True):
+                survival_bonus = 1.0  
+                boosted_reward += survival_bonus
 
-        return boosted_reward
+        return max(boosted_reward, 0.0)
     
     def _extract_valence_levels(self, valence_status):
         """Extrai níveis das valências como array"""
@@ -831,24 +836,47 @@ class DPGManager:
         success = episode_results.get('success', False)
         distance = episode_results.get('distance', 0)
         reward = episode_results.get('reward', 0)
-        recent_metrics = self.episode_metrics_history[-20:] if self.episode_metrics_history else []
-        if recent_metrics:
-            recent_success_rate = np.mean([m.get('success', False) for m in recent_metrics])
-            recent_avg_distance = np.mean([m.get('distance', 0) for m in recent_metrics])
-            recent_avg_reward = np.mean([m.get('reward', 0) for m in recent_metrics])
+        if self.episode_count < 300:
+            new_crutch_level = 0.95  
+        elif self.episode_count < 600:
+            new_crutch_level = 0.8   
+        elif self.episode_count < 1000:
+            new_crutch_level = 0.6  
         else:
-            recent_success_rate = 0.0
-            recent_avg_distance = 0.0
-            recent_avg_reward = 0.0
-        new_crutch_level = self._calculate_adaptive_crutch_level(
-            success, distance, reward, recent_success_rate, recent_avg_distance, recent_avg_reward
-        )
-        smoothing_factor = 0.3
+            recent_metrics = self.episode_metrics_history[-30:] if self.episode_metrics_history else []
+            if recent_metrics:
+                recent_success_rate = np.mean([m.get('success', False) for m in recent_metrics])
+                recent_avg_distance = np.mean([m.get('distance', 0) for m in recent_metrics])
+
+                if recent_success_rate > 0.7 and recent_avg_distance > 2.0:
+                    new_crutch_level = 0.3  
+                else:
+                    new_crutch_level = 0.6  
+            else:
+                new_crutch_level = 0.5
+
+        smoothing_factor = 0.2  
         self.crutches["level"] = (
             smoothing_factor * new_crutch_level + 
             (1 - smoothing_factor) * self.crutches["level"]
         )
+
         self._update_crutch_stage()
+
+    def _update_crutch_stage(self):
+        """ESTÁGIOS MAIS BEM DISTRIBUÍDOS"""
+        crutch_level = self.crutches["level"]
+
+        if crutch_level > 0.8:
+            self.crutches["current_stage"] = 0  
+        elif crutch_level > 0.6:
+            self.crutches["current_stage"] = 1    
+        elif crutch_level > 0.4:
+            self.crutches["current_stage"] = 2  
+        elif crutch_level > 0.2:
+            self.crutches["current_stage"] = 3  
+        else:
+            self.crutches["current_stage"] = 4
 
     def _calculate_adaptive_crutch_level(self, success, distance, reward, success_rate, avg_distance, avg_reward):
         """Calcula nível de crutch baseado em múltiplas métricas"""
@@ -871,22 +899,6 @@ class DPGManager:
 
         return max(0.0, min(crutch_level, 1.0))
 
-    def _update_crutch_stage(self):
-        """Atualiza estágio do crutch system baseado no nível atual"""
-        crutch_level = self.crutches["level"]
-        thresholds = self.crutches["progress_thresholds"]
-
-        if crutch_level > thresholds[0]: 
-            self.crutches["current_stage"] = 0  
-        elif crutch_level > thresholds[1]:  
-            self.crutches["current_stage"] = 1  
-        elif crutch_level > thresholds[2]: 
-            self.crutches["current_stage"] = 2  
-        elif crutch_level > thresholds[3]: 
-            self.crutches["current_stage"] = 3  
-        else:
-            self.crutches["current_stage"] = 4
-
     def _generate_comprehensive_report(self):
         """Relatório completo otimizado"""
         try:
@@ -894,7 +906,6 @@ class DPGManager:
             consistency_metrics = self._calculate_training_consistency()
             current_irl_weights = self.valence_manager.get_irl_weights()
 
-            # CÁLCULOS quando necessário
             mastered_count = sum(
                 1 for details in valence_status['valence_details'].values()
                 if details['state'] == 'mastered'

@@ -7,6 +7,8 @@ from collections import deque
 from functools import lru_cache
 import time
 
+from dpg_valence import ValenceState
+
 
 @dataclass
 class Experience:
@@ -430,7 +432,6 @@ class OptimizedBufferManager(SmartBufferManager):
         self._relevance_cache = {}
         self._cache_episode = 0
         
-        # Estatísticas de performance
         self.performance_stats = {
             "cache_hits": 0,
             "cache_misses": 0,
@@ -454,7 +455,6 @@ class OptimizedBufferManager(SmartBufferManager):
                 if len(self.core_buffer_heap) < self.max_core_experiences:
                     heapq.heappush(self.core_buffer_heap, (-experience.quality, experience))
                 else:
-                    # Substituir pior experiência em O(log n)
                     worst_quality, worst_exp = self.core_buffer_heap[0]
                     if experience.quality > -worst_quality:
                         heapq.heapreplace(self.core_buffer_heap, (-experience.quality, experience))
@@ -474,7 +474,6 @@ class OptimizedBufferManager(SmartBufferManager):
         self.current_group_buffer = self.group_buffers[group]
         
         if len(self.group_buffers[group]) > 3000:
-            # Manter apenas as melhores 2500 experiências
             self.group_buffers[group].sort(key=lambda x: x.quality, reverse=True)
             self.group_buffers[group] = self.group_buffers[group][:2500]
             self.current_group_buffer = self.group_buffers[group]
@@ -494,7 +493,6 @@ class OptimizedBufferManager(SmartBufferManager):
             self.performance_stats["cache_misses"] += 1
             available = self._get_relevant_experiences_optimized(current_group)
             self._relevance_cache[cache_key] = available
-            # Limpar cache antigo
             old_keys = [k for k in self._relevance_cache.keys() if k != cache_key]
             for k in old_keys:
                 del self._relevance_cache[k]
@@ -508,12 +506,10 @@ class OptimizedBufferManager(SmartBufferManager):
         """Experiências relevantes com cache"""
         relevant = []
         
-        # Grupo atual
         group_exps = self.group_buffers.get(current_group, [])
-        relevant.extend(group_exps[:1000])  # Limitar para performance
+        relevant.extend(group_exps[:1000]) 
         
-        # Core buffer (apenas as melhores)
-        core_exps = [exp for _, exp in self.core_buffer_heap[-500:]]  # Top 500
+        core_exps = [exp for _, exp in self.core_buffer_heap[-500:]]  
         relevant.extend(core_exps[:len(core_exps)//3])
         
         return relevant
@@ -552,7 +548,6 @@ class OptimizedBufferManager(SmartBufferManager):
         """Retorna métricas aprimoradas com estatísticas de performance"""
         base_metrics = super().get_metrics()
         
-        # Adicionar métricas de otimização
         optimization_metrics = {
             "cache_hit_rate": self.performance_stats["cache_hits"] / max(
                 self.performance_stats["cache_hits"] + self.performance_stats["cache_misses"], 1
@@ -573,7 +568,6 @@ class OptimizedBufferManager(SmartBufferManager):
         cache_efficiency = self.performance_stats["cache_hits"] / total_operations
         heap_efficiency = min(self.performance_stats["heap_operations"] / max(self.experience_count, 1), 1.0)
         
-        # Estimativa conservadora: 15-25% de ganho
         estimated_gain = (cache_efficiency * 0.15 + heap_efficiency * 0.10)
         return min(estimated_gain, 0.25)
     
@@ -581,5 +575,3 @@ class OptimizedBufferManager(SmartBufferManager):
         """Invalidar cache quando o buffer muda significativamente"""
         self._high_quality_experiences.clear()
         self._cache_episode += 1
-
-

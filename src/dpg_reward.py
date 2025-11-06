@@ -166,17 +166,17 @@ class RewardCalculator:
     def _calculate_basic_progress_reward(self, sim, phase_info) -> float:
         distance = getattr(sim, "episode_distance", 0)
         velocity = getattr(sim, "robot_x_velocity", 0)
-        if distance > 2.0:  
-            distance_reward = 3.0
+        if distance > 1.5:  
+            distance_reward = 4.0
         elif distance > 1.0:  
-            distance_reward = 2.0
+            distance_reward = 3.0
         elif distance > 0.5:  
-            distance_reward = 1.0
+            distance_reward = 2.0
         else:  
-            distance_reward = 0.3
-        velocity_reward = min(abs(velocity) / 0.8, 2.0) if velocity > 0.02 else 0.0
+            distance_reward = 0.5
+        velocity_reward = min(abs(velocity) / 0.5, 3.0) if velocity > 0.01 else 0.0
 
-        return (distance_reward * 0.8 + velocity_reward * 0.2)
+        return (distance_reward * 0.7 + velocity_reward * 0.3)
     
     def _calculate_posture_reward(self, sim, phase_info) -> float:
         try:
@@ -557,12 +557,12 @@ class CachedRewardCalculator(RewardCalculator):
         self._last_sim_state = None
         self._last_reward = 0.0
         self._component_priority_cache = {}
+        self._last_gait_phase = "unknown"
+        self._gait_phase_cache = {}
         
     def calculate(self, sim, action, phase_info: Dict) -> float:
-        # ✅ Cache por estado da simulação
         sim_state = self._get_sim_state_fingerprint(sim)
         
-        # Se estado não mudou significativamente, retornar cached
         if (self._last_sim_state and 
             self._sim_states_similar(sim_state, self._last_sim_state)):
             return self._last_reward
@@ -573,10 +573,7 @@ class CachedRewardCalculator(RewardCalculator):
         if cached_reward is not None:
             return cached_reward
         
-        # ✅ Cálculo com priorização inteligente
         reward = self._calculate_prioritized_reward(sim, action, phase_info)
-        
-        # Armazenar em cache
         self.cache.set(cache_key, reward, ttl=20)
         self._last_sim_state = sim_state
         self._last_reward = reward
@@ -597,38 +594,77 @@ class CachedRewardCalculator(RewardCalculator):
             self.logger.warning(f"Erro ao criar fingerprint: {e}")
             return "unknown"
     
-    def _sim_states_similar(self, state1: str, state2: str, threshold: float = 0.15) -> bool:
-        """Verifica se estados são suficientemente similares"""
+    def _sim_states_similar(self, state1: str, state2: str, threshold: float = 0.05) -> bool:
+        """Comparação"""
         if state1 == "unknown" or state2 == "unknown":
             return False
             
         try:
-            # Extrair valores numéricos do fingerprint
+            phase1 = self._get_gait_phase_from_state(state1)
+            phase2 = self._get_gait_phase_from_state(state2)
+            
+            if phase1 != phase2:
+                return False  
+            
             parts1 = state1.split('_')
             parts2 = state2.split('_')
+            numeric_matches = 0
+            total_numeric = 0
             
-            # Comparar apenas as partes numéricas (primeiras 4)
-            for i in range(4):
+            for i in range(min(len(parts1), len(parts2))):  
                 if i < len(parts1) and i < len(parts2):
                     try:
                         val1 = float(parts1[i])
                         val2 = float(parts2[i])
-                        if abs(val1 - val2) > threshold:
-                            return False
+                        total_numeric += 1
+                        if abs(val1 - val2) <= threshold: 
+                             numeric_matches += 1
                     except ValueError:
-                        # Ignorar partes não numéricas
                         continue
             
-            # Verificar contato dos pés (últimas 2 partes)
-            if len(parts1) >= 6 and len(parts2) >= 6:
-                if parts1[4] != parts2[4] or parts1[5] != parts2[5]:
-                    return False
+            if total_numeric > 0 and numeric_matches / total_numeric >= 0.6:
+                return True
                     
-            return True
+            return False
             
         except Exception as e:
             self.logger.warning(f"Erro na comparação de estados: {e}")
             return False
+    
+    def _get_gait_phase_from_state(self, state_str: str) -> str:
+        """Detecta fase da marcha baseado no estado - CRÍTICO para cache"""
+        try:
+            parts = state_str.split('_')
+            if len(parts) < 6:
+                return "unknown"
+                
+            left_contact = parts[4].lower() == "true"
+            right_contact = parts[5].lower() == "true"
+            
+            if not left_contact and not right_contact:
+                return "flight"
+            elif left_contact and not right_contact:
+                return "left_stance"
+            elif not left_contact and right_contact:
+                return "right_stance" 
+            else:
+                return "double_support"
+                
+        except Exception:
+            return "unknown"
+    
+    def _prioritize_components(self, sim, enabled_components: List[str]) -> List[str]:
+        """Priorização MAIS EFETIVA baseada em pesquisa real"""
+        priority_order = [
+            "stability", "basic_progress", "posture", "velocity", 
+            "coordination", "dynamic_balance", "efficiency", "smoothness",
+            "phase_angles", "propulsion", "clearance", "rhythm", "gait_pattern",
+            "biomechanics", "robustness", "adaptation", "recovery"
+        ]
+        
+        prioritized = [comp for comp in priority_order if comp in enabled_components]
+        
+        return prioritized[:6]
     
     def _generate_cache_key(self, sim, phase_info: Dict) -> str:
         """Gera chave de cache única"""
@@ -641,11 +677,7 @@ class CachedRewardCalculator(RewardCalculator):
         """Cálculo com priorização inteligente de componentes"""
         total_reward = 0.0
         enabled_components = phase_info['enabled_components']
-        
-        # ✅ Priorizar componentes baseado no estado atual
         prioritized_components = self._prioritize_components(sim, enabled_components)
-        
-        # ✅ Calcular apenas componentes prioritários (limite de 8)
         max_components = min(8, len(prioritized_components))
         calculated_components = 0
         
@@ -664,42 +696,7 @@ class CachedRewardCalculator(RewardCalculator):
         total_reward -= penalties
 
         return max(total_reward, -0.5)
-    
-    def _prioritize_components(self, sim, enabled_components: List[str]) -> List[str]:
-        """Prioriza componentes baseado no estado da simulação"""
-        priority_scores = {}
         
-        # ✅ Analisar estado para determinar prioridades
-        velocity = abs(getattr(sim, "robot_x_velocity", 0))
-        roll = abs(getattr(sim, "robot_roll", 0))
-        pitch = abs(getattr(sim, "robot_pitch", 0))
-        stability = 1.0 - min(roll + pitch, 1.0)
-        has_movement = velocity > 0.1
-        is_unstable = stability < 0.6
-        distance = getattr(sim, "episode_distance", 0)
-        
-        for component in enabled_components:
-            if component == "stability" and is_unstable:
-                priority_scores[component] = 10.0  # Máxima prioridade
-            elif component == "basic_progress" and not has_movement and distance < 1.0:
-                priority_scores[component] = 9.0   # Alta prioridade
-            elif component == "velocity" and has_movement:
-                priority_scores[component] = 8.0
-            elif component == "posture" and is_unstable:
-                priority_scores[component] = 7.5
-            elif component == "coordination" and has_movement:
-                priority_scores[component] = 7.0
-            elif component == "dynamic_balance" and has_movement:
-                priority_scores[component] = 6.5
-            elif component == "efficiency" and has_movement and distance > 1.0:
-                priority_scores[component] = 6.0
-            elif component == "smoothness" and has_movement:
-                priority_scores[component] = 5.5
-            else:
-                priority_scores[component] = 5.0  # Prioridade padrão
-    
-        return sorted(enabled_components, key=lambda x: priority_scores[x], reverse=True)
-    
     def _get_component_weight(self, component_name: str, phase_info: Dict) -> float:
         """Obtém peso do componente de forma otimizada"""
         valence_weights = phase_info.get('valence_weights', {})
