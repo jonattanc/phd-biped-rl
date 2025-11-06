@@ -279,7 +279,14 @@ class ValenceManager:
             if distance <= 0.1 and speed <= 0.1:
                 level = max(level * 0.3, 0.1)  
             elif distance < 0:  
-                level = max(level * 0.1, 0.05)  
+                level = max(level * 0.1, 0.05) 
+        if valence_name == "coordenacao_ritmica":
+            alternating = results.get("alternating", False)
+            gait_score = results.get("gait_pattern_score", 0)
+            if alternating:
+                level = min(level * 1.5, 1.0)
+            elif gait_score > 0.6:
+                level = min(level * 1.2, 1.0) 
 
         return min(max(level, 0.0), 1.0)
     
@@ -392,6 +399,13 @@ class ValenceManager:
         """Gera nova missão baseada nas valências mais problemáticas"""
         candidate_valences = []
         
+        if ('coordenacao_ritmica' in valence_levels and 
+            valence_levels['coordenacao_ritmica'] < 0.4):
+            mission = Mission('coordenacao_ritmica', 0.2, 15)  
+            mission.start_level = valence_levels['coordenacao_ritmica']
+            mission.bonus_multiplier = 2.0 
+            return mission
+    
         for valence_name in self.active_valences:
             existing_mission = any(
                 mission.valence_name == valence_name 
@@ -403,27 +417,19 @@ class ValenceManager:
             perf = self.valence_performance[valence_name]
             config = self.valences[valence_name]
             current_level = valence_levels[valence_name]
-            
-            # Apenas valências que precisam de melhoria
             if (perf.state in [ValenceState.LEARNING, ValenceState.REGRESSING] and 
                 current_level < config.target_level - 0.1):
-                
                 deficit = config.target_level - current_level
                 urgency = deficit * (2.0 if perf.state == ValenceState.REGRESSING else 1.0)
-                
                 candidate_valences.append((valence_name, urgency, deficit))
         
         if not candidate_valences:
             return None
         
-        # Selecionar valência mais urgente
         candidate_valences.sort(key=lambda x: x[1], reverse=True)
         selected_valence, urgency, deficit = candidate_valences[0]
-        
-        # Definir meta realista
-        target_improvement = min(deficit * 0.6, 0.3)  # 60% do déficit, máximo 0.3
-        duration = max(10, min(25, int(30 / (urgency + 0.1))))  # 10-25 episódios
-        
+        target_improvement = min(deficit * 0.6, 0.3)  
+        duration = max(10, min(25, int(30 / (urgency + 0.1)))) 
         mission = Mission(selected_valence, target_improvement, duration)
         mission.start_level = valence_levels[selected_valence]
         
