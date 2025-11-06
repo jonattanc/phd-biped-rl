@@ -459,24 +459,6 @@ class TrainingTab(common_tab.GUITab):
         self.ipc_queue_main_to_process.put({"type": "save_request", "save_session_path": save_session_path})
         self.config_changed_values[-1].value = 1
 
-    def make_serializable(self, obj):
-        """Converte objetos em tipos compatíveis com JSON."""
-        if isinstance(obj, dict):
-            return {str(k): self.make_serializable(v) for k, v in obj.items()}
-        elif isinstance(obj, (list, tuple, set)):
-            return [self.make_serializable(v) for v in obj]
-        elif isinstance(obj, np.ndarray):
-            # self.logger.warning(f"Making {obj} of type np.ndarray serializable")
-            return obj.tolist()
-        elif isinstance(obj, np.generic):
-            # self.logger.warning(f"Making {obj} of type np.generic serializable")
-            return obj.item()
-        elif isinstance(obj, (datetime,)):
-            # self.logger.warning(f"Making {obj} of type datetime serializable")
-            return obj.isoformat()
-        else:
-            return obj
-
     def save_training_data(self, is_autosave, save_path, tracker_status):
         try:
             total_episodes = len(self.episode_data["episodes"])
@@ -498,7 +480,7 @@ class TrainingTab(common_tab.GUITab):
                 "episode_data": self.episode_data,
             }
 
-            training_serializable_data = self.make_serializable(training_raw_data)
+            training_serializable_data = utils.make_serializable(training_raw_data)
             training_data_path = os.path.join(save_path, "training_data.json")
 
             # self.logger.warning(f"Salvando training_serializable_data:\n{training_serializable_data}")

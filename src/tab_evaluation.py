@@ -9,6 +9,8 @@ from datetime import datetime
 import sys
 import pandas as pd
 import multiprocessing
+import shutil
+import json
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import utils
@@ -94,7 +96,8 @@ class EvaluationTab(common_tab.GUITab):
         self.create_camera_selector(row3_frame, column=6)
 
         # Botões de exportação
-        ttk.Button(row3_frame, text="Exportar Resultados", command=self.export_evaluation_results).grid(row=0, column=8, padx=5)
+        self.save_results_btn = ttk.Button(row3_frame, text="Salvar Resultados", command=self.save_evaluation_results, state=tk.DISABLED)
+        self.save_results_btn.grid(row=0, column=8, padx=5)
         ttk.Button(row3_frame, text="Salvar Gráficos", command=self.export_evaluation_plots).grid(row=0, column=9, padx=5)
 
         # Resultados da avaliação
@@ -228,6 +231,7 @@ class EvaluationTab(common_tab.GUITab):
             return
 
         self.lock_gui()
+        self.save_results_btn.config(state=tk.DISABLED)
         self._run_evaluation(agent_model_path)
 
     def _run_evaluation(self, agent_model_path):
@@ -238,6 +242,9 @@ class EvaluationTab(common_tab.GUITab):
 
             episodes = int(self.eval_episodes_var.get())
             deterministic = self.eval_deterministic_var.get()
+
+            shutil.rmtree(utils.TEMP_EVALUATION_SAVE_PATH)
+            utils.ensure_directory(utils.TEMP_EVALUATION_SAVE_PATH)
 
             pause_val = multiprocessing.Value("b", 0)
             exit_val = multiprocessing.Value("b", 0)
@@ -462,52 +469,8 @@ Análise:
             self.history_listbox.delete(0, tk.END)
             self.logger.info("Histórico de avaliações limpo")
 
-    def export_evaluation_results(self):
-        """Exporta os resultados da avaliação para arquivo CSV"""
-        if not self.evaluation_data["current_evaluation"]:
-            messagebox.showwarning("Aviso", "Nenhum resultado de avaliação para exportar.")
-            return
-
-        try:
-            filename = filedialog.asksaveasfilename(
-                title="Salvar Resultados da Avaliação",
-                defaultextension=".csv",
-                filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
-                initialfile=f"evaluation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-            )
-
-            if filename:
-                # Garantir que o diretório existe
-                utils.ensure_directory(os.path.dirname(filename))
-
-                # Exportar para CSV
-                evaluation = self.evaluation_data["current_evaluation"]
-                metrics = evaluation["metrics"]
-
-                # Criar DataFrame com dados completos
-                data = {
-                    "timestamp": [datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
-                    "model_path": [evaluation["model_path"]],
-                    "environment": [evaluation["environment"]],
-                    "robot": [evaluation["robot"]],
-                    "episodes": [evaluation["episodes"]],
-                    "deterministic": [evaluation["deterministic"]],
-                    "avg_time": [metrics.get("avg_time", 0)],
-                    "std_time": [metrics.get("std_time", 0)],
-                    "success_rate": [metrics.get("success_rate", 0)],
-                    "success_count": [metrics.get("success_count", 0)],
-                    "num_episodes": [metrics.get("num_episodes", 0)],
-                }
-
-                df = pd.DataFrame(data)
-                df.to_csv(filename, index=False, encoding="utf-8")
-
-                messagebox.showinfo("Sucesso", f"Resultados exportados para:\n{filename}")
-                self.logger.info(f"Resultados de avaliação exportados: {filename}")
-
-        except Exception as e:
-            messagebox.showerror("Erro", f"Erro ao exportar resultados: {e}")
-            self.logger.exception("Erro ao exportar resultados")
+    def save_evaluation_results(self):
+        pass
 
     def export_evaluation_plots(self):
         """Exporta os gráficos de avaliação como imagens PNG separadas"""
@@ -652,6 +615,11 @@ Análise:
                         self.logger.info("Processo de avaliação finalizado.")
                         self.unlock_gui()
 
+                    elif data_type == "evaluation_complete":
+                        self.metrics_path = msg["metrics_path"]
+                        self.load_metrics()
+                        self.save_results_btn.config(state=tk.NORMAL)
+
                 except queue.Empty:
                     # Timeout normal, continuar loop
                     continue
@@ -666,6 +634,10 @@ Análise:
 
             if not self.gui_closed:
                 self.on_closing()
+
+    def load_metrics(self):
+        with open(self.metrics_path, "r") as f:
+            self.metrics_data = json.load(f)
 
     def start(self):
         """Inicializa a aba de avaliação"""

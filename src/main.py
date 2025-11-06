@@ -95,6 +95,7 @@ def setup_folders():
 
     utils.ensure_directory(utils.TRAINING_DATA_PATH)
     utils.ensure_directory(utils.TEMP_MODEL_SAVE_PATH)
+    utils.ensure_directory(utils.TEMP_EVALUATION_SAVE_PATH)
 
     return logs
 

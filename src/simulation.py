@@ -208,7 +208,7 @@ class Simulation(gym.Env):
         self.metrics = {}
         obs, _ = self.reset()
 
-        while self.episode_count < episodes:
+        while self.episode_count < episodes and not self.exit_value.value:
             self.metrics[str(self.episode_count + 1)] = {"step_data": {}}
 
             action, _ = self.agent.model.predict(obs, deterministic=deterministic)

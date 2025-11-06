@@ -4,6 +4,8 @@ import logging
 import multiprocessing
 import queue
 import json
+from datetime import datetime
+import numpy as np
 
 
 class FormattedQueueHandler(logging.Handler):
@@ -29,6 +31,7 @@ ENVIRONMENT_PATH = os.path.join(PROJECT_ROOT, "environments")
 ROBOTS_PATH = os.path.join(PROJECT_ROOT, "robots")
 TRAINING_DATA_PATH = os.path.join(PROJECT_ROOT, "training_data")
 TEMP_MODEL_SAVE_PATH = os.path.join(TMP_PATH, "improvement_models")
+TEMP_EVALUATION_SAVE_PATH = os.path.join(TMP_PATH, "evaluation_data")
 
 
 def get_logger(description=["main"], ipc_queue=None):
@@ -118,3 +121,22 @@ def load_default_settings():
         default_settings[key] = value
 
     return default_settings
+
+
+def make_serializable(obj):
+    """Converte objetos em tipos compatíveis com JSON."""
+    if isinstance(obj, dict):
+        return {str(k): make_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple, set)):
+        return [make_serializable(v) for v in obj]
+    elif isinstance(obj, np.ndarray):
+        # self.logger.warning(f"Making {obj} of type np.ndarray serializable")
+        return obj.tolist()
+    elif isinstance(obj, np.generic):
+        # self.logger.warning(f"Making {obj} of type np.generic serializable")
+        return obj.item()
+    elif isinstance(obj, (datetime,)):
+        # self.logger.warning(f"Making {obj} of type datetime serializable")
+        return obj.isoformat()
+    else:
+        return obj

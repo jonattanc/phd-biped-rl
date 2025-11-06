@@ -9,6 +9,10 @@ import utils
 import numpy as np
 import random
 import torch
+from datetime import datetime
+import os
+import json
+from dataclasses import asdict
 
 
 def process_runner(
@@ -83,8 +87,37 @@ def process_runner(
 
         if algorithm is None:
             logger.info("Modo de avaliação")
-            metrics = sim.evaluate(episodes, deterministic)
-            metrics = metrics_saver.calculate_extra_metrics(metrics)
+            metrics_data = sim.evaluate(episodes, deterministic)
+
+            if exit_value.value:
+                ipc_queue.put({"type": "done"})
+                return
+
+            metrics_data = metrics_saver.calculate_extra_metrics(metrics_data)
+
+            metrics_data["hyperparameters"] = {
+                "selected_environment": selected_environment,
+                "environment_settings": environment_settings,
+                "selected_robot": selected_robot,
+                "algorithm": algorithm,
+                "reward_system_components": {key: asdict(value) for key, value in reward_system.components.items()},
+                "seed": seed,
+                "device": device,
+                "initial_episode": initial_episode,
+                "model_path": model_path,
+                "enable_dpg": enable_dpg,
+                "episodes": episodes,
+                "deterministic": deterministic,
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            }
+
+            metrics_path = os.path.join(utils.TEMP_EVALUATION_SAVE_PATH, f"evaluation_metrics_{os.getpid()}.json")
+            metrics_serializebla_data = utils.make_serializable(metrics_data)
+
+            with open(metrics_path, "w", encoding="utf-8") as f:
+                json.dump(metrics_serializebla_data, f, indent=4, ensure_ascii=False)
+
+            ipc_queue.put({"type": "evaluation_complete", "metrics_path": metrics_path})
 
         else:
             logger.info("Modo de treinamento")
