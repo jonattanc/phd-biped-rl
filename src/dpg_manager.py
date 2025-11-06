@@ -241,14 +241,15 @@ class DPGManager:
     def _get_target_speed_from_valences(self, valence_status):
         """Calcula velocidade alvo baseada no progresso das valências"""
         overall_progress = valence_status['overall_progress']
-        base_speed = 0.1 + (overall_progress * 1.9) 
+        base_speed = 0.1 + (overall_progress * 2.4)  # Até 2.5 m/s
+
         details = valence_status['valence_details']
-        if details.get('propulsao_basica', {}).get('current_level', 0) > 0.5:
-            base_speed *= 1.3
-        if details.get('eficiencia_propulsiva', {}).get('current_level', 0) > 0.6:
-            base_speed *= 1.2
-        
-        return min(base_speed, 2.0)
+        if details.get('propulsao_eficiente', {}).get('current_level', 0) > 0.5:
+            base_speed *= 1.3  # Bônus de velocidade quando propulsão eficiente
+        if details.get('eficiencia_biomecanica', {}).get('current_level', 0) > 0.6:
+            base_speed *= 1.1  # Pequeno bônus por eficiência biomecânica
+
+        return min(base_speed, 2.5)
     
     def _extract_state(self, sim):
         """Extrai estado da simulação"""
@@ -478,7 +479,6 @@ class DPGManager:
         if self._last_distance < 2.0 and self.episode_count > 100:
             self.activate_propulsion_irl()
         valence_status = self.valence_manager.get_valence_status()
-        self._emergency_coordination_fix(valence_status)
         if (valence_status['overall_progress'] > 0.8 and 
             self._last_distance < 1.0 and 
             self.episode_count > 500):
@@ -529,31 +529,13 @@ class DPGManager:
 
     def _emergency_propulsion_fix(self, valence_status):
         """Correção de emergência quando propulsão fica zerada"""
-        if 'propulsao_basica' in valence_status['valence_details']:
-            details = valence_status['valence_details']['propulsao_basica']
+        if 'propulsao_eficiente' in valence_status['valence_details']:
+            details = valence_status['valence_details']['propulsao_eficiente']
             if details['current_level'] == 0.0 and self.episode_count > 100:
-                self.valence_manager.valence_performance['propulsao_basica'].current_level = 0.3
-                self.valence_manager.valence_performance['propulsao_basica'].state = ValenceState.LEARNING
-                self.valence_manager.active_valences.add('propulsao_basica')
+                self.valence_manager.valence_performance['propulsao_eficiente'].current_level = 0.3
+                self.valence_manager.valence_performance['propulsao_eficiente'].state = ValenceState.LEARNING
+                self.valence_manager.active_valences.add('propulsao_eficiente')
             
-    def _emergency_coordination_fix(self, valence_status):
-        """Correção emergencial para problemas de coordenação"""
-        if 'coordenacao_ritmica' in valence_status['valence_details']:
-            details = valence_status['valence_details']['coordenacao_ritmica']
-            if (details['current_level'] < 0.4 and 
-                self.episode_count > 100 and
-                hasattr(self, '_last_coordination_fix') and 
-                self.episode_count - self._last_coordination_fix > 50):
-                self.valence_manager.valence_performance['coordenacao_ritmica'].current_level = 0.3
-                self.valence_manager.valence_performance['coordenacao_ritmica'].state = ValenceState.LEARNING
-                self.valence_manager.active_valences.add('coordenacao_ritmica')
-                self.critic.weights.coordination = 0.25
-                self.critic.weights.propulsion = 0.35
-                self.critic.weights.stability = 0.30
-                self.critic.weights.efficiency = 0.10
-
-                self._last_coordination_fix = self.episode_count
-
     def _get_adaptive_config(self):
         """Retorna configuração para preservação adaptativa"""
         valence_status = self.valence_manager.get_valence_status()
@@ -583,10 +565,10 @@ class DPGManager:
     def activate_propulsion_irl(self):
         """Ativar IRL ESPECÍFICO para movimento"""
         propulsion_irl_weights = {
-            'progress': 0.7,      
+            'progress': 0.75,      
             'stability': 0.15,    
             'efficiency': 0.05,   
-            'coordination': 0.1  
+            'coordination': 0.10  
         }
         try:
             self.valence_manager.irl_weights = propulsion_irl_weights
@@ -631,22 +613,22 @@ class DPGManager:
         """Estabiliza pesos do critic para evitar oscilações"""
         distance = getattr(self, '_last_distance', 0)
         if distance < 1.0:  # Fase inicial 
-            self.critic.weights.propulsion = 0.70
-            self.critic.weights.stability = 0.15
+            self.critic.weights.propulsion = 0.75
+            self.critic.weights.stability = 0.10
             self.critic.weights.coordination = 0.10
             self.critic.weights.efficiency = 0.05
             self.critic.weights.irl_influence = 0.9
         elif distance < 3.0:  # Fase intermediária
-            self.critic.weights.propulsion = 0.50
-            self.critic.weights.stability = 0.25
+            self.critic.weights.propulsion = 0.45
+            self.critic.weights.stability = 0.30
             self.critic.weights.coordination = 0.15
             self.critic.weights.efficiency = 0.10
             self.critic.weights.irl_influence = 0.6
         else:  # Fase avançada
-            self.critic.weights.stability = 0.30
+            self.critic.weights.stability = 0.40
             self.critic.weights.propulsion = 0.30
-            self.critic.weights.coordination = 0.20
-            self.critic.weights.efficiency = 0.20
+            self.critic.weights.coordination = 0.15
+            self.critic.weights.efficiency = 0.15
             self.critic.weights.irl_influence = 0.3
 
     def emergency_stabilization(self):
@@ -709,8 +691,8 @@ class DPGManager:
             self.logger.warning(f"⚠️ Correção automática falhou: {e}")
         self.critic.weights.propulsion = 0.35
         self.critic.weights.stability = 0.30
-        self.critic.weights.efficiency = 0.15
-        self.critic.weights.coordination = 0.20
+        self.critic.weights.efficiency = 0.20
+        self.critic.weights.coordination = 0.15
         self.mission_bonus_multiplier = 1.5
 
     def _emergency_unstick_propulsion(self, valence_status):

@@ -125,76 +125,72 @@ class ValenceManager:
         for valence_name in self.valences.keys():
             self.valence_performance[valence_name] = ValenceTracker(valence_name)
         
-        
     def _initialize_valences(self) -> Dict[str, ValenceConfig]:
         """Inicializa as valências fundamentais para locomoção bípede"""
         return {
-            # VALÊNCIA FUNDAMENTAL: Estabilidade Postural
-            "estabilidade_postural": ValenceConfig(
-                name="estabilidade_postural",
+            # VALÊNCIA FUNDAMENTAL: Estabilidade dinamica
+            "estabilidade_dinamica": ValenceConfig(
+                name="estabilidade_dinamica",
                 target_level=0.9,
-                metrics=["roll", "pitch", "z_position", "stability"],
-                reward_components=["stability", "posture", "basic_progress"],
+                metrics=["roll", "pitch", "com_height_consistency", "lateral_stability", "pitch_velocity"],
+                reward_components=["stability", "posture", "dynamic_balance"],
                 dependencies=[],
                 activation_threshold=0.1,
                 mastery_threshold=0.85,
                 min_episodes=8
             ),
             
-            # VALÊNCIA: Propulsão Básica
-            "propulsao_basica": ValenceConfig(
-                name="propulsao_basica", 
+            # VALÊNCIA: Propulsão eficiente
+            "propulsao_eficiente": ValenceConfig(
+                name="propulsao_eficiente", 
                 target_level=0.8,
-                metrics=["x_velocity", "distance", "positive_movement_rate"],
-                reward_components=["velocity", "basic_progress", "direction"],
-                dependencies=["estabilidade_postural"],
+                metrics=["x_velocity", "velocity_consistency", "positive_movement_rate", "acceleration_smoothness"],
+                reward_components=["velocity", "propulsion", "smoothness"],
+                dependencies=["estabilidade_dinamica"],
                 activation_threshold=0.3,
                 mastery_threshold=0.8,
                 min_episodes=10
             ),
             
             # VALÊNCIA: Coordenação Rítmica
-            "coordenacao_ritmica": ValenceConfig(
-                name="coordenacao_ritmica",
+            "ritmo_marcha_natural": ValenceConfig(
+                name="ritmo_marcha_natural",
                 target_level=0.7,
-                metrics=["gait_pattern_score", "alternating_score", "clearance_score"],
-                reward_components=["coordination", "phase_angles", "clearance"],
-                dependencies=["propulsao_basica"],
+                metrics=["gait_pattern_score", "alternating_consistency", "step_length_consistency", "stance_swing_ratio"],
+                reward_components=["coordination", "rhythm", "gait_pattern"],
+                dependencies=["propulsao_eficiente"],
                 activation_threshold=0.4,
                 mastery_threshold=0.75,
                 min_episodes=12
             ),
             
-            # VALÊNCIA: Eficiência Propulsiva
-            "eficiencia_propulsiva": ValenceConfig(
-                name="eficiencia_propulsiva",
-                target_level=0.8,
-                metrics=["propulsion_efficiency", "energy_used", "speed"],
-                reward_components=["efficiency", "propulsion", "velocity"],
-                dependencies=["coordenacao_ritmica"],
+            # VALÊNCIA: Eficiência Biomecânica
+            "eficiencia_biomecanica": ValenceConfig(
+                name="eficiencia_biomecanica",
+                target_level=0.85,
+                metrics=["energy_efficiency", "stride_efficiency", "clearance_score", "propulsion_efficiency"],
+                reward_components=["efficiency", "biomechanics", "clearance"],
+                dependencies=["ritmo_marcha_natural"],
                 activation_threshold=0.5,
                 mastery_threshold=0.8,
-                min_episodes=15
+                min_episodes=18
             ),
-            
-            # VALÊNCIA AVANÇADA: Adaptação Dinâmica
-            "adaptacao_dinamica": ValenceConfig(
-                name="adaptacao_dinamica",
-                target_level=0.75,
-                metrics=["flight_quality", "recovery_events", "consistency"],
-                reward_components=["efficiency", "coordination", "adaptation"],
-                dependencies=["eficiencia_propulsiva"],
+
+            # VALÊNCIA AVANÇADA: Marcha Robusta
+            "marcha_robusta": ValenceConfig(
+                name="marcha_robusta",
+                target_level=0.8,
+                metrics=["gait_robustness", "recovery_success", "speed_adaptation", "terrain_handling"],
+                reward_components=["robustness", "adaptation", "recovery"],
+                dependencies=["eficiencia_biomecanica"],
                 activation_threshold=0.6,
                 mastery_threshold=0.8,
-                min_episodes=18
+                min_episodes=20
             )
         }
     
     def update_valences(self, episode_results: Dict) -> Dict[str, float]:
-        """
-        Atualiza todas as valências baseado nos resultados do episódio
-        Retorna: pesos das valências para cálculo de recompensa
-        """
+        """Atualiza todas as valências baseado nos resultados do episódio"""
         self.episode_count += 1
         self.performance_history.append(episode_results)
         self.update_irl_system(episode_results)
@@ -279,25 +275,18 @@ class ValenceManager:
             if distance <= 0.1 and speed <= 0.1:
                 level = max(level * 0.3, 0.1)  
             elif distance < 0:  
-                level = max(level * 0.1, 0.05) 
-        if valence_name == "coordenacao_ritmica":
-            alternating = results.get("alternating", False)
-            gait_score = results.get("gait_pattern_score", 0)
-            if alternating:
-                level = min(level * 1.5, 1.0)
-            elif gait_score > 0.6:
-                level = min(level * 1.2, 1.0) 
+                level = max(level * 0.1, 0.05)  
 
         return min(max(level, 0.0), 1.0)
     
     def _normalize_metric(self, metric: str, value: float) -> float:
         """Normaliza métricas para escala 0-1"""
         normalization_rules = {
-            "roll": lambda x: 1.0 - min(abs(x) / 0.5, 1.0), 
+            "roll": lambda x: 1.0 - min(abs(x) / 0.5, 1.0),
             "pitch": lambda x: 1.0 - min(abs(x) / 0.5, 1.0),
             "z_position": lambda x: 1.0 if 0.7 < x < 0.9 else max(0.0, 1.0 - abs(x-0.8)/0.5),
-            "x_velocity": lambda x: min(max(x, 0) / 1.0, 1.0),  
-            "distance": lambda x: min(max(x, 0) / 2.0, 1.0), 
+            "x_velocity": lambda x: min(max(x, 0) / 2.5, 1.0),  
+            "distance": lambda x: min(max(x, 0) / 3.0, 1.0),   
             "gait_pattern_score": lambda x: x,
             "alternating_score": lambda x: x,
             "clearance_score": lambda x: x,
@@ -306,8 +295,22 @@ class ValenceManager:
             "flight_quality": lambda x: x,
             "positive_movement_rate": lambda x: x,
             "stability": lambda x: x,
-            "speed": lambda x: min(x / 1.5, 1.0),
-            "consistency": lambda x: x
+            "speed": lambda x: min(x / 2.5, 1.0),  
+            "consistency": lambda x: x,
+            "com_height_consistency": lambda x: x,
+            "lateral_stability": lambda x: 1.0 - min(abs(x) / 0.3, 1.0),
+            "pitch_velocity": lambda x: 1.0 - min(abs(x) / 2.0, 1.0),
+            "velocity_consistency": lambda x: x,
+            "acceleration_smoothness": lambda x: x,
+            "alternating_consistency": lambda x: x,
+            "step_length_consistency": lambda x: x,
+            "stance_swing_ratio": lambda x: min(abs(x - 0.6) / 0.3, 1.0),  
+            "energy_efficiency": lambda x: x,
+            "stride_efficiency": lambda x: x,
+            "gait_robustness": lambda x: x,
+            "recovery_success": lambda x: x,
+            "speed_adaptation": lambda x: x,
+            "terrain_handling": lambda x: x
         }
         
         normalizer = normalization_rules.get(metric, lambda x: min(abs(x), 1.0))
@@ -399,13 +402,6 @@ class ValenceManager:
         """Gera nova missão baseada nas valências mais problemáticas"""
         candidate_valences = []
         
-        if ('coordenacao_ritmica' in valence_levels and 
-            valence_levels['coordenacao_ritmica'] < 0.4):
-            mission = Mission('coordenacao_ritmica', 0.2, 15)  
-            mission.start_level = valence_levels['coordenacao_ritmica']
-            mission.bonus_multiplier = 2.0 
-            return mission
-    
         for valence_name in self.active_valences:
             existing_mission = any(
                 mission.valence_name == valence_name 
@@ -417,19 +413,27 @@ class ValenceManager:
             perf = self.valence_performance[valence_name]
             config = self.valences[valence_name]
             current_level = valence_levels[valence_name]
+            
+            # Apenas valências que precisam de melhoria
             if (perf.state in [ValenceState.LEARNING, ValenceState.REGRESSING] and 
                 current_level < config.target_level - 0.1):
+                
                 deficit = config.target_level - current_level
                 urgency = deficit * (2.0 if perf.state == ValenceState.REGRESSING else 1.0)
+                
                 candidate_valences.append((valence_name, urgency, deficit))
         
         if not candidate_valences:
             return None
         
+        # Selecionar valência mais urgente
         candidate_valences.sort(key=lambda x: x[1], reverse=True)
         selected_valence, urgency, deficit = candidate_valences[0]
-        target_improvement = min(deficit * 0.6, 0.3)  
-        duration = max(10, min(25, int(30 / (urgency + 0.1)))) 
+        
+        # Definir meta realista
+        target_improvement = min(deficit * 0.6, 0.3)  # 60% do déficit, máximo 0.3
+        duration = max(10, min(25, int(30 / (urgency + 0.1))))  # 10-25 episódios
+        
         mission = Mission(selected_valence, target_improvement, duration)
         mission.start_level = valence_levels[selected_valence]
         
