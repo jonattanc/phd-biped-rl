@@ -96,9 +96,11 @@ class EvaluationTab(common_tab.GUITab):
         self.create_camera_selector(row3_frame, column=6)
 
         # Botões de exportação
-        self.save_results_btn = ttk.Button(row3_frame, text="Salvar Resultados", command=self.save_evaluation_results, state=tk.DISABLED)
+        self.save_results_btn = ttk.Button(row3_frame, text="Salvar Avaliação", command=self.save_evaluation_results, state=tk.DISABLED)
         self.save_results_btn.grid(row=0, column=8, padx=5)
-        ttk.Button(row3_frame, text="Salvar Gráficos", command=self.export_evaluation_plots).grid(row=0, column=9, padx=5)
+        self.load_results_btn = ttk.Button(row3_frame, text="Carregar Avaliação", command=self.load_evaluation_results)
+        self.load_results_btn.grid(row=0, column=9, padx=5)
+        ttk.Button(row3_frame, text="Salvar Gráficos", command=self.export_evaluation_plots).grid(row=0, column=10, padx=5)
 
         # Resultados da avaliação
         results_frame = ttk.LabelFrame(main_frame, text="Resultados da Avaliação", padding="10")
@@ -470,7 +472,46 @@ Análise:
             self.logger.info("Histórico de avaliações limpo")
 
     def save_evaluation_results(self):
-        pass
+        try:
+            self.logger.info("Salvando dados de avaliação")
+
+            save_path = filedialog.asksaveasfilename(
+                title="Selecione o arquivo JSON para salvar os dados",
+                defaultextension=".json",
+                filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+                initialdir=os.path.expanduser("~"),
+                initialfile="evaluation_data.json",
+            )
+
+            shutil.copy2(self.metrics_path, save_path)
+
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro ao salvar dados de avaliação: {e}")
+            self.logger.exception("Erro ao salvar dados de avaliação")
+
+    def load_evaluation_results(self):
+        try:
+            self.logger.info("Carregando dados de avaliação")
+
+            self.metrics_path = filedialog.askopenfilename(
+                title="Selecione o arquivo JSON para carregar os dados", defaultextension=".json", filetypes=[("JSON files", "*.json"), ("All files", "*.*")], initialdir=os.path.expanduser("~")
+            )
+
+            self.load_metrics()
+
+            hyperparameters = self.metrics_data["hyperparameters"]
+
+            self.eval_model_path.set(hyperparameters["model_path"])
+            self.env_var.set(hyperparameters["selected_environment"])
+            self.robot_var.set(hyperparameters["selected_robot"])
+            self.eval_episodes_var.set(hyperparameters["episodes"])
+            self.eval_deterministic_var.set(hyperparameters["deterministic"])
+            self.seed_var.set(hyperparameters["seed"])
+            self.enable_dpg_var.set(hyperparameters["enable_dpg"])
+
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro ao carregar dados de avaliação: {e}")
+            self.logger.exception("Erro ao carregar dados de avaliação")
 
     def export_evaluation_plots(self):
         """Exporta os gráficos de avaliação como imagens PNG separadas"""

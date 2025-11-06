@@ -258,6 +258,9 @@ class GUITab:
         if hasattr(self, "episodes_spinbox"):
             self.episodes_spinbox.config(state=opposite_state)
 
+        if hasattr(self, "load_results_btn"):
+            self.load_results_btn.config(state=opposite_state)
+
     def lock_gui(self):
         self.disable_other_tabs()
         self.set_gui_state(tk.NORMAL)
