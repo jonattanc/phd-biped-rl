@@ -764,16 +764,13 @@ class DPGManager:
             'coordination': 0.02   # Quase zero
         }
         
-        try:
-            self.valence_manager.irl_weights = propulsion_irl_weights
-            self.critic.weights.irl_influence = 0.95  # MÁXIMA influência
-            self.critic.weights.propulsion = 0.8      # FOCO em propulsão
-            self.critic.weights.stability = 0.15      # Reduz estabilidade
-            self.critic.weights.coordination = 0.03
-            self.critic.weights.efficiency = 0.02
-            
-        except Exception as e:
-            self.logger.warning(f"❌ Erro ao ativar IRL de propulsão: {e}")
+        self.critic.weights.propulsion = 0.90
+        self.critic.weights.stability = 0.08
+        self.critic.weights.coordination = 0.01
+        self.critic.weights.efficiency = 0.01
+        self.critic.weights.irl_influence = 0.95
+    
+        self.valence_manager.irl_weights = propulsion_irl_weights
 
     def activate_stabilization_irl(self):
         """Ativa IRL específico para estabilização quando detectada instabilidade"""
@@ -853,16 +850,16 @@ class DPGManager:
             self.critic.weights.irl_influence = 0.9
 
         # Crutch MAXIMO até conseguir movimento
-        if distance < 0.5:
+        if distance < 0.2:
             new_crutch_level = 1.0  
+        elif distance < 0.5:
+            new_crutch_level = 0.7
         elif distance < 1.0:
-            new_crutch_level = 0.8
+            new_crutch_level = 0.5
         elif distance < 1.5:
-            new_crutch_level = 0.6
-        elif distance < 2.0:
-            new_crutch_level = 0.4
+            new_crutch_level = 0.3
         else:
-            new_crutch_level = 0.2
+            new_crutch_level = 0.1
 
         self.crutches["level"] = new_crutch_level
         self._update_crutch_stage()
@@ -941,10 +938,17 @@ class DPGManager:
             self.logger.info(f"   Crutch System: Nível {self.crutches['level']:.2f} ({crutch_stage_names[self.crutches['current_stage']]})")
 
             # ESTATÍSTICAS DO BUFFER
-            if hasattr(self, 'buffer_manager') and self.buffer_manager:
-                buffer_status = self.buffer_manager.get_status()
-                buffer_metrics = self.buffer_manager.get_metrics()
-                self.logger.info(f"   Buffer: {buffer_status.get('total_experiences', 0)} exp | Qualidade: {buffer_metrics.get('buffer_avg_quality', 0):.2f}")
+            buffer_status = self.buffer_manager.get_status()
+            quality_working = buffer_status.get("quality_calculation_working", False)
+
+            self.logger.info("🔧 VERIFICAÇÃO DO BUFFER:")
+            self.logger.info(f"    Calculando: {'✅ SIM' if quality_working else '❌ NÃO'} | Experiências: {buffer_status.get('total_calculated', 0)}")
+            self.logger.info(f"    Qualidade média: {buffer_status.get('avg_quality', 0):.2f} | Distância média: {buffer_status.get('avg_distance', 0):.2f}m")
+
+            # ALERTA SE HÁ PROBLEMA
+            if not quality_working and buffer_status.get('total_calculated', 0) > 10:
+                self.logger.info("   🚨 ALERTA: Sistema NÃO está calculando qualidade corretamente!")
+                self.logger.info("   💡 AÇÃO: Verificar _calculate_quality e criação de experiências")
 
             # ESTADO DETALHADO DAS VALÊNCIAS
             self.logger.info("📈 ESTADO DAS VALÊNCIAS:")

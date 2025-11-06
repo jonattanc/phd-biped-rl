@@ -307,103 +307,144 @@ class OptimizedBufferManager:
             # Verificação rápida de qualidade básica
             metrics = experience_data.get("metrics", {})
             distance = metrics.get("distance", 0)
+            speed = metrics.get("speed", 0)
             reward = experience_data.get("reward", 0)
 
-            # Filtro rápido 
-            if distance < -0.2:
-                self.rejected_count += 1
-                return
+            # CALCULA QUALIDADE COM DEBUG
+            quality = self._calculate_quality_with_debug(experience_data)
 
-            # Gera fingerprint para cache
-            state_fp = self._generate_state_fingerprint(experience_data["state"])
-            
-            # Verifica cache de qualidade
-            cached_quality = self.quality_cache.get_quality(state_fp, metrics)
-            
-            if cached_quality is not None and cached_quality < 0.15:
-                self.performance_stats["cache_hits"] += 1
-                self.rejected_count += 1
-                return
-
-            # Processa experiência
+            # CORREÇÃO RADICAL: Armazena TUDO para debug
             current_group = self.get_current_group()
             experience_data["group_level"] = current_group
             experience = self._create_compressed_experience(experience_data)
-
-            # Calcula qualidade (usa cache se disponível)
-            if cached_quality is None:
-                quality = self._calculate_quality(experience_data)
-                self.quality_cache.set_quality(state_fp, metrics, quality)
-                self.performance_stats["cache_misses"] += 1
-            else:
-                quality = cached_quality
-                self.performance_stats["cache_hits"] += 1
-            
             experience.quality = quality
 
-            # Critério inteligente de armazenamento
-            if not self._should_store(experience):
-                if experience.quality > 0.2 and np.random.random() < 0.3:  
-                    pass  
-                else:
-                    self.rejected_count += 1
-                    return
-
-            # Armazenamento otimizado
-            self._store_optimized(experience, current_group)
+            # ARMAZENA SEM CRITÉRIOS
+            self._store_without_criteria(experience, current_group)
             self.stored_count += 1
             self.episode_count += 1
 
-            # Limpeza e manutenção periódica
-            if self.episode_count - self._last_cleanup > self.cleanup_interval:
-                self._cleanup_low_quality()
-                self._last_cleanup = self.episode_count
+        except Exception as e:
+            self.logger.error(f"❌❌ ERRO CRÍTICO no armazenamento: {e}")
+
+    def _calculate_quality_with_debug(self, data: Dict) -> float:
+        """Cálculo de qualidade com DEBUG COMPULSIVO"""
+        try:
+            metrics = data.get("metrics", {})
+            reward = data.get("reward", 0)
+
+            distance = float(metrics.get("distance", 0))
+            speed = float(metrics.get("speed", 0))
+            success = bool(metrics.get("success", False))
+
+            # CÁLCULO SIMPLES E DIRETO
+            quality = 0.0
+
+            # 1. DISTÂNCIA (80% do peso)
+            if distance > 0:
+                distance_component = min(distance / 2.0, 1.0) * 0.8
+                quality += distance_component
+
+            # 2. VELOCIDADE (20% do peso)  
+            if speed > 0:
+                speed_component = min(speed / 1.5, 1.0) * 0.2
+                quality += speed_component
+
+            # 3. BÔNUS AGRESSIVO
+            if distance > 1.0:
+                quality = min(quality + 0.3, 1.0)
+            elif distance > 0.5:
+                quality = min(quality + 0.15, 1.0)
+            if success:
+                quality = 1.0
+
+            # GARANTIA: Qualidade mínima para movimento
+            if distance > 0.1 and quality == 0:
+                quality = 0.1
+                self.logger.info(f"   🛡️  Garantia mínima: 0.10")
+
+            return quality
 
         except Exception as e:
-            self.logger.warning(f"Erro otimizado ao armazenar experiência: {e}")
+            self.logger.error(f"❌ ERRO no cálculo de qualidade: {e}")
+            return 0.0
+
+    def _store_without_criteria(self, experience: Experience, group: int):
+        """Armazenamento SEM CRITÉRIOS - apenas para debug"""
+        try:
+            # Armazena em TODOS os buffers
+            priority = 1.0  # Prioridade máxima
+
+            self.group_buffers[group].add(experience, priority)
+            self.current_group_buffer = self.group_buffers[group].buffer
+
+            # Também no core buffer
+            self.core_buffer.add(experience, priority)
+
+        except Exception as e:
+            self.logger.error(f"❌ ERRO no armazenamento: {e}")
     
     def _create_compressed_experience(self, data: Dict) -> Experience:
         """Cria experiência com estado comprimido"""
-        compressed_state = self.state_compressor.compress_state(data["state"])
-        compressed_next = self.state_compressor.compress_state(
-            data.get("next_state", data["state"])
-        )
-        
-        return Experience(
-            state=compressed_state,
-            action=data["action"],
-            reward=data["reward"],
-            next_state=compressed_next,
-            done=False,
-            info=data.get("phase_info", {}),
-            group=data.get("group_level", 1),
-            sub_phase=0,
-            quality=0.0,  # Será calculado depois
-            skills=self._analyze_skills(data.get("metrics", {}))
-        )
+        try:
+            # Garante que estados são numpy arrays
+            state = np.array(data["state"], dtype=np.float32)
+            action = np.array(data["action"], dtype=np.float32)
+
+            compressed_state = self.state_compressor.compress_state(state)
+            compressed_next = self.state_compressor.compress_state(
+                data.get("next_state", data["state"])
+            )
+
+            # Calcula qualidade ANTES de criar a experiência
+            quality = self._calculate_quality(data)
+
+            experience = Experience(
+                state=compressed_state,
+                action=action,
+                reward=float(data["reward"]),
+                next_state=compressed_next,
+                done=False,
+                info=data.get("phase_info", {}),
+                group=data.get("group_level", 1),
+                sub_phase=0,
+                quality=quality,  # JÁ CALCULADA
+                skills=self._analyze_skills(data.get("metrics", {}))
+            )
+
+            return experience
+
+        except Exception as e:
+            self.logger.error(f"❌ ERRO na criação de experiência: {e}")
+            return Experience(
+                state=np.zeros(10),
+                action=np.zeros(6),
+                reward=0,
+                next_state=np.zeros(10),
+                done=False,
+                info={},
+                group=1,
+                sub_phase=0,
+                quality=0.0,
+                skills={}
+            )
     
     def _should_store(self, experience: Experience) -> bool:
         """Critérios INTELIGENTES de armazenamento"""
-        metrics = experience.info.get("metrics", {})
-        distance = metrics.get("distance", 0)
+        try:
+            metrics = experience.info.get("metrics", {})
+            distance = metrics.get("distance", 0)
 
-        # ARMARENA QUALQUER movimento positivo significativo
-        if distance > 0.3: 
+            if distance > 0.1:
+                return True
+            if distance > 0.05 and experience.quality > 0.3:
+                return True
+
+            return False
+
+        except Exception as e:
+            self.logger.error(f"❌ ERRO nos critérios de armazenamento: {e}")
             return True
-
-        # Alta qualidade calculada
-        if experience.quality > 0.5:
-            return True
-
-        # Recompensa alta indica progresso
-        if experience.reward > 10.0:
-            return True
-
-        # Diversidade - mantém 20% de experiências médias
-        if distance > 0.1 and np.random.random() < 0.2:
-            return True
-
-        return False
 
     def _is_fundamental_skill(self, experience: Experience) -> bool:
         """Habilidades fundamentais CORRIGIDAS"""
@@ -491,37 +532,60 @@ class OptimizedBufferManager:
     
     def _calculate_quality(self, data: Dict) -> float:
         """Calcula qualidade com FOCO EM MOVIMENTO POSITIVO"""
-        metrics = data.get("metrics", {})
-        reward = data.get("reward", 0)
+        try:
+            metrics = data.get("metrics", {})
+            reward = data.get("reward", 0)
 
-        # Obtém valores REAIS da simulação
-        distance = metrics.get("distance", 0)
-        speed = metrics.get("speed", 0)
-        success = metrics.get("success", False)
+            # Obtém valores de forma SEGURA
+            distance = float(metrics.get("distance", 0))
+            speed = float(metrics.get("speed", 0))
+            success = bool(metrics.get("success", False))
+            roll = abs(metrics.get("roll", 0))
+            pitch = abs(metrics.get("pitch", 0))
 
-        # Debug para identificar o problema
-        if distance > 1.0:
-            self.logger.info(f"🚨 DISTÂNCIA ALTA: {distance}m - Verificar métricas")
+            # Cálculo DIRETO e SIMPLES
+            quality = 0.0
 
-        # Cálculo SIMPLES e DIRETO
-        distance_score = 0.0
-        if distance > 0:
-            distance_score = min(distance / 2.0, 1.0)  # Meta: 2m
+            # 1. Componente de DISTÂNCIA (50%)
+            if distance <= 0:
+                quality += 0.01
+            if distance > 3.0: quality += 1.0
+            if distance > 2.0: quality += 0.8
+            if distance > 1.5: quality += 0.7
+            if distance > 1.0: quality += 0.6
+            if distance > 0.5: quality += 0.4
+            if distance > 0.2: quality += 0.3
+            if distance > 0.1: quality += 0.2
+            if distance > 0.05: quality += 0.1
 
-        speed_score = min(abs(speed) / 1.0, 1.0) if speed > 0 else 0.0
+            # 2. Componente de ESTABILIDADE (30%)
+            stability = 1.0 - min((roll + pitch) / 2.0, 1.0)  # Média de roll e pitch, normalizada para [0,1]
+            stability_component = stability * 0.3
+            quality += stability_component
 
-        # Qualidade baseada PRINCIPALMENTE em movimento
-        quality = distance_score * 0.8 + speed_score * 0.2
+            # 3. Componente de VELOCIDADE (20%)
+            if speed > 0:
+                speed_component = min(speed / 1.5, 1.0) * 0.2
+                quality += speed_component
 
-        # Bônus AGGRESSIVO por movimento real
-        if distance > 0.5:
-            quality = min(quality * 1.5, 1.0)
-        if distance > 1.0:
-            quality = min(quality * 2.0, 1.0)
-        if success:
-            quality = 1.0
+            # Bônus por movimento real com estabilidade
+            if distance > 1.0 and stability > 0.7:
+                quality = min(quality + 0.2, 1.0)  # Bônus fixo
+            elif distance > 0.5 and stability > 0.5:
+                quality = min(quality + 0.1, 1.0)
 
-        return quality
+            if success:
+                quality = 1.0
+
+            # Garante que qualidade nunca seja 0 se há movimento
+            if distance > 0.1 and quality == 0:
+                quality = 0.1  # Mínimo garantido
+
+            return float(quality)
+
+        except Exception as e:
+            self.logger.error(f"❌ ERRO CRÍTICO no cálculo de qualidade: {e}")
+            return 0.0
     
     def _generate_state_fingerprint(self, state: np.ndarray) -> str:
         """Gera fingerprint rápido do estado para cache"""
@@ -694,31 +758,62 @@ class OptimizedBufferManager:
 
     def get_status(self):
         """Status OTIMIZADO com métricas de eficiência"""
-        total_quality = 0.0
-        quality_count = 0
+        try:
+            # Calcula qualidade REAL de todas as experiências
+            all_experiences = []
 
-        for group_id, buffer in self.group_buffers.items():
-            if buffer.buffer:
-                for exp in buffer.buffer[:100]:  
+            for group_id, buffer in self.group_buffers.items():
+                all_experiences.extend(buffer.buffer)
+
+            all_experiences.extend(self.core_buffer.buffer)
+
+            total_quality = 0.0
+            total_distance = 0.0
+            count = len(all_experiences)
+
+            if count > 0:
+                for exp in all_experiences:
                     total_quality += exp.quality
-                    quality_count += 1
+                    metrics = exp.info.get("metrics", {})
+                    total_distance += metrics.get("distance", 0)
 
-        avg_quality = total_quality / max(quality_count, 1)
-        cache_hits = self.performance_stats["cache_hits"]
-        cache_misses = self.performance_stats["cache_misses"]
-        cache_total = cache_hits + cache_misses
-        
-        return {
-            "total_experiences": self.stored_count,
-            "stored_count": self.stored_count,
-            "rejected_count": self.rejected_count,
-            "rejection_rate": self.rejected_count / max(self.episode_count, 1),
-            "cache_hit_rate": cache_hits / max(cache_total, 1),
-            "current_group_size": len(self.current_group_buffer),
-            "core_buffer_size": len(self.core_buffer.buffer),
-            "avg_quality": avg_quality,  
-            "avg_distance": self._calculate_avg_distance()
-        }
+                avg_quality = total_quality / count
+                avg_distance = total_distance / count
+            else:
+                avg_quality = 0.0
+                avg_distance = 0.0
+
+            # ALERTA CRÍTICO se qualidade é 0 mas há experiências
+            if count > 10 and avg_quality == 0:
+                self.logger.error(f"🚨🚨 ALERTA CRÍTICO: {count} experiências mas qualidade média 0.00!")
+                # DEBUG DETALHADO
+                sample_exps = all_experiences[:5]  # Primeiras 5
+                for i, exp in enumerate(sample_exps):
+                    metrics = exp.info.get("metrics", {})
+                    distance = metrics.get("distance", 0)
+                    self.logger.error(f"   🧪 Amostra {i+1}: Quality={exp.quality:.2f}, Distance={distance:.2f}m, Reward={exp.reward:.1f}")
+
+            cache_hits = self.performance_stats["cache_hits"]
+            cache_misses = self.performance_stats["cache_misses"]
+            cache_total = cache_hits + cache_misses
+
+            return {
+                "total_experiences": self.stored_count,
+                "stored_count": self.stored_count,
+                "rejected_count": self.rejected_count,
+                "rejection_rate": self.rejected_count / max(self.episode_count, 1),
+                "cache_hit_rate": cache_hits / max(cache_total, 1),
+                "current_group_size": len(self.current_group_buffer),
+                "core_buffer_size": len(self.core_buffer.buffer),
+                "avg_quality": avg_quality,
+                "avg_distance": avg_distance,
+                "total_calculated": count,
+                "quality_calculation_working": avg_quality > 0  # INDICADOR CRÍTICO
+            }
+
+        except Exception as e:
+            self.logger.error(f"❌ ERRO RADICAL no cálculo de status: {e}")
+            return {"error": str(e), "critical": True}
     
     def _calculate_avg_distance(self) -> float:
         """Calcula distância média das experiências"""

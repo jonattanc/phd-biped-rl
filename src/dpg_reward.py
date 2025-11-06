@@ -164,38 +164,24 @@ class RewardCalculator:
             return 1.0 - min((roll + pitch) / 1.0, 1.0)
     
     def _calculate_basic_progress_reward(self, sim, phase_info) -> float:
+        base_reward = 0.0
+    
+        # 1. COMPONENTE PRINCIPAL: DISTÂNCIA (80%)
         distance = getattr(sim, "episode_distance", 0)
-        velocity = getattr(sim, "robot_x_velocity", 0)
         if distance > 0:
-            # Recompensa EXPONENCIAL por distância
-            if distance > 2.0:
-                distance_reward = 50.0
-            elif distance > 1.5:
-                distance_reward = 30.0
-            elif distance > 1.0:
-                distance_reward = 20.0
-            elif distance > 0.5:
-                distance_reward = 10.0
-            elif distance > 0.2:
-                distance_reward = 5.0
-            else:
-                distance_reward = 2.0
-        else:
-            distance_reward = -1.0  # Penalidade leve por movimento negativo
+            distance_reward = min(distance * 20.0, 50.0)  # 20 pontos por metro
+            base_reward += distance_reward
 
-        # Recompensa AGGRESSIVA por velocidade positiva
-        velocity_reward = 0.0
-        if velocity > 0.1:
-            velocity_reward = velocity * 20.0  # Recompensa linear alta
-        elif velocity > 0.5:
-            velocity_reward = velocity * 40.0  # Recompensa muito alta
+        # 2. BÔNUS MASSIVO POR MOVIMENTO INICIAL
+        if distance > 0.1 and distance <= 0.5:
+            base_reward += 30.0  # Bônus por começar a se mover
 
-        # Bônus MÁSSIVO por progresso consistente
-        consistency_bonus = 0.0
-        if distance > 0.5 and velocity > 0.2:
-            consistency_bonus = 15.0
+        # 3. BÔNUS POR VELOCIDADE SUSTENTADA
+        velocity = getattr(sim, "robot_x_velocity", 0)
+        if velocity > 0.3:
+            base_reward += velocity * 10.0
 
-        return distance_reward + velocity_reward + consistency_bonus
+        return max(base_reward, 1.0)
     
     def _calculate_posture_reward(self, sim, phase_info) -> float:
         try:

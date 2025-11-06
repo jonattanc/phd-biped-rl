@@ -708,13 +708,8 @@ class LightValenceIRL:
     def should_activate(self, valence_status):
         """Ativa quando valências base estão consolidadas"""
         try:
-            if self.sample_count < 10: 
+            if self.sample_count < 20:  # Aumentamos o mínimo de amostras
                 return False
-            if hasattr(self, '_last_demo_distance'):
-                recent_distance = getattr(self, '_last_demo_distance', 0)
-                if recent_distance < 0.5 and self.sample_count > 5:  
-                    self._active = True
-                    return True
                 
             base_valences = ['estabilidade_dinamica', 'propulsao_eficiente']
             struggling_valences = 0
@@ -723,8 +718,8 @@ class LightValenceIRL:
                 if v in valence_status['valence_details']:
                     details = valence_status['valence_details'][v]
                     if (details['state'] == 'regressing' or 
-                        details['current_level'] < 0.4 or  
-                        (details['learning_rate'] < 0.01 and details['current_level'] < 0.6)):
+                        details['current_level'] < 0.3 or  # Limite mais baixo
+                        (details['learning_rate'] < 0.005 and details['current_level'] < 0.5)): # Taxa de aprendizado mais baixa
                         struggling_valences += 1
             
             if struggling_valences >= 1:
@@ -732,7 +727,7 @@ class LightValenceIRL:
                 return True
                 
             overall_progress = valence_status.get('overall_progress', 0)
-            if self.sample_count > 50 and overall_progress < 0.4: 
+            if self.sample_count > 100 and overall_progress < 0.3:  # Mais amostras e progresso mais baixo
                 self._active = True
                 return True
                 
