@@ -28,7 +28,7 @@ class RewardCalculator:
         """Inicializa componentes de recompensa"""
         return {
             "stability": RewardComponent("stability", 3.0, self._calculate_stability_reward),
-            "basic_progress": RewardComponent("basic_progress", 2.0, self._calculate_basic_progress_reward),
+            "basic_progress": RewardComponent("basic_progress", 5.0, self._calculate_basic_progress_reward),
             "posture": RewardComponent("posture", 2.5, self._calculate_posture_reward),
             "velocity": RewardComponent("velocity", 1.5, self._calculate_velocity_reward),
             "phase_angles": RewardComponent("phase_angles", 1.0, self._calculate_phase_angles_reward),
@@ -117,6 +117,47 @@ class RewardCalculator:
 
         return penalties
         
+    def calculate_emergency_reward(self, sim, action, phase_info: Dict) -> float:
+        """RECOMPENSA DE EMERGÊNCIA - APENAS MOVIMENTO POSITIVO"""
+        distance = getattr(sim, "episode_distance", 0)
+        velocity = getattr(sim, "robot_x_velocity", 0)
+        success = getattr(sim, "episode_success", False)
+        
+        # RECOMPENSA BASE: DISTÂNCIA (90% do peso)
+        base_reward = 0.0
+        
+        # 1. RECOMPENSA MASSIVA POR DISTÂNCIA
+        if distance > 0:
+            distance_reward = distance * 200.0  # 200 pontos por metro
+            base_reward += distance_reward
+            
+            # BÔNUS AGRESSIVO POR METROS
+            if distance > 2.0: base_reward += 1000.0
+            elif distance > 1.5: base_reward += 500.0
+            elif distance > 1.0: base_reward += 200.0
+            elif distance > 0.5: base_reward += 100.0
+            elif distance > 0.2: base_reward += 50.0
+        
+        # 2. RECOMPENSA POR VELOCIDADE (10% do peso)
+        if velocity > 0.1:
+            velocity_reward = velocity * 50.0  # 50 pontos por m/s
+            base_reward += velocity_reward
+        
+        # 3. RECOMPENSA MASSIVA POR SUCESSO
+        if success:
+            base_reward += 5000.0
+        
+        # 4. BÔNUS POR SOBREVIVÊNCIA (não cair)
+        if not getattr(sim, "episode_terminated", True) and distance > 0.1:
+            base_reward += 100.0
+        
+        # 5. PENALIDADES MÍNIMAS APENAS PARA QUEDAS
+        height = getattr(sim, "robot_z_position", 0.8)
+        if height < 0.3:  # Quase caindo
+            base_reward -= 50.0
+        
+        return max(base_reward, 1.0) 
+
     def _calculate_stability_reward(self, sim, phase_info) -> float:
         try:
             roll = abs(getattr(sim, "robot_roll", 0))
@@ -166,23 +207,24 @@ class RewardCalculator:
     
     def _calculate_basic_progress_reward(self, sim, phase_info) -> float:
         base_reward = 0.0
-    
-        # 1. COMPONENTE PRINCIPAL: DISTÂNCIA (80%)
+
+        # 1. COMPONENTE PRINCIPAL: DISTÂNCIA (100 pontos por metro)
         distance = getattr(sim, "episode_distance", 0)
         if distance > 0:
-            distance_reward = min(distance * 50.0, 100.0)  
+            distance_reward = distance * 100.0  # 100 pontos por metro
             base_reward += distance_reward
 
-        # 2. BÔNUS MASSIVO POR MOVIMENTO INICIAL
-        if distance > 0.1 and distance <= 0.5:
-            base_reward += 50.0  
-
-        # 3. BÔNUS POR VELOCIDADE SUSTENTADA
+        # 2. BÔNUS POR VELOCIDADE
         velocity = getattr(sim, "robot_x_velocity", 0)
-        if velocity > 0.3:
-            base_reward += velocity * 20.0 
+        if velocity > 0.1:
+            velocity_reward = velocity * 10.0  # 10 pontos por m/s
+            base_reward += velocity_reward
 
-        return max(base_reward, 1.0)
+        # 3. BÔNUS POR SOBREVIVÊNCIA (se não terminou e se moveu)
+        if not getattr(sim, "episode_terminated", True) and distance > 0.1:
+            base_reward += 10.0
+
+        return base_reward
     
     def _calculate_posture_reward(self, sim, phase_info) -> float:
         try:
@@ -639,26 +681,28 @@ class CachedRewardCalculator(RewardCalculator):
         if state1 == "unknown" or state2 == "unknown":
             return False
 
-        # Comparação mais simples e eficaz
         try:
-            # Apenas compara velocidades e contatos - métricas principais
+            # Extrai a velocidade e a fase da marcha
             parts1 = state1.split('_')
             parts2 = state2.split('_')
 
-            if len(parts1) < 3 or len(parts2) < 3:
+            # Se não tem pelo menos 6 partes, não é um estado completo
+            if len(parts1) < 6 or len(parts2) < 6:
                 return False
 
-            # Compara apenas velocidade (principal métrica)
+            # Compara velocidade (primeiro elemento) e fase da marcha (últimos dois elementos)
             vel1 = float(parts1[0])
             vel2 = float(parts2[0])
+            phase1 = parts1[4] + "_" + parts1[5]  # contatos dos pés
+            phase2 = parts2[4] + "_" + parts2[5]
 
-            # Se velocidade similar e mesma fase de marcha
-            if abs(vel1 - vel2) <= threshold and self._get_gait_phase_from_state(state1) == self._get_gait_phase_from_state(state2):
+            if abs(vel1 - vel2) <= threshold and phase1 == phase2:
                 return True
 
             return False
 
-        except Exception:
+        except Exception as e:
+            self.logger.warning(f"Erro na comparação de estados: {e}")
             return False
     
     def _get_gait_phase_from_state(self, state_str: str) -> str:
@@ -706,7 +750,8 @@ class CachedRewardCalculator(RewardCalculator):
         base_key = self._get_sim_state_fingerprint(sim)
         components_key = "_".join(sorted(phase_info.get('enabled_components', [])))
         group_key = str(phase_info.get('group_level', 1))
-        return f"{base_key}_{components_key}_{group_key}"
+        distance = getattr(sim, "episode_distance", 0)
+        return f"{base_key}_{components_key}_{group_key}_{distance:.2f}"
     
     def _calculate_prioritized_reward(self, sim, action, phase_info: Dict) -> float:
         """Cálculo com priorização inteligente de componentes"""

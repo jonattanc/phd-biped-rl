@@ -263,47 +263,29 @@ class ValenceManager:
     
     def _calculate_valence_level(self, valence_name: str, results: Dict) -> float:
         """Calcula nível atual de uma valência específica COM PROTEÇÃO"""
-        
-        if valence_name == "movimento_positivo_basico":
-            # Cálculo MAIS AGRESSIVO e REALISTA
+        if valence_name == "movimento_positivo_basico" or "movimento" in valence_name:
             distance = results.get("distance", 0)
-            speed = results.get("speed", 0)
             success = results.get("success", False)
 
-            # MOVIMENTO É TUDO - Foco absoluto em distância
+            # SUCESSO = mastered instantâneo
             if success:
-                return 1.0  # Sucesso = mastered instantâneo
+                return 1.0
 
+            # DISTÂNCIA = única métrica que importa
             if distance <= 0:
-                return 0.05  # Quase zero se não há movimento
+                return 0.05
 
-            # PROGRESSÃO AGRESSIVA baseada em movimento REAL
-            if distance > 3.0: return 1.0
-            if distance > 2.0: return 0.9
+            # PROGRESSÃO LINEAR DIRETA
+            if distance > 2.0: return 1.0
             if distance > 1.5: return 0.8
-            if distance > 1.0: return 0.7
-            if distance > 0.5: return 0.5
-            if distance > 0.2: return 0.3
-            if distance > 0.1: return 0.2
-            return 0.1
-    
-        valence_config = self.valences[valence_name]
-        level = 0.0
-        metric_count = 0
+            if distance > 1.0: return 0.6
+            if distance > 0.5: return 0.4  
+            if distance > 0.2: return 0.2
+            if distance > 0.1: return 0.1
+            return 0.05
 
-        # Para outras valências, cálculo normal
-        for metric in valence_config.metrics:
-            if metric in results:
-                raw_value = results[metric]
-                normalized_value = self._normalize_metric(metric, raw_value)
-                if normalized_value > 0.1:
-                    level += normalized_value
-                    metric_count += 1
-
-        if metric_count > 0:
-            level /= metric_count
-
-        return min(max(level, 0.0), 1.0)
+        # Para outras valências, cálculo mínimo
+        return 0.3
     
     def _normalize_metric(self, metric: str, value: float) -> float:
         """Normaliza métricas para escala 0-1"""

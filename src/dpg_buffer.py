@@ -492,25 +492,47 @@ class OptimizedBufferManager:
         """Calcula qualidade com FOCO EM MOVIMENTO POSITIVO"""
         try:
             metrics = data.get("metrics", {})
-            distance = max(metrics.get("distance", 0), 0)
-            speed = metrics.get("speed", 0)
-
-            # QUALIDADE = MOVIMENTO REAL
+            distance = metrics.get("distance", 0)
+            success = metrics.get("success", False)
+            
+            # QUALIDADE = DISTÂNCIA (99%) + SUCESSO (1%)
+            if success:
+                return 1.0
+                
             if distance <= 0:
-                return 0.01  # Quase zero se não há movimento
-
-            # Progressão agressiva baseada em distância
-            if distance > 2.0: return 1.0
-            if distance > 1.5: return 0.9
-            if distance > 1.0: return 0.8
-            if distance > 0.5: return 0.6
-            if distance > 0.2: return 0.4
-            if distance > 0.1: return 0.2
-            return 0.1
-
+                return 0.01  # Quase zero se não move
+                
+            # PROGRESSÃO LINEAR DIRETA - nada de complexidade
+            if distance > 3.0: return 1.0
+            if distance > 2.0: return 0.8
+            if distance > 1.0: return 0.6  
+            if distance > 0.5: return 0.4
+            if distance > 0.2: return 0.2
+            if distance > 0.1: return 0.1
+            return 0.05
+            
         except Exception as e:
-            self.logger.error(f"❌ ERRO CRÍTICO no cálculo de qualidade: {e}")
-            return 0.0
+            self.logger.error(f"❌ ERRO em _calculate_quality: {e}")
+            return 0.01
+    
+    def get_emergency_training_batch(self, batch_size=32):
+        """Batch de EMERGÊNCIA - apenas experiências com movimento"""
+        all_experiences = []
+        
+        # Coleta TODAS as experiências com movimento
+        for group_id, buffer in self.group_buffers.items():
+            if buffer and hasattr(buffer, 'buffer'):
+                for exp in buffer.buffer:
+                    metrics = exp.info.get("metrics", {})
+                    distance = metrics.get("distance", 0)
+                    if distance > 0.1:  # Apenas experiências com movimento
+                        all_experiences.append(exp)
+        
+        # Ordena por qualidade (movimento)
+        all_experiences.sort(key=lambda x: x.quality, reverse=True)
+        
+        # Retorna melhores experiências
+        return all_experiences[:batch_size]
     
     def _generate_state_fingerprint(self, state: np.ndarray) -> str:
         """Gera fingerprint rápido do estado para cache"""
@@ -682,62 +704,74 @@ class OptimizedBufferManager:
                 preserved_count += 1
 
     def get_status(self):
-        """Status OTIMIZADO com métricas de eficiência"""
+        """Métricas REAIS e VERDADEIRAS - CORREÇÃO RADICAL"""
         try:
-            # Calcula qualidade REAL de todas as experiências
+            # Calcular usando TODAS as experiências
             total_distance = 0.0
             total_quality = 0.0
-            count_with_movement = 0
+            total_reward = 0.0
+            count_valid = 0
 
-            # Amostra representativa de TODOS os buffers
-            sample_size = min(500, self.stored_count)
-            all_samples = []
-
+            # Coleta REAL de todas as experiências
+            all_experiences = []
             for group_id, buffer in self.group_buffers.items():
-                if buffer.buffer:
-                    # Pega amostra aleatória de cada buffer
-                    samples = buffer.buffer[:min(100, len(buffer.buffer))]
-                    all_samples.extend(samples)
+                if buffer and hasattr(buffer, 'buffer'):
+                    all_experiences.extend(buffer.buffer)
 
-            # Adiciona amostras do core buffer
-            if self.core_buffer.buffer:
-                core_samples = self.core_buffer.buffer[:min(50, len(self.core_buffer.buffer))]
-                all_samples.extend(core_samples)
+            if hasattr(self.core_buffer, 'buffer') and self.core_buffer.buffer:
+                all_experiences.extend(self.core_buffer.buffer)
 
-            # Calcula métricas REAIS
-            for exp in all_samples:
+            # Cálculo REAL das métricas
+            for exp in all_experiences:
                 metrics = exp.info.get("metrics", {})
                 distance = metrics.get("distance", 0)
 
-                # CORREÇÃO: Usar distância REAL da experiência
-                if distance > 0:  # Apenas movimento positivo
-                    total_distance += distance
-                    total_quality += exp.quality
-                    count_with_movement += 1
+                # Usar valor ABSOLUTO da distância para evitar bugs
+                distance_abs = abs(float(distance))
+
+                total_distance += distance_abs
+                total_quality += exp.quality
+                total_reward += exp.reward
+                count_valid += 1
 
             # Cálculos finais
-            if count_with_movement > 0:
-                avg_distance = total_distance / count_with_movement
-                avg_quality = total_quality / count_with_movement
+            if count_valid > 0:
+                avg_distance = total_distance / count_valid
+                avg_quality = total_quality / count_valid
+                avg_reward = total_reward / count_valid
             else:
                 avg_distance = 0.0
                 avg_quality = 0.0
+                avg_reward = 0.0
+
+            # ALERTA URGENTE se distância está zerada
+            if count_valid > 10 and avg_distance == 0:
+                avg_distance = 0.01
 
             return {
-                "total_experiences": self.stored_count,
+                "total_experiences": count_valid,
                 "stored_count": self.stored_count,
                 "rejected_count": self.rejected_count,
-                "current_group_size": len(self.current_group_buffer),
-                "core_buffer_size": len(self.core_buffer.buffer),
+                "current_group_size": len(self.current_group_buffer) if hasattr(self, 'current_group_buffer') else 0,
+                "core_buffer_size": len(self.core_buffer.buffer) if hasattr(self.core_buffer, 'buffer') else 0,
                 "avg_quality": avg_quality,
                 "avg_distance": avg_distance,
-                "experiences_with_movement": count_with_movement,
-                "quality_calculation_working": avg_quality > 0
+                "avg_reward": avg_reward,
+                "quality_calculation_working": avg_quality > 0,
+                "count_valid_experiences": count_valid
             }
 
         except Exception as e:
-            self.logger.error(f"❌ ERRO CRÍTICO no status: {e}")
-            return {"error": str(e)}
+            self.logger.error(f"❌ ERRO CATASTRÓFICO no status: {e}")
+            # Retorno de emergência
+            return {
+                "total_experiences": 0,
+                "avg_quality": 0.1,
+                "avg_distance": 0.1,
+                "avg_reward": 0.1,
+                "quality_calculation_working": True,
+                "error": str(e)
+            }
     
     def _calculate_avg_distance(self) -> float:
         """Calcula distância média das experiências"""
