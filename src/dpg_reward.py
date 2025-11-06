@@ -46,6 +46,7 @@ class RewardCalculator:
             "robustness": RewardComponent("robustness", 0.5, self._calculate_robustness_reward),
             "adaptation": RewardComponent("adaptation", 0.5, self._calculate_adaptation_reward),
             "recovery": RewardComponent("recovery", 0.8, self._calculate_recovery_reward),
+            "movement_priority": RewardComponent("movement_priority", 10.0, self._calculate_movement_priority_reward),
         }
     
     def calculate(self, sim, action, phase_info: Dict) -> float:
@@ -390,6 +391,37 @@ class RewardCalculator:
             self.logger.warning(f"Erro no cálculo de recompensa de ângulos: {e}")
             return 0.3  
     
+    def _calculate_movement_priority_reward(self, sim, phase_info) -> float:
+        """Recompensa PRINCIPAL focada APENAS em movimento positivo"""
+        distance = getattr(sim, "episode_distance", 0)
+        velocity = getattr(sim, "robot_x_velocity", 0)
+
+        # MOVIMENTO É TUDO - Recompensa massiva por progresso
+        base_reward = 0.0
+
+        # 1. RECOMPENSA POR DISTÂNCIA (80%)
+        if distance > 0:
+            # Progressão AGRESSIVA
+            distance_reward = min(distance * 100.0, 500.0)  # 100 pontos por metro
+            base_reward += distance_reward
+
+            # BÔNUS MASSIVO por marcos
+            if distance > 2.0: base_reward += 300.0
+            elif distance > 1.0: base_reward += 150.0
+            elif distance > 0.5: base_reward += 75.0
+            elif distance > 0.2: base_reward += 30.0
+
+        # 2. RECOMPENSA POR VELOCIDADE (20%)
+        if velocity > 0.1:
+            velocity_reward = velocity * 50.0  # 50 pontos por m/s
+            base_reward += velocity_reward
+
+        # 3. BÔNUS POR SOBREVIVÊNCIA (movimento contínuo)
+        if not getattr(sim, "episode_terminated", True) and distance > 0.1:
+            base_reward += 20.0
+
+        return base_reward
+
     def _calculate_propulsion_reward(self, sim, phase_info) -> float:
         pitch = getattr(sim, "robot_pitch", 0)
         velocity = getattr(sim, "robot_x_velocity", 0)
@@ -603,40 +635,30 @@ class CachedRewardCalculator(RewardCalculator):
             return "unknown"
     
     def _sim_states_similar(self, state1: str, state2: str, threshold: float = 0.05) -> bool:
-        """Comparação"""
+        """Comparação MAIS PERMISSIVA para cache"""
         if state1 == "unknown" or state2 == "unknown":
             return False
-            
+
+        # Comparação mais simples e eficaz
         try:
-            phase1 = self._get_gait_phase_from_state(state1)
-            phase2 = self._get_gait_phase_from_state(state2)
-            
-            if phase1 != phase2:
-                return False  
-            
+            # Apenas compara velocidades e contatos - métricas principais
             parts1 = state1.split('_')
             parts2 = state2.split('_')
-            numeric_matches = 0
-            total_numeric = 0
-            
-            for i in range(min(len(parts1), len(parts2))):  
-                if i < len(parts1) and i < len(parts2):
-                    try:
-                        val1 = float(parts1[i])
-                        val2 = float(parts2[i])
-                        total_numeric += 1
-                        if abs(val1 - val2) <= threshold: 
-                             numeric_matches += 1
-                    except ValueError:
-                        continue
-            
-            if total_numeric > 0 and numeric_matches / total_numeric >= 0.6:
+
+            if len(parts1) < 3 or len(parts2) < 3:
+                return False
+
+            # Compara apenas velocidade (principal métrica)
+            vel1 = float(parts1[0])
+            vel2 = float(parts2[0])
+
+            # Se velocidade similar e mesma fase de marcha
+            if abs(vel1 - vel2) <= threshold and self._get_gait_phase_from_state(state1) == self._get_gait_phase_from_state(state2):
                 return True
-                    
+
             return False
-            
-        except Exception as e:
-            self.logger.warning(f"Erro na comparação de estados: {e}")
+
+        except Exception:
             return False
     
     def _get_gait_phase_from_state(self, state_str: str) -> str:

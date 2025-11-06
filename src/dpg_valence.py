@@ -263,22 +263,33 @@ class ValenceManager:
     
     def _calculate_valence_level(self, valence_name: str, results: Dict) -> float:
         """Calcula nível atual de uma valência específica COM PROTEÇÃO"""
+        
+        if valence_name == "movimento_positivo_basico":
+            # Cálculo MAIS AGRESSIVO e REALISTA
+            distance = results.get("distance", 0)
+            speed = results.get("speed", 0)
+            success = results.get("success", False)
+
+            # MOVIMENTO É TUDO - Foco absoluto em distância
+            if success:
+                return 1.0  # Sucesso = mastered instantâneo
+
+            if distance <= 0:
+                return 0.05  # Quase zero se não há movimento
+
+            # PROGRESSÃO AGRESSIVA baseada em movimento REAL
+            if distance > 3.0: return 1.0
+            if distance > 2.0: return 0.9
+            if distance > 1.5: return 0.8
+            if distance > 1.0: return 0.7
+            if distance > 0.5: return 0.5
+            if distance > 0.2: return 0.3
+            if distance > 0.1: return 0.2
+            return 0.1
+    
         valence_config = self.valences[valence_name]
         level = 0.0
         metric_count = 0
-        if valence_name == "movimento_positivo_basico":
-            distance = max(results.get("distance", 0), 0)
-            speed = results.get("speed", 0)
-
-            # Cálculo DIRETO baseado em movimento
-            if distance > 0:
-                distance_level = min(distance / 2.0, 1.0)
-                speed_level = min(speed / 1.0, 1.0) if speed > 0 else 0.0
-                level = (distance_level * 0.7 + speed_level * 0.3)
-            else:
-                level = 0.1 
-
-            return min(level, 1.0)
 
         # Para outras valências, cálculo normal
         for metric in valence_config.metrics:
@@ -415,18 +426,18 @@ class ValenceManager:
     
     def _generate_mission(self, valence_levels: Dict[str, float]) -> Optional[Mission]:
         """Gera nova missão baseada nas valências mais problemáticas"""
-        # PRIORIDADE ABSOLUTA para movimento_positivo_basico
         
-        existing_mission_for_movimento = any(
-            mission.valence_name == 'movimento_positivo_basico' 
-            for mission in self.current_missions
-        )
-        if not existing_mission_for_movimento and valence_levels.get('movimento_positivo_basico', 0) < 0.7:
-            target_improvement = 0.3  
-            duration = 15  
+        # PRIORIDADE ABSOLUTA para movimento_positivo_basico
+        movimento_level = valence_levels.get('movimento_positivo_basico', 0)
+        if movimento_level < 0.7:
+            # Meta AGRESSIVA: 50% de melhoria
+            target_improvement = min(0.5, 0.7 - movimento_level)
+            duration = 10  # Missões CURTAS e frequentes
+
             mission = Mission('movimento_positivo_basico', target_improvement, duration)
-            mission.start_level = valence_levels['movimento_positivo_basico']
-            mission.bonus_multiplier = 3.0  
+            mission.start_level = movimento_level
+            mission.bonus_multiplier = 4.0  # Bônus MASSIVO
+
             return mission
     
         candidate_valences = []

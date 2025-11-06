@@ -739,21 +739,36 @@ class DPGManager:
         
     def _check_irl_activations(self, episode_results):
         """Verifica e ativa IRL quando necessário"""
-        distance = max(episode_results.get('distance', 0), 0)
-        reward = episode_results.get('reward', 0)
-        if distance < 0 and self.episode_count > 100:
-            self.activate_propulsion_irl()
-            self.critic.weights.irl_influence = 0.9
-        
-        if (distance < 0.5 and self.episode_count > 200 and 
-            not hasattr(self, '_propulsion_irl_activated')):
+        distance = episode_results.get('distance', 0)
+        valence_status = self.valence_manager.get_valence_status()
+        movimento_level = valence_status['valence_details']['movimento_positivo_basico']['current_level']
+    
+        # ATIVAÇÃO AGRESSIVA: Se não há movimento suficiente
+        if (distance < 1.0 and self.episode_count > 100) or movimento_level < 0.3:
             self.activate_propulsion_irl()
             self._propulsion_irl_activated = True
         
-        valence_status = self.valence_manager.get_valence_status()
-        instability = self._calculate_instability(valence_status)
-        if instability > 0.6 and self.episode_count > 50:
-            self.activate_stabilization_irl()
+        # ATIVAÇÃO DE EMERGÊNCIA: Se regressão
+        if movimento_level < 0.2 and self.episode_count > 50:
+            self.activate_emergency_movement_irl()
+
+    def activate_emergency_movement_irl(self):
+        """IRL DE EMERGÊNCIA - Foco ABSOLUTO em movimento"""
+        emergency_weights = {
+            'progress': 0.98,    # FOCO MÁXIMO
+            'stability': 0.01,   # Mínimo vital  
+            'efficiency': 0.005, # Quase zero
+            'coordination': 0.005 # Quase zero
+        }
+
+        # FORÇAR pesos extremos
+        self.critic.weights.propulsion = 0.95
+        self.critic.weights.stability = 0.04
+        self.critic.weights.coordination = 0.005
+        self.critic.weights.efficiency = 0.005
+        self.critic.weights.irl_influence = 0.99
+
+        self.valence_manager.irl_weights = emergency_weights
         
     def activate_propulsion_irl(self):
         """Ativar IRL ESPECÍFICO para movimento"""

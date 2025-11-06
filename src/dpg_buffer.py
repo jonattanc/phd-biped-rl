@@ -685,50 +685,59 @@ class OptimizedBufferManager:
         """Status OTIMIZADO com métricas de eficiência"""
         try:
             # Calcula qualidade REAL de todas as experiências
-            all_experiences = []
+            total_distance = 0.0
+            total_quality = 0.0
+            count_with_movement = 0
+
+            # Amostra representativa de TODOS os buffers
+            sample_size = min(500, self.stored_count)
+            all_samples = []
 
             for group_id, buffer in self.group_buffers.items():
-                all_experiences.extend(buffer.buffer)
+                if buffer.buffer:
+                    # Pega amostra aleatória de cada buffer
+                    samples = buffer.buffer[:min(100, len(buffer.buffer))]
+                    all_samples.extend(samples)
 
-            all_experiences.extend(self.core_buffer.buffer)
+            # Adiciona amostras do core buffer
+            if self.core_buffer.buffer:
+                core_samples = self.core_buffer.buffer[:min(50, len(self.core_buffer.buffer))]
+                all_samples.extend(core_samples)
 
-            total_quality = 0.0
-            total_distance = 0.0
-            count = len(all_experiences)
+            # Calcula métricas REAIS
+            for exp in all_samples:
+                metrics = exp.info.get("metrics", {})
+                distance = metrics.get("distance", 0)
 
-            if count > 0:
-                for exp in all_experiences:
+                # CORREÇÃO: Usar distância REAL da experiência
+                if distance > 0:  # Apenas movimento positivo
+                    total_distance += distance
                     total_quality += exp.quality
-                    metrics = exp.info.get("metrics", {})
-                    total_distance += max(metrics.get("distance", 0), 0)
+                    count_with_movement += 1
 
-                avg_quality = total_quality / count
-                avg_distance = total_distance / count
+            # Cálculos finais
+            if count_with_movement > 0:
+                avg_distance = total_distance / count_with_movement
+                avg_quality = total_quality / count_with_movement
             else:
-                avg_quality = 0.0
                 avg_distance = 0.0
-
-            cache_hits = self.performance_stats["cache_hits"]
-            cache_misses = self.performance_stats["cache_misses"]
-            cache_total = cache_hits + cache_misses
+                avg_quality = 0.0
 
             return {
                 "total_experiences": self.stored_count,
                 "stored_count": self.stored_count,
                 "rejected_count": self.rejected_count,
-                "rejection_rate": self.rejected_count / max(self.episode_count, 1),
-                "cache_hit_rate": cache_hits / max(cache_total, 1),
                 "current_group_size": len(self.current_group_buffer),
                 "core_buffer_size": len(self.core_buffer.buffer),
                 "avg_quality": avg_quality,
                 "avg_distance": avg_distance,
-                "total_calculated": count,
-                "quality_calculation_working": avg_quality > 0  # INDICADOR CRÍTICO
+                "experiences_with_movement": count_with_movement,
+                "quality_calculation_working": avg_quality > 0
             }
 
         except Exception as e:
-            self.logger.error(f"❌ ERRO RADICAL no cálculo de status: {e}")
-            return {"error": str(e), "critical": True}
+            self.logger.error(f"❌ ERRO CRÍTICO no status: {e}")
+            return {"error": str(e)}
     
     def _calculate_avg_distance(self) -> float:
         """Calcula distância média das experiências"""
