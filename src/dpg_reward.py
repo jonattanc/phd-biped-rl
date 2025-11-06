@@ -169,17 +169,17 @@ class RewardCalculator:
         # 1. COMPONENTE PRINCIPAL: DISTÂNCIA (80%)
         distance = getattr(sim, "episode_distance", 0)
         if distance > 0:
-            distance_reward = min(distance * 50.0, 100.0)  # Aumentado para 50 pontos por metro
+            distance_reward = min(distance * 50.0, 100.0)  
             base_reward += distance_reward
 
         # 2. BÔNUS MASSIVO POR MOVIMENTO INICIAL
         if distance > 0.1 and distance <= 0.5:
-            base_reward += 50.0  # Aumentado bônus por começar a se mover
+            base_reward += 50.0  
 
         # 3. BÔNUS POR VELOCIDADE SUSTENTADA
         velocity = getattr(sim, "robot_x_velocity", 0)
         if velocity > 0.3:
-            base_reward += velocity * 20.0  # Aumentado
+            base_reward += velocity * 20.0 
 
         return max(base_reward, 1.0)
     
@@ -228,7 +228,8 @@ class RewardCalculator:
         """Recompensa por velocidade consistente e eficiente"""
         current_velocity = getattr(sim, "robot_x_velocity", 0)
         target_velocity = 2.0  # ~7 km/h - objetivo realista
-        
+        if current_velocity < 0:
+            return 0.0
         # Recompensa velocidade próxima do alvo com baixa variação
         velocity_ratio = current_velocity / target_velocity
         if 0.8 <= velocity_ratio <= 1.2:  # ±20% do alvo
@@ -311,7 +312,7 @@ class RewardCalculator:
     
     def _calculate_biomechanics_reward(self, sim, phase_info) -> float:
         """Recompensa por eficiência biomecânica"""
-        distance = getattr(sim, "episode_distance", 0)
+        distance = max(getattr(sim, "episode_distance", 0), 0)
         energy = max(getattr(sim, "robot_energy_used", 1.0), 0.1)
         
         # Eficiência energética
@@ -392,6 +393,8 @@ class RewardCalculator:
     def _calculate_propulsion_reward(self, sim, phase_info) -> float:
         pitch = getattr(sim, "robot_pitch", 0)
         velocity = getattr(sim, "robot_x_velocity", 0)
+        if velocity < 0:
+            return 0.0
         if pitch < -0.05 and velocity > 0.1:
             return min(abs(pitch) * velocity * 4.0, 1.0)
         return 0.0
@@ -662,18 +665,18 @@ class CachedRewardCalculator(RewardCalculator):
         """Priorização MAIS EFETIVA baseada em pesquisa real"""
         movement_components = ["basic_progress", "velocity", "propulsion"]
         stability_components = ["stability", "posture", "dynamic_balance"]
-        
+
         # PRIMEIRO: Movimento (60%)
         prioritized = [c for c in movement_components if c in enabled_components]
-        
+
         # SEGUNDO: Estabilidade (30%)
         prioritized.extend([c for c in stability_components if c in enabled_components])
-        
+
         # TERCEIRO: Outros (10%)
         other_components = [c for c in enabled_components 
                            if c not in movement_components + stability_components]
         prioritized.extend(other_components)
-        
+
         return prioritized[:6]
     
     def _generate_cache_key(self, sim, phase_info: Dict) -> str:

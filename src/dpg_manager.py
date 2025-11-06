@@ -78,7 +78,7 @@ class ValenceAwareCritic:
     
     def _calculate_propulsion_score(self, metrics, valence_levels):
         """Calcula score de propulsão"""
-        distance = metrics.get('distance', 0)
+        distance = max(metrics.get("distance", 0), 0)
         velocity = metrics.get('speed', 0)
         distance_score = min(distance / 3.0, 1.0)
         velocity_score = min(abs(velocity) / 1.5, 1.0) if velocity > 0 else 0.0
@@ -113,7 +113,7 @@ class ValenceAwareCritic:
         """Calcula valor baseado em alinhamento IRL"""
         alignment = 0.0
         if 'progress' in irl_weights:
-            distance = metrics.get('distance', 0)
+            distance = max(metrics.get("distance", 0), 0)
             alignment += irl_weights['progress'] * min(distance / 2.0, 1.0)
         if 'stability' in irl_weights:
             roll = abs(metrics.get('roll', 0))
@@ -295,7 +295,7 @@ class DPGManager:
             # Métricas básicas
             roll = abs(episode_results.get("roll", 0))
             pitch = abs(episode_results.get("pitch", 0))
-            distance = episode_results.get("distance", 0)
+            distance = max(episode_results.get('distance', 0), 0)
             velocity = episode_results.get("speed", 0)
 
             # Métricas para valências aprimoradas
@@ -357,7 +357,7 @@ class DPGManager:
                 'success_rate': 0.0
             }
         rewards = [m['reward'] for m in self.episode_metrics_history]
-        distances = [m['distance'] for m in self.episode_metrics_history]
+        distances = [max(m['distance'], 0) for m in self.episode_metrics_history]
         successes = [m['success'] for m in self.episode_metrics_history]
         avg_reward = np.mean(rewards)
         avg_distance = np.mean(distances)
@@ -496,7 +496,7 @@ class DPGManager:
         except:
             energy_used = 1.0
         return {
-            'distance': getattr(sim, 'episode_distance', 0),
+            'distance': max(getattr(sim, 'episode_distance', 0), 0),
             'speed': getattr(sim, 'robot_x_velocity', 0),
             'roll': abs(getattr(sim, 'robot_roll', 0)),
             'pitch': abs(getattr(sim, 'robot_pitch', 0)),
@@ -729,7 +729,7 @@ class DPGManager:
         """Atualização otimizada do histórico"""
         self.episode_metrics_history.append({
             'reward': episode_results.get('reward', 0),
-            'distance': episode_results.get('distance', 0),
+            'distance': max(episode_results.get('distance', 0), 0),
             'speed': episode_results.get('speed', 0),
             'success': episode_results.get('success', False)
         })
@@ -739,7 +739,7 @@ class DPGManager:
         
     def _check_irl_activations(self, episode_results):
         """Verifica e ativa IRL quando necessário"""
-        distance = episode_results.get('distance', 0)
+        distance = max(episode_results.get('distance', 0), 0)
         reward = episode_results.get('reward', 0)
         if distance < 0 and self.episode_count > 100:
             self.activate_propulsion_irl()
@@ -843,13 +843,13 @@ class DPGManager:
     
     def update_crutch_system(self, episode_results):
         """Atualiza nível de ajuda baseado em performance REAL"""
-        distance = episode_results.get('distance', 0)
+        distance = max(episode_results.get('distance', 0), 0)
         valence_status = self.valence_manager.get_valence_status()
         movimento_level = valence_status['valence_details']['movimento_positivo_basico']['current_level']
-        
+
         # CRITÉRIO PRINCIPAL: movimento real
         if distance > 1.0:
-            new_level = 0.1  # Mínimo
+            new_level = 0.1  
         elif distance > 0.5:
             new_level = 0.3
         elif distance > 0.2:
@@ -858,11 +858,11 @@ class DPGManager:
             new_level = 0.7
         else:
             new_level = 0.9
-        
+
         # BÔNUS por valência de movimento
         if movimento_level > 0.5:
             new_level = max(new_level - 0.2, 0.1)
-        
+
         self.crutches["level"] = new_level
         self._update_crutch_stage()
 

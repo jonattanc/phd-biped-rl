@@ -306,12 +306,12 @@ class OptimizedBufferManager:
 
             # Verificação rápida de qualidade básica
             metrics = experience_data.get("metrics", {})
-            distance = metrics.get("distance", 0)
+            distance = max(metrics.get("distance", 0), 0)
             speed = metrics.get("speed", 0)
             reward = experience_data.get("reward", 0)
 
-            # CALCULA QUALIDADE COM DEBUG
-            quality = self._calculate_quality_with_debug(experience_data)
+            # CALCULA QUALIDADE
+            quality = self._calculate_quality(experience_data)
 
             # CORREÇÃO RADICAL: Armazena TUDO para debug
             current_group = self.get_current_group()
@@ -326,48 +326,6 @@ class OptimizedBufferManager:
 
         except Exception as e:
             self.logger.error(f"❌❌ ERRO CRÍTICO no armazenamento: {e}")
-
-    def _calculate_quality_with_debug(self, data: Dict) -> float:
-        """Cálculo de qualidade com DEBUG COMPULSIVO"""
-        try:
-            metrics = data.get("metrics", {})
-            reward = data.get("reward", 0)
-
-            distance = float(metrics.get("distance", 0))
-            speed = float(metrics.get("speed", 0))
-            success = bool(metrics.get("success", False))
-
-            # CÁLCULO SIMPLES E DIRETO
-            quality = 0.0
-
-            # 1. DISTÂNCIA (80% do peso)
-            if distance > 0:
-                distance_component = min(distance / 2.0, 1.0) * 0.8
-                quality += distance_component
-
-            # 2. VELOCIDADE (20% do peso)  
-            if speed > 0:
-                speed_component = min(speed / 1.5, 1.0) * 0.2
-                quality += speed_component
-
-            # 3. BÔNUS AGRESSIVO
-            if distance > 1.0:
-                quality = min(quality + 0.3, 1.0)
-            elif distance > 0.5:
-                quality = min(quality + 0.15, 1.0)
-            if success:
-                quality = 1.0
-
-            # GARANTIA: Qualidade mínima para movimento
-            if distance > 0.1 and quality == 0:
-                quality = 0.1
-                self.logger.info(f"   🛡️  Garantia mínima: 0.10")
-
-            return quality
-
-        except Exception as e:
-            self.logger.error(f"❌ ERRO no cálculo de qualidade: {e}")
-            return 0.0
 
     def _store_without_criteria(self, experience: Experience, group: int):
         """Armazenamento SEM CRITÉRIOS - apenas para debug"""
@@ -433,7 +391,7 @@ class OptimizedBufferManager:
         """Critérios INTELIGENTES de armazenamento"""
         try:
             metrics = experience.info.get("metrics", {})
-            distance = metrics.get("distance", 0)
+            distance = max(metrics.get("distance", 0), 0)
 
             if distance > 0.1:
                 return True
@@ -449,7 +407,7 @@ class OptimizedBufferManager:
     def _is_fundamental_skill(self, experience: Experience) -> bool:
         """Habilidades fundamentais CORRIGIDAS"""
         metrics = experience.info.get("metrics", {})
-        distance = metrics.get("distance", 0)
+        distance = max(metrics.get("distance", 0), 0)
 
         # Foco em movimento POSITIVO com estabilidade
         return (distance > 0.2 and 
@@ -534,7 +492,7 @@ class OptimizedBufferManager:
         """Calcula qualidade com FOCO EM MOVIMENTO POSITIVO"""
         try:
             metrics = data.get("metrics", {})
-            distance = metrics.get("distance", 0)
+            distance = max(metrics.get("distance", 0), 0)
             speed = metrics.get("speed", 0)
 
             # QUALIDADE = MOVIMENTO REAL
@@ -567,7 +525,7 @@ class OptimizedBufferManager:
     
     def _analyze_skills(self, metrics: Dict) -> Dict[str, float]:
         """Análise simplificada de habilidades """
-        distance = metrics.get("distance", 0)
+        distance = max(metrics.get("distance", 0), 0)
         speed = metrics.get("speed", 0)
         roll = abs(metrics.get("roll", 0))
         pitch = abs(metrics.get("pitch", 0))
@@ -699,7 +657,7 @@ class OptimizedBufferManager:
 
         for exp in old_buffer.buffer:
             metrics = exp.info.get("metrics", {})
-            distance = metrics.get("distance", 0)
+            distance = max(metrics.get("distance", 0), 0)
 
             # PRIORIDADE: Experiências com movimento significativo
             movement_bonus = min(distance / 1.0, 1.0) 
@@ -742,23 +700,13 @@ class OptimizedBufferManager:
                 for exp in all_experiences:
                     total_quality += exp.quality
                     metrics = exp.info.get("metrics", {})
-                    total_distance += metrics.get("distance", 0)
+                    total_distance += max(metrics.get("distance", 0), 0)
 
                 avg_quality = total_quality / count
                 avg_distance = total_distance / count
             else:
                 avg_quality = 0.0
                 avg_distance = 0.0
-
-            # ALERTA CRÍTICO se qualidade é 0 mas há experiências
-            if count > 10 and avg_quality == 0:
-                self.logger.error(f"🚨🚨 ALERTA CRÍTICO: {count} experiências mas qualidade média 0.00!")
-                # DEBUG DETALHADO
-                sample_exps = all_experiences[:5]  # Primeiras 5
-                for i, exp in enumerate(sample_exps):
-                    metrics = exp.info.get("metrics", {})
-                    distance = metrics.get("distance", 0)
-                    self.logger.error(f"   🧪 Amostra {i+1}: Quality={exp.quality:.2f}, Distance={distance:.2f}m, Reward={exp.reward:.1f}")
 
             cache_hits = self.performance_stats["cache_hits"]
             cache_misses = self.performance_stats["cache_misses"]
@@ -790,7 +738,7 @@ class OptimizedBufferManager:
         for buffer in self.group_buffers.values():
             if buffer.buffer:
                 for exp in buffer.buffer[:50]:  
-                    distance = exp.info.get("metrics", {}).get("distance", 0)
+                    distance = max(exp.info.get("metrics", {}).get("distance", 0), 0)
                     total_distance += max(distance, 0)  
                     count += 1
 

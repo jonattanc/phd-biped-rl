@@ -267,7 +267,7 @@ class ValenceManager:
         level = 0.0
         metric_count = 0
         if valence_name == "movimento_positivo_basico":
-            distance = results.get("distance", 0)
+            distance = max(results.get("distance", 0), 0)
             speed = results.get("speed", 0)
 
             # Cálculo DIRETO baseado em movimento
@@ -417,12 +417,16 @@ class ValenceManager:
         """Gera nova missão baseada nas valências mais problemáticas"""
         # PRIORIDADE ABSOLUTA para movimento_positivo_basico
         
-        if valence_levels.get('movimento_positivo_basico', 0) < 0.7:
-            target_improvement = 0.3  # Meta agressiva
-            duration = 15  # Curta duração
+        existing_mission_for_movimento = any(
+            mission.valence_name == 'movimento_positivo_basico' 
+            for mission in self.current_missions
+        )
+        if not existing_mission_for_movimento and valence_levels.get('movimento_positivo_basico', 0) < 0.7:
+            target_improvement = 0.3  
+            duration = 15  
             mission = Mission('movimento_positivo_basico', target_improvement, duration)
             mission.start_level = valence_levels['movimento_positivo_basico']
-            mission.bonus_multiplier = 3.0  # Bônus massivo
+            mission.bonus_multiplier = 3.0  
             return mission
     
         candidate_valences = []
@@ -771,7 +775,7 @@ class LightValenceIRL:
         # Progresso básico já é suficiente
         if results.get('success', False):
             quality += 0.5 
-        elif results.get('distance', 0) > 1.0:  # Aumentamos a distância mínima
+        elif max(results.get('distance', 0), 0) > 1.0:  # Aumentamos a distância mínima
             quality += 0.4 
         elif results.get('speed', 0) > 0.5:  # Aumentamos a velocidade mínima
             quality += 0.3 
@@ -814,7 +818,7 @@ class LightValenceIRL:
             results = demo['results']
             
             # Progresso
-            if results.get('distance', 0) > 0.5:
+            if max(results.get('distance', 0), 0) > 0.5:
                 feature_scores['progress'] += results['distance']
                 feature_counts['progress'] += 1
                 
