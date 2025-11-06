@@ -128,6 +128,17 @@ class ValenceManager:
     def _initialize_valences(self) -> Dict[str, ValenceConfig]:
         """Inicializa as valências fundamentais para locomoção bípede"""
         return {
+            # VALÊNCIA INICIAL: Movimento Básico Positivo
+            "movimento_positivo_basico": ValenceConfig(
+                name="movimento_positivo_basico",
+                target_level=0.9,  
+                metrics=["distance", "speed", "positive_movement_rate"],
+                reward_components=["basic_progress", "velocity", "propulsion"],
+                dependencies=[],  
+                activation_threshold=0.01, 
+                mastery_threshold=0.8,
+                min_episodes=1
+            ),
             # VALÊNCIA FUNDAMENTAL: Estabilidade dinamica
             "estabilidade_dinamica": ValenceConfig(
                 name="estabilidade_dinamica",
@@ -146,7 +157,7 @@ class ValenceManager:
                 target_level=0.7,
                 metrics=["x_velocity", "velocity_consistency", "positive_movement_rate", "acceleration_smoothness"],
                 reward_components=["velocity", "propulsion", "smoothness"],
-                dependencies=["estabilidade_dinamica"],
+                dependencies=["movimento_positivo_basico"],
                 activation_threshold=0.2,
                 mastery_threshold=0.65,
                 min_episodes=5

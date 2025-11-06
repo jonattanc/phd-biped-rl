@@ -741,9 +741,15 @@ class DPGManager:
         """Verifica e ativa IRL quando necessário"""
         distance = episode_results.get('distance', 0)
         reward = episode_results.get('reward', 0)
-        if (distance < 1.0 and self.episode_count > 50 and 
-            len(self.valence_manager.get_irl_weights()) == 0):
+        if distance < 0 and self.episode_count > 100:
             self.activate_propulsion_irl()
+            self.critic.weights.irl_influence = 0.9
+        
+        if (distance < 0.5 and self.episode_count > 200 and 
+            not hasattr(self, '_propulsion_irl_activated')):
+            self.activate_propulsion_irl()
+            self._propulsion_irl_activated = True
+        
         valence_status = self.valence_manager.get_valence_status()
         instability = self._calculate_instability(valence_status)
         if instability > 0.6 and self.episode_count > 50:
@@ -836,32 +842,22 @@ class DPGManager:
         success = episode_results.get('success', False)
         distance = episode_results.get('distance', 0)
         reward = episode_results.get('reward', 0)
-        if distance < 0:  
-            new_crutch_level = max(0.3, self.crutches["level"] - 0.1) 
-        elif self.episode_count < 200:
-            new_crutch_level = 0.8
-        elif self.episode_count < 500:
-            new_crutch_level = 0.6
+        if distance < 0 and self.episode_count > 500:  
+            new_crutch_level = 0.1 
+            if not hasattr(self, '_emergency_irl_activated'):
+                self.activate_propulsion_irl()
+                self.critic.weights.irl_influence = 0.9 
+                self._emergency_irl_activated = True
+        elif distance < 0.1:  
+            new_crutch_level = 0.2
+        elif distance < 0.5:
+            new_crutch_level = 0.3
+        elif distance < 1.0:
+            new_crutch_level = 0.4
         else:
-            recent_metrics = self.episode_metrics_history[-20:] if self.episode_metrics_history else []
-            if recent_metrics:
-                recent_avg_distance = np.mean([m.get('distance', 0) for m in recent_metrics])
+            new_crutch_level = 0.1  
 
-                if recent_avg_distance > 1.0:  
-                    new_crutch_level = 0.3
-                elif recent_avg_distance > 0.5:
-                    new_crutch_level = 0.5
-                else:
-                    new_crutch_level = 0.7
-            else:
-                new_crutch_level = 0.5
-
-        smoothing_factor = 0.3 
-        self.crutches["level"] = (
-            smoothing_factor * new_crutch_level + 
-            (1 - smoothing_factor) * self.crutches["level"]
-        )
-
+        self.crutches["level"] = new_crutch_level
         self._update_crutch_stage()
 
     def _update_crutch_stage(self):
