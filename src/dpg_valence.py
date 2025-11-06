@@ -694,8 +694,13 @@ class LightValenceIRL:
     def should_activate(self, valence_status):
         """Ativa quando valências base estão consolidadas"""
         try:
-            if self.sample_count < 20: 
+            if self.sample_count < 10: 
                 return False
+            if hasattr(self, '_last_demo_distance'):
+                recent_distance = getattr(self, '_last_demo_distance', 0)
+                if recent_distance < 0.5 and self.sample_count > 5:  
+                    self._active = True
+                    return True
                 
             base_valences = ['estabilidade_dinamica', 'propulsao_eficiente']
             struggling_valences = 0

@@ -166,17 +166,21 @@ class RewardCalculator:
     def _calculate_basic_progress_reward(self, sim, phase_info) -> float:
         distance = getattr(sim, "episode_distance", 0)
         velocity = getattr(sim, "robot_x_velocity", 0)
-        if distance > 1.5:  
-            distance_reward = 4.0
+        if distance > 2.0:  
+            distance_reward = 8.0
+        elif distance > 1.5:  
+            distance_reward = 6.0
         elif distance > 1.0:  
-            distance_reward = 3.0
+            distance_reward = 4.0
         elif distance > 0.5:  
             distance_reward = 2.0
+        elif distance > 0.1: 
+            distance_reward = 1.0
         else:  
-            distance_reward = 0.5
-        velocity_reward = min(abs(velocity) / 0.5, 3.0) if velocity > 0.01 else 0.0
+            distance_reward = 0.1
+        velocity_reward = min(abs(velocity) / 0.3, 5.0) if velocity > 0.01 else 0.0
 
-        return (distance_reward * 0.7 + velocity_reward * 0.3)
+        return (distance_reward * 0.8 + velocity_reward * 0.2)
     
     def _calculate_posture_reward(self, sim, phase_info) -> float:
         try:

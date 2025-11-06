@@ -741,7 +741,7 @@ class DPGManager:
         """Verifica e ativa IRL quando necessário"""
         distance = episode_results.get('distance', 0)
         reward = episode_results.get('reward', 0)
-        if (distance < 1.0 and self.episode_count > 100 and 
+        if (distance < 1.0 and self.episode_count > 50 and 
             len(self.valence_manager.get_irl_weights()) == 0):
             self.activate_propulsion_irl()
         valence_status = self.valence_manager.get_valence_status()
@@ -836,26 +836,27 @@ class DPGManager:
         success = episode_results.get('success', False)
         distance = episode_results.get('distance', 0)
         reward = episode_results.get('reward', 0)
-        if self.episode_count < 300:
-            new_crutch_level = 0.95  
-        elif self.episode_count < 600:
-            new_crutch_level = 0.8   
-        elif self.episode_count < 1000:
-            new_crutch_level = 0.6  
+        if distance < 0:  
+            new_crutch_level = max(0.3, self.crutches["level"] - 0.1) 
+        elif self.episode_count < 200:
+            new_crutch_level = 0.8
+        elif self.episode_count < 500:
+            new_crutch_level = 0.6
         else:
-            recent_metrics = self.episode_metrics_history[-30:] if self.episode_metrics_history else []
+            recent_metrics = self.episode_metrics_history[-20:] if self.episode_metrics_history else []
             if recent_metrics:
-                recent_success_rate = np.mean([m.get('success', False) for m in recent_metrics])
                 recent_avg_distance = np.mean([m.get('distance', 0) for m in recent_metrics])
 
-                if recent_success_rate > 0.7 and recent_avg_distance > 2.0:
-                    new_crutch_level = 0.3  
+                if recent_avg_distance > 1.0:  
+                    new_crutch_level = 0.3
+                elif recent_avg_distance > 0.5:
+                    new_crutch_level = 0.5
                 else:
-                    new_crutch_level = 0.6  
+                    new_crutch_level = 0.7
             else:
                 new_crutch_level = 0.5
 
-        smoothing_factor = 0.2  
+        smoothing_factor = 0.3 
         self.crutches["level"] = (
             smoothing_factor * new_crutch_level + 
             (1 - smoothing_factor) * self.crutches["level"]
