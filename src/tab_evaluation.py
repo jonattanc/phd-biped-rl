@@ -128,6 +128,31 @@ class EvaluationTab(common_tab.GUITab):
         self.canvas_evaluation = FigureCanvasTkAgg(self.fig_evaluation, master=graph_frame)
         self.canvas_evaluation.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
+        # Aba de gráfico dinâmico
+        dynamic_graph_frame = ttk.Frame(results_notebook)
+        results_notebook.add(dynamic_graph_frame, text="Gráfico Dinâmico")
+
+        # Controles para o gráfico dinâmico
+        controls_frame = ttk.Frame(dynamic_graph_frame)
+        controls_frame.pack(fill=tk.X, pady=5)
+
+        ttk.Label(controls_frame, text="Episódio:").grid(row=0, column=0, sticky=tk.W, padx=5)
+        self.dynamic_episode_var = tk.IntVar(value=1)
+        self.dynamic_episode_spinbox = ttk.Spinbox(controls_frame, from_=1, to=1e7, textvariable=self.dynamic_episode_var, width=8, state=tk.DISABLED, command=self.update_dynamic_plot)
+        self.dynamic_episode_spinbox.grid(row=0, column=1, padx=5)
+        self.dynamic_episode_spinbox.bind("<Return>", lambda event: self.update_dynamic_plot())
+
+        ttk.Label(controls_frame, text="Dados para plotar:").grid(row=0, column=2, sticky=tk.W, padx=5)
+        self.dynamic_data_var = tk.StringVar()
+        self.dynamic_data_combobox = ttk.Combobox(controls_frame, textvariable=self.dynamic_data_var, state=tk.DISABLED)
+        self.dynamic_data_combobox.grid(row=0, column=3, padx=5)
+        self.dynamic_data_combobox.bind("<<ComboboxSelected>>", lambda event: self.update_dynamic_plot())
+
+        # Gráfico dinâmico
+        self.fig_dynamic, self.ax_dynamic = plt.subplots(figsize=(10, 6))
+        self.canvas_dynamic = FigureCanvasTkAgg(self.fig_dynamic, master=dynamic_graph_frame)
+        self.canvas_dynamic.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
         self._initialize_evaluation_plots()
 
     def _initialize_evaluation_plots(self):
@@ -528,6 +553,18 @@ class EvaluationTab(common_tab.GUITab):
             messagebox.showerror("Erro", f"Erro ao exportar gráficos: {e}")
             self.logger.exception("Erro ao exportar gráficos")
 
+    def update_dynamic_plot(self):
+        try:
+            self.logger.info("Atualizando gráfico dinâmico")
+            episode = self.dynamic_episode_var.get()
+            selected_data = self.dynamic_data_var.get()
+
+            self.logger.info(f"episode: {episode}")
+            self.logger.info(f"selected_data: {selected_data}")
+
+        except Exception as e:
+            self.logger.exception("Erro ao atualizar plot dinâmico")
+
     def pause_training(self, force_pause=False):
         """Pausa ou retoma o treinamento"""
         if not self.pause_values:
@@ -597,6 +634,19 @@ class EvaluationTab(common_tab.GUITab):
         self._display_evaluation_results()
         self.save_results_btn.config(state=tk.NORMAL)
         self.export_plot_btn.config(state=tk.NORMAL)
+        self.dynamic_episode_spinbox.config(state=tk.NORMAL)
+        self.dynamic_data_combobox.config(state=tk.NORMAL)
+
+        num_episodes = self.metrics_data["extra_metrics"]["num_episodes"]
+        self.dynamic_episode_spinbox.config(from_=1, to=num_episodes)
+        self.dynamic_episode_var.set(1)
+
+        available_keys = list(self.metrics_data["episodes"]["1"]["step_data"].keys())
+        self.logger.info(f"available_keys: {available_keys}")
+        self.dynamic_data_combobox["values"] = available_keys
+        self.dynamic_data_var.set(available_keys[0])
+
+        self.update_dynamic_plot()
 
     def start(self):
         """Inicializa a aba de avaliação"""
