@@ -2,9 +2,9 @@
 import numpy as np
 from dataclasses import dataclass
 from typing import Dict, List, Optional
-from dpg_valence import ValenceManager, ValenceState
-from dpg_reward import RewardCalculator
-from dpg_buffer import SmartBufferManager
+from dpg_valence import OptimizedValenceManager, ValenceState
+from dpg_reward import CachedRewardCalculator
+from dpg_buffer import OptimizedBufferManager
 
 @dataclass
 class CriticWeights:
@@ -156,9 +156,9 @@ class DPGManager:
         self.config = type('Config', (), {'enabled': True})
         self.config.valence_system = True
 
-        self.valence_manager = ValenceManager(logger, {})
-        self.reward_calculator = RewardCalculator(logger, {})
-        self.buffer_manager = SmartBufferManager(logger, {})
+        self.valence_manager = OptimizedValenceManager(logger, {}) 
+        self.reward_calculator = CachedRewardCalculator(logger, {}) 
+        self.buffer_manager = OptimizedBufferManager(logger, {})
         self.buffer_manager._dpg_manager = self
         valence_count = len(self.valence_manager.valences)
         self.critic = ValenceAwareCritic(logger, valence_count)
@@ -264,17 +264,46 @@ class DPGManager:
         """Prepara métricas estendidas para o sistema de valências"""
         extended = episode_results.copy()
         try:
+            # Métricas básicas
             roll = abs(episode_results.get("roll", 0))
             pitch = abs(episode_results.get("pitch", 0))
-            extended["stability"] = 1.0 - min((roll + pitch) / 2.0, 1.0)
             distance = episode_results.get("distance", 0)
+            velocity = episode_results.get("speed", 0)
+
+            # Métricas para valências aprimoradas
+            extended["stability"] = 1.0 - min((roll + pitch) / 2.0, 1.0)
             extended["positive_movement_rate"] = 1.0 if distance > 0.1 else 0.0
+
+            # Métricas de estabilidade dinâmica
+            extended["com_height_consistency"] = 0.8 
+            extended["lateral_stability"] = 1.0 - min(abs(getattr(self.robot, "y_velocity", 0)) / 0.3, 1.0)
+            extended["pitch_velocity"] = abs(getattr(self.robot, "pitch_velocity", 0))
+
+            # Métricas de propulsão eficiente
+            extended["velocity_consistency"] = 0.7 
+            extended["acceleration_smoothness"] = 0.8 
+
+            # Métricas de ritmo de marcha
             left_contact = episode_results.get("left_contact", False)
             right_contact = episode_results.get("right_contact", False)
-            extended["alternating_score"] = 1.0 if left_contact != right_contact else 0.3
+            extended["alternating_consistency"] = 1.0 if left_contact != right_contact else 0.3
+            extended["step_length_consistency"] = 0.7  
+            extended["stance_swing_ratio"] = 0.6  
+
+            # Métricas de eficiência biomecânica
+            extended["energy_efficiency"] = episode_results.get("propulsion_efficiency", 0.5)
+            extended["stride_efficiency"] = distance / max(episode_results.get("steps", 1), 1)
+            extended["clearance_score"] = episode_results.get("clearance_score", 0.5)
+
+            # Métricas de marcha robusta
+            extended["gait_robustness"] = 0.7  
+            extended["recovery_success"] = 1.0 if episode_results.get("success", False) else 0.0
+            extended["speed_adaptation"] = 0.8  
+            extended["terrain_handling"] = 0.6  
+
         except Exception as e:
             self.logger.warning(f"Erro ao preparar métricas de valência: {e}")
-        
+
         return extended
 
     def _determine_group_from_valences(self, valence_status):

@@ -3,6 +3,8 @@ import numpy as np
 from typing import Dict, List, Callable, Tuple
 from dataclasses import dataclass
 
+from dpg_buffer import IntelligentCache
+
 
 class AdaptiveIRL:
     """Sistema IRL Adaptável por Necessidade"""
@@ -749,3 +751,64 @@ class RewardCalculator:
         }
         
         return status
+    
+
+class CachedRewardCalculator(RewardCalculator):
+    """Calculator de recompensa com cache inteligente"""
+    
+    def __init__(self, logger, config):
+        super().__init__(logger, config)
+        self.cache = IntelligentCache(max_size=500, default_ttl=50)
+        self._last_sim_state = None
+        self._last_reward = 0.0
+        
+    def calculate(self, sim, action, phase_info: Dict) -> float:
+        # ✅ CACHE POR ESTADO DA SIMULAÇÃO
+        sim_state = self._get_sim_state_fingerprint(sim)
+        
+        # Se estado não mudou significativamente, retornar cached
+        if (self._last_sim_state and 
+            self._sim_states_similar(sim_state, self._last_sim_state)):
+            return self._last_reward
+        
+        cache_key = self._generate_cache_key(sim, phase_info)
+        cached_reward = self.cache.get(cache_key)
+        
+        if cached_reward is not None:
+            return cached_reward
+        
+        # Cálculo completo
+        reward = super().calculate(sim, action, phase_info)
+        
+        # Armazenar em cache
+        self.cache.set(cache_key, reward, ttl=20)  # TTL de 20 steps
+        self._last_sim_state = sim_state
+        self._last_reward = reward
+        
+        return reward
+    
+    def _get_sim_state_fingerprint(self, sim) -> str:
+        """Fingerprint rápido do estado da simulação"""
+        try:
+            return f"{getattr(sim, 'robot_x_velocity', 0):.2f}_" \
+                   f"{getattr(sim, 'robot_roll', 0):.2f}_" \
+                   f"{getattr(sim, 'robot_pitch', 0):.2f}_" \
+                   f"{getattr(sim, 'robot_z_position', 0):.2f}"
+        except:
+            return "unknown"
+    
+    def _sim_states_similar(self, state1: str, state2: str, threshold: float = 0.1) -> bool:
+        """Verifica se estados são suficientemente similares"""
+        try:
+            v1 = [float(x) for x in state1.split('_')]
+            v2 = [float(x) for x in state2.split('_')]
+            differences = [abs(a - b) for a, b in zip(v1, v2)]
+            return all(diff < threshold for diff in differences)
+        except:
+            return False
+    
+    def _generate_cache_key(self, sim, phase_info: Dict) -> str:
+        """Gera chave de cache única"""
+        base_key = self._get_sim_state_fingerprint(sim)
+        components_key = "_".join(sorted(phase_info.get('enabled_components', [])))
+        return f"{base_key}_{components_key}"

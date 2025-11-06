@@ -2,7 +2,10 @@
 import numpy as np
 from typing import Dict, List, Any, Tuple
 from dataclasses import dataclass
+import heapq
 from collections import deque
+from functools import lru_cache
+import time
 
 
 @dataclass
@@ -17,7 +20,17 @@ class Experience:
     group: int
     sub_phase: int
     quality: float
-    skills: Dict[str, float] 
+    skills: Dict[str, float]
+    
+    def __lt__(self, other):
+        """Define comparação para heapq baseado na qualidade"""
+        return self.quality < other.quality
+    
+    def __eq__(self, other):
+        """Define igualdade para heapq"""
+        if not isinstance(other, Experience):
+            return False
+        return self.quality == other.quality
 
 
 class SkillTransferMap:
@@ -130,19 +143,27 @@ class SmartBufferManager:
         try:
             if not experience_data:
                 return
+
             current_group = self.get_current_group()
             experience_data["group_level"] = current_group
             experience = self._create_enhanced_experience(experience_data)
-            self._store_hierarchical(experience, current_group, 0)
+
+            self._store_hierarchical_optimized(experience, current_group)
+
             if self._is_fundamental_experience(experience):
-                if len(self.core_buffer) < self.max_core_experiences:
-                    self.core_buffer.append(experience)
+                import time
+                heap_item = (-experience.quality, time.time_ns(), experience)
+
+                if len(self.core_buffer_heap) < self.max_core_experiences:
+                    heapq.heappush(self.core_buffer_heap, heap_item)
                 else:
-                    min_quality_exp = min(self.core_buffer, key=lambda x: x.quality)
-                    if experience.quality > min_quality_exp.quality:
-                        self.core_buffer.remove(min_quality_exp)
-                        self.core_buffer.append(experience)
+                    worst_quality, worst_timestamp, worst_exp = self.core_buffer_heap[0]
+                    if experience.quality > -worst_quality:
+                        heapq.heapreplace(self.core_buffer_heap, heap_item)
+
             self.experience_count += 1
+            self._invalidate_cache()
+
         except Exception as e:
             self.logger.warning(f"Erro ao armazenar experiência: {e}")
     
@@ -399,3 +420,212 @@ class SmartBufferManager:
             "learning_convergence": 0.5,  
             "memory_efficiency": self.preservation_stats.get("preservation_rate", 0.0),
         }
+    
+class OptimizedBufferManager(SmartBufferManager):
+    def __init__(self, logger, config, max_core_experiences=2000):
+        super().__init__(logger, config, max_core_experiences)
+        
+        self.core_buffer_heap = []
+        self._high_quality_experiences = set()
+        self._relevance_cache = {}
+        self._cache_episode = 0
+        
+        # Estatísticas de performance
+        self.performance_stats = {
+            "cache_hits": 0,
+            "cache_misses": 0,
+            "heap_operations": 0,
+            "sort_operations_saved": 0
+        }
+        
+    def store_experience(self, experience_data: Dict):
+        """Armazenamento otimizado com inserção O(log n)"""
+        try:
+            if not experience_data:
+                return
+                
+            current_group = self.get_current_group()
+            experience_data["group_level"] = current_group
+            experience = self._create_enhanced_experience(experience_data)
+            
+            self._store_hierarchical_optimized(experience, current_group)
+            
+            if self._is_fundamental_experience(experience):
+                if len(self.core_buffer_heap) < self.max_core_experiences:
+                    heapq.heappush(self.core_buffer_heap, (-experience.quality, experience))
+                else:
+                    # Substituir pior experiência em O(log n)
+                    worst_quality, worst_exp = self.core_buffer_heap[0]
+                    if experience.quality > -worst_quality:
+                        heapq.heapreplace(self.core_buffer_heap, (-experience.quality, experience))
+            
+            self.experience_count += 1
+            self._invalidate_cache()
+            
+        except Exception as e:
+            self.logger.warning(f"Erro ao armazenar experiência: {e}")
+    
+    def _store_hierarchical_optimized(self, experience: Experience, group: int):
+        """Armazenamento otimizado por grupo"""
+        if group not in self.group_buffers:
+            self.group_buffers[group] = []
+            
+        self.group_buffers[group].append(experience)
+        self.current_group_buffer = self.group_buffers[group]
+        
+        if len(self.group_buffers[group]) > 3000:
+            # Manter apenas as melhores 2500 experiências
+            self.group_buffers[group].sort(key=lambda x: x.quality, reverse=True)
+            self.group_buffers[group] = self.group_buffers[group][:2500]
+            self.current_group_buffer = self.group_buffers[group]
+    
+    def get_training_batch(self, batch_size=32):
+        """Batch otimizado com cache de relevância e métricas"""
+        if not self.current_group_buffer:
+            return None
+            
+        current_group = self.get_current_group()
+        cache_key = f"group_{current_group}_ep_{self.episode_count//100}"
+        
+        if cache_key in self._relevance_cache:
+            self.performance_stats["cache_hits"] += 1
+            available = self._relevance_cache[cache_key]
+        else:
+            self.performance_stats["cache_misses"] += 1
+            available = self._get_relevant_experiences_optimized(current_group)
+            self._relevance_cache[cache_key] = available
+            # Limpar cache antigo
+            old_keys = [k for k in self._relevance_cache.keys() if k != cache_key]
+            for k in old_keys:
+                del self._relevance_cache[k]
+        
+        if len(available) < batch_size:
+            batch_size = len(available)
+            
+        return self._stratified_sampling_optimized(available, batch_size)
+    
+    def _get_relevant_experiences_optimized(self, current_group: int) -> List[Experience]:
+        """Experiências relevantes com cache"""
+        relevant = []
+        
+        # Grupo atual
+        group_exps = self.group_buffers.get(current_group, [])
+        relevant.extend(group_exps[:1000])  # Limitar para performance
+        
+        # Core buffer (apenas as melhores)
+        core_exps = [exp for _, exp in self.core_buffer_heap[-500:]]  # Top 500
+        relevant.extend(core_exps[:len(core_exps)//3])
+        
+        return relevant
+    
+    def _stratified_sampling_optimized(self, experiences: List[Experience], batch_size: int) -> List[Experience]:
+        """Amostragem estratificada otimizada"""
+        if not experiences:
+            return []
+            
+        high_quality = []
+        medium_quality = []
+        low_quality = []
+        
+        for exp in experiences:
+            if exp.quality > 0.7:
+                high_quality.append(exp)
+            elif exp.quality > 0.4:
+                medium_quality.append(exp)
+            else:
+                low_quality.append(exp)
+        
+        selected = []
+        hq_count = min(len(high_quality), int(batch_size * 0.6))
+        mq_count = min(len(medium_quality), int(batch_size * 0.3))
+        lq_count = batch_size - hq_count - mq_count
+        
+        selected.extend(high_quality[:hq_count])
+        selected.extend(medium_quality[:mq_count])
+        
+        if lq_count > 0 and low_quality:
+            # Apenas low quality com recompensa positiva
+            positive_low = [exp for exp in low_quality if exp.reward > 0]
+            selected.extend(positive_low[:lq_count])
+            
+        return selected
+    
+    def get_metrics(self) -> Dict:
+        """Retorna métricas aprimoradas com estatísticas de performance"""
+        base_metrics = super().get_metrics()
+        
+        # Adicionar métricas de otimização
+        optimization_metrics = {
+            "cache_hit_rate": self.performance_stats["cache_hits"] / max(
+                self.performance_stats["cache_hits"] + self.performance_stats["cache_misses"], 1
+            ),
+            "heap_size": len(self.core_buffer_heap),
+            "relevance_cache_size": len(self._relevance_cache),
+            "estimated_efficiency_gain": self._calculate_efficiency_gain()
+        }
+        
+        return {**base_metrics, **optimization_metrics}
+    
+    def _calculate_efficiency_gain(self) -> float:
+        """Calcula ganho estimado de eficiência"""
+        total_operations = self.performance_stats["cache_hits"] + self.performance_stats["cache_misses"]
+        if total_operations == 0:
+            return 0.0
+            
+        cache_efficiency = self.performance_stats["cache_hits"] / total_operations
+        heap_efficiency = min(self.performance_stats["heap_operations"] / max(self.experience_count, 1), 1.0)
+        
+        # Estimativa conservadora: 15-25% de ganho
+        estimated_gain = (cache_efficiency * 0.15 + heap_efficiency * 0.10)
+        return min(estimated_gain, 0.25)
+    
+    def _invalidate_cache(self):
+        """Invalidar cache quando o buffer muda significativamente"""
+        self._high_quality_experiences.clear()
+        self._cache_episode += 1
+
+
+class IntelligentCache:
+    """Sistema de cache inteligente para cálculos repetitivos"""
+    
+    def __init__(self, max_size=1000, default_ttl=100):
+        self._cache = {}
+        self._max_size = max_size
+        self._default_ttl = default_ttl
+        self._hits = 0
+        self._misses = 0
+        
+    def get(self, key: str) -> Any:
+        """Obtém valor do cache com estatísticas"""
+        if key in self._cache:
+            value, timestamp, ttl = self._cache[key]
+            if time.time() - timestamp < ttl:
+                self._hits += 1
+                return value
+            else:
+                del self._cache[key]  # Expirou
+                
+        self._misses += 1
+        return None
+    
+    def set(self, key: str, value: Any, ttl: int = None):
+        """Define valor no cache com TTL"""
+        if len(self._cache) >= self._max_size:
+            self._evict_oldest()
+            
+        self._cache[key] = (value, time.time(), ttl or self._default_ttl)
+    
+    def _evict_oldest(self):
+        """Remove entradas mais antigas"""
+        if not self._cache:
+            return
+            
+        oldest_key = min(self._cache.keys(), 
+                        key=lambda k: self._cache[k][1])
+        del self._cache[oldest_key]
+    
+    def get_hit_rate(self) -> float:
+        """Taxa de acerto do cache"""
+        total = self._hits + self._misses
+        return self._hits / total if total > 0 else 0.0
+

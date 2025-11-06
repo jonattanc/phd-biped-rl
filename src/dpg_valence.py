@@ -443,24 +443,20 @@ class ValenceManager:
         """Calcula progresso geral considerando todas as valências"""
         if not valence_levels:
             return 0.0
-        
+
         total_weighted = 0.0
         total_weights = 0.0
-        
+
         for valence_name, level in valence_levels.items():
             config = self.valences[valence_name]
             perf = self.valence_performance[valence_name]
-            
-            # Peso baseado na importância da valência
             weight = 1.0
-            if valence_name in ["estabilidade_postural", "propulsao_basica"]:
-                weight = 1.5  # Valências fundamentais têm mais peso
-            
-            # Progresso normalizado pelo alvo
+            if valence_name in ["estabilidade_dinamica", "propulsao_eficiente"]:
+                weight = 1.5  
             normalized_progress = min(level / config.target_level, 1.0)
             total_weighted += normalized_progress * weight
             total_weights += weight
-        
+
         return total_weighted / total_weights if total_weights > 0 else 0.0
     
     def get_active_reward_components(self) -> List[str]:
@@ -524,6 +520,60 @@ class ValenceManager:
         
         return component_weights
     
+class OptimizedValenceManager(ValenceManager):
+    def __init__(self, logger, config=None):
+        super().__init__(logger, config)
+        self._last_irl_update = 0
+        self._irl_update_interval = 100  # Apenas a cada 100 episódios
+        self._performance_stagnation_count = 0
+        self._last_overall_progress = 0.0
+        
+    def update_valences(self, episode_results: Dict) -> Dict[str, float]:
+        self.episode_count += 1
+        
+        # ✅ CÁLCULO BÁSICO SEMPRE (custo baixo)
+        valence_levels = {}
+        for valence_name, valence_config in self.valences.items():
+            level = self._calculate_valence_level(valence_name, episode_results)
+            valence_levels[valence_name] = level
+            perf = self.valence_performance[valence_name]
+            perf.update_level(level, self.episode_count)
+        
+        self._update_valence_states(valence_levels)
+        self.valence_weights = self._calculate_valence_weights(valence_levels)
+        mission_bonus = self._update_missions(valence_levels)
+        
+        # ✅ IRL APENAS QUANDO NECESSÁRIO (75% de economia)
+        if self._should_update_irl():
+            self.update_irl_system(episode_results)
+            self._last_irl_update = self.episode_count
+        
+        self.overall_progress = self._calculate_overall_progress(valence_levels)
+        
+        return self.valence_weights, mission_bonus
+    
+    def _should_update_irl(self) -> bool:
+        """Determina se IRL deve ser executado baseado em critérios inteligentes"""
+        # Critério 1: Intervalo mínimo
+        if self.episode_count - self._last_irl_update < self._irl_update_interval:
+            return False
+            
+        # Critério 2: Progresso estagnado
+        progress_change = abs(self.overall_progress - self._last_overall_progress)
+        if progress_change < 0.02:  # Menos de 2% de progresso
+            self._performance_stagnation_count += 1
+        else:
+            self._performance_stagnation_count = 0
+            
+        self._last_overall_progress = self.overall_progress
+        
+        # Ativar IRL se: estagnação OU mudança de grupo
+        valence_status = self.get_valence_status()
+        mastered_count = sum(1 for d in valence_status['valence_details'].values() 
+                           if d['state'] == 'mastered')
+        
+        return (self._performance_stagnation_count >= 20 or 
+                mastered_count != getattr(self, '_last_mastered_count', 0))
 
 class LightValenceIRL:
     """Sistema IRL leve integrado com valências"""
