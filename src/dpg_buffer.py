@@ -520,34 +520,32 @@ class OptimizedBufferManager(SmartBufferManager):
     
     def _stratified_sampling_optimized(self, experiences: List[Experience], batch_size: int) -> List[Experience]:
         """Amostragem estratificada otimizada"""
-        if not experiences:
-            return []
-            
-        high_quality = []
-        medium_quality = []
-        low_quality = []
-        
+        if len(experiences) <= batch_size:
+            return experiences
+
+        skill_groups = {}
         for exp in experiences:
-            if exp.quality > 0.7:
-                high_quality.append(exp)
-            elif exp.quality > 0.4:
-                medium_quality.append(exp)
-            else:
-                low_quality.append(exp)
-        
+            primary_skill = max(exp.skills.items(), key=lambda x: x[1])[0] if exp.skills else 'unknown'
+            if primary_skill not in skill_groups:
+                skill_groups[primary_skill] = []
+            skill_groups[primary_skill].append(exp)
+
         selected = []
-        hq_count = min(len(high_quality), int(batch_size * 0.6))
-        mq_count = min(len(medium_quality), int(batch_size * 0.3))
-        lq_count = batch_size - hq_count - mq_count
-        
-        selected.extend(high_quality[:hq_count])
-        selected.extend(medium_quality[:mq_count])
-        
-        if lq_count > 0 and low_quality:
-            # Apenas low quality com recompensa positiva
-            positive_low = [exp for exp in low_quality if exp.reward > 0]
-            selected.extend(positive_low[:lq_count])
-            
+        min_slots_per_group = 2  
+        slots_per_group = max(min_slots_per_group, batch_size // max(len(skill_groups), 1))
+
+        for skill, group_exps in skill_groups.items():
+            group_exps.sort(key=lambda x: x.quality, reverse=True)
+            selected.extend(group_exps[:slots_per_group])
+
+        remaining = batch_size - len(selected)
+        if remaining > 0:
+            remaining_exps = [exp for exp in experiences if exp not in selected]
+            remaining_exps.sort(key=lambda x: x.quality, reverse=True)
+            selected.extend(remaining_exps[:remaining])
+        elif len(selected) > batch_size:
+            selected = selected[:batch_size]
+
         return selected
     
     def get_metrics(self) -> Dict:
@@ -584,48 +582,4 @@ class OptimizedBufferManager(SmartBufferManager):
         self._high_quality_experiences.clear()
         self._cache_episode += 1
 
-
-class IntelligentCache:
-    """Sistema de cache inteligente para cálculos repetitivos"""
-    
-    def __init__(self, max_size=1000, default_ttl=100):
-        self._cache = {}
-        self._max_size = max_size
-        self._default_ttl = default_ttl
-        self._hits = 0
-        self._misses = 0
-        
-    def get(self, key: str) -> Any:
-        """Obtém valor do cache com estatísticas"""
-        if key in self._cache:
-            value, timestamp, ttl = self._cache[key]
-            if time.time() - timestamp < ttl:
-                self._hits += 1
-                return value
-            else:
-                del self._cache[key]  # Expirou
-                
-        self._misses += 1
-        return None
-    
-    def set(self, key: str, value: Any, ttl: int = None):
-        """Define valor no cache com TTL"""
-        if len(self._cache) >= self._max_size:
-            self._evict_oldest()
-            
-        self._cache[key] = (value, time.time(), ttl or self._default_ttl)
-    
-    def _evict_oldest(self):
-        """Remove entradas mais antigas"""
-        if not self._cache:
-            return
-            
-        oldest_key = min(self._cache.keys(), 
-                        key=lambda k: self._cache[k][1])
-        del self._cache[oldest_key]
-    
-    def get_hit_rate(self) -> float:
-        """Taxa de acerto do cache"""
-        total = self._hits + self._misses
-        return self._hits / total if total > 0 else 0.0
 

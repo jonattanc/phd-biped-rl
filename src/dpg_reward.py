@@ -1,271 +1,8 @@
 # dpg_reward.py
+import time
 import numpy as np
-from typing import Dict, List, Callable, Tuple
+from typing import Any, Dict, List, Callable, Tuple
 from dataclasses import dataclass
-
-from dpg_buffer import IntelligentCache
-
-
-class AdaptiveIRL:
-    """Sistema IRL Adaptável por Necessidade"""
-    
-    def __init__(self, logger):
-        self.logger = logger
-        self.irl_modes = {
-            "disabled": {"samples_required": 0, "complexity": 0, "features": []},
-            "light": {"samples_required": 200, "complexity": 1, "features": ["progress", "stability"]},
-            "standard": {"samples_required": 500, "complexity": 2, "features": ["progress", "stability", "efficiency", "consistency"]},
-            "advanced": {"samples_required": 1000, "complexity": 3, "features": ["progress", "stability", "efficiency", "consistency", "coordination", "adaptation"]}
-        }
-        
-        self.learned_models = {}
-        self.demonstration_buffer = []
-
-    def get_irl_mode(self, group_level: int, learning_progress: float, sample_count: int) -> str:
-        """Seleciona modo IRL baseado na necessidade"""
-        
-        # Grupo 1: IRL light apenas se progresso suficiente
-        if group_level == 1:
-            if learning_progress > 0.6 and sample_count >= 200:
-                return "light"
-            return "disabled"
-        
-        # Grupo 2: IRL standard para desenvolvimento
-        elif group_level == 2:
-            if learning_progress > 0.7 and sample_count >= 500:
-                return "standard"
-            elif sample_count >= 200:
-                return "light"
-            return "disabled"
-        
-        # Grupo 3: IRL advanced para domínio
-        elif group_level == 3:
-            if learning_progress > 0.8 and sample_count >= 1000:
-                return "advanced"
-            elif sample_count >= 500:
-                return "standard"
-            return "light"
-        
-        return "disabled"
-    
-    def collect_demonstration(self, experience: Dict, quality: float):
-        """Coleta demonstração para IRL"""
-        if quality > 0.7:  # Apenas demonstrações de alta qualidade
-            self.demonstration_buffer.append({
-                'experience': experience,
-                'quality': quality,
-                'timestamp': np.datetime64('now')
-            })
-            
-            # Manter buffer limitado
-            if len(self.demonstration_buffer) > 2000:
-                self.demonstration_buffer.pop(0)
-    
-    def execute_irl_learning(self, mode: str, group_level: int) -> Dict:
-        """Executa aprendizado IRL no modo especificado"""
-        if mode == "disabled" or len(self.demonstration_buffer) < 100:
-            return {}
-        
-        mode_config = self.irl_modes[mode]
-        demonstrations = self._filter_high_quality_demos()
-        
-        if len(demonstrations) < mode_config["samples_required"]:
-            return {}
-        
-        try:
-            if mode == "light":
-                learned_weights = self._light_irl(demonstrations, mode_config["features"])
-            elif mode == "standard":
-                learned_weights = self._standard_irl(demonstrations, mode_config["features"])
-            elif mode == "advanced":
-                learned_weights = self._advanced_irl(demonstrations, mode_config["features"])
-            else:
-                return {}
-            
-            # Calcular confiança do modelo
-            confidence = self._calculate_model_confidence(learned_weights, demonstrations)
-            
-            model = {
-                'weights': learned_weights,
-                'features': mode_config["features"],
-                'confidence': confidence,
-                'mode': mode,
-                'group_level': group_level,
-                'sample_size': len(demonstrations),
-                'timestamp': np.datetime64('now')
-            }
-            
-            self.learned_models[f"group_{group_level}"] = model
-            self.logger.info(f"🧠 IRL {mode} aprendido: {len(demonstrations)} amostras, confiança: {confidence:.2f}")
-            
-            return model
-            
-        except Exception as e:
-            self.logger.warning(f"IRL learning failed: {e}")
-            return {}
-    
-    def _light_irl(self, demonstrations: List, features: List[str]) -> Dict[str, float]:
-        """IRL simplificado para grupos iniciais"""
-        feature_importance = {}
-        
-        for feature in features:
-            if feature == "progress":
-                # Progresso é sempre importante
-                progresses = [d['experience']['metrics'].get('distance', 0) for d in demonstrations]
-                feature_importance[feature] = min(np.mean(progresses) * 2.0, 1.0)
-            
-            elif feature == "stability":
-                # Estabilidade é crucial
-                stabilities = []
-                for d in demonstrations:
-                    roll = d['experience']['metrics'].get('roll', 0)
-                    pitch = d['experience']['metrics'].get('pitch', 0)
-                    stability = 1.0 - min(abs(roll) + abs(pitch), 1.0)
-                    stabilities.append(stability)
-                feature_importance[feature] = np.mean(stabilities)
-        
-        # Normalizar pesos
-        total = sum(feature_importance.values())
-        if total > 0:
-            return {k: v/total for k, v in feature_importance.items()}
-        
-        return feature_importance
-    
-    def _standard_irl(self, demonstrations: List, features: List[str]) -> Dict[str, float]:
-        """IRL padrão para desenvolvimento"""
-        feature_scores = {}
-        
-        for feature in features:
-            scores = []
-            for demo in demonstrations:
-                score = self._calculate_feature_score(feature, demo['experience'])
-                scores.append(score * demo['quality'])  # Ponderar pela qualidade
-            
-            feature_scores[feature] = np.mean(scores) if scores else 0.5
-        
-        # Aplicar suavização
-        smoothed = self._smooth_feature_weights(feature_scores)
-        
-        # Normalizar
-        total = sum(smoothed.values())
-        if total > 0:
-            return {k: v/total for k, v in smoothed.items()}
-        
-        return smoothed
-    
-    def _advanced_irl(self, demonstrations: List, features: List[str]) -> Dict[str, float]:
-        """IRL avançado para domínio"""
-        # Usar abordagem mais sofisticada com correlações
-        feature_matrix = []
-        performance_scores = []
-        
-        for demo in demonstrations:
-            features_vec = []
-            for feature in features:
-                features_vec.append(self._calculate_feature_score(feature, demo['experience']))
-            feature_matrix.append(features_vec)
-            performance_scores.append(demo['quality'] * demo['experience']['reward'])
-        
-        # Aprender pesos via análise de correlação
-        if len(feature_matrix) > 50:
-            correlations = []
-            for i in range(len(features)):
-                corr = np.corrcoef([vec[i] for vec in feature_matrix], performance_scores)[0,1]
-                correlations.append(max(0, corr) if not np.isnan(corr) else 0.0)
-            
-            weights = {features[i]: correlations[i] for i in range(len(features))}
-            
-            # Normalizar e aplicar regularização
-            total = sum(weights.values())
-            if total > 0:
-                normalized = {k: v/total for k, v in weights.items()}
-                return self._apply_regularization(normalized)
-        
-        return self._standard_irl(demonstrations, features)  # Fallback
-    
-    def _calculate_feature_score(self, feature: str, experience: Dict) -> float:
-        """Calcula score para uma feature específica"""
-        metrics = experience['metrics']
-        
-        if feature == "progress":
-            return min(metrics.get('distance', 0) / 2.0, 1.0)
-        
-        elif feature == "stability":
-            roll = abs(metrics.get('roll', 0))
-            pitch = abs(metrics.get('pitch', 0))
-            return 1.0 - min(roll + pitch, 1.0)
-        
-        elif feature == "efficiency":
-            distance = metrics.get('distance', 0)
-            steps = metrics.get('steps', 1)
-            return min(distance / steps, 1.0)
-        
-        elif feature == "consistency":
-            # Para simplificar, usar estabilidade como proxy
-            return 1.0 - min(metrics.get('roll', 0) * 2.0, 1.0)
-        
-        elif feature == "coordination":
-            left_contact = metrics.get('left_contact', False)
-            right_contact = metrics.get('right_contact', False)
-            return 1.0 if left_contact != right_contact else 0.3
-        
-        elif feature == "adaptation":
-            # Score baseado na variação (simplificado)
-            return 0.7  # Placeholder
-        
-        return 0.5
-    
-    def _smooth_feature_weights(self, weights: Dict[str, float]) -> Dict[str, float]:
-        """Suaviza pesos para evitar extremos"""
-        smoothed = {}
-        for feature, weight in weights.items():
-            # Aplicar transformação suave
-            smoothed[feature] = np.sqrt(weight)  # Reduz extremos
-        return smoothed
-    
-    def _apply_regularization(self, weights: Dict[str, float]) -> Dict[str, float]:
-        """Aplica regularização para evitar overfitting"""
-        regularized = {}
-        for feature, weight in weights.items():
-            # Regularização L2 leve
-            regularized[feature] = weight * 0.9 + 0.1 * (1.0 / len(weights))
-        return regularized
-    
-    def _filter_high_quality_demos(self) -> List:
-        """Filtra demonstrações de alta qualidade"""
-        return [d for d in self.demonstration_buffer if d['quality'] > 0.8]
-    
-    def _calculate_model_confidence(self, weights: Dict, demonstrations: List) -> float:
-        """Calcula confiança no modelo aprendido"""
-        if not demonstrations:
-            return 0.0
-        consistencies = []
-        for demo in demonstrations[:50]: 
-            predicted_score = 0.0
-            for feature, weight in weights.items():
-                feature_score = self._calculate_feature_score(feature, demo['experience'])
-                predicted_score += feature_score * weight
-            
-            actual_performance = demo['quality'] * demo['experience']['reward']
-            error = abs(predicted_score - actual_performance)
-            consistency = 1.0 - min(error, 1.0)
-            consistencies.append(consistency)
-        
-        return np.mean(consistencies) if consistencies else 0.5
-    
-    def get_learned_weights(self, group_level: int) -> Dict[str, float]:
-        """Retorna pesos aprendidos para um grupo"""
-        model = self.learned_models.get(f"group_{group_level}")
-        return model.get('weights', {}) if model else {}
-    
-    def get_irl_status(self) -> Dict:
-        """Retorna status do sistema IRL"""
-        return {
-            "demonstration_count": len(self.demonstration_buffer),
-            "learned_models": len(self.learned_models),
-            "current_modes": list(self.irl_modes.keys()),
-            "model_confidences": {k: v.get('confidence', 0) for k, v in self.learned_models.items()}
-        }
 
 
 @dataclass
@@ -753,17 +490,76 @@ class RewardCalculator:
         return status
     
 
-class CachedRewardCalculator(RewardCalculator):
-    """Calculator de recompensa com cache inteligente"""
+class IntelligentCache:
+    def __init__(self, max_size=1000, default_ttl=100):
+        self._cache = {}
+        self._max_size = max_size
+        self._default_ttl = default_ttl
+        self._hits = 0
+        self._misses = 0
+        self._access_pattern = {}  
     
+    def get(self, key: str) -> Any:
+        if key in self._cache:
+            value, timestamp, ttl = self._cache[key]
+            if time.time() - timestamp < ttl:
+                self._hits += 1
+                self._access_pattern[key] = self._access_pattern.get(key, 0) + 1
+                return value
+            else:
+                del self._cache[key]
+                del self._access_pattern[key]
+        
+        self._misses += 1
+        return None
+    
+    def set(self, key: str, value: Any, ttl: int = None):
+        if len(self._cache) >= self._max_size:
+            self._evict_oldest()
+            
+        self._cache[key] = (value, time.time(), ttl or self._default_ttl)
+        self._access_pattern[key] = self._access_pattern.get(key, 0) + 1
+    
+    def _evict_oldest(self):
+        """Remove entradas menos acessadas primeiro"""
+        if not self._cache:
+            return
+            
+        # Combinar idade + frequência de acesso
+        def eviction_score(k):
+            value, timestamp, ttl = self._cache[k]
+            age = time.time() - timestamp
+            access_count = self._access_pattern.get(k, 0)
+            return age / (access_count + 1)  # +1 para evitar divisão por zero
+            
+        oldest_key = min(self._cache.keys(), key=eviction_score)
+        del self._cache[oldest_key]
+        del self._access_pattern[oldest_key]
+    
+    def get_hit_rate(self) -> float:
+        total = self._hits + self._misses
+        return self._hits / total if total > 0 else 0.0
+    
+    def get_stats(self) -> Dict:
+        return {
+            "hits": self._hits,
+            "misses": self._misses,
+            "hit_rate": self.get_hit_rate(),
+            "size": len(self._cache),
+            "max_size": self._max_size
+        }
+    
+
+class CachedRewardCalculator(RewardCalculator):
     def __init__(self, logger, config):
         super().__init__(logger, config)
         self.cache = IntelligentCache(max_size=500, default_ttl=50)
         self._last_sim_state = None
         self._last_reward = 0.0
+        self._component_priority_cache = {}
         
     def calculate(self, sim, action, phase_info: Dict) -> float:
-        # ✅ CACHE POR ESTADO DA SIMULAÇÃO
+        # ✅ Cache por estado da simulação
         sim_state = self._get_sim_state_fingerprint(sim)
         
         # Se estado não mudou significativamente, retornar cached
@@ -777,11 +573,11 @@ class CachedRewardCalculator(RewardCalculator):
         if cached_reward is not None:
             return cached_reward
         
-        # Cálculo completo
-        reward = super().calculate(sim, action, phase_info)
+        # ✅ Cálculo com priorização inteligente
+        reward = self._calculate_prioritized_reward(sim, action, phase_info)
         
         # Armazenar em cache
-        self.cache.set(cache_key, reward, ttl=20)  # TTL de 20 steps
+        self.cache.set(cache_key, reward, ttl=20)
         self._last_sim_state = sim_state
         self._last_reward = reward
         
@@ -790,25 +586,157 @@ class CachedRewardCalculator(RewardCalculator):
     def _get_sim_state_fingerprint(self, sim) -> str:
         """Fingerprint rápido do estado da simulação"""
         try:
+            # Métricas essenciais para fingerprint
             return f"{getattr(sim, 'robot_x_velocity', 0):.2f}_" \
                    f"{getattr(sim, 'robot_roll', 0):.2f}_" \
                    f"{getattr(sim, 'robot_pitch', 0):.2f}_" \
-                   f"{getattr(sim, 'robot_z_position', 0):.2f}"
-        except:
+                   f"{getattr(sim, 'robot_z_position', 0):.2f}_" \
+                   f"{getattr(sim, 'robot_left_foot_contact', False)}_" \
+                   f"{getattr(sim, 'robot_right_foot_contact', False)}"
+        except Exception as e:
+            self.logger.warning(f"Erro ao criar fingerprint: {e}")
             return "unknown"
     
-    def _sim_states_similar(self, state1: str, state2: str, threshold: float = 0.1) -> bool:
+    def _sim_states_similar(self, state1: str, state2: str, threshold: float = 0.15) -> bool:
         """Verifica se estados são suficientemente similares"""
+        if state1 == "unknown" or state2 == "unknown":
+            return False
+            
         try:
-            v1 = [float(x) for x in state1.split('_')]
-            v2 = [float(x) for x in state2.split('_')]
-            differences = [abs(a - b) for a, b in zip(v1, v2)]
-            return all(diff < threshold for diff in differences)
-        except:
+            # Extrair valores numéricos do fingerprint
+            parts1 = state1.split('_')
+            parts2 = state2.split('_')
+            
+            # Comparar apenas as partes numéricas (primeiras 4)
+            for i in range(4):
+                if i < len(parts1) and i < len(parts2):
+                    try:
+                        val1 = float(parts1[i])
+                        val2 = float(parts2[i])
+                        if abs(val1 - val2) > threshold:
+                            return False
+                    except ValueError:
+                        # Ignorar partes não numéricas
+                        continue
+            
+            # Verificar contato dos pés (últimas 2 partes)
+            if len(parts1) >= 6 and len(parts2) >= 6:
+                if parts1[4] != parts2[4] or parts1[5] != parts2[5]:
+                    return False
+                    
+            return True
+            
+        except Exception as e:
+            self.logger.warning(f"Erro na comparação de estados: {e}")
             return False
     
     def _generate_cache_key(self, sim, phase_info: Dict) -> str:
         """Gera chave de cache única"""
         base_key = self._get_sim_state_fingerprint(sim)
         components_key = "_".join(sorted(phase_info.get('enabled_components', [])))
-        return f"{base_key}_{components_key}"
+        group_key = str(phase_info.get('group_level', 1))
+        return f"{base_key}_{components_key}_{group_key}"
+    
+    def _calculate_prioritized_reward(self, sim, action, phase_info: Dict) -> float:
+        """Cálculo com priorização inteligente de componentes"""
+        total_reward = 0.0
+        enabled_components = phase_info['enabled_components']
+        
+        # ✅ Priorizar componentes baseado no estado atual
+        prioritized_components = self._prioritize_components(sim, enabled_components)
+        
+        # ✅ Calcular apenas componentes prioritários (limite de 8)
+        max_components = min(8, len(prioritized_components))
+        calculated_components = 0
+        
+        for component_name in prioritized_components:
+            if component_name in self.components and calculated_components < max_components:
+                component = self.components[component_name]
+                if component.enabled:
+                    component_reward = component.calculator(sim, phase_info)
+                    
+                    weight = self._get_component_weight(component_name, phase_info)
+                    weighted_reward = weight * component_reward
+                    total_reward += weighted_reward
+                    calculated_components += 1
+
+        penalties = self._calculate_essential_penalties(sim, action)
+        total_reward -= penalties
+
+        return max(total_reward, -0.5)
+    
+    def _prioritize_components(self, sim, enabled_components: List[str]) -> List[str]:
+        """Prioriza componentes baseado no estado da simulação"""
+        priority_scores = {}
+        
+        # ✅ Analisar estado para determinar prioridades
+        velocity = abs(getattr(sim, "robot_x_velocity", 0))
+        roll = abs(getattr(sim, "robot_roll", 0))
+        pitch = abs(getattr(sim, "robot_pitch", 0))
+        stability = 1.0 - min(roll + pitch, 1.0)
+        has_movement = velocity > 0.1
+        is_unstable = stability < 0.6
+        distance = getattr(sim, "episode_distance", 0)
+        
+        for component in enabled_components:
+            if component == "stability" and is_unstable:
+                priority_scores[component] = 10.0  # Máxima prioridade
+            elif component == "basic_progress" and not has_movement and distance < 1.0:
+                priority_scores[component] = 9.0   # Alta prioridade
+            elif component == "velocity" and has_movement:
+                priority_scores[component] = 8.0
+            elif component == "posture" and is_unstable:
+                priority_scores[component] = 7.5
+            elif component == "coordination" and has_movement:
+                priority_scores[component] = 7.0
+            elif component == "dynamic_balance" and has_movement:
+                priority_scores[component] = 6.5
+            elif component == "efficiency" and has_movement and distance > 1.0:
+                priority_scores[component] = 6.0
+            elif component == "smoothness" and has_movement:
+                priority_scores[component] = 5.5
+            else:
+                priority_scores[component] = 5.0  # Prioridade padrão
+    
+        return sorted(enabled_components, key=lambda x: priority_scores[x], reverse=True)
+    
+    def _get_component_weight(self, component_name: str, phase_info: Dict) -> float:
+        """Obtém peso do componente de forma otimizada"""
+        valence_weights = phase_info.get('valence_weights', {})
+        irl_weights = phase_info.get('irl_weights', {})
+        component = self.components[component_name]
+        
+        if irl_weights and component_name in irl_weights:
+            return irl_weights[component_name]
+        elif valence_weights and component_name in valence_weights:
+            return valence_weights[component_name]
+        else:
+            return component.weight * component.adaptive_weight
+    
+    def _calculate_essential_penalties(self, sim, action) -> float:
+        """Calcula apenas penalidades essenciais"""
+        penalties = 0.0
+        
+        # 1. Penalidade de ação extrema 
+        if hasattr(action, '__len__'):
+            action_magnitude = np.sqrt(np.sum(np.square(action)))
+            penalties += min(action_magnitude * 0.005, 0.3)
+        
+        # 2. Penalidade por queda iminente 
+        height = getattr(sim, "robot_z_position", 0.8)
+        if height < 0.5:
+            penalties += min((0.5 - height) * 1.5, 0.8)
+            
+        # 3. Penalidade por instabilidade extrema
+        roll = abs(getattr(sim, "robot_roll", 0))
+        pitch = abs(getattr(sim, "robot_pitch", 0))
+        if roll > 0.8 or pitch > 0.8:
+            penalties += 0.3
+        
+        return penalties
+    
+    def get_cache_stats(self) -> Dict:
+        """Retorna estatísticas do cache para monitoramento"""
+        if hasattr(self.cache, 'get_stats'):
+            return self.cache.get_stats()
+        return {"cache_status": "active", "cache_size": "unknown"}

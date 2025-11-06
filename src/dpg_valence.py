@@ -524,14 +524,18 @@ class OptimizedValenceManager(ValenceManager):
     def __init__(self, logger, config=None):
         super().__init__(logger, config)
         self._last_irl_update = 0
-        self._irl_update_interval = 100  # Apenas a cada 100 episódios
+        self._irl_update_interval = 100  
         self._performance_stagnation_count = 0
         self._last_overall_progress = 0.0
+        self._normalization_cache = {}
+        self._last_metrics_hash = None
+        self._cached_levels = {}
+        self._cache_hits = 0
+        self._cache_misses = 0
         
     def update_valences(self, episode_results: Dict) -> Dict[str, float]:
         self.episode_count += 1
         
-        # ✅ CÁLCULO BÁSICO SEMPRE (custo baixo)
         valence_levels = {}
         for valence_name, valence_config in self.valences.items():
             level = self._calculate_valence_level(valence_name, episode_results)
@@ -543,7 +547,6 @@ class OptimizedValenceManager(ValenceManager):
         self.valence_weights = self._calculate_valence_weights(valence_levels)
         mission_bonus = self._update_missions(valence_levels)
         
-        # ✅ IRL APENAS QUANDO NECESSÁRIO (75% de economia)
         if self._should_update_irl():
             self.update_irl_system(episode_results)
             self._last_irl_update = self.episode_count
@@ -554,26 +557,62 @@ class OptimizedValenceManager(ValenceManager):
     
     def _should_update_irl(self) -> bool:
         """Determina se IRL deve ser executado baseado em critérios inteligentes"""
-        # Critério 1: Intervalo mínimo
         if self.episode_count - self._last_irl_update < self._irl_update_interval:
             return False
             
-        # Critério 2: Progresso estagnado
         progress_change = abs(self.overall_progress - self._last_overall_progress)
-        if progress_change < 0.02:  # Menos de 2% de progresso
+        if progress_change < 0.02: 
             self._performance_stagnation_count += 1
         else:
             self._performance_stagnation_count = 0
             
         self._last_overall_progress = self.overall_progress
         
-        # Ativar IRL se: estagnação OU mudança de grupo
         valence_status = self.get_valence_status()
         mastered_count = sum(1 for d in valence_status['valence_details'].values() 
                            if d['state'] == 'mastered')
         
         return (self._performance_stagnation_count >= 20 or 
                 mastered_count != getattr(self, '_last_mastered_count', 0))
+    
+    def _calculate_valence_level(self, valence_name: str, results: Dict) -> float:
+        metrics_hash = self._calculate_metrics_hash(results)
+        cache_key = f"{valence_name}_{metrics_hash}"
+        
+        if cache_key in self._cached_levels:
+            self._cache_hits += 1
+            return self._cached_levels[cache_key]
+        
+        self._cache_misses += 1
+        level = super()._calculate_valence_level(valence_name, results)
+        self._cached_levels[cache_key] = level
+        
+        if len(self._cached_levels) > 100:
+            oldest_key = next(iter(self._cached_levels))
+            del self._cached_levels[oldest_key]
+            
+        return level
+    
+    def _calculate_metrics_hash(self, results: Dict) -> int:
+        """Calcula hash eficiente para cache"""
+        try:
+            numeric_items = {k: v for k, v in results.items() 
+                           if isinstance(v, (int, float))}
+            return hash(frozenset(numeric_items.items()))
+        except:
+            return hash(str(results))
+    
+    def get_cache_stats(self) -> Dict:
+        """Retorna estatísticas do cache para monitoramento"""
+        total = self._cache_hits + self._cache_misses
+        hit_rate = self._cache_hits / total if total > 0 else 0.0
+        return {
+            "cache_hits": self._cache_hits,
+            "cache_misses": self._cache_misses,
+            "cache_hit_rate": hit_rate,
+            "cache_size": len(self._cached_levels)
+        }
+    
 
 class LightValenceIRL:
     """Sistema IRL leve integrado com valências"""
