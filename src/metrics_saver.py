@@ -1,20 +1,20 @@
 # metrics_saver.py
-import csv
 import math
 import os
-import json
 import numpy as np
 from datetime import datetime
 import pandas as pd
 
 
 def calculate_extra_metrics(metrics):
-    num_episodes = len(metrics)
+    episodes_metrics = metrics["episodes"]
+
+    num_episodes = len(episodes_metrics)
     success_count = 0
     total_times = []
     total_rewards = []
 
-    for episode, episode_data in metrics.items():
+    for episode, episode_data in episodes_metrics.items():
         total_times.append(episode_data["episode_data"]["times"])
         total_rewards.append(episode_data["episode_data"]["rewards"])
 

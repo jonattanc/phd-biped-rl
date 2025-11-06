@@ -222,7 +222,7 @@ class Simulation(gym.Env):
             else:
                 obs = next_obs
 
-        return self.metrics
+        return {"episodes": self.metrics}
 
     def soft_env_reset(self):
         # Remover corpos antigos se existirem

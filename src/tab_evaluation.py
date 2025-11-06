@@ -25,9 +25,6 @@ class EvaluationTab(common_tab.GUITab):
         self.frame = ttk.Frame(notebook)
         self.device = device
 
-        # Dados de avaliação
-        self.evaluation_data = {"current_evaluation": None, "evaluation_history": [], "comparison_data": []}
-
         # Componentes da UI
         self.metrics_text = None
         self.fig_evaluation = None
@@ -100,7 +97,8 @@ class EvaluationTab(common_tab.GUITab):
         self.save_results_btn.grid(row=0, column=8, padx=5)
         self.load_results_btn = ttk.Button(row3_frame, text="Carregar Avaliação", command=self.load_evaluation_results)
         self.load_results_btn.grid(row=0, column=9, padx=5)
-        ttk.Button(row3_frame, text="Salvar Gráficos", command=self.export_evaluation_plots).grid(row=0, column=10, padx=5)
+        self.export_plot_btn = ttk.Button(row3_frame, text="Salvar Gráficos", command=self.export_evaluation_plots, state=tk.DISABLED)
+        self.export_plot_btn.grid(row=0, column=10, padx=5)
 
         # Resultados da avaliação
         results_frame = ttk.LabelFrame(main_frame, text="Resultados da Avaliação", padding="10")
@@ -131,23 +129,6 @@ class EvaluationTab(common_tab.GUITab):
         self.canvas_evaluation.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
         self._initialize_evaluation_plots()
-
-        # Histórico de avaliações
-        history_frame = ttk.LabelFrame(main_frame, text="Histórico de Avaliações", padding="10")
-        history_frame.pack(fill=tk.X, pady=5)
-
-        self.history_listbox = tk.Listbox(history_frame, height=4)
-        history_scrollbar = ttk.Scrollbar(history_frame, orient="vertical", command=self.history_listbox.yview)
-        self.history_listbox.configure(yscrollcommand=history_scrollbar.set)
-        self.history_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        history_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-
-        # Botões do histórico
-        history_buttons = ttk.Frame(history_frame)
-        history_buttons.pack(side=tk.RIGHT, padx=5)
-
-        ttk.Button(history_buttons, text="Carregar", command=self.load_historical_evaluation, width=12).pack(pady=2)
-        ttk.Button(history_buttons, text="Limpar", command=self.clear_history, width=12).pack(pady=2)
 
     def _initialize_evaluation_plots(self):
         """Inicializa os gráficos de avaliação usando utils"""
@@ -234,6 +215,7 @@ class EvaluationTab(common_tab.GUITab):
 
         self.lock_gui()
         self.save_results_btn.config(state=tk.DISABLED)
+        self.export_plot_btn.config(state=tk.DISABLED)
         self._run_evaluation(agent_model_path)
 
     def _run_evaluation(self, agent_model_path):
@@ -303,9 +285,11 @@ class EvaluationTab(common_tab.GUITab):
             messagebox.showerror("Erro", f"Erro na avaliação: {e}")
             self.unlock_gui()
 
-    def _display_evaluation_results(self, metrics):
+    def _display_evaluation_results(self):
         """Exibe os resultados da avaliação na interface"""
         try:
+            metrics = self.metrics_data["extra_metrics"]
+
             # Atualizar métricas textuais
             self.metrics_text.config(state=tk.NORMAL)
             self.metrics_text.delete(1.0, tk.END)
@@ -317,24 +301,22 @@ class EvaluationTab(common_tab.GUITab):
             num_episodes = metrics.get("num_episodes", 0)
             total_rewards = metrics.get("total_rewards", [])
 
-            results_text = f"""=== RESULTADOS DA AVALIAÇÃO ===
-
-Estatísticas Gerais:
-• Modelo: {os.path.basename(self.eval_model_path.get())}
-• Ambiente: {self.env_var.get()}
-• Robô: {self.robot_var.get()}
-• Episódios executados: {num_episodes}
-• Modo: {'Determinístico' if self.eval_deterministic_var.get() else 'Estocástico'}
-
-Métricas de Performance:
-• Taxa de sucesso: {success_rate:.1f}% ({success_count}/{num_episodes})
-• Tempo médio: {avg_time:.2f} ± {std_time:.2f} segundos
-• Melhor tempo: {min(metrics.get('total_times', [0])):.2f}s
-• Pior tempo: {max(metrics.get('total_times', [0])):.2f}s
-• Recompensa média: {sum(total_rewards)/len(total_rewards) if total_rewards else 0:.2f}
-
-Distribuição de Tempos:
-"""
+            results_text = (
+                "=== RESULTADOS DA AVALIAÇÃO ===\n\n"
+                f"Estatísticas Gerais:\n"
+                f"• Modelo: {self.eval_model_path.get()}\n"
+                f"• Ambiente: {self.env_var.get()}\n"
+                f"• Robô: {self.robot_var.get()}\n"
+                f"• Episódios executados: {num_episodes}\n"
+                f"• Modo: {'Determinístico' if self.eval_deterministic_var.get() else 'Estocástico'}\n\n"
+                f"Métricas de Performance:\n"
+                f"• Taxa de sucesso: {success_rate:.1f}% ({success_count}/{num_episodes})\n"
+                f"• Tempo médio: {avg_time:.2f} ± {std_time:.2f} segundos\n"
+                f"• Melhor tempo: {min(metrics.get('total_times', [0])):.2f}s\n"
+                f"• Pior tempo: {max(metrics.get('total_times', [0])):.2f}s\n"
+                f"• Recompensa média: {sum(total_rewards)/len(total_rewards) if total_rewards else 0:.2f}\n\n"
+                f"Distribuição de Tempos:\n"
+            )
 
             times = metrics.get("total_times", [])
             if times:
@@ -343,36 +325,23 @@ Distribuição de Tempos:
                     results_text += f"• Episódio {i}: {time_val:.2f}s {status}\n"
 
             # Análise de performance
-            results_text += f"""
-Análise:
-• Performance: {'EXCELENTE' if success_rate >= 90 else 'BOA' if success_rate >= 70 else 'REGULAR' if success_rate >= 50 else 'RUIM'}
-• Consistência: {'ALTA' if std_time < avg_time * 0.1 else 'MÉDIA' if std_time < avg_time * 0.2 else 'BAXA'}
-"""
+            results_text += (
+                "\nAnálise:\n"
+                f"• Performance: "
+                f"{'EXCELENTE' if success_rate >= 90 else 'BOA' if success_rate >= 70 else 'REGULAR' if success_rate >= 50 else 'RUIM'}\n"
+                f"• Consistência: "
+                f"{'ALTA' if std_time < avg_time * 0.1 else 'MÉDIA' if std_time < avg_time * 0.2 else 'BAIXA'}\n"
+            )
+
+            results_text += "\n=== DADOS BRUTOS ===\n\n"
+            data_to_print = {k: v for k, v in self.metrics_data.items() if k != "episodes"}
+            results_text += json.dumps(data_to_print, indent=4, ensure_ascii=False)
 
             self.metrics_text.insert(1.0, results_text)
             self.metrics_text.config(state=tk.DISABLED)
 
             # Atualizar gráficos
             self._update_evaluation_plots(metrics)
-
-            # Salvar nos dados de avaliação
-            evaluation_record = {
-                "metrics": metrics,
-                "timestamp": datetime.now(),
-                "model_path": self.eval_model_path.get(),
-                "environment": self.env_var.get(),
-                "robot": self.robot_var.get(),
-                "episodes": int(self.eval_episodes_var.get()),
-                "deterministic": self.eval_deterministic_var.get(),
-            }
-
-            self.evaluation_data["current_evaluation"] = evaluation_record
-            self.evaluation_data["evaluation_history"].append(evaluation_record)
-
-            # Atualizar histórico
-            self._update_history_listbox()
-
-            messagebox.showinfo("Sucesso", "Avaliação concluída com sucesso!")
 
         except Exception as e:
             self.logger.exception("Erro ao exibir resultados")
@@ -439,38 +408,6 @@ Análise:
         except Exception as e:
             self.logger.exception("Erro ao atualizar gráficos de avaliação")
 
-    def _update_history_listbox(self):
-        """Atualiza a lista de histórico de avaliações"""
-        self.history_listbox.delete(0, tk.END)
-        for i, evaluation in enumerate(self.evaluation_data["evaluation_history"]):
-            timestamp = evaluation["timestamp"].strftime("%H:%M:%S")
-            model_name = os.path.basename(evaluation["model_path"])
-            success_rate = evaluation["metrics"].get("success_rate", 0) * 100
-            display_text = f"{timestamp} - {model_name} - {success_rate:.1f}% sucesso"
-            self.history_listbox.insert(tk.END, display_text)
-
-    def load_historical_evaluation(self):
-        """Carrega uma avaliação do histórico"""
-        selection = self.history_listbox.curselection()
-        if not selection:
-            messagebox.showwarning("Aviso", "Selecione uma avaliação do histórico.")
-            return
-
-        try:
-            evaluation = self.evaluation_data["evaluation_history"][selection[0]]
-            self._display_evaluation_results(evaluation["metrics"])
-            messagebox.showinfo("Sucesso", "Avaliação histórica carregada!")
-        except Exception as e:
-            self.logger.exception("Erro ao carregar avaliação histórica")
-            messagebox.showerror("Erro", f"Erro ao carregar avaliação: {e}")
-
-    def clear_history(self):
-        """Limpa o histórico de avaliações"""
-        if self.evaluation_data["evaluation_history"]:
-            self.evaluation_data["evaluation_history"].clear()
-            self.history_listbox.delete(0, tk.END)
-            self.logger.info("Histórico de avaliações limpo")
-
     def save_evaluation_results(self):
         try:
             self.logger.info("Salvando dados de avaliação")
@@ -515,20 +452,14 @@ Análise:
 
     def export_evaluation_plots(self):
         """Exporta os gráficos de avaliação como imagens PNG separadas"""
-        if not self.evaluation_data["current_evaluation"]:
-            messagebox.showwarning("Aviso", "Nenhum gráfico para exportar.")
-            return
-
         try:
             directory = filedialog.askdirectory(title="Selecione onde salvar os gráficos")
             if not directory:
                 return
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            model_name = os.path.basename(self.evaluation_data["current_evaluation"]["model_path"])
-            environment = self.env_var.get()
 
-            metrics = self.evaluation_data["current_evaluation"]["metrics"]
+            metrics = self.metrics_data["extra_metrics"]
             times = metrics.get("total_times", [])
             successes = [1] * metrics.get("success_count", 0) + [0] * (len(times) - metrics.get("success_count", 0))
 
@@ -597,22 +528,6 @@ Análise:
             messagebox.showerror("Erro", f"Erro ao exportar gráficos: {e}")
             self.logger.exception("Erro ao exportar gráficos")
 
-    def _plot_to_export_figure(self, axs, metrics):
-        """Plota dados nos eixos fornecidos para exportação"""
-        # Replicar a lógica de plotagem do _update_evaluation_plots
-        times = metrics.get("total_times", [])
-        successes = [1] * metrics.get("success_count", 0) + [0] * (len(times) - metrics.get("success_count", 0))
-
-        # Gráfico de distribuição de tempos
-        if times:
-            axs[0, 0].hist(times, bins=min(10, len(times)), alpha=0.7, color="blue", edgecolor="black")
-            axs[0, 0].axvline(metrics.get("avg_time", 0), color="red", linestyle="--", label=f'Média: {metrics["avg_time"]:.2f}s')
-        axs[0, 0].set_title("Distribuição de Tempos")
-        axs[0, 0].set_ylabel("Frequência")
-        axs[0, 0].set_xlabel("Tempo (s)")
-        axs[0, 0].legend()
-        axs[0, 0].grid(True, alpha=0.3)
-
     def pause_training(self, force_pause=False):
         """Pausa ou retoma o treinamento"""
         if not self.pause_values:
@@ -659,7 +574,6 @@ Análise:
                     elif data_type == "evaluation_complete":
                         self.metrics_path = msg["metrics_path"]
                         self.load_metrics()
-                        self.save_results_btn.config(state=tk.NORMAL)
 
                 except queue.Empty:
                     # Timeout normal, continuar loop
@@ -679,6 +593,10 @@ Análise:
     def load_metrics(self):
         with open(self.metrics_path, "r") as f:
             self.metrics_data = json.load(f)
+
+        self._display_evaluation_results()
+        self.save_results_btn.config(state=tk.NORMAL)
+        self.export_plot_btn.config(state=tk.NORMAL)
 
     def start(self):
         """Inicializa a aba de avaliação"""
