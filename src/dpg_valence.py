@@ -265,6 +265,21 @@ class ValenceManager:
         valence_config = self.valences[valence_name]
         level = 0.0
         metric_count = 0
+        if valence_name == "movimento_positivo_basico":
+            distance = results.get("distance", 0)
+            speed = results.get("speed", 0)
+
+            # Cálculo DIRETO baseado em movimento
+            if distance > 0:
+                distance_level = min(distance / 2.0, 1.0)
+                speed_level = min(speed / 1.0, 1.0) if speed > 0 else 0.0
+                level = (distance_level * 0.7 + speed_level * 0.3)
+            else:
+                level = 0.1 
+
+            return min(level, 1.0)
+
+        # Para outras valências, cálculo normal
         for metric in valence_config.metrics:
             if metric in results:
                 raw_value = results[metric]
@@ -272,21 +287,9 @@ class ValenceManager:
                 if normalized_value > 0.1:
                     level += normalized_value
                     metric_count += 1
+
         if metric_count > 0:
             level /= metric_count
-        else:
-            level = 0.0  
-        if results.get("success", False):
-            level = min(level * 1.2, 1.0)  
-        elif results.get("distance", 0) > 1.0:  
-            level = min(level * 1.1, 1.0)
-        if valence_name == "propulsao_basica":
-            distance = results.get("distance", 0)
-            speed = results.get("speed", 0)
-            if distance <= 0.1 and speed <= 0.1:
-                level = max(level * 0.3, 0.1)  
-            elif distance < 0:  
-                level = max(level * 0.1, 0.05)  
 
         return min(max(level, 0.0), 1.0)
     

@@ -166,34 +166,36 @@ class RewardCalculator:
     def _calculate_basic_progress_reward(self, sim, phase_info) -> float:
         distance = getattr(sim, "episode_distance", 0)
         velocity = getattr(sim, "robot_x_velocity", 0)
-        if distance < -0.1:  
-            return -10.0  
+        if distance > 0:
+            # Recompensa EXPONENCIAL por distância
+            if distance > 2.0:
+                distance_reward = 50.0
+            elif distance > 1.5:
+                distance_reward = 30.0
+            elif distance > 1.0:
+                distance_reward = 20.0
+            elif distance > 0.5:
+                distance_reward = 10.0
+            elif distance > 0.2:
+                distance_reward = 5.0
+            else:
+                distance_reward = 2.0
+        else:
+            distance_reward = -1.0  # Penalidade leve por movimento negativo
 
-        if distance < 0: 
-            return -5.0
-
-        if distance > 3.0:  
-            distance_reward = 20.0
-        elif distance > 2.0:  
-            distance_reward = 15.0
-        elif distance > 1.5:  
-            distance_reward = 10.0
-        elif distance > 1.0:  
-            distance_reward = 8.0
-        elif distance > 0.5:  
-            distance_reward = 5.0
-        elif distance > 0.1:  
-            distance_reward = 3.0
-        else:  
-            distance_reward = 0.1
-
+        # Recompensa AGGRESSIVA por velocidade positiva
         velocity_reward = 0.0
         if velocity > 0.1:
-            velocity_reward = min(velocity * 10.0, 8.0)  
-        elif velocity < -0.1:  
-            velocity_reward = -5.0  
+            velocity_reward = velocity * 20.0  # Recompensa linear alta
+        elif velocity > 0.5:
+            velocity_reward = velocity * 40.0  # Recompensa muito alta
 
-        return distance_reward + velocity_reward
+        # Bônus MÁSSIVO por progresso consistente
+        consistency_bonus = 0.0
+        if distance > 0.5 and velocity > 0.2:
+            consistency_bonus = 15.0
+
+        return distance_reward + velocity_reward + consistency_bonus
     
     def _calculate_posture_reward(self, sim, phase_info) -> float:
         try:
