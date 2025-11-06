@@ -758,18 +758,19 @@ class DPGManager:
     def activate_propulsion_irl(self):
         """Ativar IRL ESPECÍFICO para movimento"""
         propulsion_irl_weights = {
-            'progress': 0.90,      # FOCO MÁXIMO em progresso
-            'stability': 0.05,     # Mínimo necessário
-            'efficiency': 0.03,    # Quase zero
-            'coordination': 0.02   # Quase zero
+            'progress': 0.95,      # FOCO MÁXIMO
+            'stability': 0.03,     # Mínimo vital
+            'efficiency': 0.01,    # Quase zero
+            'coordination': 0.01   # Quase zero
         }
-        
-        self.critic.weights.propulsion = 0.90
-        self.critic.weights.stability = 0.08
-        self.critic.weights.coordination = 0.01
-        self.critic.weights.efficiency = 0.01
-        self.critic.weights.irl_influence = 0.95
-    
+
+        # FORÇAR pesos do critic
+        self.critic.weights.propulsion = 0.95
+        self.critic.weights.stability = 0.04
+        self.critic.weights.coordination = 0.005
+        self.critic.weights.efficiency = 0.005
+        self.critic.weights.irl_influence = 0.98
+
         self.valence_manager.irl_weights = propulsion_irl_weights
 
     def activate_stabilization_irl(self):
@@ -843,25 +844,26 @@ class DPGManager:
     def update_crutch_system(self, episode_results):
         """Atualiza nível de ajuda baseado em performance REAL"""
         distance = episode_results.get('distance', 0)
-
-        # Ativa IRL IMEDIATAMENTE se distância < 1m
-        if distance < 1.0 and self.episode_count > 50:
-            self.activate_propulsion_irl()
-            self.critic.weights.irl_influence = 0.9
-
-        # Crutch MAXIMO até conseguir movimento
-        if distance < 0.2:
-            new_crutch_level = 1.0  
-        elif distance < 0.5:
-            new_crutch_level = 0.7
-        elif distance < 1.0:
-            new_crutch_level = 0.5
-        elif distance < 1.5:
-            new_crutch_level = 0.3
+        valence_status = self.valence_manager.get_valence_status()
+        movimento_level = valence_status['valence_details']['movimento_positivo_basico']['current_level']
+        
+        # CRITÉRIO PRINCIPAL: movimento real
+        if distance > 1.0:
+            new_level = 0.1  # Mínimo
+        elif distance > 0.5:
+            new_level = 0.3
+        elif distance > 0.2:
+            new_level = 0.5
+        elif distance > 0.1:
+            new_level = 0.7
         else:
-            new_crutch_level = 0.1
-
-        self.crutches["level"] = new_crutch_level
+            new_level = 0.9
+        
+        # BÔNUS por valência de movimento
+        if movimento_level > 0.5:
+            new_level = max(new_level - 0.2, 0.1)
+        
+        self.crutches["level"] = new_level
         self._update_crutch_stage()
 
     def _update_crutch_stage(self):

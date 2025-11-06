@@ -129,16 +129,17 @@ class ValenceManager:
         """Inicializa as valências fundamentais para locomoção bípede"""
         return {
             # VALÊNCIA INICIAL: Movimento Básico Positivo
-            "movimento_positivo_basico": ValenceConfig(
+                "movimento_positivo_basico": ValenceConfig(
                 name="movimento_positivo_basico",
-                target_level=0.9,  
+                target_level=0.7,  # Reduzido de 0.9 para 0.7
                 metrics=["distance", "speed", "positive_movement_rate"],
                 reward_components=["basic_progress", "velocity", "propulsion"],
                 dependencies=[],  
-                activation_threshold=0.01, 
-                mastery_threshold=0.8,
+                activation_threshold=0.1,  # Aumentado de 0.01 para 0.1
+                mastery_threshold=0.7,     # Reduzido de 0.8 para 0.7
                 min_episodes=1
             ),
+
             # VALÊNCIA FUNDAMENTAL: Estabilidade dinamica
             "estabilidade_dinamica": ValenceConfig(
                 name="estabilidade_dinamica",
@@ -414,6 +415,16 @@ class ValenceManager:
     
     def _generate_mission(self, valence_levels: Dict[str, float]) -> Optional[Mission]:
         """Gera nova missão baseada nas valências mais problemáticas"""
+        # PRIORIDADE ABSOLUTA para movimento_positivo_basico
+        
+        if valence_levels.get('movimento_positivo_basico', 0) < 0.7:
+            target_improvement = 0.3  # Meta agressiva
+            duration = 15  # Curta duração
+            mission = Mission('movimento_positivo_basico', target_improvement, duration)
+            mission.start_level = valence_levels['movimento_positivo_basico']
+            mission.bonus_multiplier = 3.0  # Bônus massivo
+            return mission
+    
         candidate_valences = []
         
         for valence_name in self.active_valences:
@@ -708,7 +719,7 @@ class LightValenceIRL:
     def should_activate(self, valence_status):
         """Ativa quando valências base estão consolidadas"""
         try:
-            if self.sample_count < 20:  # Aumentamos o mínimo de amostras
+            if self.sample_count < 50:  # Aumentamos o mínimo de amostras
                 return False
                 
             base_valences = ['estabilidade_dinamica', 'propulsao_eficiente']
@@ -754,23 +765,23 @@ class LightValenceIRL:
                 self.demonstration_buffer.pop(0)
     
     def _calculate_demo_quality(self, results):
-        """CRITÉRIOS DE QUALIDADE MAIS LIBERAIS"""
+        """CRITÉRIOS DE QUALIDADE MAIS RESTRITIVOS"""
         quality = 0.0
         
         # Progresso básico já é suficiente
         if results.get('success', False):
+            quality += 0.5 
+        elif results.get('distance', 0) > 1.0:  # Aumentamos a distância mínima
+            quality += 0.4 
+        elif results.get('speed', 0) > 0.5:  # Aumentamos a velocidade mínima
             quality += 0.3 
-        elif results.get('distance', 0) > 0.3: 
-            quality += 0.25 
-        elif results.get('speed', 0) > 0.1:  
-            quality += 0.15 
             
         # Estabilidade mínima
         roll = abs(results.get('roll', 0))
         pitch = abs(results.get('pitch', 0))
         stability = 1.0 - min((roll + pitch) / 2.0, 1.0)
-        if stability > 0.4: 
-            quality += 0.2
+        if stability > 0.6:  # Aumentamos a estabilidade mínima
+            quality += 0.3
             
         return min(quality, 1.0)
     

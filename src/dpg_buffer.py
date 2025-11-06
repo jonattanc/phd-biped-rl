@@ -437,7 +437,7 @@ class OptimizedBufferManager:
 
             if distance > 0.1:
                 return True
-            if distance > 0.05 and experience.quality > 0.3:
+            if distance > 0.05 and experience.quality > 0.5:
                 return True
 
             return False
@@ -534,54 +534,21 @@ class OptimizedBufferManager:
         """Calcula qualidade com FOCO EM MOVIMENTO POSITIVO"""
         try:
             metrics = data.get("metrics", {})
-            reward = data.get("reward", 0)
+            distance = metrics.get("distance", 0)
+            speed = metrics.get("speed", 0)
 
-            # Obtém valores de forma SEGURA
-            distance = float(metrics.get("distance", 0))
-            speed = float(metrics.get("speed", 0))
-            success = bool(metrics.get("success", False))
-            roll = abs(metrics.get("roll", 0))
-            pitch = abs(metrics.get("pitch", 0))
-
-            # Cálculo DIRETO e SIMPLES
-            quality = 0.0
-
-            # 1. Componente de DISTÂNCIA (50%)
+            # QUALIDADE = MOVIMENTO REAL
             if distance <= 0:
-                quality += 0.01
-            if distance > 3.0: quality += 1.0
-            if distance > 2.0: quality += 0.8
-            if distance > 1.5: quality += 0.7
-            if distance > 1.0: quality += 0.6
-            if distance > 0.5: quality += 0.4
-            if distance > 0.2: quality += 0.3
-            if distance > 0.1: quality += 0.2
-            if distance > 0.05: quality += 0.1
+                return 0.01  # Quase zero se não há movimento
 
-            # 2. Componente de ESTABILIDADE (30%)
-            stability = 1.0 - min((roll + pitch) / 2.0, 1.0)  # Média de roll e pitch, normalizada para [0,1]
-            stability_component = stability * 0.3
-            quality += stability_component
-
-            # 3. Componente de VELOCIDADE (20%)
-            if speed > 0:
-                speed_component = min(speed / 1.5, 1.0) * 0.2
-                quality += speed_component
-
-            # Bônus por movimento real com estabilidade
-            if distance > 1.0 and stability > 0.7:
-                quality = min(quality + 0.2, 1.0)  # Bônus fixo
-            elif distance > 0.5 and stability > 0.5:
-                quality = min(quality + 0.1, 1.0)
-
-            if success:
-                quality = 1.0
-
-            # Garante que qualidade nunca seja 0 se há movimento
-            if distance > 0.1 and quality == 0:
-                quality = 0.1  # Mínimo garantido
-
-            return float(quality)
+            # Progressão agressiva baseada em distância
+            if distance > 2.0: return 1.0
+            if distance > 1.5: return 0.9
+            if distance > 1.0: return 0.8
+            if distance > 0.5: return 0.6
+            if distance > 0.2: return 0.4
+            if distance > 0.1: return 0.2
+            return 0.1
 
         except Exception as e:
             self.logger.error(f"❌ ERRO CRÍTICO no cálculo de qualidade: {e}")

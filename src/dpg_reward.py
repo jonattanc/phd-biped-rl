@@ -169,17 +169,17 @@ class RewardCalculator:
         # 1. COMPONENTE PRINCIPAL: DISTÂNCIA (80%)
         distance = getattr(sim, "episode_distance", 0)
         if distance > 0:
-            distance_reward = min(distance * 20.0, 50.0)  # 20 pontos por metro
+            distance_reward = min(distance * 50.0, 100.0)  # Aumentado para 50 pontos por metro
             base_reward += distance_reward
 
         # 2. BÔNUS MASSIVO POR MOVIMENTO INICIAL
         if distance > 0.1 and distance <= 0.5:
-            base_reward += 30.0  # Bônus por começar a se mover
+            base_reward += 50.0  # Aumentado bônus por começar a se mover
 
         # 3. BÔNUS POR VELOCIDADE SUSTENTADA
         velocity = getattr(sim, "robot_x_velocity", 0)
         if velocity > 0.3:
-            base_reward += velocity * 10.0
+            base_reward += velocity * 20.0  # Aumentado
 
         return max(base_reward, 1.0)
     
@@ -660,14 +660,19 @@ class CachedRewardCalculator(RewardCalculator):
     
     def _prioritize_components(self, sim, enabled_components: List[str]) -> List[str]:
         """Priorização MAIS EFETIVA baseada em pesquisa real"""
-        priority_order = [
-            "stability", "basic_progress", "posture", "velocity", 
-            "coordination", "dynamic_balance", "efficiency", "smoothness",
-            "phase_angles", "propulsion", "clearance", "rhythm", "gait_pattern",
-            "biomechanics", "robustness", "adaptation", "recovery"
-        ]
+        movement_components = ["basic_progress", "velocity", "propulsion"]
+        stability_components = ["stability", "posture", "dynamic_balance"]
         
-        prioritized = [comp for comp in priority_order if comp in enabled_components]
+        # PRIMEIRO: Movimento (60%)
+        prioritized = [c for c in movement_components if c in enabled_components]
+        
+        # SEGUNDO: Estabilidade (30%)
+        prioritized.extend([c for c in stability_components if c in enabled_components])
+        
+        # TERCEIRO: Outros (10%)
+        other_components = [c for c in enabled_components 
+                           if c not in movement_components + stability_components]
+        prioritized.extend(other_components)
         
         return prioritized[:6]
     
