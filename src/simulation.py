@@ -207,9 +207,9 @@ class Simulation(gym.Env):
     def evaluate(self, episodes, deterministic):
         self.metrics = {}
         obs, _ = self.reset()
+        self.metrics[str(self.episode_count + 1)] = {"step_data": {}}  # Criar espaço para primeiro episódio
 
         while self.episode_count < episodes and not self.exit_value.value:
-            self.metrics[str(self.episode_count + 1)] = {"step_data": {}}
 
             action, _ = self.agent.model.predict(obs, deterministic=deterministic)
 
@@ -221,6 +221,8 @@ class Simulation(gym.Env):
 
             else:
                 obs = next_obs
+
+        self.metrics.pop(str(self.episode_count + 1))  # Remover espaço para próximo episódio, pois a avaliação terminou
 
         return {"episodes": self.metrics}
 
@@ -533,6 +535,9 @@ class Simulation(gym.Env):
         # Coletar info final quando o episódio terminar
         if self.episode_done:
             self.episode_count += 1
+
+            if evaluation:
+                self.metrics[str(self.episode_count + 1)] = {"step_data": {}}
 
             if hasattr(self.reward_system, "dpg_manager") and self.reward_system.dpg_manager:
 

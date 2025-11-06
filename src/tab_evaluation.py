@@ -69,7 +69,7 @@ class EvaluationTab(common_tab.GUITab):
         self.create_robot_selector(row2_frame, column=2, enabled=False)
 
         ttk.Label(row2_frame, text="Episódios:").grid(row=0, column=4, sticky=tk.W, padx=5)
-        self.eval_episodes_var = tk.StringVar(value="20")
+        self.eval_episodes_var = tk.StringVar(value="5")
         self.episodes_spinbox = ttk.Spinbox(row2_frame, from_=0, to=1e7, textvariable=self.eval_episodes_var, width=8)
         self.episodes_spinbox.grid(row=0, column=5, padx=5)
 
