@@ -212,6 +212,9 @@ class DPGManager:
             "action_smoothing": 0.8,
             "penalty_reduction": 0.3
         }
+        self._emergency_activated = False
+        self._emergency_episode_threshold = 100  
+        self.activate_propulsion_irl()
 
     def enable(self, enabled=True):
         """Ativa o sistema completo"""
@@ -652,12 +655,12 @@ class DPGManager:
         stability_factor = self._calculate_stability_factor(valence_status)
         propulsion_factor = self._calculate_propulsion_factor(valence_status)
 
-        if overall_progress < 0.3:  
-            self.critic.weights.propulsion = 0.75 * propulsion_factor
-            self.critic.weights.stability = 0.15 * stability_factor
-            self.critic.weights.coordination = 0.06
-            self.critic.weights.efficiency = 0.04
-            self.critic.weights.irl_influence = 0.9
+        if overall_progress < 0.4:  
+            self.critic.weights.propulsion = 0.85 * propulsion_factor
+            self.critic.weights.stability = 0.10 * stability_factor
+            self.critic.weights.coordination = 0.03
+            self.critic.weights.efficiency = 0.02
+            self.critic.weights.irl_influence = 0.95
 
         elif overall_progress < 0.6:  
             self.critic.weights.propulsion = 0.45 * propulsion_factor
@@ -762,16 +765,13 @@ class DPGManager:
     def _check_irl_activations(self, episode_results):
         """Ativação AGRESSIVA de IRL quando movimento é insuficiente"""
         distance = episode_results.get('distance', 0)
-        valence_status = self.valence_manager.get_valence_status()
-        movimento_level = valence_status['valence_details']['movimento_positivo_basico']['current_level']
-
-        # Ativa IRL de propulsão se não há movimento suficiente
-        if distance < 1.0 and self.episode_count > 50:
+        # Ativa IRL de propulsão
+        if distance < 1.5 and self.episode_count > 20:  
             self.activate_propulsion_irl()
             self._propulsion_irl_activated = True
-
-        # Ativa IRL de emergência se a valência de movimento está muito baixa
-        if movimento_level < 0.3 and self.episode_count > 100:
+            
+        # Ativa IRL de emergência
+        if distance < 0.5 and self.episode_count > 50:  
             self.activate_emergency_movement_irl()
 
     def emergency_simplify_valences(self):
@@ -903,26 +903,20 @@ class DPGManager:
 
         # CRITÉRIO PRINCIPAL: movimento real
         if distance > 2.0:
-            new_level = 0.1  # Mínimo
+            new_level = 0.3
         elif distance > 1.0:
-            new_level = 0.2
+            new_level = 0.5
         elif distance > 0.5:
-            new_level = 0.4
+            new_level = 0.7
         elif distance > 0.2:
-            new_level = 0.6
-        elif distance > 0.1:
             new_level = 0.8
-        else:
+        elif distance > 0.1:
             new_level = 0.9
+        else:
+            new_level = 0.95
 
-        # Reduz ajuda se a valência de movimento está alta
-        if movimento_level > 0.5:
-            new_level = max(new_level - 0.2, 0.1)
-
-        # Reduz ajuda ao longo do tempo
-        episode_factor = max(0, 1.0 - (self.episode_count / 2000))
-        new_level = max(new_level * episode_factor, 0.1)
-
+        episode_factor = max(0, 1.0 - (self.episode_count / 5000))  
+        new_level = max(new_level * episode_factor, 0.3)  
         self.crutches["level"] = new_level
         self._update_crutch_stage()
 

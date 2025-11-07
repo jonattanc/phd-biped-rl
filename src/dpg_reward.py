@@ -128,13 +128,13 @@ class RewardCalculator:
         
         # 1. RECOMPENSA MASSIVA POR DISTÂNCIA
         if distance > 0:
-            distance_reward = distance * 200.0  # 200 pontos por metro
+            distance_reward = distance * 300.0
             base_reward += distance_reward
             
             # BÔNUS AGRESSIVO POR METROS
-            if distance > 2.0: base_reward += 1000.0
-            elif distance > 1.5: base_reward += 500.0
-            elif distance > 1.0: base_reward += 200.0
+            if distance > 2.0: base_reward += 1500.0
+            elif distance > 1.5: base_reward += 750.0
+            elif distance > 1.0: base_reward += 300.0
             elif distance > 0.5: base_reward += 100.0
             elif distance > 0.2: base_reward += 50.0
         
