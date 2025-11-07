@@ -212,6 +212,9 @@ class DPGManager:
             "action_smoothing": 0.8,
             "penalty_reduction": 0.3
         }
+        self._emergency_activated = False
+        self._emergency_episode_threshold = 100  
+        self.activate_propulsion_irl()
 
     def enable(self, enabled=True):
         """Ativa o sistema completo"""
@@ -223,13 +226,7 @@ class DPGManager:
         """Sistema SIMPLES com ajuda progressiva"""
         if not self.enabled:
             return 0.0
-        # ATIVA MODO EMERGÊNCIA se não há progresso
-        if self.episode_count > 1000 and not self._emergency_activated:
-            self._activate_emergency_mode()
-
-        if hasattr(self, '_emergency_activated') and self._emergency_activated:
-            return self.calculate_emergency_reward(sim, action, {})
-    
+        self._current_episode_action = action
         valence_status = self.valence_manager.get_valence_status()
         valence_weights = self.valence_manager.get_valence_weights_for_reward()
         irl_weights = self.valence_manager.get_irl_weights()
@@ -263,22 +260,6 @@ class DPGManager:
                 boosted_reward += survival_bonus
 
         return max(boosted_reward, 0.0)
-    
-    def _activate_emergency_mode(self):
-        """Ativa modo de emergência quando sistema normal falha"""
-        self._emergency_activated = True
-        self.emergency_simplify_valences()
-
-        # Configuração radical do critic
-        self.critic.weights.propulsion = 0.95
-        self.critic.weights.stability = 0.04
-        self.critic.weights.coordination = 0.005
-        self.critic.weights.efficiency = 0.005
-        self.critic.weights.irl_influence = 0.0  # Remove IRL
-
-        # Remove crutches
-        self.crutches["level"] = 0.1
-        self.crutches["enabled"] = False
     
     def _extract_valence_levels(self, valence_status):
         """Extrai níveis das valências como array"""
@@ -550,7 +531,7 @@ class DPGManager:
         if (self.episode_count - self.last_report_episode) >= self.report_interval:
             self._generate_comprehensive_report()
             self.last_report_episode = self.episode_count
-
+        
     def _should_update_valences(self, episode_results) -> bool:
         """Verifica se atualização de valências é necessária"""
         if (self.episode_count - self.last_valence_update_episode) < self.valence_update_interval:
@@ -647,29 +628,25 @@ class DPGManager:
         """Estabilização adaptativa baseada no progresso atual"""
         valence_status = self.valence_manager.get_valence_status()
         overall_progress = valence_status['overall_progress']
-        distance = getattr(self, '_last_distance', 0)
 
-        stability_factor = self._calculate_stability_factor(valence_status)
-        propulsion_factor = self._calculate_propulsion_factor(valence_status)
+        if overall_progress < 1.0:  
+            self.critic.weights.propulsion = 0.90  
+            self.critic.weights.stability = 0.05     
+            self.critic.weights.coordination = 0.02
+            self.critic.weights.efficiency = 0.02
+            self.critic.weights.irl_influence = 0.8  
 
-        if overall_progress < 0.3:  
-            self.critic.weights.propulsion = 0.75 * propulsion_factor
-            self.critic.weights.stability = 0.15 * stability_factor
-            self.critic.weights.coordination = 0.06
-            self.critic.weights.efficiency = 0.04
-            self.critic.weights.irl_influence = 0.9
+        elif overall_progress < 2.0:
+            self.critic.weights.propulsion = 0.75
+            self.critic.weights.stability = 0.15
+            self.critic.weights.coordination = 0.05
+            self.critic.weights.efficiency = 0.05
+            self.critic.weights.irl_influence = 0.5
 
-        elif overall_progress < 0.6:  
-            self.critic.weights.propulsion = 0.45 * propulsion_factor
-            self.critic.weights.stability = 0.30 * stability_factor
-            self.critic.weights.coordination = 0.15
-            self.critic.weights.efficiency = 0.10
-            self.critic.weights.irl_influence = 0.6
-
-        else:  
-            self.critic.weights.stability = 0.40 * stability_factor
-            self.critic.weights.propulsion = 0.30 * propulsion_factor
-            self.critic.weights.coordination = 0.15
+        else:
+            self.critic.weights.stability = 0.35
+            self.critic.weights.propulsion = 0.30
+            self.critic.weights.coordination = 0.20
             self.critic.weights.efficiency = 0.15
             self.critic.weights.irl_influence = 0.3
 
@@ -732,20 +709,29 @@ class DPGManager:
         """Armazenamento otimizado de experiência"""
         try:
             if hasattr(self, 'buffer_manager') and self.buffer_manager:
+                # Criar dados de experiência COMPLETOS
+                real_action = getattr(self, '_current_episode_action', None)
+                if real_action is None:
+                    real_action = [0.1, -0.1, 0.05, -0.05, 0.02, -0.02]
+
                 experience_data = {
-                    "state": np.zeros(10).tolist(), 
-                    "action": np.zeros(6).tolist(),  
+                    "state": self._extract_state(self.robot).tolist(),  
+                    "action": real_action,
                     "reward": episode_results.get('reward', 0),
+                    "next_state": self._extract_state(self.robot).tolist(),  
                     "phase_info": {
                         'group_level': self.current_group,
-                        'sub_phase': 0
+                        'sub_phase': 0,
+                        'valence_status': self.valence_manager.get_valence_status()
                     },
                     "metrics": episode_results,
                     "group_level": self.current_group
                 }
                 self.buffer_manager.store_experience(experience_data)
+                self._current_episode_action = None
+                
         except Exception as e:
-            self.logger.warning(f"Erro otimizado ao armazenar experiência: {e}")
+            self.logger.error(f"❌ ERRO CRÍTICO no armazenamento: {e}")
 
     def _update_metrics_history(self, episode_results):
         """Atualização otimizada do histórico"""
@@ -762,52 +748,13 @@ class DPGManager:
     def _check_irl_activations(self, episode_results):
         """Ativação AGRESSIVA de IRL quando movimento é insuficiente"""
         distance = episode_results.get('distance', 0)
-        valence_status = self.valence_manager.get_valence_status()
-        movimento_level = valence_status['valence_details']['movimento_positivo_basico']['current_level']
-
-        # Ativa IRL de propulsão se não há movimento suficiente
-        if distance < 1.0 and self.episode_count > 50:
+        # Ativa IRL de propulsão
+        if distance < 0.5:  
             self.activate_propulsion_irl()
-            self._propulsion_irl_activated = True
-
-        # Ativa IRL de emergência se a valência de movimento está muito baixa
-        if movimento_level < 0.3 and self.episode_count > 100:
-            self.activate_emergency_movement_irl()
-
-    def emergency_simplify_valences(self):
-        """SISTEMA DE EMERGÊNCIA - Remove complexidade que atrapalha"""
-        # Configuração de EMERGÊNCIA - apenas movimento básico
-        emergency_valences = {
-            "movimento_basico_emergencia": {
-                "target_level": 0.7,
-                "metrics": ["distance", "speed"],
-                "reward_components": ["basic_progress", "velocity"],
-                "activation_threshold": 0.1,
-                "mastery_threshold": 0.7
-            }
-        }
-
-        # Substitui valências complexas por sistema simples
-        self.valence_manager.valences = emergency_valences
-        self.valence_manager.active_valences = {"movimento_basico_emergencia"}
-    
-    def activate_emergency_movement_irl(self):
-        """IRL DE EMERGÊNCIA - Foco total em movimento"""
-        emergency_weights = {
-            'progress': 0.95,      # Foco máximo em progresso
-            'stability': 0.03,     # Mínimo vital
-            'efficiency': 0.01,    # Quase zero
-            'coordination': 0.01   # Quase zero
-        }
-
-        # Forçar pesos do critic
-        self.critic.weights.propulsion = 0.95
-        self.critic.weights.stability = 0.03
-        self.critic.weights.coordination = 0.01
-        self.critic.weights.efficiency = 0.01
-        self.critic.weights.irl_influence = 0.98
-
-        self.valence_manager.irl_weights = emergency_weights
+        elif distance > 2 and distance < 4:
+            self.activate_stabilization_irl()
+        else:
+            self.critic.weights.irl_influence = max(0.1, self.critic.weights.irl_influence - 0.01)
         
     def activate_propulsion_irl(self):
         """Ativar IRL ESPECÍFICO para movimento"""
@@ -823,7 +770,7 @@ class DPGManager:
         self.critic.weights.stability = 0.04
         self.critic.weights.coordination = 0.005
         self.critic.weights.efficiency = 0.005
-        self.critic.weights.irl_influence = 0.98
+        self.critic.weights.irl_influence = 0.95
 
         self.valence_manager.irl_weights = propulsion_irl_weights
 
@@ -896,34 +843,37 @@ class DPGManager:
             self.current_group = new_group
     
     def update_crutch_system(self, episode_results):
-        """Atualiza nível de ajuda baseado em performance REAL"""
+        """SISTEMA DE CRUTCH PARA 10.000 EPISÓDIOS"""
         distance = max(episode_results.get('distance', 0), 0)
-        valence_status = self.valence_manager.get_valence_status()
-        movimento_level = valence_status['valence_details']['movimento_positivo_basico']['current_level']
 
-        # CRITÉRIO PRINCIPAL: movimento real
-        if distance > 2.0:
-            new_level = 0.1  # Mínimo
-        elif distance > 1.0:
-            new_level = 0.2
-        elif distance > 0.5:
-            new_level = 0.4
-        elif distance > 0.2:
-            new_level = 0.6
-        elif distance > 0.1:
-            new_level = 0.8
+        # PROGRESSÃO MAIS GRADUAL PARA 10.000 EPISÓDIOS
+        if self.episode_count < 1500:
+            new_level = 0.95  # MÁXIMA AJUDA
+        elif self.episode_count < 3000:
+            new_level = 0.85
+        elif self.episode_count < 4500:
+            new_level = 0.75
+        elif self.episode_count < 6000:
+            new_level = 0.65
+        elif self.episode_count < 7500:
+            new_level = 0.5
+        elif self.episode_count < 9000:
+            new_level = 0.3
         else:
-            new_level = 0.9
+            new_level = 0.1  # MÍNIMA AJUDA
 
-        # Reduz ajuda se a valência de movimento está alta
-        if movimento_level > 0.5:
-            new_level = max(new_level - 0.2, 0.1)
+        # AJUSTE DINÂMICO BASEADO EM PERFORMANCE
+        valence_status = self.valence_manager.get_valence_status()
+        mastered_count = sum(1 for details in valence_status['valence_details'].values() 
+                            if details['state'] == 'mastered')
 
-        # Reduz ajuda ao longo do tempo
-        episode_factor = max(0, 1.0 - (self.episode_count / 2000))
-        new_level = max(new_level * episode_factor, 0.1)
+        # REDUÇÃO ACELERADA SE ESTIVER INDO BEM
+        if mastered_count >= 3:
+            new_level *= 0.8
+        elif distance > 2.0:  # BOM DESEMPENHO
+            new_level *= 0.9
 
-        self.crutches["level"] = new_level
+        self.crutches["level"] = max(new_level, 0.05)  # Mínimo 5% de ajuda
         self._update_crutch_stage()
 
     def _update_crutch_stage(self):
@@ -941,26 +891,38 @@ class DPGManager:
         else:
             self.crutches["current_stage"] = 4
 
-    def _calculate_adaptive_crutch_level(self, success, distance, reward, success_rate, avg_distance, avg_reward):
-        """Calcula nível de crutch baseado em múltiplas métricas"""
-        episode_factor = max(0, 1.0 - (self.episode_count / 1000))
-        success_factor = 1.0 - min(success_rate * 1.5, 1.0)
-        distance_factor = 1.0 - min(avg_distance / 3.0, 1.0)
-        reward_factor = 1.0 - min(max(avg_reward, 0) / 5.0, 1.0)
-        valence_status = self.valence_manager.get_valence_status()
-        stability_factor = 0.0
-        if 'estabilidade_postural' in valence_status['valence_details']:
-            stability_level = valence_status['valence_details']['estabilidade_postural']['current_level']
-            stability_factor = 1.0 - stability_level  
-        crutch_level = (
-            episode_factor * 0.2 +
-            success_factor * 0.3 +
-            distance_factor * 0.25 +
-            reward_factor * 0.15 +
-            stability_factor * 0.1
-        )
-
-        return max(0.0, min(crutch_level, 1.0))
+    def get_training_strategy(self):
+        """Retorna estratégia de treino para 10.000 episódios"""
+        return {
+            "fase_1_fundamentos": {
+                "episodios": "0-2000",
+                "foco": "Movimento básico e estabilidade postural",
+                "valencias_ativas": ["movimento_basico", "estabilidade_postural"],
+                "crutch_level": 0.9,
+                "target_distance": 2.0
+            },
+            "fase_2_propulsao": {
+                "episodios": "2000-4000", 
+                "foco": "Propulsão básica e coordenação fundamental",
+                "valencias_ativas": ["propulsao_basica", "coordenacao_fundamental"],
+                "crutch_level": 0.7,
+                "target_distance": 3.5
+            },
+            "fase_3_eficiencia": {
+                "episodios": "4000-6000",
+                "foco": "Eficiência biomecânica e propulsão avançada",
+                "valencias_ativas": ["eficiencia_biomecanica", "propulsao_avancada"],
+                "crutch_level": 0.5,
+                "target_distance": 5.0
+            },
+            "fase_4_marcha_robusta": {
+                "episodios": "6000-10000",
+                "foco": "Marcha robusta e adaptação",
+                "valencias_ativas": ["marcha_robusta"],
+                "crutch_level": 0.2,
+                "target_distance": 6.0
+            }
+        }
 
     def _generate_comprehensive_report(self):
         """Relatório completo otimizado"""
@@ -983,61 +945,46 @@ class DPGManager:
             )
 
             self.logger.info("=" * 70)
-            self.logger.info(f"📊 RELATÓRIO DPG COMPLETO - Episódio {self.episode_count}")
-            self.logger.info(f"🎯 Progresso Geral: {valence_status['overall_progress']:.1%}")
-            self.logger.info(f"📈 Consistência: {consistency_metrics['overall_consistency']:.1%}")
-            self.logger.info(f"📊 Valências: 🟢{mastered_count} 🟡{learning_count} 🔴{regressing_count}")
-
-            # STATUS DO IRL
-            irl_active = len(current_irl_weights) > 0 and any(w > 0 for w in current_irl_weights.values())
-            irl_status = "🟢 ATIVO" if irl_active else "⚫ INATIVO"
-
-            self.logger.info(f"   Influência IRL: {self.critic.weights.irl_influence:.1%}")
-            self.logger.info(f"   Pesos Critic: S:{self.critic.weights.stability:.2f} P:{self.critic.weights.propulsion:.2f} C:{self.critic.weights.coordination:.2f} E:{self.critic.weights.efficiency:.2f}")
-
+            self.logger.info(f"📊 DPG no episódio {self.episode_count} | Progresso: {valence_status['overall_progress']:.1%}")
             # SISTEMA DE CRUTCH
             crutch_stage_names = ["Máximo", "Alto", "Médio", "Baixo", "Mínimo"]
-            self.logger.info(f"   Crutch System: Nível {self.crutches['level']:.2f} ({crutch_stage_names[self.crutches['current_stage']]})")
+            self.logger.info(f"   Influência IRL: {self.critic.weights.irl_influence:.1%} | Muletas no nível {crutch_stage_names[self.crutches['current_stage']]}: {self.crutches['level']:.2f}")
+            self.logger.info(f"   Pesos Critic: S:{self.critic.weights.stability:.2f} P:{self.critic.weights.propulsion:.2f} C:{self.critic.weights.coordination:.2f} E:{self.critic.weights.efficiency:.2f}")
 
             # ESTATÍSTICAS DO BUFFER
             buffer_status = self.buffer_manager.get_status()
-            quality_working = buffer_status.get("quality_calculation_working", False)
-
-            self.logger.info("🔧 VERIFICAÇÃO DO BUFFER:")
-            self.logger.info(f"    Calculando: {'✅ SIM' if quality_working else '❌ NÃO'} | Experiências: {buffer_status.get('total_calculated', 0)}")
-            self.logger.info(f"    Qualidade média: {buffer_status.get('avg_quality', 0):.2f} | Distância média: {buffer_status.get('avg_distance', 0):.2f}m")
-
-            # ALERTA SE HÁ PROBLEMA
-            if not quality_working and buffer_status.get('total_calculated', 0) > 10:
-                self.logger.info("   🚨 ALERTA: Sistema NÃO está calculando qualidade corretamente!")
-                self.logger.info("   💡 AÇÃO: Verificar _calculate_quality e criação de experiências")
-
+            self.logger.info(f"   Buffers: {buffer_status.get('total_experiences', 0)} | Qualidade média: {buffer_status.get('avg_quality', 0):.2f}")
+            
             # ESTADO DETALHADO DAS VALÊNCIAS
-            self.logger.info("📈 ESTADO DAS VALÊNCIAS:")
+            self.logger.info(f"📈 ESTADO DAS VALÊNCIAS: 🟢 {mastered_count} 🟡 {learning_count} 🔴 {regressing_count}")
             for valence_name, details in valence_status["valence_details"].items():
+                # Não exibir valências inativas
+                if details.get("state") == "inactive":
+                    continue
+
                 state_icon = {
                     "inactive": "⚫", "learning": "🟡", "consolidating": "🟠",
                     "mastered": "🟢", "regressing": "🔴"
-                }.get(details["state"], "⚫")
+                }.get(details.get("state"), "⚫")
 
                 consistency = details.get('consistency', 0)
                 consistency_icon = "🟢" if consistency > 0.7 else "🟡" if consistency > 0.5 else "🔴"
 
                 self.logger.info(
-                    f"   {state_icon} {valence_name}: {details['current_level']:.1%} / "
-                    f"{details['target_level']:.1%} {consistency_icon}({consistency:.1%})"
+                    f"   {state_icon} {valence_name}: {details.get('current_level', 0):.1%} / "
+                    f"{details.get('target_level', 0):.1%} {consistency_icon}({consistency:.1%})"
                 )
 
             # MISSÕES ATIVAS 
             if valence_status["current_missions"]:
-                self.logger.info("🎯 MISSÕES ATIVAS:")
+                self.logger.info(f"🎯 MISSÕES ATIVAS ao bônus de {self.mission_bonus_multiplier:.2f}x")
                 for mission in valence_status["current_missions"]:
                     try:
                         # Verificar se os campos existem antes de acessar
                         valence_name = mission.get('valence', 'desconhecida')
                         progress = mission.get('progress', '0')
                         episodes_remaining = mission.get('episodes_remaining', 0)
-                        target_improvement = mission.get('target_improvement', 0.1)  # Valor padrão
+                        target_improvement = mission.get('target_improvement', 0.1) 
 
                         # Calcular progresso percentual com segurança
                         if isinstance(progress, (int, float)) and target_improvement > 0:
@@ -1059,49 +1006,18 @@ class DPGManager:
             self.logger.info("📈 MÉTRICAS DE TREINAMENTO:")
             self.logger.info(f"   📊 Recompensa média: {consistency_metrics['avg_reward']:.2f}")
             self.logger.info(f"   🏃 Distância média: {consistency_metrics['avg_distance']:.2f}m")
-            self.logger.info(f"   🎯 Taxa de sucesso: {consistency_metrics['success_rate']:.1%}")
-            self.logger.info(f"   🔄 Bônus de missão: {self.mission_bonus_multiplier:.2f}x")
 
             # MÉTRICAS DE OTIMIZAÇÃO 
             if hasattr(self.valence_manager, 'get_cache_stats'):
                 cache_stats = self.valence_manager.get_cache_stats()
                 if cache_stats.get('cache_hit_rate', 0) > 0:
                     self.logger.info(f"   💾 Cache Valence: {cache_stats['cache_hit_rate']:.1%}")
-
             if hasattr(self.reward_calculator, 'get_cache_stats'):
                 reward_cache_stats = self.reward_calculator.get_cache_stats()
                 if 'hit_rate' in reward_cache_stats:
-                    self.logger.info(f"   💾 Cache Reward: {reward_cache_stats['hit_rate']:.1%}")
-
-            # RECOMENDAÇÕES BASEADAS NO ESTADO ATUAL
-            self._log_recommendations(valence_status, consistency_metrics)
+                    self.logger.info(f"   💾 Cache Reward: {reward_cache_stats['hit_rate']:.1%}")           
 
             self.logger.info("=" * 70)
 
         except Exception as e:
             self.logger.error(f"❌ Erro ao gerar relatório: {e}")
-
-    def _log_recommendations(self, valence_status, consistency_metrics):
-        """Loga recomendações baseadas no estado atual do treinamento"""
-        recommendations = []
-
-        # Analisar estado para gerar recomendações
-        if consistency_metrics['success_rate'] < 0.1:
-            recommendations.append("🎯 Focar em estabilidade e movimento básico")
-
-        if valence_status['overall_progress'] > 0.7 and consistency_metrics['avg_distance'] < 1.0:
-            recommendations.append("🚀 Considerar ativar IRL de propulsão")
-
-        regressing_count = sum(1 for details in valence_status['valence_details'].values() 
-                              if details['state'] == 'regressing')
-        if regressing_count >= 2:
-            recommendations.append("🔴 Estabilizar valências em regressão")
-
-        if self.crutches['level'] > 0.8 and self.episode_count > 500:
-            recommendations.append("🔧 Reduzir gradualmente ajuda do crutch system")
-
-        # Logar recomendações se houver
-        if recommendations:
-            self.logger.info("💡 RECOMENDAÇÕES:")
-            for i, recommendation in enumerate(recommendations, 1):
-                self.logger.info(f"   {i}. {recommendation}")
