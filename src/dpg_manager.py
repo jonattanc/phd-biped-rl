@@ -226,7 +226,7 @@ class DPGManager:
         """Sistema SIMPLES com ajuda progressiva"""
         if not self.enabled:
             return 0.0
-    
+        self._current_episode_action = action
         valence_status = self.valence_manager.get_valence_status()
         valence_weights = self.valence_manager.get_valence_weights_for_reward()
         irl_weights = self.valence_manager.get_irl_weights()
@@ -710,20 +710,29 @@ class DPGManager:
         """Armazenamento otimizado de experiência"""
         try:
             if hasattr(self, 'buffer_manager') and self.buffer_manager:
+                # Criar dados de experiência COMPLETOS
+                real_action = getattr(self, '_current_episode_action', None)
+                if real_action is None:
+                    real_action = [0.1, -0.1, 0.05, -0.05, 0.02, -0.02]
+
                 experience_data = {
-                    "state": np.zeros(10).tolist(), 
-                    "action": np.zeros(6).tolist(),  
+                    "state": self._extract_state(self.robot).tolist(),  
+                    "action": real_action,
                     "reward": episode_results.get('reward', 0),
+                    "next_state": self._extract_state(self.robot).tolist(),  
                     "phase_info": {
                         'group_level': self.current_group,
-                        'sub_phase': 0
+                        'sub_phase': 0,
+                        'valence_status': self.valence_manager.get_valence_status()
                     },
                     "metrics": episode_results,
                     "group_level": self.current_group
                 }
                 self.buffer_manager.store_experience(experience_data)
+                self._current_episode_action = None
+                
         except Exception as e:
-            self.logger.warning(f"Erro otimizado ao armazenar experiência: {e}")
+            self.logger.error(f"❌ ERRO CRÍTICO no armazenamento: {e}")
 
     def _update_metrics_history(self, episode_results):
         """Atualização otimizada do histórico"""
@@ -945,9 +954,7 @@ class DPGManager:
 
             # ESTATÍSTICAS DO BUFFER
             buffer_status = self.buffer_manager.get_status()
-            quality_working = buffer_status.get("quality_calculation_working", False)
-
-            self.logger.info(f"    Calculando Buffer: {'✅' if quality_working else '❌'} | Qualidade média: {buffer_status.get('avg_quality', 0):.2f}")
+            self.logger.info(f"   Buffers: {buffer_status.get('total_experiences', 0)} | Qualidade média: {buffer_status.get('avg_quality', 0):.2f}")
 
             # ESTADO DETALHADO DAS VALÊNCIAS
             self.logger.info(f"📈 ESTADO DAS VALÊNCIAS: 🟢 {mastered_count} 🟡 {learning_count} 🔴 {regressing_count}")

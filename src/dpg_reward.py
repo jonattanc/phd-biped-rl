@@ -641,31 +641,28 @@ class CachedRewardCalculator(RewardCalculator):
             return False
 
         try:
-            # Extrai a velocidade e a fase da marcha
+            # Verifica se é o mesmo episódio
             parts1 = state1.split('_')
             parts2 = state2.split('_')
 
-            # Se não tem pelo menos 6 partes, não é um estado completo
-            if len(parts1) < 6 or len(parts2) < 6:
+            # Se tem menos de 3 partes, não é estado completo
+            if len(parts1) < 3 or len(parts2) < 3:
                 return False
 
-            # Compara velocidade (primeiro elemento) e fase da marcha (últimos dois elementos)
-            vel1 = float(parts1[0])
-            vel2 = float(parts2[0])
-            phase1 = parts1[4] + "_" + parts1[5]  # contatos dos pés
-            phase2 = parts2[4] + "_" + parts2[5]
+            # Compara os primeiros elementos (velocidade básica)
+            vel1 = float(parts1[0]) if parts1[0].replace('.', '').isdigit() else 0
+            vel2 = float(parts2[0]) if parts2[0].replace('.', '').isdigit() else 0
 
-            if abs(vel1 - vel2) <= threshold and phase1 == phase2:
-                return True
+            if abs(vel1 - vel2) > 0.5:  
+                return False
 
-            return False
+            return True
 
         except Exception as e:
-            self.logger.warning(f"Erro na comparação de estados: {e}")
             return False
     
     def _get_gait_phase_from_state(self, state_str: str) -> str:
-        """Detecta fase da marcha baseado no estado - CRÍTICO para cache"""
+        """Detecta fase da marcha baseado no estado"""
         try:
             parts = state_str.split('_')
             if len(parts) < 6:

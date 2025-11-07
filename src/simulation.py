@@ -562,6 +562,7 @@ class Simulation(gym.Env):
                     "clearance_score": self.robot.get_clearance_score(),
                     "propulsion_efficiency": self.robot.get_propulsion_efficiency(),
                     "alternating": self.robot_left_foot_contact != self.robot_right_foot_contact,
+                    "action": action.tolist() if hasattr(action, 'tolist') else action
                 }
                 try:
                     self.reward_system.dpg_manager.update_phase_progression(episode_results)
