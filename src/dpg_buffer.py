@@ -490,22 +490,20 @@ class OptimizedBufferManager:
         try:
             metrics = data.get("metrics", {})
             distance = metrics.get("distance", 0)
-            success = metrics.get("success", False)
-            
-            # QUALIDADE = DISTÂNCIA (99%) + SUCESSO (1%)
-            if success:
-                return 1.0
                 
             if distance <= 0:
-                return 0.01  # Quase zero se não move
+                return 0.01  
                 
-            # PROGRESSÃO LINEAR DIRETA - nada de complexidade
             if distance > 2.0: return 1.0
+            if distance > 1.5: return 0.9
             if distance > 1.0: return 0.8
-            if distance > 0.5: return 0.6  
+            if distance > 0.8: return 0.7  
+            if distance > 0.6: return 0.6
+            if distance > 0.4: return 0.5
             if distance > 0.2: return 0.4
             if distance > 0.1: return 0.3
             if distance > 0.05: return 0.2
+            if distance > 0.02: return 0.15
             return 0.1
             
         except Exception as e:

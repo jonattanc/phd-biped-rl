@@ -329,23 +329,24 @@ class ValenceManager:
             self.mastery_callback(valence_name)
             
     def _update_valence_states(self, valence_levels: Dict[str, float]):
-        """Ativação otimizada - mais rápida e robusta"""
+        """Ativação MAIS AGRESSIVA das valências"""
         for valence_name, current_level in valence_levels.items():
             perf = self.valence_performance[valence_name]
             config = self.valences[valence_name]
-            if current_level < config.mastery_threshold - 0.3:  
-                if perf.state == ValenceState.MASTERED:
-                    perf.state = ValenceState.REGRESSING  
+
             dependencies_met = all(
-                self.valence_performance[dep].current_level >= config.activation_threshold
+                self.valence_performance[dep].current_level >= 0.1  
                 for dep in config.dependencies
             )
+
             if not dependencies_met:
                 perf.state = ValenceState.INACTIVE
                 self.active_valences.discard(valence_name)
-            elif current_level >= config.mastery_threshold and perf.episodes_active >= config.min_episodes:
+            elif current_level >= config.mastery_threshold and perf.episodes_active >= 1:  
                 perf.state = ValenceState.MASTERED
                 self.active_valences.add(valence_name)
+                if self.mastery_callback:
+                    self.mastery_callback(valence_name)
             elif current_level < config.regression_threshold and perf.state == ValenceState.MASTERED:
                 perf.state = ValenceState.REGRESSING
                 self.active_valences.add(valence_name)
@@ -430,7 +431,7 @@ class ValenceManager:
 
             mission = Mission('movimento_positivo_basico', target_improvement, duration)
             mission.start_level = movimento_level
-            mission.bonus_multiplier = 2.0  
+            mission.bonus_multiplier = 2.5  
 
             return mission
 
@@ -465,8 +466,8 @@ class ValenceManager:
         selected_valence, urgency, deficit = candidate_valences[0]
 
         # Definir meta realista
-        target_improvement = min(deficit * 0.6, 0.3)  
-        duration = max(10, min(25, int(30 / (urgency + 0.1)))) 
+        target_improvement = min(deficit * 0.8, 0.4)  
+        duration = max(8, min(20, int(25 / (urgency + 0.1)))) 
 
         mission = Mission(selected_valence, target_improvement, duration)
         mission.start_level = valence_levels[selected_valence]
