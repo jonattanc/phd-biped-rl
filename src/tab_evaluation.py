@@ -7,7 +7,6 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import os
 from datetime import datetime
 import sys
-import pandas as pd
 import multiprocessing
 import shutil
 import json
@@ -24,12 +23,6 @@ class EvaluationTab(common_tab.GUITab):
 
         self.frame = ttk.Frame(notebook)
         self.device = device
-
-        # Componentes da UI
-        self.metrics_text = None
-        self.fig_evaluation = None
-        self.axs_evaluation = None
-        self.canvas_evaluation = None
 
         self.setup_ui()
         self.setup_ipc()
@@ -441,7 +434,7 @@ class EvaluationTab(common_tab.GUITab):
                 title="Selecione o arquivo JSON para salvar os dados",
                 defaultextension=".json",
                 filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
-                initialdir=os.path.expanduser("~"),
+                initialdir=os.path.join(os.path.expanduser("~"), "Desktop"),
                 initialfile="evaluation_data.json",
             )
 
@@ -456,7 +449,10 @@ class EvaluationTab(common_tab.GUITab):
             self.logger.info("Carregando dados de avaliação")
 
             self.metrics_path = filedialog.askopenfilename(
-                title="Selecione o arquivo JSON para carregar os dados", defaultextension=".json", filetypes=[("JSON files", "*.json"), ("All files", "*.*")], initialdir=os.path.expanduser("~")
+                title="Selecione o arquivo JSON para carregar os dados",
+                defaultextension=".json",
+                filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+                initialdir=os.path.join(os.path.expanduser("~"), "Desktop"),
             )
 
             self.load_metrics()
@@ -561,6 +557,33 @@ class EvaluationTab(common_tab.GUITab):
 
             self.logger.info(f"episode: {episode}")
             self.logger.info(f"selected_data: {selected_data}")
+
+            plot_raw_data = self.metrics_data["episodes"][str(episode)]["step_data"][selected_data]
+
+            self.ax_dynamic.clear()
+
+            if isinstance(plot_raw_data[0], list):
+                plot_separated_data = list(map(list, zip(*plot_raw_data)))
+
+                for i, series in enumerate(plot_separated_data):
+                    self.ax_dynamic.plot(series, label=f"{selected_data}[{i}]")
+
+                self.ax_dynamic.legend()
+
+            else:
+                plot_separated_data = plot_raw_data
+                self.ax_dynamic.plot(plot_separated_data, color="blue")
+
+            self.ax_dynamic.relim()
+            self.ax_dynamic.autoscale_view()
+            self.ax_dynamic.set_title(selected_data)
+            self.ax_dynamic.set_ylabel(selected_data)
+            self.ax_dynamic.grid(True, alpha=0.3)
+            self.ax_dynamic.set_xlim(1, len(plot_separated_data))
+            self.ax_dynamic.set_xlabel("Step")
+
+            self.fig_dynamic.tight_layout()
+            self.canvas_dynamic.draw_idle()
 
         except Exception as e:
             self.logger.exception("Erro ao atualizar plot dinâmico")

@@ -564,7 +564,7 @@ class TrainingTab(common_tab.GUITab):
     def export_plots(self):
         """Exporta gráficos como imagens para uso na tese"""
         try:
-            export_dir = filedialog.askdirectory(title="Selecione onde salvar os gráficos", initialdir=os.path.expanduser("~"))
+            export_dir = filedialog.askdirectory(title="Selecione onde salvar os gráficos", initialdir=os.path.join(os.path.expanduser("~"), "Desktop"))
 
             if not export_dir:
                 return
