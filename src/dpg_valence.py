@@ -128,18 +128,17 @@ class ValenceManager:
     def _initialize_valences(self) -> Dict[str, ValenceConfig]:
         """Inicializa as valências fundamentais para locomoção bípede"""
         return {
-            # VALÊNCIA INICIAL: Movimento Básico Positivo
-                "movimento_positivo_basico": ValenceConfig(
+            # VALÊNCIA PRIMÁRIA: Movimento Básico
+            "movimento_positivo_basico": ValenceConfig(
                 name="movimento_positivo_basico",
-                target_level=0.7,  # Reduzido de 0.9 para 0.7
+                target_level=0.9,  
                 metrics=["distance", "speed", "positive_movement_rate"],
-                reward_components=["basic_progress", "velocity", "propulsion"],
+                reward_components=["movement_priority", "basic_progress", "velocity"],
                 dependencies=[],  
-                activation_threshold=0.1,  # Aumentado de 0.01 para 0.1
-                mastery_threshold=0.7,     # Reduzido de 0.8 para 0.7
+                activation_threshold=0.01,  
+                mastery_threshold=0.8,      
                 min_episodes=1
             ),
-
             # VALÊNCIA FUNDAMENTAL: Estabilidade dinamica
             "estabilidade_dinamica": ValenceConfig(
                 name="estabilidade_dinamica",
@@ -147,11 +146,10 @@ class ValenceManager:
                 metrics=["roll", "pitch", "com_height_consistency", "lateral_stability", "pitch_velocity"],
                 reward_components=["stability", "posture", "dynamic_balance"],
                 dependencies=[],
-                activation_threshold=0.05,
+                activation_threshold=0.3,
                 mastery_threshold=0.7,
                 min_episodes=3
-            ),
-            
+            ),            
             # VALÊNCIA: Propulsão eficiente
             "propulsao_eficiente": ValenceConfig(
                 name="propulsao_eficiente", 
@@ -159,11 +157,10 @@ class ValenceManager:
                 metrics=["x_velocity", "velocity_consistency", "positive_movement_rate", "acceleration_smoothness"],
                 reward_components=["velocity", "propulsion", "smoothness"],
                 dependencies=["movimento_positivo_basico"],
-                activation_threshold=0.2,
+                activation_threshold=0.35,
                 mastery_threshold=0.65,
                 min_episodes=5
-            ),
-            
+            ),            
             # VALÊNCIA: Coordenação Rítmica
             "ritmo_marcha_natural": ValenceConfig(
                 name="ritmo_marcha_natural",
@@ -171,11 +168,10 @@ class ValenceManager:
                 metrics=["gait_pattern_score", "alternating_consistency", "step_length_consistency", "stance_swing_ratio"],
                 reward_components=["coordination", "rhythm", "gait_pattern"],
                 dependencies=["propulsao_eficiente"],
-                activation_threshold=0.3,
+                activation_threshold=0.4,
                 mastery_threshold=0.6,
                 min_episodes=8
-            ),
-            
+            ),            
             # VALÊNCIA: Eficiência Biomecânica
             "eficiencia_biomecanica": ValenceConfig(
                 name="eficiencia_biomecanica",
@@ -183,11 +179,10 @@ class ValenceManager:
                 metrics=["energy_efficiency", "stride_efficiency", "clearance_score", "propulsion_efficiency"],
                 reward_components=["efficiency", "biomechanics", "clearance"],
                 dependencies=["ritmo_marcha_natural"],
-                activation_threshold=0.4,
-                mastery_threshold=0.7,
+                activation_threshold=0.45,
+                mastery_threshold=0.55,
                 min_episodes=12
             ),
-
             # VALÊNCIA AVANÇADA: Marcha Robusta
             "marcha_robusta": ValenceConfig(
                 name="marcha_robusta",
@@ -196,7 +191,7 @@ class ValenceManager:
                 reward_components=["robustness", "adaptation", "recovery"],
                 dependencies=["eficiencia_biomecanica"],
                 activation_threshold=0.5,
-                mastery_threshold=0.65,
+                mastery_threshold=0.5,
                 min_episodes=15
             )
         }
@@ -398,6 +393,17 @@ class ValenceManager:
                 self.current_missions.remove(mission)
                 self.mission_history.append(mission)
                 
+        # VERIFICAÇÃO DE SEGURANÇA: Remover missões duplicadas
+        seen_valences = set()
+        unique_missions = []
+        for mission in self.current_missions:
+            if mission.valence_name not in seen_valences:
+                seen_valences.add(mission.valence_name)
+                unique_missions.append(mission)
+            else:
+                self.logger.warning(f"Removendo missão duplicada para {mission.valence_name}")
+        self.current_missions = unique_missions
+                
         # Gerar novas missões se necessário
         if len(self.current_missions) < 2:  
             new_mission = self._generate_mission(valence_levels)
@@ -408,22 +414,29 @@ class ValenceManager:
     
     def _generate_mission(self, valence_levels: Dict[str, float]) -> Optional[Mission]:
         """Gera nova missão baseada nas valências mais problemáticas"""
-        
+
         # PRIORIDADE ABSOLUTA para movimento_positivo_basico
         movimento_level = valence_levels.get('movimento_positivo_basico', 0)
-        if movimento_level < 0.7:
+
+        # VERIFICAÇÃO CRÍTICA: Evitar missões duplicadas
+        movimento_mission_active = any(
+            mission.valence_name == 'movimento_positivo_basico' 
+            for mission in self.current_missions
+        )
+
+        if not movimento_mission_active and movimento_level < 0.7:
             # Meta AGRESSIVA: 50% de melhoria
             target_improvement = min(0.5, 0.7 - movimento_level)
-            duration = 10  # Missões CURTAS e frequentes
+            duration = 10  
 
             mission = Mission('movimento_positivo_basico', target_improvement, duration)
             mission.start_level = movimento_level
-            mission.bonus_multiplier = 4.0  # Bônus MASSIVO
+            mission.bonus_multiplier = 4.0  
 
             return mission
-    
+
         candidate_valences = []
-        
+
         for valence_name in self.active_valences:
             existing_mission = any(
                 mission.valence_name == valence_name 
@@ -435,30 +448,30 @@ class ValenceManager:
             perf = self.valence_performance[valence_name]
             config = self.valences[valence_name]
             current_level = valence_levels[valence_name]
-            
+
             # Apenas valências que precisam de melhoria
             if (perf.state in [ValenceState.LEARNING, ValenceState.REGRESSING] and 
                 current_level < config.target_level - 0.1):
-                
+
                 deficit = config.target_level - current_level
                 urgency = deficit * (2.0 if perf.state == ValenceState.REGRESSING else 1.0)
-                
+
                 candidate_valences.append((valence_name, urgency, deficit))
-        
+
         if not candidate_valences:
             return None
-        
+
         # Selecionar valência mais urgente
         candidate_valences.sort(key=lambda x: x[1], reverse=True)
         selected_valence, urgency, deficit = candidate_valences[0]
-        
+
         # Definir meta realista
-        target_improvement = min(deficit * 0.6, 0.3)  # 60% do déficit, máximo 0.3
-        duration = max(10, min(25, int(30 / (urgency + 0.1))))  # 10-25 episódios
-        
+        target_improvement = min(deficit * 0.6, 0.3)  
+        duration = max(10, min(25, int(30 / (urgency + 0.1)))) 
+
         mission = Mission(selected_valence, target_improvement, duration)
         mission.start_level = valence_levels[selected_valence]
-        
+
         return mission
     
     def _calculate_overall_progress(self, valence_levels: Dict[str, float]) -> float:

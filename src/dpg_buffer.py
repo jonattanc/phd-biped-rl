@@ -392,16 +392,8 @@ class OptimizedBufferManager:
         try:
             metrics = experience.info.get("metrics", {})
             distance = max(metrics.get("distance", 0), 0)
-
-            if distance > 0.1:
-                return True
-            if distance > 0.05 and experience.quality > 0.5:
-                return True
-
-            return False
-
+            return distance > 0.05
         except Exception as e:
-            self.logger.error(f"❌ ERRO nos critérios de armazenamento: {e}")
             return True
 
     def _is_fundamental_skill(self, experience: Experience) -> bool:
