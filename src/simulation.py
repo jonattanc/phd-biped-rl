@@ -167,6 +167,7 @@ class Simulation(gym.Env):
 
     def set_agent(self, agent):
         self.agent = agent
+        self.wrapped_env = agent.env
 
     def pre_fill_buffer(self):
         dpg_enabled = False
@@ -212,7 +213,7 @@ class Simulation(gym.Env):
         noise_std = 0.01
 
         while self.episode_count < episodes and not self.exit_value.value:
-
+            obs = self.wrapped_env.normalize_obs(obs)
             action, _ = self.agent.model.predict(obs, deterministic=deterministic)
             noise = np.random.normal(0, noise_std, size=action.shape)
             action = np.clip(action + noise, -1, 1)
@@ -562,7 +563,7 @@ class Simulation(gym.Env):
                     "clearance_score": self.robot.get_clearance_score(),
                     "propulsion_efficiency": self.robot.get_propulsion_efficiency(),
                     "alternating": self.robot_left_foot_contact != self.robot_right_foot_contact,
-                    "action": action.tolist() if hasattr(action, 'tolist') else action
+                    "action": action.tolist() if hasattr(action, "tolist") else action,
                 }
                 try:
                     self.reward_system.dpg_manager.update_phase_progression(episode_results)
