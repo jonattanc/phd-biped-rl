@@ -137,7 +137,7 @@ class EvaluationTab(common_tab.GUITab):
 
         ttk.Label(controls_frame, text="Dados para plotar:").grid(row=0, column=2, sticky=tk.W, padx=5)
         self.dynamic_data_var = tk.StringVar()
-        self.dynamic_data_combobox = ttk.Combobox(controls_frame, textvariable=self.dynamic_data_var, state=tk.DISABLED)
+        self.dynamic_data_combobox = ttk.Combobox(controls_frame, textvariable=self.dynamic_data_var, state=tk.DISABLED, width=50)
         self.dynamic_data_combobox.grid(row=0, column=3, padx=5)
         self.dynamic_data_combobox.bind("<<ComboboxSelected>>", lambda event: self.update_dynamic_plot())
 
@@ -558,7 +558,14 @@ class EvaluationTab(common_tab.GUITab):
             self.logger.info(f"episode: {episode}")
             self.logger.info(f"selected_data: {selected_data}")
 
-            plot_raw_data = self.metrics_data["episodes"][str(episode)]["step_data"][selected_data]
+            if selected_data.startswith("episode_data_"):
+                self.dynamic_episode_spinbox.config(state=tk.DISABLED)
+                key = selected_data.replace("episode_data_", "")
+                plot_raw_data = [value["episode_data"][key] for value in self.metrics_data["episodes"].values()]
+
+            else:
+                self.dynamic_episode_spinbox.config(state=tk.NORMAL)
+                plot_raw_data = self.metrics_data["episodes"][str(episode)]["step_data"][selected_data]
 
             self.ax_dynamic.clear()
 
@@ -665,6 +672,8 @@ class EvaluationTab(common_tab.GUITab):
         self.dynamic_episode_var.set(1)
 
         available_keys = list(self.metrics_data["episodes"]["1"]["step_data"].keys())
+        episode_data_keys = list(self.metrics_data["episodes"]["1"]["episode_data"].keys())
+        available_keys += [f"episode_data_{key}" for key in episode_data_keys]
         self.logger.info(f"available_keys: {available_keys}")
         self.dynamic_data_combobox["values"] = available_keys
         self.dynamic_data_var.set(available_keys[0])
