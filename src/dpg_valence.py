@@ -126,78 +126,91 @@ class ValenceManager:
             self.valence_performance[valence_name] = ValenceTracker(valence_name)
         
     def _initialize_valences(self) -> Dict[str, ValenceConfig]:
-        """Inicializa as valências fundamentais para locomoção bípede"""
         return {
-            # VALÊNCIA PRIMÁRIA: Movimento Básico 
+            # FASE 1: Fundamentos (Episódios 0-2000)
             "movimento_basico": ValenceConfig(
                 name="movimento_basico",
-                target_level=0.8,  
-                metrics=["distance", "speed", "success"],
-                reward_components=["movement_priority", "basic_progress", "velocity"],
-                dependencies=[],  
-                activation_threshold=0.01,  
-                mastery_threshold=0.3,      
-                max_learning_rate=0.5,     
-                min_episodes=1
-            ),
-
-            # VALÊNCIA SECUNDÁRIA: Estabilidade Simplificada
-            "estabilidade_simples": ValenceConfig(
-                name="estabilidade_simples",
-                target_level=0.4,
-                metrics=["roll", "pitch", "stability"],
-                reward_components=["stability", "posture"],
-                dependencies=["movimento_basico"],
-                activation_threshold=0.05,   
-                mastery_threshold=0.25,      
-                max_learning_rate=0.3,
-                min_episodes=2
-            ),
-
-            # VALÊNCIA TERCIÁRIA: Propulsão Eficiente
-            "propulsao_eficiente": ValenceConfig(
-                name="propulsao_eficiente", 
-                target_level=0.35,
-                metrics=["x_velocity", "positive_movement_rate"],
-                reward_components=["velocity", "propulsion"],
-                dependencies=["movimento_basico"],
-                activation_threshold=0.1,
-                mastery_threshold=0.2,      
-                max_learning_rate=0.25,
-                min_episodes=3
-            ),            
-            # VALÊNCIA: Coordenação Rítmica
-            "ritmo_marcha_natural": ValenceConfig(
-                name="ritmo_marcha_natural",
-                target_level=0.3,
-                metrics=["gait_pattern_score", "alternating_consistency", "step_length_consistency", "stance_swing_ratio"],
-                reward_components=["coordination", "rhythm", "gait_pattern"],
-                dependencies=["propulsao_eficiente"],
-                activation_threshold=0.2,
-                mastery_threshold=0.2,
+                target_level=0.95,  # Meta mais ambiciosa
+                metrics=["distance", "speed", "success", "positive_movement_rate"],
+                reward_components=["movement_priority", "basic_progress"],
+                dependencies=[],
+                activation_threshold=0.01,
+                mastery_threshold=0.8,  # Mais exigente
+                max_learning_rate=0.4,
                 min_episodes=8
-            ),            
-            # VALÊNCIA: Eficiência Biomecânica
+            ),
+
+            # FASE 2: Estabilidade Postural (Episódios 500-3000)
+            "estabilidade_postural": ValenceConfig(
+                name="estabilidade_postural", 
+                target_level=0.85,
+                metrics=["roll", "pitch", "stability", "com_height_consistency", "lateral_stability"],
+                reward_components=["stability", "posture", "dynamic_balance"],
+                dependencies=["movimento_basico"],
+                activation_threshold=0.4,  # Ativa mais cedo
+                mastery_threshold=0.75,
+                min_episodes=15
+            ),
+
+            # FASE 3: Propulsão Básica (Episódios 1000-4000)
+            "propulsao_basica": ValenceConfig(
+                name="propulsao_basica",
+                target_level=0.9,
+                metrics=["x_velocity", "velocity_consistency", "acceleration_smoothness", "distance"],
+                reward_components=["velocity", "propulsion", "basic_progress"],
+                dependencies=["movimento_basico"],
+                activation_threshold=0.3,  # Menos dependente
+                mastery_threshold=0.8,
+                min_episodes=20
+            ),
+
+            # FASE 4: Coordenação Fundamental (Episódios 1500-5000)
+            "coordenacao_fundamental": ValenceConfig(
+                name="coordenacao_fundamental",
+                target_level=0.85,
+                metrics=["alternating_consistency", "step_length_consistency", "gait_pattern_score"],
+                reward_components=["coordination", "rhythm", "gait_pattern"],
+                dependencies=["propulsao_basica", "estabilidade_postural"],
+                activation_threshold=0.5,
+                mastery_threshold=0.7,
+                min_episodes=25
+            ),
+
+            # FASE 5: Eficiência Biomecânica (Episódios 2500-6000)
             "eficiencia_biomecanica": ValenceConfig(
                 name="eficiencia_biomecanica",
-                target_level=0.25,
-                metrics=["energy_efficiency", "stride_efficiency", "clearance_score", "propulsion_efficiency"],
-                reward_components=["efficiency", "biomechanics", "clearance"],
-                dependencies=["ritmo_marcha_natural"],
-                activation_threshold=0.3,
-                mastery_threshold=0.15,
-                min_episodes=12
+                target_level=0.8,
+                metrics=["energy_efficiency", "stride_efficiency", "propulsion_efficiency"],
+                reward_components=["efficiency", "biomechanics", "smoothness"],
+                dependencies=["coordenacao_fundamental"],
+                activation_threshold=0.6,
+                mastery_threshold=0.65,
+                min_episodes=30
             ),
-            # VALÊNCIA AVANÇADA: Marcha Robusta
-            "marcha_robusta": ValenceConfig(
-                name="marcha_robusta",
-                target_level=0.2,
-                metrics=["gait_robustness", "recovery_success", "speed_adaptation", "terrain_handling"],
-                reward_components=["robustness", "adaptation", "recovery"],
+
+            # FASE 6: Propulsão Avançada (Episódios 3500-7000)
+            "propulsao_avancada": ValenceConfig(
+                name="propulsao_avancada",
+                target_level=0.9,
+                metrics=["x_velocity", "velocity_consistency", "acceleration_smoothness", "distance"],
+                reward_components=["velocity", "propulsion", "smoothness"],
                 dependencies=["eficiencia_biomecanica"],
-                activation_threshold=0.4,
-                mastery_threshold=0.1,
-                min_episodes=15
+                activation_threshold=0.7,
+                mastery_threshold=0.8,
+                min_episodes=35
+            ),
+
+            # FASE 7: Marcha Robusta (Episódios 5000-10000)
+            "marcha_robusta": ValenceConfig(
+                name="marcha_robusta", 
+                target_level=0.95,
+                metrics=["gait_robustness", "recovery_success", "speed_adaptation", 
+                        "terrain_handling", "distance", "velocity_consistency"],
+                reward_components=["robustness", "adaptation", "recovery", "velocity", "propulsion"],
+                dependencies=["propulsao_avancada", "coordenacao_fundamental"],
+                activation_threshold=0.8,
+                mastery_threshold=0.85,
+                min_episodes=50
             )
         }
     
@@ -263,24 +276,24 @@ class ValenceManager:
     
     def _calculate_valence_level(self, valence_name: str, results: Dict) -> float:
         """BLOQUEIO COMPLETO - movimento negativo ZERA todas as valências"""
-        
+
         distance = results.get("distance", 0)
-        
-        # 🔴 BLOQUEIO TOTAL: movimento negativo ZERA todas as valências
+
+        # BLOQUEIO TOTAL: movimento negativo ZERA todas as valências
         if distance < 0:
-            return 0.0  # ZERO ABSOLUTO
-    
+            return 0.0  
+
         # VALÊNCIA MOVIMENTO BÁSICO
         if valence_name == "movimento_basico":
             success = results.get("success", False)
-    
+
             if success:
                 return 1.0
-    
+
             if distance <= 0:
                 return 0.01
-    
-            # 🟢 ESCALA HIPER-AGRESSIVA
+
+            # ESCALA AGRESSIVA
             if distance > 2.0: return 1.0
             if distance > 1.5: return 0.9
             if distance > 1.0: return 0.8
@@ -291,7 +304,7 @@ class ValenceManager:
             if distance > 0.1: return 0.3
             if distance > 0.05: return 0.2
             return 0.1
-    
+
         # Para outras valências
         if distance > 0.5:
             return 0.8
@@ -425,17 +438,6 @@ class ValenceManager:
                 self.current_missions.remove(mission)
                 self.mission_history.append(mission)
                 
-        # VERIFICAÇÃO DE SEGURANÇA: Remover missões duplicadas
-        seen_valences = set()
-        unique_missions = []
-        for mission in self.current_missions:
-            if mission.valence_name not in seen_valences:
-                seen_valences.add(mission.valence_name)
-                unique_missions.append(mission)
-            else:
-                self.logger.warning(f"Removendo missão duplicada para {mission.valence_name}")
-        self.current_missions = unique_missions
-                
         # Gerar novas missões se necessário
         if len(self.current_missions) < 2:  
             new_mission = self._generate_mission(valence_levels)
@@ -445,27 +447,72 @@ class ValenceManager:
         return total_bonus
     
     def _generate_mission(self, valence_levels: Dict[str, float]) -> Optional[Mission]:
-        """Gera missões AGRESSIVAS para movimento"""
+        """Gera missões estratégicas para 10.000 episódios"""
+        episode = self.episode_count
+        
+        # FASE 1: Fundamentos (0-2000 episódios)
+        if episode < 2000:
+            if not any(m.valence_name == 'movimento_basico' for m in self.current_missions):
+                mission = Mission('movimento_basico', 0.4, 400)  # Meta: 40% em 400 episódios
+                mission.start_level = valence_levels.get('movimento_basico', 0)
+                mission.bonus_multiplier = 4.0  # Bônus maior
+                return mission
 
-        # FOCO ABSOLUTO EM MOVIMENTO
-        movimento_level = valence_levels.get('movimento_basico', 0)
+        # FASE 2: Estabilidade + Propulsão (1000-4000 episódios)  
+        elif episode < 4000:
+            movimento_level = valence_levels.get('movimento_basico', 0)
+            if movimento_level > 0.5:
+                # Missão dupla: estabilidade E propulsão
+                if not any(m.valence_name == 'estabilidade_postural' for m in self.current_missions):
+                    mission = Mission('estabilidade_postural', 0.3, 500)
+                    mission.start_level = valence_levels.get('estabilidade_postural', 0)
+                    mission.bonus_multiplier = 3.0
+                    return mission
+                if not any(m.valence_name == 'propulsao_basica' for m in self.current_missions):
+                    mission = Mission('propulsao_basica', 0.35, 500)
+                    mission.start_level = valence_levels.get('propulsao_basica', 0)
+                    mission.bonus_multiplier = 3.0
+                    return mission
 
-        # SEMPRE ter missão de movimento ativa
-        movimento_mission_active = any(
-            mission.valence_name == 'movimento_basico' 
-            for mission in self.current_missions
-        )
+        # FASE 3: Coordenação (2000-6000 episódios)
+        elif episode < 6000:
+            propulsao_level = valence_levels.get('propulsao_basica', 0)
+            estabilidade_level = valence_levels.get('estabilidade_postural', 0)
 
-        if not movimento_mission_active:
-            # qualquer melhoria
-            target_improvement = 0.1  
-            duration = 20 
+            if propulsao_level > 0.4 and estabilidade_level > 0.4:
+                if not any(m.valence_name == 'coordenacao_fundamental' for m in self.current_missions):
+                    mission = Mission('coordenacao_fundamental', 0.3, 600)
+                    mission.start_level = valence_levels.get('coordenacao_fundamental', 0)
+                    mission.bonus_multiplier = 2.8
+                    return mission
 
-            mission = Mission('movimento_basico', target_improvement, duration)
-            mission.start_level = movimento_level
-            mission.bonus_multiplier = 3.0 
+        # FASE 4: Eficiência + Propulsão Avançada (4000-8000 episódios)
+        elif episode < 8000:
+            coordenacao_level = valence_levels.get('coordenacao_fundamental', 0)
+            if coordenacao_level > 0.5:
+                # Missão dupla
+                if not any(m.valence_name == 'eficiencia_biomecanica' for m in self.current_missions):
+                    mission = Mission('eficiencia_biomecanica', 0.25, 700)
+                    mission.start_level = valence_levels.get('eficiencia_biomecanica', 0)
+                    mission.bonus_multiplier = 2.5
+                    return mission
+                if not any(m.valence_name == 'propulsao_avancada' for m in self.current_missions):
+                    mission = Mission('propulsao_avancada', 0.3, 700)
+                    mission.start_level = valence_levels.get('propulsao_avancada', 0)
+                    mission.bonus_multiplier = 2.5
+                    return mission
 
-            return mission
+        # FASE 5: Marcha Robusta (6000-10000 episódios)
+        else:
+            propulsao_avancada_level = valence_levels.get('propulsao_avancada', 0)
+            eficiencia_level = valence_levels.get('eficiencia_biomecanica', 0)
+
+            if propulsao_avancada_level > 0.6 and eficiencia_level > 0.5:
+                if not any(m.valence_name == 'marcha_robusta' for m in self.current_missions):
+                    mission = Mission('marcha_robusta', 0.4, 1000)  # Missão longa
+                    mission.start_level = valence_levels.get('marcha_robusta', 0)
+                    mission.bonus_multiplier = 3.0
+                    return mission
 
         return None
     
