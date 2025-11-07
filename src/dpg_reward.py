@@ -116,47 +116,6 @@ class RewardCalculator:
             penalties += min(pitch_penalty, 0.3)  
 
         return penalties
-        
-    def calculate_emergency_reward(self, sim, action, phase_info: Dict) -> float:
-        """RECOMPENSA DE EMERGÊNCIA - APENAS MOVIMENTO POSITIVO"""
-        distance = getattr(sim, "episode_distance", 0)
-        velocity = getattr(sim, "robot_x_velocity", 0)
-        success = getattr(sim, "episode_success", False)
-        
-        # RECOMPENSA BASE: DISTÂNCIA (90% do peso)
-        base_reward = 0.0
-        
-        # 1. RECOMPENSA MASSIVA POR DISTÂNCIA
-        if distance > 0:
-            distance_reward = distance * 300.0
-            base_reward += distance_reward
-            
-            # BÔNUS AGRESSIVO POR METROS
-            if distance > 2.0: base_reward += 1500.0
-            elif distance > 1.5: base_reward += 750.0
-            elif distance > 1.0: base_reward += 300.0
-            elif distance > 0.5: base_reward += 100.0
-            elif distance > 0.2: base_reward += 50.0
-        
-        # 2. RECOMPENSA POR VELOCIDADE (10% do peso)
-        if velocity > 0.1:
-            velocity_reward = velocity * 50.0  # 50 pontos por m/s
-            base_reward += velocity_reward
-        
-        # 3. RECOMPENSA MASSIVA POR SUCESSO
-        if success:
-            base_reward += 5000.0
-        
-        # 4. BÔNUS POR SOBREVIVÊNCIA (não cair)
-        if not getattr(sim, "episode_terminated", True) and distance > 0.1:
-            base_reward += 100.0
-        
-        # 5. PENALIDADES MÍNIMAS APENAS PARA QUEDAS
-        height = getattr(sim, "robot_z_position", 0.8)
-        if height < 0.3:  # Quase caindo
-            base_reward -= 50.0
-        
-        return max(base_reward, 1.0) 
 
     def _calculate_stability_reward(self, sim, phase_info) -> float:
         try:

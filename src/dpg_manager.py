@@ -226,12 +226,6 @@ class DPGManager:
         """Sistema SIMPLES com ajuda progressiva"""
         if not self.enabled:
             return 0.0
-        # ATIVA MODO EMERGÊNCIA se não há progresso
-        if self.episode_count > 1000 and not self._emergency_activated:
-            self._activate_emergency_mode()
-
-        if hasattr(self, '_emergency_activated') and self._emergency_activated:
-            return self.calculate_emergency_reward(sim, action, {})
     
         valence_status = self.valence_manager.get_valence_status()
         valence_weights = self.valence_manager.get_valence_weights_for_reward()
@@ -266,22 +260,6 @@ class DPGManager:
                 boosted_reward += survival_bonus
 
         return max(boosted_reward, 0.0)
-    
-    def _activate_emergency_mode(self):
-        """Ativa modo de emergência quando sistema normal falha"""
-        self._emergency_activated = True
-        self.emergency_simplify_valences()
-
-        # Configuração radical do critic
-        self.critic.weights.propulsion = 0.95
-        self.critic.weights.stability = 0.04
-        self.critic.weights.coordination = 0.005
-        self.critic.weights.efficiency = 0.005
-        self.critic.weights.irl_influence = 0.0  # Remove IRL
-
-        # Remove crutches
-        self.crutches["level"] = 0.1
-        self.crutches["enabled"] = False
     
     def _extract_valence_levels(self, valence_status):
         """Extrai níveis das valências como array"""
@@ -978,36 +956,21 @@ class DPGManager:
 
             self.logger.info("=" * 70)
             self.logger.info(f"📊 RELATÓRIO DPG COMPLETO - Episódio {self.episode_count}")
-            self.logger.info(f"🎯 Progresso Geral: {valence_status['overall_progress']:.1%}")
-            self.logger.info(f"📈 Consistência: {consistency_metrics['overall_consistency']:.1%}")
-            self.logger.info(f"📊 Valências: 🟢{mastered_count} 🟡{learning_count} 🔴{regressing_count}")
-
-            # STATUS DO IRL
-            irl_active = len(current_irl_weights) > 0 and any(w > 0 for w in current_irl_weights.values())
-            irl_status = "🟢 ATIVO" if irl_active else "⚫ INATIVO"
-
-            self.logger.info(f"   Influência IRL: {self.critic.weights.irl_influence:.1%}")
-            self.logger.info(f"   Pesos Critic: S:{self.critic.weights.stability:.2f} P:{self.critic.weights.propulsion:.2f} C:{self.critic.weights.coordination:.2f} E:{self.critic.weights.efficiency:.2f}")
+            self.logger.info(f"   Progresso Geral: {valence_status['overall_progress']:.1%} | Consistência: {consistency_metrics['overall_consistency']:.1%}")
 
             # SISTEMA DE CRUTCH
             crutch_stage_names = ["Máximo", "Alto", "Médio", "Baixo", "Mínimo"]
-            self.logger.info(f"   Crutch System: Nível {self.crutches['level']:.2f} ({crutch_stage_names[self.crutches['current_stage']]})")
+            self.logger.info(f"   Influência IRL: {self.critic.weights.irl_influence:.1%} | Muletas no nível {crutch_stage_names[self.crutches['current_stage']]}: {self.crutches['level']:.2f}")
+            self.logger.info(f"   Pesos Critic: S:{self.critic.weights.stability:.2f} P:{self.critic.weights.propulsion:.2f} C:{self.critic.weights.coordination:.2f} E:{self.critic.weights.efficiency:.2f}")
 
             # ESTATÍSTICAS DO BUFFER
             buffer_status = self.buffer_manager.get_status()
             quality_working = buffer_status.get("quality_calculation_working", False)
 
-            self.logger.info("🔧 VERIFICAÇÃO DO BUFFER:")
-            self.logger.info(f"    Calculando: {'✅ SIM' if quality_working else '❌ NÃO'} | Experiências: {buffer_status.get('total_calculated', 0)}")
-            self.logger.info(f"    Qualidade média: {buffer_status.get('avg_quality', 0):.2f} | Distância média: {buffer_status.get('avg_distance', 0):.2f}m")
-
-            # ALERTA SE HÁ PROBLEMA
-            if not quality_working and buffer_status.get('total_calculated', 0) > 10:
-                self.logger.info("   🚨 ALERTA: Sistema NÃO está calculando qualidade corretamente!")
-                self.logger.info("   💡 AÇÃO: Verificar _calculate_quality e criação de experiências")
+            self.logger.info(f"    Calculando Buffer: {'✅' if quality_working else '❌'} | Qualidade média: {buffer_status.get('avg_quality', 0):.2f}")
 
             # ESTADO DETALHADO DAS VALÊNCIAS
-            self.logger.info("📈 ESTADO DAS VALÊNCIAS:")
+            self.logger.info(f"📈 ESTADO DAS VALÊNCIAS: 🟢 {mastered_count} 🟡 {learning_count} 🔴 {regressing_count}")
             for valence_name, details in valence_status["valence_details"].items():
                 state_icon = {
                     "inactive": "⚫", "learning": "🟡", "consolidating": "🟠",
@@ -1024,7 +987,7 @@ class DPGManager:
 
             # MISSÕES ATIVAS 
             if valence_status["current_missions"]:
-                self.logger.info("🎯 MISSÕES ATIVAS:")
+                self.logger.info(f"🎯 MISSÕES ATIVAS ao bônus de {self.mission_bonus_multiplier:.2f}x")
                 for mission in valence_status["current_missions"]:
                     try:
                         # Verificar se os campos existem antes de acessar
@@ -1081,18 +1044,18 @@ class DPGManager:
 
         # Analisar estado para gerar recomendações
         if consistency_metrics['success_rate'] < 0.1:
-            recommendations.append("🎯 Focar em estabilidade e movimento básico")
+            recommendations.append("Focar em estabilidade e movimento básico")
 
         if valence_status['overall_progress'] > 0.7 and consistency_metrics['avg_distance'] < 1.0:
-            recommendations.append("🚀 Considerar ativar IRL de propulsão")
+            recommendations.append("Considerar ativar IRL de propulsão")
 
         regressing_count = sum(1 for details in valence_status['valence_details'].values() 
                               if details['state'] == 'regressing')
         if regressing_count >= 2:
-            recommendations.append("🔴 Estabilizar valências em regressão")
+            recommendations.append("Estabilizar valências em regressão")
 
         if self.crutches['level'] > 0.8 and self.episode_count > 500:
-            recommendations.append("🔧 Reduzir gradualmente ajuda do crutch system")
+            recommendations.append("Reduzir gradualmente ajuda do crutch system")
 
         # Logar recomendações se houver
         if recommendations:
