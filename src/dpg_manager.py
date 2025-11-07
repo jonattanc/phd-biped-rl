@@ -630,25 +630,25 @@ class DPGManager:
         overall_progress = valence_status['overall_progress']
 
         if overall_progress < 0.6:  
-            self.critic.weights.propulsion = 0.70  
-            self.critic.weights.stability = 0.20     
-            self.critic.weights.coordination = 0.05
-            self.critic.weights.efficiency = 0.05
-            self.critic.weights.irl_influence = 0.8  
+            self.critic.weights.propulsion = 0.60  
+            self.critic.weights.stability = 0.35     
+            self.critic.weights.coordination = 0.03
+            self.critic.weights.efficiency = 0.02
+            self.critic.weights.irl_influence = 0.2  
 
         elif overall_progress < 0.8:
-            self.critic.weights.propulsion = 0.60
+            self.critic.weights.propulsion = 0.50
             self.critic.weights.stability = 0.25
-            self.critic.weights.coordination = 0.10
-            self.critic.weights.efficiency = 0.05
-            self.critic.weights.irl_influence = 0.75
+            self.critic.weights.coordination = 0.15
+            self.critic.weights.efficiency = 0.10
+            self.critic.weights.irl_influence = 0.25
 
         else:
             self.critic.weights.stability = 0.35
             self.critic.weights.propulsion = 0.30
             self.critic.weights.coordination = 0.20
             self.critic.weights.efficiency = 0.15
-            self.critic.weights.irl_influence = 0.7
+            self.critic.weights.irl_influence = 0.3
 
         self._normalize_critic_weights()
 
@@ -749,31 +749,12 @@ class DPGManager:
         """Ativação AGRESSIVA de IRL quando movimento é insuficiente"""
         distance = episode_results.get('distance', 0)
         # Ativa IRL de propulsão
-        if distance < 1.0 and self.episode_count > 2:  
+        if distance < 0.1:  
             self.activate_propulsion_irl()
-            self._propulsion_irl_activated = True
-            
-        # Ativa IRL de emergência
-        if distance < 0.3 and self.episode_count > 5:  
-            self.activate_emergency_movement_irl()
-   
-    def activate_emergency_movement_irl(self):
-        """IRL DE EMERGÊNCIA - Foco total em movimento"""
-        emergency_weights = {
-            'progress': 0.95,      # Foco máximo em progresso
-            'stability': 0.03,     # Mínimo vital
-            'efficiency': 0.01,    # Quase zero
-            'coordination': 0.01   # Quase zero
-        }
-
-        # Forçar pesos do critic
-        self.critic.weights.propulsion = 0.95
-        self.critic.weights.stability = 0.03
-        self.critic.weights.coordination = 0.01
-        self.critic.weights.efficiency = 0.01
-        self.critic.weights.irl_influence = 0.98
-
-        self.valence_manager.irl_weights = emergency_weights
+        elif distance > 2 and distance < 4:
+            self.activate_stabilization_irl()
+        else:
+            self.critic.weights.irl_influence = max(0.1, self.critic.weights.irl_influence - 0.05)
         
     def activate_propulsion_irl(self):
         """Ativar IRL ESPECÍFICO para movimento"""
@@ -865,22 +846,19 @@ class DPGManager:
         """Atualiza nível de ajuda baseado em performance REAL"""
         distance = max(episode_results.get('distance', 0), 0)
     
-        if distance > 2.0:
-            new_level = 0.8   
-        elif distance > 1.5:
-            new_level = 0.85  
-        elif distance > 1.0:
-            new_level = 0.9   
-        elif distance > 0.5:
-            new_level = 0.95  
-        elif distance > 0.2:
-            new_level = 1.0  
-        else:
-            new_level = 1.0   
+        if distance > 1.0: new_level = 0.1
+        elif distance > 0.7: new_level = 0.2  
+        elif distance > 0.5: new_level = 0.3
+        elif distance > 0.3: new_level = 0.4
+        elif distance > 0.2: new_level = 0.5
+        elif distance > 0.1: new_level = 0.6
+        elif distance > 0.05: new_level = 0.7
+        elif distance > 0.02: new_level = 0.8
+        else: new_level = 0.9   
 
         # Redução MUITO mais gradual
-        episode_factor = max(0, 1.0 - (self.episode_count / 5000))  
-        new_level = max(new_level * episode_factor, 0.5)  
+        episode_factor = max(0, 1.0 - (self.episode_count / 1000))  
+        new_level = max(new_level * episode_factor, 0.1)  
 
         self.crutches["level"] = new_level
         self._update_crutch_stage()

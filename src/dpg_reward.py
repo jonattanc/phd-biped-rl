@@ -51,34 +51,33 @@ class RewardCalculator:
     
     def calculate(self, sim, action, phase_info: Dict) -> float:
         """Calcula recompensa usando sistema de valências com cache - VERSÃO BALANCEADA"""
-        total_reward = 0.0
+        base_reward = 0.0
 
-        enabled_components = phase_info['enabled_components']
-        valence_weights = phase_info.get('valence_weights', {})
-        irl_weights = phase_info.get('irl_weights', {})
+        # 1. RECOMPENSA MASSIVA por distância
+        distance = getattr(sim, "episode_distance", 0)
+        if distance > 0:
+            base_reward += distance * 200.0  
 
-        use_irl = len(irl_weights) > 0 and phase_info.get('learning_progress', 0) > 0.7
-        irl_bonus = 0.1 if use_irl else 0.0 
+            # BÔNUS AGGRESSIVO por marcos
+            if distance > 1.0: base_reward += 500.0
+            elif distance > 0.5: base_reward += 200.0
+            elif distance > 0.2: base_reward += 100.0
+            elif distance > 0.1: base_reward += 50.0
 
-        for component_name in enabled_components:
-            if component_name in self.components:
-                component = self.components[component_name]
-                component_reward = component.calculator(sim, phase_info)
+        # 2. Recompensa por velocidade
+        velocity = getattr(sim, "robot_x_velocity", 0)
+        if velocity > 0:
+            base_reward += velocity * 100.0  
 
-                if use_irl and component_name in irl_weights:
-                    weight = irl_weights[component_name]
-                elif valence_weights and component_name in valence_weights:
-                    weight = valence_weights[component_name]
-                else:
-                    weight = component.weight * component.adaptive_weight
+        # 3. Bônus de sobrevivência
+        if not getattr(sim, "episode_terminated", True) and distance > 0.05:
+            base_reward += 20.0
 
-                weighted_reward = weight * component_reward
-                total_reward += weighted_reward
+        # 4. APLICAR CRUTCH
+        crutch_multiplier = 1.0 + (self.crutches["level"] * 2.0) 
+        base_reward *= crutch_multiplier
 
-        penalties = self._calculate_global_penalties(sim, action)
-        total_reward -= penalties
-
-        return max(total_reward, -0.5)
+        return max(base_reward, 0.0)
     
     def _calculate_global_penalties(self, sim, action) -> float:
         """Calcula penalidades globais mais balanceadas"""

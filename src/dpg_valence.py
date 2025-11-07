@@ -131,13 +131,13 @@ class ValenceManager:
             # VALÊNCIA PRIMÁRIA: Movimento Básico 
             "movimento_basico": ValenceConfig(
                 name="movimento_basico",
-                target_level=0.7,  
+                target_level=0.3,  
                 metrics=["distance", "speed", "success"],
                 reward_components=["movement_priority", "basic_progress", "velocity"],
                 dependencies=[],  
-                activation_threshold=0.01,  
-                mastery_threshold=0.6,      
-                max_learning_rate=0.15,     
+                activation_threshold=0.001,  
+                mastery_threshold=0.2,      
+                max_learning_rate=0.3,     
                 min_episodes=1
             ),
 
@@ -276,13 +276,13 @@ class ValenceManager:
                 return 0.05
 
             # PROGRESSÃO LINEAR DIRETA
-            if distance > 1.5: return 1.0
-            if distance > 1.0: return 0.8
-            if distance > 0.5: return 0.6
-            if distance > 0.2: return 0.4  
-            if distance > 0.1: return 0.3
-            if distance > 0.05: return 0.2
-            return 0.1
+            if distance > 1.0: return 1.0
+            if distance > 0.6: return 0.8
+            if distance > 0.3: return 0.6
+            if distance > 0.1: return 0.4  
+            if distance > 0.05: return 0.3
+            if distance > 0.01: return 0.2
+            return 0.05
 
         # Para outras valências, cálculo mínimo
         return 0.3
