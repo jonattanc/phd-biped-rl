@@ -210,7 +210,7 @@ class Simulation(gym.Env):
         obs, _ = self.reset()
         self.metrics[str(self.episode_count + 1)] = {"step_data": {}}  # Criar espaço para primeiro episódio
 
-        noise_std = 0.01
+        noise_std = 1e-3
 
         while self.episode_count < episodes and not self.exit_value.value:
             obs = self.wrapped_env.normalize_obs(obs)
