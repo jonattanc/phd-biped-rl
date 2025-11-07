@@ -209,9 +209,13 @@ class Simulation(gym.Env):
         obs, _ = self.reset()
         self.metrics[str(self.episode_count + 1)] = {"step_data": {}}  # Criar espaço para primeiro episódio
 
+        noise_std = 0.01
+
         while self.episode_count < episodes and not self.exit_value.value:
 
             action, _ = self.agent.model.predict(obs, deterministic=deterministic)
+            noise = np.random.normal(0, noise_std, size=action.shape)
+            action = np.clip(action + noise, -1, 1)
 
             next_obs, reward, episode_terminated, episode_truncated, info = self.step(action, evaluation=True)
             done = episode_terminated or episode_truncated
