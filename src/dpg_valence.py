@@ -271,13 +271,13 @@ class ValenceManager:
                 return 0.05
 
             # PROGRESSÃO LINEAR DIRETA
-            if distance > 2.0: return 1.0
-            if distance > 1.5: return 0.8
-            if distance > 1.0: return 0.6
-            if distance > 0.5: return 0.4  
-            if distance > 0.2: return 0.2
-            if distance > 0.1: return 0.1
-            return 0.05
+            if distance > 1.5: return 1.0
+            if distance > 1.0: return 0.8
+            if distance > 0.5: return 0.6
+            if distance > 0.2: return 0.4  
+            if distance > 0.1: return 0.3
+            if distance > 0.05: return 0.2
+            return 0.1
 
         # Para outras valências, cálculo mínimo
         return 0.3
@@ -425,13 +425,12 @@ class ValenceManager:
         )
 
         if not movimento_mission_active and movimento_level < 0.7:
-            # Meta AGRESSIVA: 50% de melhoria
-            target_improvement = min(0.5, 0.7 - movimento_level)
-            duration = 10  
+            target_improvement = min(0.2, 0.7 - movimento_level)
+            duration = 15  
 
             mission = Mission('movimento_positivo_basico', target_improvement, duration)
             mission.start_level = movimento_level
-            mission.bonus_multiplier = 4.0  
+            mission.bonus_multiplier = 2.0  
 
             return mission
 

@@ -628,29 +628,26 @@ class DPGManager:
         """Estabilização adaptativa baseada no progresso atual"""
         valence_status = self.valence_manager.get_valence_status()
         overall_progress = valence_status['overall_progress']
-        distance = getattr(self, '_last_distance', 0)
 
-        stability_factor = self._calculate_stability_factor(valence_status)
-        propulsion_factor = self._calculate_propulsion_factor(valence_status)
-
+        # REDUZIR DRASTICAMENTE IRL NO INÍCIO
         if overall_progress < 0.4:  
-            self.critic.weights.propulsion = 0.85 * propulsion_factor
-            self.critic.weights.stability = 0.10 * stability_factor
-            self.critic.weights.coordination = 0.03
-            self.critic.weights.efficiency = 0.02
-            self.critic.weights.irl_influence = 0.95
+            self.critic.weights.propulsion = 0.60  
+            self.critic.weights.stability = 0.30   
+            self.critic.weights.coordination = 0.05
+            self.critic.weights.efficiency = 0.05
+            self.critic.weights.irl_influence = 0.3 
 
         elif overall_progress < 0.6:  
-            self.critic.weights.propulsion = 0.45 * propulsion_factor
-            self.critic.weights.stability = 0.30 * stability_factor
+            self.critic.weights.propulsion = 0.50
+            self.critic.weights.stability = 0.25
             self.critic.weights.coordination = 0.15
             self.critic.weights.efficiency = 0.10
-            self.critic.weights.irl_influence = 0.6
+            self.critic.weights.irl_influence = 0.5
 
         else:  
-            self.critic.weights.stability = 0.40 * stability_factor
-            self.critic.weights.propulsion = 0.30 * propulsion_factor
-            self.critic.weights.coordination = 0.15
+            self.critic.weights.stability = 0.35
+            self.critic.weights.propulsion = 0.30
+            self.critic.weights.coordination = 0.20
             self.critic.weights.efficiency = 0.15
             self.critic.weights.irl_influence = 0.3
 
@@ -744,31 +741,14 @@ class DPGManager:
         """Ativação AGRESSIVA de IRL quando movimento é insuficiente"""
         distance = episode_results.get('distance', 0)
         # Ativa IRL de propulsão
-        if distance < 1.5 and self.episode_count > 20:  
+        if distance < 1.0 and self.episode_count > 10:  
             self.activate_propulsion_irl()
             self._propulsion_irl_activated = True
             
         # Ativa IRL de emergência
-        if distance < 0.5 and self.episode_count > 50:  
+        if distance < 0.3 and self.episode_count > 20:  
             self.activate_emergency_movement_irl()
-
-    def emergency_simplify_valences(self):
-        """SISTEMA DE EMERGÊNCIA - Remove complexidade que atrapalha"""
-        # Configuração de EMERGÊNCIA - apenas movimento básico
-        emergency_valences = {
-            "movimento_basico_emergencia": {
-                "target_level": 0.7,
-                "metrics": ["distance", "speed"],
-                "reward_components": ["basic_progress", "velocity"],
-                "activation_threshold": 0.1,
-                "mastery_threshold": 0.7
-            }
-        }
-
-        # Substitui valências complexas por sistema simples
-        self.valence_manager.valences = emergency_valences
-        self.valence_manager.active_valences = {"movimento_basico_emergencia"}
-    
+   
     def activate_emergency_movement_irl(self):
         """IRL DE EMERGÊNCIA - Foco total em movimento"""
         emergency_weights = {
