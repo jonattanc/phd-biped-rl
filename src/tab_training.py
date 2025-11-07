@@ -77,8 +77,6 @@ class TrainingTab(common_tab.GUITab):
         # Controle de processos
         self.gui_log_queue = queue.Queue()
         self.plot_data_lock = threading.Lock()
-        self.gui_closed = False
-        self.after_ids = {}
         self.new_plot_data = False
         self.last_pause_value = 0
 
@@ -1035,49 +1033,6 @@ class TrainingTab(common_tab.GUITab):
 
         except Exception as e:
             self.logger.exception("Erro ao focar a janela do PyBullet")
-
-    def on_closing(self):
-        """Limpeza adequada ao fechar"""
-        self.logger.info("Gui fechando")
-
-        # Marcar como fechado ANTES de cancelar os callbacks
-        self.gui_closed = True
-
-        # Cancelar todas as callbacks agendadas
-        for after_id in self.after_ids.values():
-            try:
-                self.root.after_cancel(after_id)
-            except Exception as e:
-                pass
-
-        # Limpar o dicionário de after_ids
-        self.after_ids.clear()
-
-        if hasattr(self, "ipc_queue"):
-            self.ipc_queue.put(None)  # Sinaliza para a thread IPC terminar
-
-        for v in self.exit_values:
-            v.value = 1  # Sinaliza para os processos terminarem
-
-        for v in self.config_changed_values:
-            v.value = 1  # Necessário para processos verificarem o exit
-
-        self.logger.info("Aguardando thread IPC terminar...")
-        if hasattr(self, "ipc_thread") and self.ipc_thread and self.ipc_thread.is_alive():
-            self.ipc_thread.join(timeout=5.0)
-
-        # Terminar processos
-        self.logger.info("Aguardando processos de treinamento terminarem...")
-        for p in self.processes:
-            if p.is_alive():
-                p.join(timeout=10.0)
-                if p.is_alive():
-                    self.logger.warning(f"Forcing termination of process {p.pid}")
-                    p.terminate()
-
-        self.logger.info("Todos os processos finalizados. Fechando GUI.")
-        self.logger.info("Programa finalizado com sucesso.")  # Log adicional
-        self.root.quit()
 
     def start(self):
         """Inicializa a aba de treinamento"""

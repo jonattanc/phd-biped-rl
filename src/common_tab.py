@@ -28,6 +28,9 @@ class GUITab:
         self.ipc_queue_main_to_process = multiprocessing.Queue()
         self.ipc_thread = None
 
+        self.gui_closed = False
+        self.after_ids = {}
+
     def create_environment_selector(self, frame, column):
         xacro_env_files = self._get_xacro_files(utils.ENVIRONMENT_PATH)
 
@@ -285,3 +288,50 @@ class GUITab:
         """Configura IPC para comunicação entre processos"""
         self.ipc_thread = threading.Thread(target=self.ipc_runner, daemon=True)
         self.ipc_thread.start()
+
+    def on_closing(self):
+        """Limpeza adequada ao fechar"""
+        try:
+            if self.gui_closed:
+                return
+
+            self.logger.info(f"Tab {self.__class__.__name__} fechando")
+
+            # Marcar como fechado ANTES de cancelar os callbacks
+            self.gui_closed = True
+            self.ipc_queue.put(None)  # Sinaliza para a thread IPC terminar
+
+            # Cancelar todas as callbacks agendadas
+            for after_id in self.after_ids.values():
+                try:
+                    self.root.after_cancel(after_id)
+                except Exception as e:
+                    pass
+
+            # Limpar o dicionário de after_ids
+            self.after_ids.clear()
+
+            for v in self.exit_values:
+                v.value = 1  # Sinaliza para os processos terminarem
+
+            for v in self.config_changed_values:
+                v.value = 1  # Necessário para processos verificarem o exit
+
+            self.logger.info("Aguardando thread IPC terminar...")
+            if hasattr(self, "ipc_thread") and self.ipc_thread and self.ipc_thread.is_alive():
+                self.ipc_thread.join(timeout=5.0)
+
+            # Terminar processos
+            self.logger.info("Aguardando processos de treinamento terminarem...")
+
+            for p in self.processes:
+                if p.is_alive():
+                    p.join(timeout=10.0)
+                    if p.is_alive():
+                        self.logger.warning(f"Forcing termination of process {p.pid}")
+                        p.terminate()
+
+            self.logger.info("Todos os processos finalizados. Fechando Tab.")
+
+        except:
+            pass

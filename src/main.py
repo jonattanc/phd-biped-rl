@@ -44,6 +44,8 @@ class TrainingGUI:
         self.comparison_tab = ComparisonTab(notebook, self.device, self.logger)
         self.reward_tab = RewardTab(notebook, self.device, self.logger, self.reward_system)
 
+        self.common_tabs = [self.training_tab, self.evaluation_tab]
+
         # Adicionar abas ao notebook
         notebook.add(self.training_tab.frame, text="Treinamento")
         notebook.add(self.evaluation_tab.frame, text="Avaliação Individual")
@@ -52,23 +54,21 @@ class TrainingGUI:
 
     def on_closing(self):
         """Fecha todas as abas adequadamente"""
-        self.logger.info("Fechando aplicação...")
+        try:
+            self.logger.info("Fechando aplicação...")
 
-        # Chamar cleanup nas abas que possuem o método
-        if hasattr(self, "training_tab") and hasattr(self.training_tab, "on_closing"):
-            self.training_tab.on_closing()
+            for tab in self.common_tabs:
+                if hasattr(tab, "cleanup"):
+                    tab.cleanup()
 
-        if hasattr(self, "evaluation_tab") and hasattr(self.evaluation_tab, "cleanup"):
-            self.evaluation_tab.cleanup()
-        elif hasattr(self, "evaluation_tab") and hasattr(self.evaluation_tab, "on_closing"):
-            self.evaluation_tab.on_closing()
+                tab.on_closing()
 
-        if hasattr(self, "comparison_tab") and hasattr(self.comparison_tab, "cleanup"):
-            self.comparison_tab.cleanup()
-        elif hasattr(self, "comparison_tab") and hasattr(self.comparison_tab, "on_closing"):
-            self.comparison_tab.on_closing()
+            self.logger.info("TrainingGUI finalizada com sucesso.")
 
-        self.root.destroy()
+        except:
+            pass
+
+        self.root.quit()
 
     def start(self):
         # Iniciar componentes das abas
