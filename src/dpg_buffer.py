@@ -397,7 +397,7 @@ class OptimizedBufferManager:
         try:
             metrics = experience.info.get("metrics", {})
             distance = max(metrics.get("distance", 0), 0)
-            return distance > 0.05
+            return distance > 0.01
         except Exception as e:
             return True
 
@@ -490,24 +490,27 @@ class OptimizedBufferManager:
         try:
             metrics = data.get("metrics", {})
             distance = metrics.get("distance", 0)
-                
+            success = metrics.get("success", False)
+
+            # BÔNUS MASSIVO por sucesso
+            if success:
+                return 1.0
+
             if distance <= 0:
-                return 0.01  
-                
-            if distance > 2.0: return 1.0
-            if distance > 1.5: return 0.9
-            if distance > 1.0: return 0.8
-            if distance > 0.8: return 0.7  
-            if distance > 0.6: return 0.6
-            if distance > 0.4: return 0.5
-            if distance > 0.2: return 0.4
-            if distance > 0.1: return 0.3
-            if distance > 0.05: return 0.2
-            if distance > 0.02: return 0.15
+                return 0.05  
+
+            # ESCALA MAIS PERMISSIVA
+            if distance > 1.0: return 0.9
+            if distance > 0.7: return 0.8  
+            if distance > 0.5: return 0.7
+            if distance > 0.3: return 0.6
+            if distance > 0.2: return 0.5
+            if distance > 0.1: return 0.4
+            if distance > 0.05: return 0.3
+            if distance > 0.02: return 0.2
             return 0.1
-            
+
         except Exception as e:
-            self.logger.error(f"❌ ERRO em _calculate_quality: {e}")
             return 0.1
     
     def get_emergency_training_batch(self, batch_size=32):

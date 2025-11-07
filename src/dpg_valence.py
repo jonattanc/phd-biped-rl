@@ -128,38 +128,43 @@ class ValenceManager:
     def _initialize_valences(self) -> Dict[str, ValenceConfig]:
         """Inicializa as valências fundamentais para locomoção bípede"""
         return {
-            # VALÊNCIA PRIMÁRIA: Movimento Básico
-            "movimento_positivo_basico": ValenceConfig(
-                name="movimento_positivo_basico",
-                target_level=0.9,  
-                metrics=["distance", "speed", "positive_movement_rate"],
+            # VALÊNCIA PRIMÁRIA: Movimento Básico 
+            "movimento_basico": ValenceConfig(
+                name="movimento_basico",
+                target_level=0.7,  
+                metrics=["distance", "speed", "success"],
                 reward_components=["movement_priority", "basic_progress", "velocity"],
                 dependencies=[],  
                 activation_threshold=0.01,  
-                mastery_threshold=0.8,      
+                mastery_threshold=0.6,      
+                max_learning_rate=0.15,     
                 min_episodes=1
             ),
-            # VALÊNCIA FUNDAMENTAL: Estabilidade dinamica
-            "estabilidade_dinamica": ValenceConfig(
-                name="estabilidade_dinamica",
-                target_level=0.8,
-                metrics=["roll", "pitch", "com_height_consistency", "lateral_stability", "pitch_velocity"],
-                reward_components=["stability", "posture", "dynamic_balance"],
-                dependencies=[],
-                activation_threshold=0.3,
-                mastery_threshold=0.7,
-                min_episodes=3
-            ),            
-            # VALÊNCIA: Propulsão eficiente
+
+            # VALÊNCIA SECUNDÁRIA: Estabilidade Simplificada
+            "estabilidade_simples": ValenceConfig(
+                name="estabilidade_simples",
+                target_level=0.6,
+                metrics=["roll", "pitch", "stability"],
+                reward_components=["stability", "posture"],
+                dependencies=["movimento_basico"],
+                activation_threshold=0.2,   
+                mastery_threshold=0.5,      
+                max_learning_rate=0.1,
+                min_episodes=2
+            ),
+
+            # VALÊNCIA TERCIÁRIA: Propulsão Eficiente
             "propulsao_eficiente": ValenceConfig(
                 name="propulsao_eficiente", 
-                target_level=0.7,
-                metrics=["x_velocity", "velocity_consistency", "positive_movement_rate", "acceleration_smoothness"],
-                reward_components=["velocity", "propulsion", "smoothness"],
-                dependencies=["movimento_positivo_basico"],
-                activation_threshold=0.35,
-                mastery_threshold=0.65,
-                min_episodes=5
+                target_level=0.5,
+                metrics=["x_velocity", "positive_movement_rate"],
+                reward_components=["velocity", "propulsion"],
+                dependencies=["movimento_basico"],
+                activation_threshold=0.3,
+                mastery_threshold=0.4,      
+                max_learning_rate=0.08,
+                min_episodes=3
             ),            
             # VALÊNCIA: Coordenação Rítmica
             "ritmo_marcha_natural": ValenceConfig(
