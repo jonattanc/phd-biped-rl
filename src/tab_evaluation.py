@@ -665,7 +665,7 @@ class EvaluationTab(common_tab.GUITab):
                 self.on_closing()
 
     def load_metrics(self):
-        with open(self.metrics_path, "r") as f:
+        with open(self.metrics_path, "r", encoding="utf-8") as f:
             self.metrics_data = json.load(f)
 
         self._display_evaluation_results()

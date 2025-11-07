@@ -114,7 +114,7 @@ def load_default_settings():
     if not os.path.exists(default_settings_path):
         return default_settings
 
-    with open(default_settings_path, "r") as f:
+    with open(default_settings_path, "r", encoding="utf-8") as f:
         loaded_settings = json.load(f)
 
     for key, value in loaded_settings.items():

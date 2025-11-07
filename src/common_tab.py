@@ -176,7 +176,7 @@ class GUITab:
         if not os.path.exists(data_file):
             raise FileNotFoundError("Arquivo de dados não encontrado.")
 
-        with open(data_file, "r") as f:
+        with open(data_file, "r", encoding="utf-8") as f:
             return json.load(f)
 
     def disable_other_tabs(self):

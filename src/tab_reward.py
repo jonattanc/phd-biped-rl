@@ -180,7 +180,7 @@ class RewardTab:
 
             config_path = os.path.join(self.config_dir, f"{name}.json")
 
-            with open(config_path, "w") as f:
+            with open(config_path, "w", encoding="utf-8") as f:
                 json.dump(config_data, f, indent=2)
 
             self.refresh_config_list()
@@ -242,7 +242,7 @@ class RewardTab:
         config_name = self.config_var.get()
         config_path = os.path.join(self.config_dir, f"{config_name}.json")
 
-        with open(config_path, "w") as f:
+        with open(config_path, "w", encoding="utf-8") as f:
             json.dump(config_data, f, indent=2)
 
     def start(self):
