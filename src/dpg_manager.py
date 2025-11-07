@@ -531,7 +531,7 @@ class DPGManager:
         if (self.episode_count - self.last_report_episode) >= self.report_interval:
             self._generate_comprehensive_report()
             self.last_report_episode = self.episode_count
-
+        
     def _should_update_valences(self, episode_results) -> bool:
         """Verifica se atualização de valências é necessária"""
         if (self.episode_count - self.last_valence_update_episode) < self.valence_update_interval:
@@ -629,14 +629,14 @@ class DPGManager:
         valence_status = self.valence_manager.get_valence_status()
         overall_progress = valence_status['overall_progress']
 
-        if overall_progress < 0.6:  
+        if overall_progress < 1.0:  
             self.critic.weights.propulsion = 0.90  
             self.critic.weights.stability = 0.05     
             self.critic.weights.coordination = 0.02
             self.critic.weights.efficiency = 0.02
             self.critic.weights.irl_influence = 0.8  
 
-        elif overall_progress < 0.8:
+        elif overall_progress < 2.0:
             self.critic.weights.propulsion = 0.75
             self.critic.weights.stability = 0.15
             self.critic.weights.coordination = 0.05
@@ -843,22 +843,24 @@ class DPGManager:
             self.current_group = new_group
     
     def update_crutch_system(self, episode_results):
-        """Atualiza nível de ajuda baseado em performance REAL"""
-        distance = max(episode_results.get('distance', 0), 0)
-    
-        if distance > 2.0: new_level = 0.1
-        elif distance > 1.5: new_level = 0.2  
-        elif distance > 1.0: new_level = 0.3
-        elif distance > 0.5: new_level = 0.4
-        elif distance > 0.4: new_level = 0.5
-        elif distance > 0.3: new_level = 0.6
-        elif distance > 0.2: new_level = 0.7
-        elif distance > 0.1: new_level = 0.8
-        else: new_level = 0.9   
+        """CRUTCH MÁXIMO por MUITO MAIS TEMPO - FOCO EM MOVIMENTO POSITIVO"""
+        distance = max(episode_results.get('distance', 0), 0)  
 
-        # Redução MUITO mais gradual
-        episode_factor = max(0, 1.0 - (self.episode_count / 1000))  
-        new_level = max(new_level * episode_factor, 0.1)  
+        # CRUTCH MÁXIMO por primeiros 2000 episódios
+        if self.episode_count < 2000:
+            new_level = 0.95  # CRUTCH QUASE MÁXIMO
+        elif self.episode_count < 3000:
+            new_level = 0.8
+        else:
+            # Redução MUITO gradual
+            if distance > 2.0: new_level = 0.1
+            elif distance > 1.5: new_level = 0.2  
+            elif distance > 1.0: new_level = 0.4
+            elif distance > 0.7: new_level = 0.6
+            elif distance > 0.5: new_level = 0.7
+            elif distance > 0.3: new_level = 0.8
+            elif distance > 0.1: new_level = 0.9
+            else: new_level = 0.95
 
         self.crutches["level"] = new_level
         self._update_crutch_stage()

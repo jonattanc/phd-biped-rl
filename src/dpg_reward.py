@@ -383,7 +383,7 @@ class RewardCalculator:
                 extension_bonus += 0.2
 
             base_score = (left_score + right_score) / 2.0
-            final_score = base_score + coordination_bonus + extension_bonus - overflex_penalty
+            final_score = base_score + coordination_bonus + (extension_bonus * 10) - overflex_penalty
 
             return min(max(final_score, 0.0), 1.0)
 
@@ -392,33 +392,45 @@ class RewardCalculator:
             return 0.3  
     
     def _calculate_movement_priority_reward(self, sim, phase_info) -> float:
-        """Recompensa PRINCIPAL focada APENAS em movimento positivo"""
+        """RECOMPENSA MASSIVA - PENALIDADE NUCLEAR POR MOVIMENTO NEGATIVO"""
         distance = getattr(sim, "episode_distance", 0)
         velocity = getattr(sim, "robot_x_velocity", 0)
 
-        # MOVIMENTO É TUDO - Recompensa massiva por progresso
+        # PENALIDADE NUCLEAR POR MOVIMENTO NEGATIVO
+        if distance < 0:
+            nuclear_penalty = -100000.0 
+            return nuclear_penalty
+
         base_reward = 0.0
 
-        # 1. RECOMPENSA POR DISTÂNCIA (80%)
+        # RECOMPENSA MASSIVA por QUALQUER movimento positivo
         if distance > 0:
-            # Progressão AGRESSIVA
-            distance_reward = min(distance * 1000.0, 500.0)  
-            base_reward += distance_reward
+            # ESCALA AGRESSIVA por metro!
+            base_reward += distance * 10000.0
 
-            # BÔNUS MASSIVO por marcos
-            if distance > 2.0: base_reward += 3000.0
-            elif distance > 1.0: base_reward += 1500.0
-            elif distance > 0.5: base_reward += 750.0
-            elif distance > 0.2: base_reward += 300.0
+            # BÔNUS MASSIVOS por marcos - QUALQUER progresso
+            if distance > 2.0: base_reward += 50000.0
+            elif distance > 1.5: base_reward += 30000.0
+            elif distance > 1.0: base_reward += 20000.0
+            elif distance > 0.7: base_reward += 10000.0
+            elif distance > 0.5: base_reward += 5000.0
+            elif distance > 0.3: base_reward += 3000.0
+            elif distance > 0.2: base_reward += 2000.0
+            elif distance > 0.1: base_reward += 1000.0
+            elif distance > 0.05: base_reward += 500.0
+            elif distance > 0.02: base_reward += 200.0
+            elif distance > 0.01: base_reward += 100.0
 
-        # 2. RECOMPENSA POR VELOCIDADE (20%)
-        if velocity > 0.1:
-            velocity_reward = velocity * 500.0  
-            base_reward += velocity_reward
+        # RECOMPENSA MASSIVA por velocidade positiva
+        if velocity > 0:
+            base_reward += velocity * 5000.0  # 5000 pontos por m/s
+        elif velocity < 0:
+            # PENALIDADE por velocidade negativa
+            base_reward -= 5000.0  # Penalidade fixa massiva
 
-        # 3. BÔNUS POR SOBREVIVÊNCIA (movimento contínuo)
-        if not getattr(sim, "episode_terminated", True) and distance > 0.1:
-            base_reward += 200.0
+        # BÔNUS GIGANTE por sobrevivência com movimento positivo
+        if not getattr(sim, "episode_terminated", True) and distance > 0.01:
+            base_reward += 2000.0
 
         return base_reward
 

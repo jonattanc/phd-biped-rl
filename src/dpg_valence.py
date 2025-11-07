@@ -262,30 +262,45 @@ class ValenceManager:
             return {'progress': 0.3, 'stability': 0.4, 'efficiency': 0.2, 'coordination': 0.1}
     
     def _calculate_valence_level(self, valence_name: str, results: Dict) -> float:
-        """Calcula nível atual de uma valência específica COM PROTEÇÃO"""
-        if valence_name == "movimento_positivo_basico" or "movimento" in valence_name:
-            distance = results.get("distance", 0)
+        """BLOQUEIO COMPLETO - movimento negativo ZERA todas as valências"""
+        
+        distance = results.get("distance", 0)
+        
+        # 🔴 BLOQUEIO TOTAL: movimento negativo ZERA todas as valências
+        if distance < 0:
+            return 0.0  # ZERO ABSOLUTO
+    
+        # VALÊNCIA MOVIMENTO BÁSICO
+        if valence_name == "movimento_basico":
             success = results.get("success", False)
-
-            # SUCESSO = mastered instantâneo
+    
             if success:
                 return 1.0
-
-            # DISTÂNCIA = única métrica que importa
+    
             if distance <= 0:
-                return 0.05
-
-            # PROGRESSÃO LINEAR DIRETA
-            if distance > 1.0: return 1.0
-            if distance > 0.6: return 0.8
-            if distance > 0.3: return 0.6
-            if distance > 0.1: return 0.4  
-            if distance > 0.05: return 0.3
-            if distance > 0.01: return 0.2
-            return 0.05
-
-        # Para outras valências, cálculo mínimo
-        return 0.3
+                return 0.01
+    
+            # 🟢 ESCALA HIPER-AGRESSIVA
+            if distance > 2.0: return 1.0
+            if distance > 1.5: return 0.9
+            if distance > 1.0: return 0.8
+            if distance > 0.7: return 0.7
+            if distance > 0.5: return 0.6
+            if distance > 0.3: return 0.5  
+            if distance > 0.2: return 0.4
+            if distance > 0.1: return 0.3
+            if distance > 0.05: return 0.2
+            return 0.1
+    
+        # Para outras valências
+        if distance > 0.5:
+            return 0.8
+        elif distance > 0.2:
+            return 0.6
+        elif distance > 0.05:
+            return 0.4
+        else:
+            return 0.2
     
     def _normalize_metric(self, metric: str, value: float) -> float:
         """Normaliza métricas para escala 0-1"""
@@ -334,24 +349,35 @@ class ValenceManager:
             self.mastery_callback(valence_name)
             
     def _update_valence_states(self, valence_levels: Dict[str, float]):
-        """Ativação MAIS AGRESSIVA das valências"""
+        """Ativação OBRIGATÓRIA da valência movimento_basico"""
         for valence_name, current_level in valence_levels.items():
             perf = self.valence_performance[valence_name]
             config = self.valences[valence_name]
 
+            # 🔴 MOVIMENTO BÁSICO - ATIVAÇÃO OBRIGATÓRIA
+            if valence_name == "movimento_basico":
+                # SEMPRE ATIVO - não pode ser inativo
+                if current_level > 0.01:  # Qualquer movimento positivo
+                    perf.state = ValenceState.LEARNING
+                    self.active_valences.add(valence_name)
+                else:
+                    perf.state = ValenceState.LEARNING  # MESMO SEM MOVIMENTO, FICA LEARNING
+                    self.active_valences.add(valence_name)
+                continue
+
+            # Para outras valências, verificar dependências
             dependencies_met = all(
-                self.valence_performance[dep].current_level >= 0.1  
+                dep in self.valence_performance and 
+                self.valence_performance[dep].current_level >= 0.1
                 for dep in config.dependencies
             )
 
             if not dependencies_met:
                 perf.state = ValenceState.INACTIVE
                 self.active_valences.discard(valence_name)
-            elif current_level >= config.mastery_threshold and perf.episodes_active >= 1:  
+            elif current_level >= config.mastery_threshold:
                 perf.state = ValenceState.MASTERED
                 self.active_valences.add(valence_name)
-                if self.mastery_callback:
-                    self.mastery_callback(valence_name)
             elif current_level < config.regression_threshold and perf.state == ValenceState.MASTERED:
                 perf.state = ValenceState.REGRESSING
                 self.active_valences.add(valence_name)
@@ -419,65 +445,29 @@ class ValenceManager:
         return total_bonus
     
     def _generate_mission(self, valence_levels: Dict[str, float]) -> Optional[Mission]:
-        """Gera nova missão baseada nas valências mais problemáticas"""
+        """Gera missões AGRESSIVAS para movimento"""
 
-        # PRIORIDADE ABSOLUTA para movimento_positivo_basico
-        movimento_level = valence_levels.get('movimento_positivo_basico', 0)
+        # FOCO ABSOLUTO EM MOVIMENTO
+        movimento_level = valence_levels.get('movimento_basico', 0)
 
-        # VERIFICAÇÃO CRÍTICA: Evitar missões duplicadas
+        # SEMPRE ter missão de movimento ativa
         movimento_mission_active = any(
-            mission.valence_name == 'movimento_positivo_basico' 
+            mission.valence_name == 'movimento_basico' 
             for mission in self.current_missions
         )
 
-        if not movimento_mission_active and movimento_level < 0.7:
-            target_improvement = min(0.2, 0.7 - movimento_level)
-            duration = 15  
+        if not movimento_mission_active:
+            # qualquer melhoria
+            target_improvement = 0.1  
+            duration = 20 
 
-            mission = Mission('movimento_positivo_basico', target_improvement, duration)
+            mission = Mission('movimento_basico', target_improvement, duration)
             mission.start_level = movimento_level
-            mission.bonus_multiplier = 2.5  
+            mission.bonus_multiplier = 3.0 
 
             return mission
 
-        candidate_valences = []
-
-        for valence_name in self.active_valences:
-            existing_mission = any(
-                mission.valence_name == valence_name 
-                for mission in self.current_missions
-            )
-            if existing_mission:
-                continue
-
-            perf = self.valence_performance[valence_name]
-            config = self.valences[valence_name]
-            current_level = valence_levels[valence_name]
-
-            # Apenas valências que precisam de melhoria
-            if (perf.state in [ValenceState.LEARNING, ValenceState.REGRESSING] and 
-                current_level < config.target_level - 0.1):
-
-                deficit = config.target_level - current_level
-                urgency = deficit * (2.0 if perf.state == ValenceState.REGRESSING else 1.0)
-
-                candidate_valences.append((valence_name, urgency, deficit))
-
-        if not candidate_valences:
-            return None
-
-        # Selecionar valência mais urgente
-        candidate_valences.sort(key=lambda x: x[1], reverse=True)
-        selected_valence, urgency, deficit = candidate_valences[0]
-
-        # Definir meta realista
-        target_improvement = min(deficit * 0.8, 0.4)  
-        duration = max(8, min(20, int(25 / (urgency + 0.1)))) 
-
-        mission = Mission(selected_valence, target_improvement, duration)
-        mission.start_level = valence_levels[selected_valence]
-
-        return mission
+        return None
     
     def _calculate_overall_progress(self, valence_levels: Dict[str, float]) -> float:
         """Calcula progresso geral considerando todas as valências"""
@@ -559,6 +549,27 @@ class ValenceManager:
             component_weights = {k: v/total for k, v in component_weights.items()}
         
         return component_weights
+    
+    def _debug_valence_calculation(self, episode_results):
+        """DEBUG AVANÇADO para movimento positivo/negativo"""
+        distance = episode_results.get('distance', 0)
+        movimento_level = self.valence_manager._calculate_valence_level("movimento_basico", episode_results)
+
+        # Log detalhado a cada 20 episódios
+        if self.episode_count % 20 == 0:
+            status = "🟢 POSITIVO" if distance > 0 else "🔴 NEGATIVO" if distance < 0 else "⚪ ZERO"
+            self.logger.info(f"🔍 DEBUG EPISODE {self.episode_count}: {status} distance={distance:.3f}, movimento_level={movimento_level:.3f}")
+
+        # FORÇAR ativação se houver movimento positivo
+        if distance > 0.01 and "movimento_basico" not in self.valence_manager.active_valences:
+            self.logger.warning(f"🚨 MOVIMENTO POSITIVO DETECTADO mas valência inativa! distance={distance:.3f}")
+            # Forçar ativação
+            self.valence_manager.active_valences.add("movimento_basico")
+            self.valence_manager.valence_performance["movimento_basico"].state = ValenceState.LEARNING
+
+        # ALERTA CRÍTICO para movimento negativo
+        if distance < -0.1:
+            self.logger.error(f"🚨🚨 MOVIMENTO NEGATIVO CRÍTICO: {distance:.3f} - PENALIDADE APLICADA")
     
 class OptimizedValenceManager(ValenceManager):
     def __init__(self, logger, config=None):

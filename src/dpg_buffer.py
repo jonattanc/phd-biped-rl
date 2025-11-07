@@ -486,27 +486,34 @@ class OptimizedBufferManager:
                 experience.skills.get("estabilidade", 0) > 0.7)
     
     def _calculate_quality(self, data: Dict) -> float:
-        """Calcula qualidade com FOCO EM MOVIMENTO POSITIVO"""
+        """QUALIDADE ZERO para movimento negativo - ELIMINA DO BUFFER"""
         try:
             metrics = data.get("metrics", {})
             distance = metrics.get("distance", 0)
-
+    
+            # 🔴 QUALIDADE ZERO ABSOLUTA para movimento negativo
+            if distance < 0:
+                return 0.0  # ELIMINA completamente do buffer
+    
             if distance <= 0:
-                return 0.01  
-
-            # ESCALA MAIS PERMISSIVA
-            if distance > 1.0: return 1.0
-            if distance > 0.7: return 0.9  
-            if distance > 0.4: return 0.8
-            if distance > 0.2: return 0.6
-            if distance > 0.1: return 0.5
-            if distance > 0.05: return 0.4
-            if distance > 0.03: return 0.3
-            if distance > 0.01: return 0.2
-            return 0.1
-
+                return 0.01  # Quase zero para movimento zero
+    
+            # 🟢 ESCALA HIPER-PERMISSIVA para movimento positivo
+            if distance > 3.0: return 1.0
+            if distance > 2.0: return 0.9
+            if distance > 1.5: return 0.8
+            if distance > 1.0: return 0.7
+            if distance > 0.7: return 0.6
+            if distance > 0.5: return 0.5
+            if distance > 0.3: return 0.4
+            if distance > 0.2: return 0.3
+            if distance > 0.1: return 0.2
+            if distance > 0.05: return 0.15
+            if distance > 0.01: return 0.1
+            return 0.05
+    
         except Exception as e:
-            return 0.1
+            return 0.0
     
     def get_emergency_training_batch(self, batch_size=32):
         """Batch de EMERGÊNCIA - apenas experiências com movimento"""
