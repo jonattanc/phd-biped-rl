@@ -452,7 +452,7 @@ class TrainingTab(common_tab.GUITab):
             messagebox.showwarning("Aviso", "Nenhum treinamento em andamento para salvar.")
             return
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now().strftime("%Y.%m.%d_%H.%M.%S")
         session_name = f"{self.current_env}__{self.current_robot}__{timestamp}"
         save_session_path = utils.ensure_directory(os.path.join(utils.TRAINING_DATA_PATH, session_name))
 
@@ -564,7 +564,7 @@ class TrainingTab(common_tab.GUITab):
     def export_plots(self):
         """Exporta gráficos como imagens para uso na tese"""
         try:
-            export_dir = filedialog.askdirectory(title="Selecione onde salvar os gráficos", initialdir=os.path.expanduser("~"))
+            export_dir = filedialog.askdirectory(title="Selecione onde salvar os gráficos", initialdir=os.path.join(os.path.expanduser("~"), "Desktop"))
 
             if not export_dir:
                 return

@@ -7,7 +7,6 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import os
 from datetime import datetime
 import sys
-import pandas as pd
 import multiprocessing
 import shutil
 import json
@@ -24,12 +23,6 @@ class EvaluationTab(common_tab.GUITab):
 
         self.frame = ttk.Frame(notebook)
         self.device = device
-
-        # Componentes da UI
-        self.metrics_text = None
-        self.fig_evaluation = None
-        self.axs_evaluation = None
-        self.canvas_evaluation = None
 
         self.setup_ui()
         self.setup_ipc()
@@ -69,7 +62,7 @@ class EvaluationTab(common_tab.GUITab):
         self.create_robot_selector(row2_frame, column=2, enabled=False)
 
         ttk.Label(row2_frame, text="Episódios:").grid(row=0, column=4, sticky=tk.W, padx=5)
-        self.eval_episodes_var = tk.StringVar(value="20")
+        self.eval_episodes_var = tk.StringVar(value="5")
         self.episodes_spinbox = ttk.Spinbox(row2_frame, from_=0, to=1e7, textvariable=self.eval_episodes_var, width=8)
         self.episodes_spinbox.grid(row=0, column=5, padx=5)
 
@@ -144,7 +137,7 @@ class EvaluationTab(common_tab.GUITab):
 
         ttk.Label(controls_frame, text="Dados para plotar:").grid(row=0, column=2, sticky=tk.W, padx=5)
         self.dynamic_data_var = tk.StringVar()
-        self.dynamic_data_combobox = ttk.Combobox(controls_frame, textvariable=self.dynamic_data_var, state=tk.DISABLED)
+        self.dynamic_data_combobox = ttk.Combobox(controls_frame, textvariable=self.dynamic_data_var, state=tk.DISABLED, width=50)
         self.dynamic_data_combobox.grid(row=0, column=3, padx=5)
         self.dynamic_data_combobox.bind("<<ComboboxSelected>>", lambda event: self.update_dynamic_plot())
 
@@ -441,9 +434,12 @@ class EvaluationTab(common_tab.GUITab):
                 title="Selecione o arquivo JSON para salvar os dados",
                 defaultextension=".json",
                 filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
-                initialdir=os.path.expanduser("~"),
+                initialdir=os.path.join(os.path.expanduser("~"), "Desktop"),
                 initialfile="evaluation_data.json",
             )
+
+            if not save_path:
+                return
 
             shutil.copy2(self.metrics_path, save_path)
 
@@ -456,8 +452,14 @@ class EvaluationTab(common_tab.GUITab):
             self.logger.info("Carregando dados de avaliação")
 
             self.metrics_path = filedialog.askopenfilename(
-                title="Selecione o arquivo JSON para carregar os dados", defaultextension=".json", filetypes=[("JSON files", "*.json"), ("All files", "*.*")], initialdir=os.path.expanduser("~")
+                title="Selecione o arquivo JSON para carregar os dados",
+                defaultextension=".json",
+                filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+                initialdir=os.path.join(os.path.expanduser("~"), "Desktop"),
             )
+
+            if not self.metrics_path:
+                return
 
             self.load_metrics()
 
@@ -479,6 +481,7 @@ class EvaluationTab(common_tab.GUITab):
         """Exporta os gráficos de avaliação como imagens PNG separadas"""
         try:
             directory = filedialog.askdirectory(title="Selecione onde salvar os gráficos")
+
             if not directory:
                 return
 
@@ -562,6 +565,40 @@ class EvaluationTab(common_tab.GUITab):
             self.logger.info(f"episode: {episode}")
             self.logger.info(f"selected_data: {selected_data}")
 
+            if selected_data.startswith("episode_data_"):
+                self.dynamic_episode_spinbox.config(state=tk.DISABLED)
+                key = selected_data.replace("episode_data_", "")
+                plot_raw_data = [value["episode_data"][key] for value in self.metrics_data["episodes"].values()]
+
+            else:
+                self.dynamic_episode_spinbox.config(state=tk.NORMAL)
+                plot_raw_data = self.metrics_data["episodes"][str(episode)]["step_data"][selected_data]
+
+            self.ax_dynamic.clear()
+
+            if isinstance(plot_raw_data[0], list):
+                plot_separated_data = list(map(list, zip(*plot_raw_data)))
+
+                for i, series in enumerate(plot_separated_data):
+                    self.ax_dynamic.plot(series, label=f"{selected_data}[{i}]")
+
+                self.ax_dynamic.legend()
+
+            else:
+                plot_separated_data = plot_raw_data
+                self.ax_dynamic.plot(plot_separated_data, color="blue")
+
+            self.ax_dynamic.relim()
+            self.ax_dynamic.autoscale_view()
+            self.ax_dynamic.set_title(selected_data)
+            self.ax_dynamic.set_ylabel(selected_data)
+            self.ax_dynamic.grid(True, alpha=0.3)
+            self.ax_dynamic.set_xlim(1, len(plot_separated_data))
+            self.ax_dynamic.set_xlabel("Step")
+
+            self.fig_dynamic.tight_layout()
+            self.canvas_dynamic.draw_idle()
+
         except Exception as e:
             self.logger.exception("Erro ao atualizar plot dinâmico")
 
@@ -642,6 +679,8 @@ class EvaluationTab(common_tab.GUITab):
         self.dynamic_episode_var.set(1)
 
         available_keys = list(self.metrics_data["episodes"]["1"]["step_data"].keys())
+        episode_data_keys = list(self.metrics_data["episodes"]["1"]["episode_data"].keys())
+        available_keys += [f"episode_data_{key}" for key in episode_data_keys]
         self.logger.info(f"available_keys: {available_keys}")
         self.dynamic_data_combobox["values"] = available_keys
         self.dynamic_data_var.set(available_keys[0])

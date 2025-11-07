@@ -1,9 +1,7 @@
 # metrics_saver.py
 import math
-import os
 import numpy as np
 from datetime import datetime
-import pandas as pd
 
 
 def calculate_extra_metrics(metrics):
@@ -38,71 +36,6 @@ def calculate_extra_metrics(metrics):
     metrics["extra_metrics"] = extra_metrics
 
     return metrics
-
-
-def compile_results(pattern="*", output_file="logs/data/compiled_results.csv"):
-    """
-    Compila todos os resultados CSV baseados no padrão.
-    """
-    import glob
-
-    csv_files = glob.glob(os.path.join("logs/data", f"{pattern}.csv"))
-
-    if not csv_files:
-        print(f"Nenhum arquivo encontrado com padrão: {pattern}")
-        return None
-
-    all_data = []
-
-    for csv_file in csv_files:
-        try:
-            df = pd.read_csv(csv_file)
-            df["source_file"] = os.path.basename(csv_file)
-            all_data.append(df)
-        except Exception as e:
-            print(f"Erro ao ler {csv_file}: {e}")
-
-    if all_data:
-        compiled_df = pd.concat(all_data, ignore_index=True)
-        compiled_df.to_csv(output_file, index=False)
-        print(f"Resultados compilados salvos em: {output_file}")
-        return compiled_df
-
-    return None
-
-
-def generate_report(circuit_name=None, avatar_name=None):
-    """
-    Gera um relatório com base nos dados compilados.
-    """
-    compiled_df = compile_results()
-
-    if compiled_df is None:
-        print("Nenhum dado para gerar relatório")
-        return
-
-    # Filtrar por circuito e avatar se especificado
-    if circuit_name:
-        compiled_df = compiled_df[compiled_df["circuit"] == circuit_name]
-    if avatar_name:
-        compiled_df = compiled_df[compiled_df["avatar"] == avatar_name]
-
-    if compiled_df.empty:
-        print("Nenhum dado encontrado com os filtros especificados")
-        return
-
-    print("\n=== RELATÓRIO DE DESEMPENHO ===")
-
-    # Agrupar por circuito e avatar
-    grouped = compiled_df.groupby(["circuit", "avatar", "role"])
-
-    for (circuit, avatar, role), group in grouped:
-        print(f"\n--- {circuit} | {avatar} | {role} ---")
-        print(f"Episódios: {len(group)}")
-        print(f"Taxa de sucesso: {group['success'].mean() * 100:.1f}%")
-        print(f"Tempo médio: {group['time_total'].mean():.2f}s ± {group['time_total'].std():.2f}s")
-        print(f"Melhor tempo: {group['time_total'].min():.2f}s")
-        print(f"Pior tempo: {group['time_total'].max():.2f}s")
 
 
 def calculate_energy_metrics(joint_torques_history, joint_velocities_history, timestep):

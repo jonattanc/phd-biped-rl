@@ -61,22 +61,25 @@ class Agent:
         self.model = None
         self.algorithm = algorithm
         self.env = env
-        self.action_dim = 0
+        self.action_dim = env.action_dim
         self.initial_episode = initial_episode
         self.learning_starts = 10e3
         self.prefill_steps = 100e3
         self.minimum_steps_to_save = self.learning_starts + self.prefill_steps + 100e3
 
+        dummy_env = DummyVecEnv([lambda: env])
+
         if model_path is None:
-            # Criar ambiente vetorizado
-            dummy_env = DummyVecEnv([lambda: env])
             self.env = VecNormalize(dummy_env, norm_obs=True, norm_reward=True)
-            self.action_dim = env.action_dim
             self.model = self._create_model(algorithm, device, seed)
 
         else:
+            vecnorm_path = model_path.replace(".zip", "_vecnormalize.pkl")
+            self.env = VecNormalize.load(vecnorm_path, dummy_env)
+            self.env.training = False
+            self.env.norm_reward = False
             self._load_model(model_path)
-            self.set_env(env)
+            self.model.set_env(self.env)
 
     def _create_model(self, algorithm, device="cpu", seed=42):
         # Criar modelo baseado no algoritmo selecionado
@@ -144,6 +147,9 @@ class Agent:
         """Salva o modelo treinado"""
         if self.model is not None:
             self.model.save(model_path)
+            vecnorm_path = model_path.replace(".zip", "_vecnormalize.pkl")
+            self.env.save(vecnorm_path)
+
             self.logger.info(f"Modelo salvo em: {model_path}")
         else:
             raise ValueError("Nenhum modelo para salvar")
@@ -171,47 +177,6 @@ class Agent:
                 if hasattr(self.model, "action_space") and self.model.action_space is not None:
                     self.action_dim = self.model.action_space.shape[0]
                 self.logger.info(f"Modelo FastTD3 carregado: {model_path}")
-
-    def set_env(self, env):
-        """Configura o ambiente para um modelo carregado"""
-        self.logger.info("=== CONFIGURANDO AMBIENTE NO AGENT ===")
-
-        if self.model is None:
-            self.logger.error("Modelo não disponível para configurar ambiente")
-            return
-
-        if env is None:
-            self.logger.error("Ambiente não disponível")
-            return
-
-        try:
-            # Criar ambiente vetorizado
-            self.logger.info("Criando ambiente vetorizado...")
-            vec_env = DummyVecEnv([lambda: env])
-
-            # Configurar o ambiente no modelo
-            self.logger.info("Configurando ambiente no modelo...")
-            self.model.set_env(vec_env)
-            self.env = vec_env
-
-            # Tentar obter action_dim de várias formas
-            if hasattr(env, "action_dim"):
-                self.action_dim = env.action_dim
-                self.logger.info(f"Action dim do env: {self.action_dim}")
-            elif hasattr(env, "action_space"):
-                self.action_dim = env.action_space.shape[0]
-                self.logger.info(f"Action dim do action_space: {self.action_dim}")
-            elif self.model.action_space is not None:
-                self.action_dim = self.model.action_space.shape[0]
-                self.logger.info(f"Action dim do model: {self.action_dim}")
-            else:
-                self.logger.warning("Não foi possível determinar action_dim")
-
-            self.logger.info("Ambiente configurado com sucesso no agente")
-
-        except Exception as e:
-            self.logger.exception("Erro ao configurar ambiente")
-            raise
 
     def set_agent(self, agent):
         """Configura o agente no ambiente"""
