@@ -50,67 +50,30 @@ class RewardCalculator:
         }
     
     def calculate(self, sim, action, phase_info: Dict) -> float:
-        """Sistema de recompensa EVOLUTIVO para marcha robusta em 10.000 episódios"""
+        """RECOMPENSA FOCADA NA SEQUÊNCIA DA MARCHA"""
         base_reward = 0.0
-        episode = getattr(sim, "episode_count", 0)
+        distance = max(getattr(sim, "episode_distance", 0), 0)
 
-        # METAS PROGRESSIVAS MAIS AMBICIOSAS
-        distance_targets = {
-            0: 1.0,    # Episódio 0: 1.0m
-            1000: 2.0,  # Episódio 1000: 2.0m  
-            2500: 3.0,  # Episódio 2500: 3.0m
-            4000: 4.0,  # Episódio 4000: 4.0m
-            6000: 5.0,  # Episódio 6000: 5.0m
-            8000: 6.0   # Episódio 8000: 6.0m
-        }
-
-        # Encontrar target atual
-        current_target = 1.0
-        for ep_threshold, target in sorted(distance_targets.items()):
-            if episode >= ep_threshold:
-                current_target = target
-
-        distance = getattr(sim, "episode_distance", 0)
-
-        # RECOMPENSA PRIMÁRIA MASSIVA por progresso
+        # BÔNUS PRIMÁRIO: DISTÂNCIA (MASSIVO)
         if distance > 0:
-            distance_ratio = min(distance / current_target, 2.0)
-            base_reward += distance_ratio * 800.0  # Aumentado de 500 para 800
+            base_reward += distance * 5000.0  # 5000 pontos por metro!
 
-            # BÔNUS POR EXCEDER TARGET
-            if distance > current_target:
-                base_reward += (distance - current_target) * 300.0
+            # BÔNUS PROGRESSIVO AGRESSIVO
+            if distance > 0.5: base_reward += 10000.0
+            elif distance > 0.3: base_reward += 5000.0
+            elif distance > 0.2: base_reward += 2000.0
+            elif distance > 0.1: base_reward += 1000.0
+            elif distance > 0.05: base_reward += 500.0
+            elif distance > 0.02: base_reward += 200.0
+            elif distance > 0.01: base_reward += 100.0
 
-        # RECOMPENSA DE VELOCIDADE CONSISTENTE
-        velocity = getattr(sim, "robot_x_velocity", 0)
-        velocity_targets = {
-            0: 0.5,    # 0.5 m/s
-            1000: 0.8,  # 0.8 m/s  
-            2500: 1.2,  # 1.2 m/s
-            4000: 1.5,  # 1.5 m/s
-            6000: 1.8,  # 1.8 m/s
-            8000: 2.0   # 2.0 m/s
-        }
+        # BÔNUS SECUNDÁRIO: SEQUÊNCIA DA MARCHA
+        sequence_bonus = self.calculate_marcha_sequence_bonus(sim, action)
+        base_reward += sequence_bonus
 
-        current_vel_target = 0.5
-        for ep_threshold, target in sorted(velocity_targets.items()):
-            if episode >= ep_threshold:
-                current_vel_target = target
-
-        if velocity > current_vel_target:
-            base_reward += (velocity - current_vel_target) * 500.0  # Aumentado
-
-        # BÔNUS DE MARCHA ROBUSTA (episódios avançados)
-        if episode > 5000:
-            # Bônus por estabilidade em alta velocidade
-            stability = self._calculate_stability_reward(sim, phase_info)
-            if velocity > 1.0 and stability > 0.8:
-                base_reward += 200.0
-
-            # Bônus por coordenação consistente
-            coordination = self._calculate_coordination_reward(sim, phase_info)
-            if coordination > 0.7:
-                base_reward += 150.0
+        # BÔNUS DE SOBREVIVÊNCIA
+        if not getattr(sim, "episode_terminated", True) and distance > 0.01:
+            base_reward += 500.0
 
         return max(base_reward, 0.0)
     
@@ -150,6 +113,30 @@ class RewardCalculator:
             penalties += min(pitch_penalty, 0.3)  
 
         return penalties
+
+    def calculate_marcha_sequence_bonus(self, sim, action) -> float:
+        """BÔNUS MASSIVO para a sequência correta da marcha"""
+        bonus = 0.0
+        
+        # 1. Verificar inclinação do tronco para frente
+        pitch = getattr(sim, "robot_pitch", 0)
+        if pitch > 0.05:  # Inclinação para frente
+            bonus += 50.0
+        
+        # 2. Verificar movimento alternado das pernas
+        left_hip = getattr(sim, "robot_left_hip_angle", 0)
+        right_hip = getattr(sim, "robot_right_hip_angle", 0)
+        
+        # Movimento alternado (uma perna flexionada, outra estendida)
+        if abs(left_hip - right_hip) > 0.3:
+            bonus += 100.0
+        
+        # 3. Bônus por velocidade positiva consistente
+        velocity = getattr(sim, "robot_x_velocity", 0)
+        if velocity > 0.1:
+            bonus += velocity * 200.0
+        
+        return bonus
 
     def _calculate_stability_reward(self, sim, phase_info) -> float:
         try:
