@@ -69,7 +69,7 @@ class ValenceTracker:
 
 
 class Mission:
-    """Missão de curto prazo para acelerar aprendizado"""
+    """Missão com proteção contra progresso negativo"""
     
     def __init__(self, valence_name: str, target_improvement: float, duration_episodes: int):
         self.valence_name = valence_name
@@ -79,16 +79,22 @@ class Mission:
         self.episodes_remaining = duration_episodes
         self.completed = False
         self.bonus_multiplier = 1.5
+        self.max_level_achieved = 0.0  # ✅ Rastrear máximo alcançado
     
     def update(self, current_level: float) -> float:
-        """Atualiza missão e retorna bônus se aplicável"""
+        """Atualiza missão com proteção contra regressão"""
         if self.completed or self.episodes_remaining <= 0:
             return 1.0
             
         self.episodes_remaining -= 1
-        improvement = current_level - self.start_level
         
-        if improvement >= self.target_improvement:
+        # ✅ USAR o máximo alcançado para evitar regressão no cálculo
+        self.max_level_achieved = max(self.max_level_achieved, current_level)
+        improvement = self.max_level_achieved - self.start_level
+        
+        progress_ratio = improvement / self.target_improvement if self.target_improvement > 0 else 0
+        
+        if progress_ratio >= 1.0:
             self.completed = True
             return self.bonus_multiplier
         elif self.episodes_remaining <= 0:
@@ -127,96 +133,108 @@ class ValenceManager:
         
     def _initialize_valences(self) -> Dict[str, ValenceConfig]:
         return {
-            # FASE 1: Fundamentos (Episódios 0-2000)
+            # FASE 1: Fundamentos - thresholds MAIS BAIXOS
             "movimento_basico": ValenceConfig(
                 name="movimento_basico",
-                target_level=0.95,  # Meta mais ambiciosa
+                target_level=0.7,  
                 metrics=["distance", "speed", "success", "positive_movement_rate"],
                 reward_components=["movement_priority", "basic_progress"],
                 dependencies=[],
-                activation_threshold=0.01,
-                mastery_threshold=0.8,  # Mais exigente
+                activation_threshold=0.01,  
+                mastery_threshold=0.6,  
+                regression_threshold=0.3,    
                 max_learning_rate=0.4,
-                min_episodes=8
+                min_episodes=5              
             ),
 
-            # FASE 2: Estabilidade Postural (Episódios 500-3000)
+            # FASE 2: Estabilidade Postural 
             "estabilidade_postural": ValenceConfig(
                 name="estabilidade_postural", 
-                target_level=0.85,
+                target_level=0.6,           
                 metrics=["roll", "pitch", "stability", "com_height_consistency", "lateral_stability"],
                 reward_components=["stability", "posture", "dynamic_balance"],
                 dependencies=["movimento_basico"],
-                activation_threshold=0.4,  # Ativa mais cedo
-                mastery_threshold=0.75,
-                min_episodes=15
+                activation_threshold=0.15,   
+                mastery_threshold=0.5,
+                regression_threshold=0.25,      
+                min_episodes=10
             ),
 
-            # FASE 3: Propulsão Básica (Episódios 1000-4000)
+            # FASE 3: Propulsão Básica
             "propulsao_basica": ValenceConfig(
                 name="propulsao_basica",
-                target_level=0.9,
+                target_level=0.6,           
                 metrics=["x_velocity", "velocity_consistency", "acceleration_smoothness", "distance"],
                 reward_components=["velocity", "propulsion", "basic_progress"],
                 dependencies=["movimento_basico"],
-                activation_threshold=0.3,  # Menos dependente
-                mastery_threshold=0.8,
-                min_episodes=20
+                activation_threshold=0.2,  
+                mastery_threshold=0.5,
+                regression_threshold=0.25,      
+                min_episodes=15
             ),
 
             # FASE 4: Coordenação Fundamental (Episódios 1500-5000)
             "coordenacao_fundamental": ValenceConfig(
                 name="coordenacao_fundamental",
-                target_level=0.85,
+                target_level=0.6,
                 metrics=["alternating_consistency", "step_length_consistency", "gait_pattern_score"],
                 reward_components=["coordination", "rhythm", "gait_pattern"],
                 dependencies=["propulsao_basica", "estabilidade_postural"],
-                activation_threshold=0.5,
-                mastery_threshold=0.7,
+                activation_threshold=0.25,
+                mastery_threshold=0.5,
+                regression_threshold=0.3,
                 min_episodes=25
             ),
 
             # FASE 5: Eficiência Biomecânica (Episódios 2500-6000)
             "eficiencia_biomecanica": ValenceConfig(
                 name="eficiencia_biomecanica",
-                target_level=0.8,
+                target_level=0.5,
                 metrics=["energy_efficiency", "stride_efficiency", "propulsion_efficiency"],
                 reward_components=["efficiency", "biomechanics", "smoothness"],
                 dependencies=["coordenacao_fundamental"],
-                activation_threshold=0.6,
-                mastery_threshold=0.65,
+                activation_threshold=0.3,
+                mastery_threshold=0.5,
+                regression_threshold=0.3,
                 min_episodes=30
             ),
 
             # FASE 6: Propulsão Avançada (Episódios 3500-7000)
             "propulsao_avancada": ValenceConfig(
                 name="propulsao_avancada",
-                target_level=0.9,
+                target_level=0.5,
                 metrics=["x_velocity", "velocity_consistency", "acceleration_smoothness", "distance"],
                 reward_components=["velocity", "propulsion", "smoothness"],
                 dependencies=["eficiencia_biomecanica"],
-                activation_threshold=0.7,
-                mastery_threshold=0.8,
+                activation_threshold=0.35,
+                mastery_threshold=0.5,
+                regression_threshold=0.35,
                 min_episodes=35
             ),
 
             # FASE 7: Marcha Robusta (Episódios 5000-10000)
             "marcha_robusta": ValenceConfig(
                 name="marcha_robusta", 
-                target_level=0.95,
+                target_level=0.5,
                 metrics=["gait_robustness", "recovery_success", "speed_adaptation", 
                         "terrain_handling", "distance", "velocity_consistency"],
                 reward_components=["robustness", "adaptation", "recovery", "velocity", "propulsion"],
                 dependencies=["propulsao_avancada", "coordenacao_fundamental"],
-                activation_threshold=0.8,
-                mastery_threshold=0.85,
+                activation_threshold=0.4,
+                mastery_threshold=0.5,
+                regression_threshold=0.4,
                 min_episodes=50
             )
         }
     
     def update_valences(self, episode_results: Dict) -> Dict[str, float]:
-        """Atualiza todas as valências baseado nos resultados do episódio"""
+        """Atualiza valências com DEBUG EXPANDIDO"""
         self.episode_count += 1
+        
+        # ✅ DEBUG CRÍTICO: Verificar dados de entrada
+        distance_raw = episode_results.get("distance", "N/A")
+        self.logger.info(f"🔍 VALENCE_INPUT - Ep {self.episode_count}, Distance: {distance_raw}, Type: {type(distance_raw)}")
+        
         self.performance_history.append(episode_results)
         self.update_irl_system(episode_results)
         
@@ -225,9 +243,18 @@ class ValenceManager:
             level = self._calculate_valence_level(valence_name, episode_results)
             valence_levels[valence_name] = level
             
+            # ✅ DEBUG expandido para movimento_basico
+            if valence_name == "movimento_basico" and self.episode_count % 20 == 0:
+                self.logger.info(f"🔍 movimento_basico RESULT: dist={episode_results.get('distance', 'N/A')} -> level={level:.1%}")
+            
             perf = self.valence_performance[valence_name]
+            old_level = perf.current_level
             perf.update_level(level, self.episode_count)
             perf.episodes_active += 1 if valence_name in self.active_valences else 0
+            
+            # ✅ Log de mudanças significativas
+            if abs(level - old_level) > 0.1 and self.episode_count % 50 == 0:
+                self.logger.info(f"📈 VALENCE_UPDATE: {valence_name} {old_level:.1%} -> {level:.1%}")
         
         self._update_valence_states(valence_levels)
         self.valence_weights = self._calculate_valence_weights(valence_levels)
@@ -275,128 +302,158 @@ class ValenceManager:
             return {'progress': 0.3, 'stability': 0.4, 'efficiency': 0.2, 'coordination': 0.1}
     
     def _calculate_valence_level(self, valence_name: str, results: Dict) -> float:
-        """BLOQUEIO COMPLETO - movimento negativo ZERA todas as valências"""
+        """VALÊNCIA - COM SMOOTHING para evitar oscilações"""
+        try:
+            raw_distance = results.get("distance", 0)
+            if not isinstance(raw_distance, (int, float)):
+                distance = 0.0
+            else:
+                distance = float(raw_distance)
 
-        distance = results.get("distance", 0)
+            # IGNORAR distâncias negativas para movimento_basico
+            if valence_name == "movimento_basico" and distance < 0:
+                return 0.0
 
-        # BLOQUEIO TOTAL: movimento negativo ZERA todas as valências
-        if distance < 0:
-            return 0.0  
+        except:
+            distance = 0.0
 
-        # VALÊNCIA MOVIMENTO BÁSICO
+        # MOVIMENTO BÁSICO 
         if valence_name == "movimento_basico":
-            success = results.get("success", False)
-
-            if success:
-                return 1.0
-
             if distance <= 0:
-                return 0.01
+                return 0.0 
 
-            # ESCALA AGRESSIVA
-            if distance > 2.0: return 1.0
-            if distance > 1.5: return 0.9
-            if distance > 1.0: return 0.8
-            if distance > 0.7: return 0.7
-            if distance > 0.5: return 0.6
-            if distance > 0.3: return 0.5  
-            if distance > 0.2: return 0.4
-            if distance > 0.1: return 0.3
-            if distance > 0.05: return 0.2
-            return 0.1
+            # ESCALA MAIS SUAVE E CONSISTENTE
+            if distance > 1.0: return 0.95
+            if distance > 0.8: return 0.85
+            if distance > 0.6: return 0.75
+            if distance > 0.5: return 0.65
+            if distance > 0.4: return 0.55
+            if distance > 0.3: return 0.45
+            if distance > 0.25: return 0.35
+            if distance > 0.2: return 0.25
+            if distance > 0.15: return 0.18
+            if distance > 0.1: return 0.12
+            if distance > 0.05: return 0.07
+            if distance > 0.02: return 0.04
+            return 0.02
 
-        # Para outras valências
-        if distance > 0.5:
-            return 0.8
-        elif distance > 0.2:
-            return 0.6
-        elif distance > 0.05:
-            return 0.4
-        else:
+        # ESTABILIDADE POSTURAL
+        elif valence_name == "estabilidade_postural":
+            roll = abs(results.get("roll", 0))
+            pitch = abs(results.get("pitch", 0))
+            stability = 1.0 - min((roll + pitch) / 1.0, 1.0)
+
+            # ATIVAÇÃO MAIS FÁCIL
+            movimento_level = self.valence_performance["movimento_basico"].current_level
+            if movimento_level >= 0.2:  
+                return stability * 0.9
+            return 0.0
+
+        # PROPULSÃO BÁSICA
+        elif valence_name == "propulsao_basica":
+            velocity = results.get("speed", 0)
+            if velocity <= 0:
+                return 0.0
+
+            # ATIVAÇÃO MAIS FÁCIL
+            movimento_level = self.valence_performance["movimento_basico"].current_level
+            if movimento_level >= 0.25:  
+                # Escala de velocidade MAIS PERMISSIVA
+                if velocity > 1.2: return 0.9
+                if velocity > 0.8: return 0.7
+                if velocity > 0.5: return 0.5
+                if velocity > 0.3: return 0.3
+                if velocity > 0.1: return 0.15
+            return 0.0
+
+        # COORDENAÇÃO FUNDAMENTAL - BASEADA EM PADRÃO ALTERNADO
+        elif valence_name == "coordenacao_fundamental":
+            alternating = results.get("alternating", False)
+            movimento_level = self.valence_performance["movimento_basico"].current_level
+            propulsao_level = self.valence_performance["propulsao_basica"].current_level
+
+            if movimento_level < 0.5 or propulsao_level < 0.3:
+                return 0.0
+
+            base_level = 0.3
+            if alternating:
+                base_level += 0.4
+            if results.get("gait_pattern_score", 0) > 0.6:
+                base_level += 0.2
+
+            return min(base_level, 0.9)
+
+        # EFICIÊNCIA BIOMECÂNICA
+        elif valence_name == "eficiencia_biomecanica":
+            efficiency = results.get("propulsion_efficiency", 0.5)
+            coordenacao_level = self.valence_performance["coordenacao_fundamental"].current_level
+
+            if coordenacao_level < 0.4:
+                return 0.0
+
+            return efficiency * 0.8
+
+        # PROPULSÃO AVANÇADA  
+        elif valence_name == "propulsao_avancada":
+            velocity = results.get("speed", 0)
+            eficiencia_level = self.valence_performance["eficiencia_biomecanica"].current_level
+
+            if eficiencia_level < 0.5:
+                return 0.0
+
+            if velocity > 2.0: return 0.9
+            if velocity > 1.5: return 0.7
+            if velocity > 1.0: return 0.5
             return 0.2
-    
-    def _normalize_metric(self, metric: str, value: float) -> float:
-        """Normaliza métricas para escala 0-1"""
-        normalization_rules = {
-            "roll": lambda x: 1.0 - min(abs(x) / 0.5, 1.0),
-            "pitch": lambda x: 1.0 - min(abs(x) / 0.5, 1.0),
-            "z_position": lambda x: 1.0 if 0.7 < x < 0.9 else max(0.0, 1.0 - abs(x-0.8)/0.5),
-            "x_velocity": lambda x: min(max(x, 0) / 2.5, 1.0),  
-            "distance": lambda x: min(max(x, 0) / 3.0, 1.0),   
-            "gait_pattern_score": lambda x: x,
-            "alternating_score": lambda x: x,
-            "clearance_score": lambda x: x,
-            "propulsion_efficiency": lambda x: x,
-            "energy_used": lambda x: 1.0 - min(x / 5.0, 1.0),
-            "flight_quality": lambda x: x,
-            "positive_movement_rate": lambda x: x,
-            "stability": lambda x: x,
-            "speed": lambda x: min(x / 2.5, 1.0),  
-            "consistency": lambda x: x,
-            "com_height_consistency": lambda x: x,
-            "lateral_stability": lambda x: 1.0 - min(abs(x) / 0.3, 1.0),
-            "pitch_velocity": lambda x: 1.0 - min(abs(x) / 2.0, 1.0),
-            "velocity_consistency": lambda x: x,
-            "acceleration_smoothness": lambda x: x,
-            "alternating_consistency": lambda x: x,
-            "step_length_consistency": lambda x: x,
-            "stance_swing_ratio": lambda x: min(abs(x - 0.6) / 0.3, 1.0),  
-            "energy_efficiency": lambda x: x,
-            "stride_efficiency": lambda x: x,
-            "gait_robustness": lambda x: x,
-            "recovery_success": lambda x: x,
-            "speed_adaptation": lambda x: x,
-            "terrain_handling": lambda x: x
-        }
-        
-        normalizer = normalization_rules.get(metric, lambda x: min(abs(x), 1.0))
-        return normalizer(value)
-    
-    def set_mastery_callback(self, callback):
-        """Define callback para quando valências atingem mastered"""
-        self.mastery_callback = callback
-        
-    def _notify_valence_mastered(self, valence_name):
-        """Notifica quando valência atinge mastered"""
-        if self.mastery_callback:
-            self.mastery_callback(valence_name)
-            
+
+        # MARCHA ROBUSTA
+        elif valence_name == "marcha_robusta":
+            distance = max(results.get("distance", 0), 0)
+            propulsao_level = self.valence_performance["propulsao_avancada"].current_level
+            coordenacao_level = self.valence_performance["coordenacao_fundamental"].current_level
+
+            if propulsao_level < 0.6 or coordenacao_level < 0.5:
+                return 0.0
+
+            if distance > 3.0: return 0.9
+            if distance > 2.0: return 0.7
+            if distance > 1.0: return 0.5
+            return 0.2
+
+        return 0.0
+          
     def _update_valence_states(self, valence_levels: Dict[str, float]):
-        """Ativação OBRIGATÓRIA da valência movimento_basico"""
+        """Ativação das valências"""
         for valence_name, current_level in valence_levels.items():
             perf = self.valence_performance[valence_name]
             config = self.valences[valence_name]
 
-            # 🔴 MOVIMENTO BÁSICO - ATIVAÇÃO OBRIGATÓRIA
+            # MOVIMENTO BÁSICO - SEMPRE ATIVO
             if valence_name == "movimento_basico":
-                # SEMPRE ATIVO - não pode ser inativo
-                if current_level > 0.01:  # Qualquer movimento positivo
-                    perf.state = ValenceState.LEARNING
-                    self.active_valences.add(valence_name)
-                else:
-                    perf.state = ValenceState.LEARNING  # MESMO SEM MOVIMENTO, FICA LEARNING
-                    self.active_valences.add(valence_name)
+                perf.state = ValenceState.LEARNING
+                self.active_valences.add(valence_name)
                 continue
 
-            # Para outras valências, verificar dependências
-            dependencies_met = all(
-                dep in self.valence_performance and 
-                self.valence_performance[dep].current_level >= 0.1
-                for dep in config.dependencies
-            )
+            # Para outras valências, verificar dependências 
+            dependencies_met = True
+            for dep in config.dependencies:
+                if dep in self.valence_performance:
+                    dep_level = self.valence_performance[dep].current_level
+                    if dep_level < 0.15:  
+                        dependencies_met = False
+                        break
+                else:
+                    dependencies_met = False
+                    break
 
             if not dependencies_met:
                 perf.state = ValenceState.INACTIVE
                 self.active_valences.discard(valence_name)
-            elif current_level >= config.mastery_threshold:
-                perf.state = ValenceState.MASTERED
-                self.active_valences.add(valence_name)
-            elif current_level < config.regression_threshold and perf.state == ValenceState.MASTERED:
-                perf.state = ValenceState.REGRESSING
-                self.active_valences.add(valence_name)
-            elif dependencies_met and valence_name not in self.active_valences:
-                perf.state = ValenceState.LEARNING
-                self.active_valences.add(valence_name)
+                continue
+
+            # SE dependências atendidas, ATIVAR imediatamente
+            perf.state = ValenceState.LEARNING
+            self.active_valences.add(valence_name)
     
     def _calculate_valence_weights(self, valence_levels: Dict[str, float]) -> Dict[str, float]:
         """Calcula pesos dinâmicos baseados em déficit de performance"""
@@ -425,94 +482,67 @@ class ValenceManager:
         return weights
     
     def _update_missions(self, valence_levels: Dict[str, float]) -> float:
-        """Atualiza missões ativas e retorna bônus agregado"""
+        """Atualiza missões sem progresso negativo"""
         total_bonus = 1.0
-        
+
         # Atualizar missões existentes
         for mission in self.current_missions[:]:
-            valence_level = valence_levels.get(mission.valence_name, 0.0)
-            bonus = mission.update(valence_level)
+            current_level = valence_levels.get(mission.valence_name, 0.0)
+            bonus = mission.update(current_level)
             total_bonus *= bonus
-            
+
+            # Evitar progresso negativo nas missões
+            improvement = current_level - mission.start_level
+            if improvement < 0:
+                # Se regrediu, ajusta o start_level para evitar progresso negativo
+                mission.start_level = current_level
+
             if mission.completed or mission.episodes_remaining <= 0:
                 self.current_missions.remove(mission)
                 self.mission_history.append(mission)
-                
+
         # Gerar novas missões se necessário
         if len(self.current_missions) < 2:  
             new_mission = self._generate_mission(valence_levels)
             if new_mission:
                 self.current_missions.append(new_mission)
-        
+
         return total_bonus
     
     def _generate_mission(self, valence_levels: Dict[str, float]) -> Optional[Mission]:
-        """Gera missões estratégicas para 10.000 episódios"""
+        """MISSÕES COM METAS REALISTAS E PROGRESSIVAS"""
         episode = self.episode_count
-        
-        # FASE 1: Fundamentos (0-2000 episódios)
-        if episode < 2000:
+
+        # MISSÃO MOVIMENTO BÁSICO - sempre que estiver baixo
+        movimento_level = valence_levels.get('movimento_basico', 0)
+        if movimento_level < 0.4:  
             if not any(m.valence_name == 'movimento_basico' for m in self.current_missions):
-                mission = Mission('movimento_basico', 0.4, 400)  # Meta: 40% em 400 episódios
-                mission.start_level = valence_levels.get('movimento_basico', 0)
-                mission.bonus_multiplier = 4.0  # Bônus maior
+                mission = Mission('movimento_basico', 0.4, 150)  
+                mission.start_level = movimento_level
+                mission.bonus_multiplier = 2.0
                 return mission
 
-        # FASE 2: Estabilidade + Propulsão (1000-4000 episódios)  
-        elif episode < 4000:
-            movimento_level = valence_levels.get('movimento_basico', 0)
-            if movimento_level > 0.5:
-                # Missão dupla: estabilidade E propulsão
-                if not any(m.valence_name == 'estabilidade_postural' for m in self.current_missions):
-                    mission = Mission('estabilidade_postural', 0.3, 500)
-                    mission.start_level = valence_levels.get('estabilidade_postural', 0)
-                    mission.bonus_multiplier = 3.0
-                    return mission
-                if not any(m.valence_name == 'propulsao_basica' for m in self.current_missions):
-                    mission = Mission('propulsao_basica', 0.35, 500)
-                    mission.start_level = valence_levels.get('propulsao_basica', 0)
-                    mission.bonus_multiplier = 3.0
-                    return mission
-
-        # FASE 3: Coordenação (2000-6000 episódios)
-        elif episode < 6000:
-            propulsao_level = valence_levels.get('propulsao_basica', 0)
+        # MISSÃO ESTABILIDADE - quando movimento_basico estiver OK
+        elif episode < 2000 and movimento_level >= 0.3:
             estabilidade_level = valence_levels.get('estabilidade_postural', 0)
-
-            if propulsao_level > 0.4 and estabilidade_level > 0.4:
-                if not any(m.valence_name == 'coordenacao_fundamental' for m in self.current_missions):
-                    mission = Mission('coordenacao_fundamental', 0.3, 600)
-                    mission.start_level = valence_levels.get('coordenacao_fundamental', 0)
-                    mission.bonus_multiplier = 2.8
+            if estabilidade_level < 0.4:
+                if not any(m.valence_name == 'estabilidade_postural' for m in self.current_missions):
+                    mission = Mission('estabilidade_postural', 0.4, 200)
+                    mission.start_level = estabilidade_level
+                    mission.bonus_multiplier = 1.8
                     return mission
 
-        # FASE 4: Eficiência + Propulsão Avançada (4000-8000 episódios)
-        elif episode < 8000:
-            coordenacao_level = valence_levels.get('coordenacao_fundamental', 0)
-            if coordenacao_level > 0.5:
-                # Missão dupla
-                if not any(m.valence_name == 'eficiencia_biomecanica' for m in self.current_missions):
-                    mission = Mission('eficiencia_biomecanica', 0.25, 700)
-                    mission.start_level = valence_levels.get('eficiencia_biomecanica', 0)
-                    mission.bonus_multiplier = 2.5
-                    return mission
-                if not any(m.valence_name == 'propulsao_avancada' for m in self.current_missions):
-                    mission = Mission('propulsao_avancada', 0.3, 700)
-                    mission.start_level = valence_levels.get('propulsao_avancada', 0)
-                    mission.bonus_multiplier = 2.5
-                    return mission
-
-        # FASE 5: Marcha Robusta (6000-10000 episódios)
-        else:
-            propulsao_avancada_level = valence_levels.get('propulsao_avancada', 0)
-            eficiencia_level = valence_levels.get('eficiencia_biomecanica', 0)
-
-            if propulsao_avancada_level > 0.6 and eficiencia_level > 0.5:
-                if not any(m.valence_name == 'marcha_robusta' for m in self.current_missions):
-                    mission = Mission('marcha_robusta', 0.4, 1000)  # Missão longa
-                    mission.start_level = valence_levels.get('marcha_robusta', 0)
-                    mission.bonus_multiplier = 3.0
-                    return mission
+        # MISSÃO PROPULSÃO - quando estabilidade estiver OK
+        elif episode < 5000:
+            estabilidade_level = valence_levels.get('estabilidade_postural', 0)
+            if estabilidade_level >= 0.3:
+                propulsao_level = valence_levels.get('propulsao_basica', 0)
+                if propulsao_level < 0.5:
+                    if not any(m.valence_name == 'propulsao_basica' for m in self.current_missions):
+                        mission = Mission('propulsao_basica', 0.5, 250)
+                        mission.start_level = propulsao_level
+                        mission.bonus_multiplier = 1.6
+                        return mission
 
         return None
     
