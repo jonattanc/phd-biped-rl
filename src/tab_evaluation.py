@@ -438,6 +438,9 @@ class EvaluationTab(common_tab.GUITab):
                 initialfile="evaluation_data.json",
             )
 
+            if not save_path:
+                return
+
             shutil.copy2(self.metrics_path, save_path)
 
         except Exception as e:
@@ -454,6 +457,9 @@ class EvaluationTab(common_tab.GUITab):
                 filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
                 initialdir=os.path.join(os.path.expanduser("~"), "Desktop"),
             )
+
+            if not self.metrics_path:
+                return
 
             self.load_metrics()
 
@@ -475,6 +481,7 @@ class EvaluationTab(common_tab.GUITab):
         """Exporta os gráficos de avaliação como imagens PNG separadas"""
         try:
             directory = filedialog.askdirectory(title="Selecione onde salvar os gráficos")
+
             if not directory:
                 return
 
