@@ -402,23 +402,23 @@ class RewardCalculator:
         # 1. RECOMPENSA POR DISTÂNCIA (80%)
         if distance > 0:
             # Progressão AGRESSIVA
-            distance_reward = min(distance * 100.0, 500.0)  # 100 pontos por metro
+            distance_reward = min(distance * 1000.0, 500.0)  
             base_reward += distance_reward
 
             # BÔNUS MASSIVO por marcos
-            if distance > 2.0: base_reward += 300.0
-            elif distance > 1.0: base_reward += 150.0
-            elif distance > 0.5: base_reward += 75.0
-            elif distance > 0.2: base_reward += 30.0
+            if distance > 2.0: base_reward += 3000.0
+            elif distance > 1.0: base_reward += 1500.0
+            elif distance > 0.5: base_reward += 750.0
+            elif distance > 0.2: base_reward += 300.0
 
         # 2. RECOMPENSA POR VELOCIDADE (20%)
         if velocity > 0.1:
-            velocity_reward = velocity * 50.0  # 50 pontos por m/s
+            velocity_reward = velocity * 500.0  
             base_reward += velocity_reward
 
         # 3. BÔNUS POR SOBREVIVÊNCIA (movimento contínuo)
         if not getattr(sim, "episode_terminated", True) and distance > 0.1:
-            base_reward += 20.0
+            base_reward += 200.0
 
         return base_reward
 

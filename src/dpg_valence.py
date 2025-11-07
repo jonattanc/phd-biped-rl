@@ -131,72 +131,72 @@ class ValenceManager:
             # VALÊNCIA PRIMÁRIA: Movimento Básico 
             "movimento_basico": ValenceConfig(
                 name="movimento_basico",
-                target_level=0.3,  
+                target_level=0.8,  
                 metrics=["distance", "speed", "success"],
                 reward_components=["movement_priority", "basic_progress", "velocity"],
                 dependencies=[],  
-                activation_threshold=0.001,  
-                mastery_threshold=0.2,      
-                max_learning_rate=0.3,     
+                activation_threshold=0.01,  
+                mastery_threshold=0.3,      
+                max_learning_rate=0.5,     
                 min_episodes=1
             ),
 
             # VALÊNCIA SECUNDÁRIA: Estabilidade Simplificada
             "estabilidade_simples": ValenceConfig(
                 name="estabilidade_simples",
-                target_level=0.6,
+                target_level=0.4,
                 metrics=["roll", "pitch", "stability"],
                 reward_components=["stability", "posture"],
                 dependencies=["movimento_basico"],
-                activation_threshold=0.2,   
-                mastery_threshold=0.5,      
-                max_learning_rate=0.1,
+                activation_threshold=0.05,   
+                mastery_threshold=0.25,      
+                max_learning_rate=0.3,
                 min_episodes=2
             ),
 
             # VALÊNCIA TERCIÁRIA: Propulsão Eficiente
             "propulsao_eficiente": ValenceConfig(
                 name="propulsao_eficiente", 
-                target_level=0.5,
+                target_level=0.35,
                 metrics=["x_velocity", "positive_movement_rate"],
                 reward_components=["velocity", "propulsion"],
                 dependencies=["movimento_basico"],
-                activation_threshold=0.3,
-                mastery_threshold=0.4,      
-                max_learning_rate=0.08,
+                activation_threshold=0.1,
+                mastery_threshold=0.2,      
+                max_learning_rate=0.25,
                 min_episodes=3
             ),            
             # VALÊNCIA: Coordenação Rítmica
             "ritmo_marcha_natural": ValenceConfig(
                 name="ritmo_marcha_natural",
-                target_level=0.65,
+                target_level=0.3,
                 metrics=["gait_pattern_score", "alternating_consistency", "step_length_consistency", "stance_swing_ratio"],
                 reward_components=["coordination", "rhythm", "gait_pattern"],
                 dependencies=["propulsao_eficiente"],
-                activation_threshold=0.4,
-                mastery_threshold=0.6,
+                activation_threshold=0.2,
+                mastery_threshold=0.2,
                 min_episodes=8
             ),            
             # VALÊNCIA: Eficiência Biomecânica
             "eficiencia_biomecanica": ValenceConfig(
                 name="eficiencia_biomecanica",
-                target_level=0.75,
+                target_level=0.25,
                 metrics=["energy_efficiency", "stride_efficiency", "clearance_score", "propulsion_efficiency"],
                 reward_components=["efficiency", "biomechanics", "clearance"],
                 dependencies=["ritmo_marcha_natural"],
-                activation_threshold=0.45,
-                mastery_threshold=0.55,
+                activation_threshold=0.3,
+                mastery_threshold=0.15,
                 min_episodes=12
             ),
             # VALÊNCIA AVANÇADA: Marcha Robusta
             "marcha_robusta": ValenceConfig(
                 name="marcha_robusta",
-                target_level=0.7,
+                target_level=0.2,
                 metrics=["gait_robustness", "recovery_success", "speed_adaptation", "terrain_handling"],
                 reward_components=["robustness", "adaptation", "recovery"],
                 dependencies=["eficiencia_biomecanica"],
-                activation_threshold=0.5,
-                mastery_threshold=0.5,
+                activation_threshold=0.4,
+                mastery_threshold=0.1,
                 min_episodes=15
             )
         }

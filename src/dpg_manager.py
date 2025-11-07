@@ -630,18 +630,18 @@ class DPGManager:
         overall_progress = valence_status['overall_progress']
 
         if overall_progress < 0.6:  
-            self.critic.weights.propulsion = 0.60  
-            self.critic.weights.stability = 0.35     
-            self.critic.weights.coordination = 0.03
+            self.critic.weights.propulsion = 0.90  
+            self.critic.weights.stability = 0.05     
+            self.critic.weights.coordination = 0.02
             self.critic.weights.efficiency = 0.02
-            self.critic.weights.irl_influence = 0.2  
+            self.critic.weights.irl_influence = 0.8  
 
         elif overall_progress < 0.8:
-            self.critic.weights.propulsion = 0.50
-            self.critic.weights.stability = 0.25
-            self.critic.weights.coordination = 0.15
-            self.critic.weights.efficiency = 0.10
-            self.critic.weights.irl_influence = 0.25
+            self.critic.weights.propulsion = 0.75
+            self.critic.weights.stability = 0.15
+            self.critic.weights.coordination = 0.05
+            self.critic.weights.efficiency = 0.05
+            self.critic.weights.irl_influence = 0.5
 
         else:
             self.critic.weights.stability = 0.35
@@ -749,12 +749,12 @@ class DPGManager:
         """Ativação AGRESSIVA de IRL quando movimento é insuficiente"""
         distance = episode_results.get('distance', 0)
         # Ativa IRL de propulsão
-        if distance < 0.1:  
+        if distance < 0.5:  
             self.activate_propulsion_irl()
         elif distance > 2 and distance < 4:
             self.activate_stabilization_irl()
         else:
-            self.critic.weights.irl_influence = max(0.1, self.critic.weights.irl_influence - 0.05)
+            self.critic.weights.irl_influence = max(0.1, self.critic.weights.irl_influence - 0.01)
         
     def activate_propulsion_irl(self):
         """Ativar IRL ESPECÍFICO para movimento"""
@@ -770,7 +770,7 @@ class DPGManager:
         self.critic.weights.stability = 0.04
         self.critic.weights.coordination = 0.005
         self.critic.weights.efficiency = 0.005
-        self.critic.weights.irl_influence = 0.98
+        self.critic.weights.irl_influence = 0.95
 
         self.valence_manager.irl_weights = propulsion_irl_weights
 
@@ -846,14 +846,14 @@ class DPGManager:
         """Atualiza nível de ajuda baseado em performance REAL"""
         distance = max(episode_results.get('distance', 0), 0)
     
-        if distance > 1.0: new_level = 0.1
-        elif distance > 0.7: new_level = 0.2  
-        elif distance > 0.5: new_level = 0.3
-        elif distance > 0.3: new_level = 0.4
-        elif distance > 0.2: new_level = 0.5
-        elif distance > 0.1: new_level = 0.6
-        elif distance > 0.05: new_level = 0.7
-        elif distance > 0.02: new_level = 0.8
+        if distance > 2.0: new_level = 0.1
+        elif distance > 1.5: new_level = 0.2  
+        elif distance > 1.0: new_level = 0.3
+        elif distance > 0.5: new_level = 0.4
+        elif distance > 0.4: new_level = 0.5
+        elif distance > 0.3: new_level = 0.6
+        elif distance > 0.2: new_level = 0.7
+        elif distance > 0.1: new_level = 0.8
         else: new_level = 0.9   
 
         # Redução MUITO mais gradual
