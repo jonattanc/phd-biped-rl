@@ -124,8 +124,8 @@ if __name__ == "__main__":
     logger = utils.get_logger()
     matplotlib.use("Agg")
 
-    environment.create_ramp_stl("ramp_up.stl", ascending=True)
-    environment.create_ramp_stl("ramp_down.stl", ascending=False)
+    environment.create_ramp_stl("PRA.xacro", "ramp_up.stl", ascending=True)
+    environment.create_ramp_stl("PRD.xacro", "ramp_down.stl", ascending=False)
 
     if folder_logs:
         logger.info("\n".join(folder_logs))

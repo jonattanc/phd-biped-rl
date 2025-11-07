@@ -7,10 +7,24 @@ import trimesh
 import numpy as np
 
 
-def create_ramp_stl(filename, ascending=True):
-    hypotenuse = 8.0
-    width = 1.5
-    angle_deg = 8.33
+def get_env_file_variable(filename, variable_name):
+    file_path = os.path.join(utils.PROJECT_ROOT, "environments", filename)
+
+    with open(file_path, "r", encoding="utf-8") as f:
+        for line in f:
+            if f'name="{variable_name}"' in line and "value=" in line:
+                start = line.find('value="') + len('value="')
+                end = line.find('"', start)
+                value = line[start:end]
+                return float(value)
+
+    return None
+
+
+def create_ramp_stl(input_filename, output_filename, ascending=True):
+    hypotenuse = get_env_file_variable(input_filename, "ramp_hypotenuse")
+    width = get_env_file_variable(input_filename, "plane_width")
+    angle_deg = get_env_file_variable(input_filename, "ramp_angle_deg")
     height = np.sin(np.radians(angle_deg)) * hypotenuse
     length = np.cos(np.radians(angle_deg)) * hypotenuse
 
@@ -45,7 +59,7 @@ def create_ramp_stl(filename, ascending=True):
 
     output_folder = os.path.join(utils.TMP_PATH, "environments")
     os.makedirs(output_folder, exist_ok=True)
-    output_path = os.path.join(output_folder, filename)
+    output_path = os.path.join(output_folder, output_filename)
 
     mesh.export(output_path)
 
