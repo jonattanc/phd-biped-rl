@@ -75,6 +75,8 @@ class Simulation(gym.Env):
         self.max_training_steps = int(self.episode_training_timeout_s / self.time_step_s)
         self.max_pre_fill_steps = int(self.episode_pre_fill_timeout_s / self.time_step_s)
         self.max_steps = self.max_training_steps
+        self.lock_per_second = 0.5  # lock/s
+        self.lock_time = 1.0  # s
 
         # Configurar ambiente de simulação PRIMEIRO
         self.setup_sim_env()
@@ -93,6 +95,12 @@ class Simulation(gym.Env):
         self.logger.info(f"Visualização: {self.enable_visualization_value.value}")
         self.logger.info(f"Tempo Real: {self.enable_real_time_value.value}")
         self.logger.info(f"Action space: {self.action_dim}, Observation space: {self.observation_dim}")
+
+        self.lock_probability = (self.lock_per_second / (1 / self.time_step_s)) / self.action_dim
+        self.lock_duration_steps = int(self.lock_time / self.time_step_s)
+
+        self.logger.info(f"lock_probability: {self.lock_probability}")
+        self.logger.info(f"lock_duration_steps: {self.lock_duration_steps} steps")
 
         # Variáveis para coleta de dados
         self.reset_episode_vars()
@@ -262,6 +270,8 @@ class Simulation(gym.Env):
         self.episode_last_action = np.zeros(self.action_dim, dtype=float)
         self.episode_steps = 0
         self.episode_info = {}
+        self.joint_is_locked = [False] * self.action_dim
+        self.joint_lock_timers = [0] * self.action_dim
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -388,6 +398,22 @@ class Simulation(gym.Env):
 
         max_step_size = self.max_motor_velocity * self.time_step_s
         target_positions = [current_angle + action_value * max_step_size for current_angle, action_value in zip(joint_positions, action)]
+
+        if self.environment.name == "PRB":
+            for i in range(self.action_dim):
+                if self.joint_is_locked[i]:
+                    self.joint_lock_timers[i] -= 1
+
+                    if self.joint_lock_timers[i] <= 0:
+                        self.joint_is_locked[i] = False
+
+                else:
+                    if np.random.rand() < self.lock_probability:
+                        self.joint_is_locked[i] = True
+                        self.joint_lock_timers[i] = self.lock_duration_steps
+
+                if self.joint_is_locked[i]:
+                    target_positions[i] = joint_positions[i]
 
         forces = [self.max_motor_torque] * self.action_dim
 
@@ -535,6 +561,7 @@ class Simulation(gym.Env):
             self.add_episode_metrics("joint_positions", self.joint_positions)
             self.add_episode_metrics("joint_velocities", self.joint_velocities)
             self.add_episode_metrics("episode_distance", self.episode_distance)
+            self.add_episode_metrics("joint_is_locked", self.joint_is_locked)
 
         # Coletar info final quando o episódio terminar
         if self.episode_done:
@@ -562,7 +589,7 @@ class Simulation(gym.Env):
                     "clearance_score": self.robot.get_clearance_score(),
                     "propulsion_efficiency": self.robot.get_propulsion_efficiency(),
                     "alternating": self.robot_left_foot_contact != self.robot_right_foot_contact,
-                    "action": action.tolist() if hasattr(action, 'tolist') else action
+                    "action": action.tolist() if hasattr(action, "tolist") else action,
                 }
                 try:
                     self.reward_system.dpg_manager.update_phase_progression(episode_results)
