@@ -431,7 +431,7 @@ class RewardSystem:
         filepath = os.path.join(utils.REWARD_CONFIGS_PATH, filepath)
 
         try:
-            with open(filepath, "r") as f:
+            with open(filepath, "r", encoding="utf-8") as f:
                 config = json.load(f)
             return self.load_configuration(config, is_default_file)
         except Exception as e:

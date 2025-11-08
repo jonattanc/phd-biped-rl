@@ -74,12 +74,16 @@ class Agent:
             self.model = self._create_model(algorithm, device, seed)
 
         else:
+            self.logger.info(f"Loading: {model_path}")
             vecnorm_path = model_path.replace(".zip", "_vecnormalize.pkl")
             self.env = VecNormalize.load(vecnorm_path, dummy_env)
             self.env.training = False
             self.env.norm_reward = False
+            self.env.norm_obs = True
             self._load_model(model_path)
             self.model.set_env(self.env)
+            self.logger.info(f"self.env.obs_rms.mean[:5]: {self.env.obs_rms.mean[:5]}")
+            self.logger.info(f"self.env.obs_rms.var[:5]: {self.env.obs_rms.var[:5]}")
 
     def _create_model(self, algorithm, device="cpu", seed=42):
         # Criar modelo baseado no algoritmo selecionado
@@ -151,6 +155,8 @@ class Agent:
             self.env.save(vecnorm_path)
 
             self.logger.info(f"Modelo salvo em: {model_path}")
+            self.logger.info(f"self.env.obs_rms.mean[:5]: {self.env.obs_rms.mean[:5]}")
+            self.logger.info(f"self.env.obs_rms.var[:5]: {self.env.obs_rms.var[:5]}")
         else:
             raise ValueError("Nenhum modelo para salvar")
 
@@ -170,6 +176,7 @@ class Agent:
                 if hasattr(self.model, "action_space") and self.model.action_space is not None:
                     self.action_dim = self.model.action_space.shape[0]
                 self.logger.info(f"Modelo TD3 carregado: {model_path}")
+                self.logger.info(f"self.model.action_space.shape[0]: {self.model.action_space.shape[0]}")
             except Exception as e:
                 # Tentar carregar como FastTD3
                 self.model = FastTD3.load(model_path)

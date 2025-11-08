@@ -175,6 +175,7 @@ class Simulation(gym.Env):
 
     def set_agent(self, agent):
         self.agent = agent
+        self.wrapped_env = agent.env
 
     def pre_fill_buffer(self):
         dpg_enabled = False
@@ -217,10 +218,10 @@ class Simulation(gym.Env):
         obs, _ = self.reset()
         self.metrics[str(self.episode_count + 1)] = {"step_data": {}}  # Criar espaço para primeiro episódio
 
-        noise_std = 0.01
+        noise_std = 1e-3
 
         while self.episode_count < episodes and not self.exit_value.value:
-
+            obs = self.wrapped_env.normalize_obs(obs)
             action, _ = self.agent.model.predict(obs, deterministic=deterministic)
             noise = np.random.normal(0, noise_std, size=action.shape)
             action = np.clip(action + noise, -1, 1)
@@ -388,7 +389,7 @@ class Simulation(gym.Env):
         except Exception as e:
             self.logger.exception("Erro ao transmitir dados do episódio")
 
-        if self.episode_count % 10 == 0:
+        if self.episode_count % 100 == 0:
             self.logger.info(f"Episódio {self.episode_count} concluído")
 
     def apply_action(self, action):
