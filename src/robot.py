@@ -4,18 +4,39 @@ import os
 import pybullet as p
 from xacrodoc import XacroDoc
 import numpy as np
+import math
 
 
 class Robot:
-    def __init__(self, logger, name):
+    def __init__(self, logger, name, env_name):
         self.logger = logger
         self.name = name
+        self.env_name = env_name
 
         self.id = None
         self.revolute_indices = None
         self.gait_state = 0
 
         self.gait_step_size = 0.2
+
+        if self.env_name == "PRA":
+            self.ramp_signal = 1
+
+        elif self.env_name == "PRD":
+            self.ramp_signal = -1
+
+        else:
+            self.ramp_signal = 0
+
+        self.initial_section_length = 1
+        self.ramp_hypotenuse = 8
+        self.ramp_angle_deg = 8.33
+
+        self.ramp_angle_rad = math.radians(self.ramp_angle_deg)
+        self.ramp_start = self.initial_section_length / 2
+        self.middle_section_length = math.cos(self.ramp_angle_rad) * self.ramp_hypotenuse
+        self.ramp_end = self.ramp_start + self.middle_section_length
+        self.ramp_height = math.sin(self.ramp_angle_rad) * self.ramp_hypotenuse
 
         self.robots_dir = os.path.join(utils.PROJECT_ROOT, "robots")
         self.robots_tmp_dir = os.path.join(utils.TMP_PATH, "robots")
@@ -189,8 +210,15 @@ class Robot:
         """Retorna as alturas dos pés direito e esquerdo em relação ao solo"""
         right_foot_state = p.getLinkState(self.id, self.get_link_index("right_foot_link"))
         left_foot_state = p.getLinkState(self.id, self.get_link_index("left_foot_link"))
-        right_foot_height = right_foot_state[0][2]
-        left_foot_height = left_foot_state[0][2]
+
+        right_foot_x = right_foot_state[0][0]
+        right_foot_z = right_foot_state[0][2]
+        left_foot_x = left_foot_state[0][0]
+        left_foot_z = left_foot_state[0][2]
+
+        right_foot_height = self.get_fixed_height(right_foot_z, right_foot_x)
+        left_foot_height = self.get_fixed_height(left_foot_z, left_foot_x)
+
         return right_foot_height, left_foot_height
 
     def get_foot_x_velocities(self):
@@ -206,8 +234,17 @@ class Robot:
         right_foot_state = p.getLinkState(self.id, self.get_link_index("right_foot_link"))
         left_foot_state = p.getLinkState(self.id, self.get_link_index("left_foot_link"))
 
-        right_foot_orientation = p.getEulerFromQuaternion(right_foot_state[1])
-        left_foot_orientation = p.getEulerFromQuaternion(left_foot_state[1])
+        right_foot_orientation = list(p.getEulerFromQuaternion(right_foot_state[1]))
+        left_foot_orientation = list(p.getEulerFromQuaternion(left_foot_state[1]))
+
+        right_foot_x = right_foot_state[0][0]
+        left_foot_x = left_foot_state[0][0]
+
+        if self.is_in_ramp(right_foot_x):
+            right_foot_orientation[1] -= self.ramp_signal * self.ramp_angle_rad
+
+        if self.is_in_ramp(left_foot_x):
+            left_foot_orientation[1] -= self.ramp_signal * self.ramp_angle_rad
 
         return right_foot_orientation, left_foot_orientation
 
@@ -377,6 +414,36 @@ class Robot:
         except Exception as e:
             self.logger.warning(f"Erro ao calcular clearance score: {e}")
             return 0.3
+
+    def get_fixed_height(self, z, x):
+        if self.env_name == "PRA" or self.env_name == "PRD":
+            if x < self.ramp_start:
+                ramp_height = 0
+
+            elif x < self.ramp_end:
+                ramp_height = self.ramp_signal * (x - self.ramp_start) * math.tan(self.ramp_angle_rad)
+
+            else:
+                ramp_height = self.ramp_signal * self.ramp_height
+
+            return z + ramp_height
+
+        else:
+            return z
+
+    def is_in_ramp(self, x):
+        if self.env_name == "PRA" or self.env_name == "PRD":
+            if x < self.ramp_start:
+                return False
+
+            elif x < self.ramp_end:
+                return True
+
+            else:
+                return False
+
+        else:
+            return False
 
     def get_example_action(self, t):
         """Gera uma ação de exemplo baseada no tempo"""
