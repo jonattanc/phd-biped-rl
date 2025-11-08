@@ -122,22 +122,46 @@ class RewardCalculator:
         
         # 1. Verificar inclinação do tronco para frente
         pitch = getattr(sim, "robot_pitch", 0)
-        if pitch > 0.05:  # Inclinação para frente
+        if pitch > 0.05:  
             bonus += 50.0
         
         # 2. Verificar movimento alternado das pernas
         left_hip = getattr(sim, "robot_left_hip_angle", 0)
         right_hip = getattr(sim, "robot_right_hip_angle", 0)
+        hip_difference = abs(left_hip - right_hip)
+    
+        if hip_difference > 0.4:  
+            bonus += 100.0  
+        elif hip_difference > 0.2: #inclusão
+            bonus += 40.0
         
-        # Movimento alternado (uma perna flexionada, outra estendida)
-        if abs(left_hip - right_hip) > 0.3:
-            bonus += 100.0
-        
-        # 3. Bônus por velocidade positiva consistente
-        velocity = getattr(sim, "robot_x_velocity", 0)
-        if velocity > 0.1:
-            bonus += velocity * 50.0
-        
+        # 3. CRUZAMENTO ALTERNADO
+        left_foot_x = getattr(sim, "robot_left_foot_x_position", 0)  # Posição X do pé esquerdo
+        right_foot_x = getattr(sim, "robot_right_foot_x_position", 0)  # Posição X do pé direito
+
+        # Verificar se há cruzamento alternado dos pés
+        foot_crossing_occurred = False
+
+        # Pé esquerdo passou o direito (esquerdo na frente)
+        if left_foot_x > right_foot_x + 0.05:  # Esquerdo > Direito + margem
+            if not hasattr(self, '_last_foot_in_front'):
+                self._last_foot_in_front = 'left'
+            elif self._last_foot_in_front != 'left':
+                # Houve alternância: antes estava direito na frente, agora esquerdo
+                bonus += 80.0
+                foot_crossing_occurred = True
+                self._last_foot_in_front = 'left'
+
+        # Pé direito passou o esquerdo (direito na frente)  
+        elif right_foot_x > left_foot_x + 0.05:  # Direito > Esquerdo + margem
+            if not hasattr(self, '_last_foot_in_front'):
+                self._last_foot_in_front = 'right'
+            elif self._last_foot_in_front != 'right':
+                # Houve alternância: antes estava esquerdo na frente, agora direito
+                bonus += 80.0
+                foot_crossing_occurred = True
+                self._last_foot_in_front = 'right'
+
         # 4. PENALIDADE POR PERNAS MUITO ABERTAS (equilíbrio estático)
         left_hip_lateral = abs(getattr(sim, "robot_left_hip_lateral_angle", 0))
         right_hip_lateral = abs(getattr(sim, "robot_right_hip_lateral_angle", 0))
@@ -145,9 +169,43 @@ class RewardCalculator:
         if left_hip_lateral > 0.6 or right_hip_lateral > 0.6:
             bonus -= 50.0  
 
-        # 5. BÔNUS por FASE DE VOO (marcha dinâmica)
+        # 5. CRUZAMENTO COMBINADO COM MOVIMENTO ALTERNADO
+        if foot_crossing_occurred and hip_difference > 0.3:
+            bonus += 20.0  
+
+        # 6. SEQUÊNCIA RÍTMICA DE CRUZAMENTOS
+        if hasattr(self, '_last_crossing_time'):
+            current_time = time.time()
+            time_since_last_crossing = current_time - self._last_crossing_time
+
+            if foot_crossing_occurred and time_since_last_crossing < 2.0:  
+                rhythm_bonus = max(0, 1.0 - time_since_last_crossing) * 15.0
+                bonus += rhythm_bonus
+
+            if foot_crossing_occurred:
+                self._last_crossing_time = current_time
+        else:
+            if foot_crossing_occurred:
+                self._last_crossing_time = time.time()
+
+        # 7. DETECÇÃO DE PASSADA (avanço do pé dianteiro)
+        if hasattr(self, '_last_left_foot_x'):
+            left_foot_advance = left_foot_x - self._last_left_foot_x
+            right_foot_advance = right_foot_x - self._last_right_foot_x
+
+            # Bônus por avanço significativo do pé da frente
+            if left_foot_x > right_foot_x and left_foot_advance > 0.02:  
+                bonus += 25.0
+            elif right_foot_x > left_foot_x and right_foot_advance > 0.02: 
+                bonus += 25.0
+
+        # 8. BÔNUS por FASE DE VOO (marcha dinâmica)
         if not left_hip and not right_hip:
             bonus += 25.0 
+
+        # Atualizar posições anteriores para próximo cálculo
+        self._last_left_foot_x = left_foot_x
+        self._last_right_foot_x = right_foot_x
             
         return bonus
 
