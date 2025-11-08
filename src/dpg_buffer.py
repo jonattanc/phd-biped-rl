@@ -262,9 +262,9 @@ class SkillTransferMap:
         return min(relevance, 1.0)
 
 class OptimizedBufferManager:
-    """BUFFER DE ALTA PERFORMANCE - Versão otimizada"""
+    """BUFFER DE ALTA PERFORMANCE"""
     
-    def __init__(self, logger, config, max_experiences=5000):
+    def __init__(self, logger, config, max_experiences=50000):
         self.logger = logger
         self.config = config
         self.max_experiences = max_experiences
@@ -272,8 +272,8 @@ class OptimizedBufferManager:
         # Sistema de buffers otimizado
         self.group_buffers = {}
         for group in [1, 2, 3]:
-            self.group_buffers[group] = PrioritizedBuffer(capacity=2000)
-        self.core_buffer = PrioritizedBuffer(capacity=1000)
+            self.group_buffers[group] = PrioritizedBuffer(capacity=20000)
+        self.core_buffer = PrioritizedBuffer(capacity=10000)
         self.current_group = 1
         if self.current_group in self.group_buffers:
             self.current_group_buffer = self.group_buffers[self.current_group].buffer

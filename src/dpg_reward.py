@@ -119,48 +119,26 @@ class RewardCalculator:
     def calculate_marcha_sequence_bonus(self, sim, action) -> float:
         """BÔNUS MASSIVO para a sequência correta da marcha"""
         bonus = 1.0
-        
+
         # 1. Verificar inclinação do tronco para frente
         pitch = getattr(sim, "robot_pitch", 0)
         if pitch > 0.05:  
             bonus += 50.0
-        
+
         # 2. Verificar movimento alternado das pernas
         left_hip = getattr(sim, "robot_left_hip_angle", 0)
         right_hip = getattr(sim, "robot_right_hip_angle", 0)
         hip_difference = abs(left_hip - right_hip)
-    
+
         if hip_difference > 0.4:  
             bonus += 100.0  
-        elif hip_difference > 0.2: #inclusão
+        elif hip_difference > 0.2:
             bonus += 40.0
-        
-        # 3. CRUZAMENTO ALTERNADO
-        left_foot_x = getattr(sim, "robot_left_foot_x_position", 0)  # Posição X do pé esquerdo
-        right_foot_x = getattr(sim, "robot_right_foot_x_position", 0)  # Posição X do pé direito
 
-        # Verificar se há cruzamento alternado dos pés
-        foot_crossing_occurred = False
-
-        # Pé esquerdo passou o direito (esquerdo na frente)
-        if left_foot_x > right_foot_x + 0.05:  # Esquerdo > Direito + margem
-            if not hasattr(self, '_last_foot_in_front'):
-                self._last_foot_in_front = 'left'
-            elif self._last_foot_in_front != 'left':
-                # Houve alternância: antes estava direito na frente, agora esquerdo
-                bonus += 80.0
-                foot_crossing_occurred = True
-                self._last_foot_in_front = 'left'
-
-        # Pé direito passou o esquerdo (direito na frente)  
-        elif right_foot_x > left_foot_x + 0.05:  # Direito > Esquerdo + margem
-            if not hasattr(self, '_last_foot_in_front'):
-                self._last_foot_in_front = 'right'
-            elif self._last_foot_in_front != 'right':
-                # Houve alternância: antes estava esquerdo na frente, agora direito
-                bonus += 80.0
-                foot_crossing_occurred = True
-                self._last_foot_in_front = 'right'
+        # 3. Bônus por velocidade positiva consistente
+        velocity = getattr(sim, "robot_x_velocity", 0)
+        if velocity > 0.1:
+            bonus += velocity * 50.0
 
         # 4. PENALIDADE POR PERNAS MUITO ABERTAS (equilíbrio estático)
         left_hip_lateral = abs(getattr(sim, "robot_left_hip_lateral_angle", 0))
@@ -169,44 +147,74 @@ class RewardCalculator:
         if left_hip_lateral > 0.6 or right_hip_lateral > 0.6:
             bonus -= 50.0  
 
-        # 5. CRUZAMENTO COMBINADO COM MOVIMENTO ALTERNADO
-        if foot_crossing_occurred and hip_difference > 0.3:
-            bonus += 20.0  
+        # 5. BÔNUS por FASE DE VOO (marcha dinâmica)
+        left_contact = getattr(sim, "robot_left_foot_contact", False)
+        right_contact = getattr(sim, "robot_right_foot_contact", False)
 
-        # 6. SEQUÊNCIA RÍTMICA DE CRUZAMENTOS
-        if hasattr(self, '_last_crossing_time'):
-            current_time = time.time()
-            time_since_last_crossing = current_time - self._last_crossing_time
-
-            if foot_crossing_occurred and time_since_last_crossing < 2.0:  
-                rhythm_bonus = max(0, 1.0 - time_since_last_crossing) * 15.0
-                bonus += rhythm_bonus
-
-            if foot_crossing_occurred:
-                self._last_crossing_time = current_time
-        else:
-            if foot_crossing_occurred:
-                self._last_crossing_time = time.time()
-
-        # 7. DETECÇÃO DE PASSADA (avanço do pé dianteiro)
-        if hasattr(self, '_last_left_foot_x'):
-            left_foot_advance = left_foot_x - self._last_left_foot_x
-            right_foot_advance = right_foot_x - self._last_right_foot_x
-
-            # Bônus por avanço significativo do pé da frente
-            if left_foot_x > right_foot_x and left_foot_advance > 0.02:  
-                bonus += 25.0
-            elif right_foot_x > left_foot_x and right_foot_advance > 0.02: 
-                bonus += 25.0
-
-        # 8. BÔNUS por FASE DE VOO (marcha dinâmica)
-        if not left_hip and not right_hip:
+        if not left_contact and not right_contact:
             bonus += 25.0 
 
-        # Atualizar posições anteriores para próximo cálculo
-        self._last_left_foot_x = left_foot_x
-        self._last_right_foot_x = right_foot_x
-            
+        # 6. BÔNUS POR FLEXÃO DOS JOELHOS PARA CIMA (DURANTE BALANÇO)
+        left_knee = getattr(sim, "robot_left_knee_angle", 0)
+        right_knee = getattr(sim, "robot_right_knee_angle", 0)
+
+        # JOELHO ESQUERDO FLEXIONADO PARA CIMA durante balanço
+        if not left_contact:
+            if left_knee > 1.2:  
+                bonus += 60.0
+            elif left_knee > 0.9:  
+                bonus += 40.0
+            elif left_knee > 0.6:  
+                bonus += 20.0
+            elif left_knee > 0.3:  
+                bonus += 10.0
+
+        # JOELHO DIREITO FLEXIONADO PARA CIMA durante balanço  
+        if not right_contact:
+            if right_knee > 1.2:  
+                bonus += 60.0
+            elif right_knee > 0.9:  
+                bonus += 40.0
+            elif right_knee > 0.6:  
+                bonus += 20.0
+            elif right_knee > 0.3:  
+                bonus += 10.0
+
+        # 7. BÔNUS POR CLEARANCE ADEQUADO DOS PÉS 
+        left_foot_height = getattr(sim, "robot_left_foot_height", 0)
+        right_foot_height = getattr(sim, "robot_right_foot_height", 0)
+
+        # Pé esquerdo com clearance adequado durante balanço
+        if not left_contact and left_foot_height > 0.08:  
+            bonus += 25.0
+        elif not left_contact and left_foot_height > 0.05:  
+            bonus += 12.0
+
+        # Pé direito com clearance adequado durante balanço
+        if not right_contact and right_foot_height > 0.08:  
+            bonus += 25.0
+        elif not right_contact and right_foot_height > 0.05:  
+            bonus += 12.0
+
+        # 8. BÔNUS COMBINADO: Joelho erguido + Clearance (VOLTEI!)
+        if ((not left_contact and left_knee > 0.7 and left_foot_height > 0.06) or
+            (not right_contact and right_knee > 0.7 and right_foot_height > 0.06)):
+            bonus += 35.0  # Bônus extra por coordenação completa
+
+        # 9. BÔNUS EXTRA POR COORDENAÇÃO: Joelho flexionado + Quadril estendido
+        if not left_contact and left_knee > 0.8 and left_hip < -0.1:  # Joelho flexionado + quadril para trás
+            bonus += 30.0
+        if not right_contact and right_knee > 0.8 and right_hip < -0.1:  # Joelho flexionado + quadril para trás
+            bonus += 30.0
+
+        # 10. BÔNUS POR PADRÃO ALTERNADO DE FLEXÃO DOS JOELHOS
+        if (not left_contact and left_knee > 0.7 and 
+            right_contact and right_knee < 0.3):  # Esquerdo flexionado, direito estendido
+            bonus += 25.0
+        if (not right_contact and right_knee > 0.7 and 
+            left_contact and left_knee < 0.3):  # Direito flexionado, esquerdo estendido
+            bonus += 25.0
+
         return bonus
 
     def _calculate_stability_reward(self, sim, phase_info) -> float:
