@@ -526,7 +526,7 @@ class DPGManager:
         self._update_metrics_history(episode_results)
         self._check_irl_activations(episode_results)
 
-        if self.episode_count > 3000 and self.episode_count % 500 == 0:
+        if self.episode_count >= 3000 and self.episode_count% 500 == 0:
             self._perform_periodic_cleanup()
 
         if (self.episode_count - self.last_report_episode) >= self.report_interval:

@@ -456,37 +456,42 @@ class OptimizedBufferManager:
         return current_buffer.buffer[-count:].copy() 
     
     def _store_optimized(self, experience: Experience, group: int):
-        """Armazenamento COM LIMPEZA CONSERVADORA"""
+        """Armazenamento com limpeza automática quando necessário"""
         try:
             # Adicionar informação de episódio para tracking de idade
             if hasattr(self, '_dpg_manager') and self._dpg_manager:
                 experience.episode_created = self._dpg_manager.episode_count
-
+            
             # Calcular prioridade
             priority = self._calculate_experience_priority(experience)
-
-            # VERIFICAR SE PRECISA LIMPAR (apenas quando >95% cheio)
+            
+            # VERIFICAR SE PRECISA LIMPAR ANTES DE ARMAZENAR
             current_buffer = self.group_buffers[group]
-            needs_cleanup = len(current_buffer.buffer) >= current_buffer.capacity * 0.95
-
+            needs_cleanup = len(current_buffer.buffer) >= current_buffer.capacity * 0.9  # 90% cheio
+            
             if needs_cleanup:
-                self.cleanup_low_quality_experiences(min_quality_threshold=0.1)  # Só remove qualidade < 0.1
+                # Limpar experiências de baixa qualidade primeiro
+                self.cleanup_low_quality_experiences(min_quality_threshold=0.4)
                 
-            # Tentar armazenar
+                # Se ainda estiver cheio, limpar experiências antigas
+                if len(current_buffer.buffer) >= current_buffer.capacity * 0.8:
+                    self.cleanup_old_experiences(max_age_episodes=800)
+                                
+            # Tentar armazenar normalmente
             success = current_buffer.add(experience, priority)
-
+            
             if success:
+                # Atualizar buffer atual
                 self.current_group_buffer = current_buffer.buffer
-
-                # Se for boa, vai para core buffer
-                if experience.quality > 0.6 or self._is_core_experience(experience):
+                
+                # Se for excepcional, vai para core buffer
+                if experience.quality > 0.7 or self._is_core_experience(experience):
                     self.core_buffer.add(experience, priority * 1.2)
-
+                    
                 return True
             else:
-                # Se falhou, é uma experiência de prioridade muito baixa
                 return False
-
+    
         except Exception as e:
             self.logger.error(f"❌ Erro em _store_optimized: {e}")
             return False
