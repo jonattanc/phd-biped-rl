@@ -583,17 +583,18 @@ class EvaluationTab(common_tab.GUITab):
                     self.ax_dynamic.plot(series, label=f"{selected_data}[{i}]")
 
                 self.ax_dynamic.legend()
+                self.ax_dynamic.set_xlim(1, len(plot_separated_data[0]))
 
             else:
                 plot_separated_data = plot_raw_data
                 self.ax_dynamic.plot(plot_separated_data, color="blue")
+                self.ax_dynamic.set_xlim(1, len(plot_separated_data))
 
             self.ax_dynamic.relim()
             self.ax_dynamic.autoscale_view()
             self.ax_dynamic.set_title(selected_data)
             self.ax_dynamic.set_ylabel(selected_data)
             self.ax_dynamic.grid(True, alpha=0.3)
-            self.ax_dynamic.set_xlim(1, len(plot_separated_data))
             self.ax_dynamic.set_xlabel("Step")
 
             self.fig_dynamic.tight_layout()
