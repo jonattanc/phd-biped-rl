@@ -526,13 +526,26 @@ class DPGManager:
         self._update_metrics_history(episode_results)
         self._check_irl_activations(episode_results)
 
-        if self.episode_count % 500 == 0:
+        if self.episode_count > 3000 and self.episode_count % 500 == 0:
             self._perform_periodic_cleanup()
-            
+
         if (self.episode_count - self.last_report_episode) >= self.report_interval:
             self._generate_comprehensive_report()
             self.last_report_episode = self.episode_count
         
+    def _perform_periodic_cleanup(self):
+        """Limpeza periódica do buffer"""
+        try:
+            if hasattr(self, 'buffer_manager') and self.buffer_manager:
+                self.buffer_manager.cleanup_low_quality_experiences(min_quality_threshold=0.35)
+                   
+                # Limpar experiências muito antigas a cada 1000 episódios
+                if self.episode_count % 1000 == 0:
+                    self.buffer_manager.cleanup_old_experiences(max_age_episodes=1500)
+                       
+        except Exception as e:
+            self.logger.warning(f"Erro na limpeza periódica: {e}")
+            
     def _should_update_valences(self, episode_results) -> bool:
         """Verifica se atualização de valências é necessária"""
         if (self.episode_count - self.last_valence_update_episode) < self.valence_update_interval:
