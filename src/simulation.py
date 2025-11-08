@@ -638,11 +638,17 @@ class Simulation(gym.Env):
     def add_episode_metrics(self, key, value):
         episode_key = str(self.episode_count + 1)
 
-        if key in self.metrics[episode_key]["step_data"]:
-            self.metrics[episode_key]["step_data"][key].append(value)
+        if hasattr(value, "copy"):
+            v = value.copy()
 
         else:
-            self.metrics[episode_key]["step_data"][key] = [value]
+            v = value
+
+        if key in self.metrics[episode_key]["step_data"]:
+            self.metrics[episode_key]["step_data"][key].append(v)
+
+        else:
+            self.metrics[episode_key]["step_data"][key] = [v]
 
     def close(self):
         p.disconnect()
