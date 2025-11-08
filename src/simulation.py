@@ -459,6 +459,7 @@ class Simulation(gym.Env):
         self.robot_x_position = robot_position[0]
         self.robot_y_position = robot_position[1]
         self.robot_z_position = robot_position[2]
+        self.robot_z_ramp_position = self.robot.get_fixed_height(self.robot_z_position, self.robot_x_position)
         self.robot_x_velocity = robot_velocity[0]
         self.robot_y_velocity = robot_velocity[1]
         self.robot_z_velocity = robot_velocity[2]
@@ -480,6 +481,7 @@ class Simulation(gym.Env):
         self.robot_left_foot_roll = self.robot_left_foot_orientation[0]
         self.robot_right_foot_pitch = self.robot_right_foot_orientation[1]
         self.robot_left_foot_pitch = self.robot_left_foot_orientation[1]
+        self.is_in_ramp = self.robot.is_in_ramp(self.robot_x_position)
 
         self.last_joint_velocities = self.joint_velocities
         self.joint_positions, self.joint_velocities = self.robot.get_joint_states()
@@ -492,7 +494,7 @@ class Simulation(gym.Env):
         self.episode_termination = "none"
 
         # Queda
-        if self.robot_z_position < self.fall_threshold:
+        if self.robot_z_ramp_position < self.fall_threshold:
             self.episode_terminated = True
             self.episode_termination = "fell"
 
@@ -539,7 +541,9 @@ class Simulation(gym.Env):
             self.add_episode_metrics("obs", obs)
             self.add_episode_metrics("reward", reward)
             self.add_episode_metrics("has_gait_state_changed", self.has_gait_state_changed)
+            self.add_episode_metrics("is_in_ramp", self.is_in_ramp)
             self.add_episode_metrics("robot_position", robot_position)
+            self.add_episode_metrics("robot_z_ramp_position", self.robot_z_ramp_position)
             self.add_episode_metrics("robot_velocity", robot_velocity)
             self.add_episode_metrics("robot_orientation", robot_orientation)
             self.add_episode_metrics("robot_orientation_velocity", robot_orientation_velocity)

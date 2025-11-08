@@ -54,7 +54,7 @@ def process_runner(
 
         # Criar componentes
         environment = Environment(logger, name=selected_environment)
-        robot = Robot(logger, name=selected_robot)
+        robot = Robot(logger, name=selected_robot, env_name=selected_environment)
         sim = Simulation(
             logger,
             robot,
