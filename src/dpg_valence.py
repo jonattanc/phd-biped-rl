@@ -167,7 +167,7 @@ class ValenceManager:
                 metrics=["x_velocity", "velocity_consistency", "acceleration_smoothness", "distance"],
                 reward_components=["velocity", "propulsion", "basic_progress"],
                 dependencies=["movimento_basico"],
-                activation_threshold=0.2,  
+                activation_threshold=0.25,  
                 mastery_threshold=0.5,
                 regression_threshold=0.25,      
                 min_episodes=15
@@ -180,7 +180,7 @@ class ValenceManager:
                 metrics=["alternating_consistency", "step_length_consistency", "gait_pattern_score"],
                 reward_components=["coordination", "rhythm", "gait_pattern"],
                 dependencies=["propulsao_basica", "estabilidade_postural"],
-                activation_threshold=0.25,
+                activation_threshold=0.35,
                 mastery_threshold=0.5,
                 regression_threshold=0.3,
                 min_episodes=25
@@ -193,7 +193,7 @@ class ValenceManager:
                 metrics=["energy_efficiency", "stride_efficiency", "propulsion_efficiency"],
                 reward_components=["efficiency", "biomechanics", "smoothness"],
                 dependencies=["coordenacao_fundamental"],
-                activation_threshold=0.3,
+                activation_threshold=0.45,
                 mastery_threshold=0.5,
                 regression_threshold=0.3,
                 min_episodes=30
@@ -206,7 +206,7 @@ class ValenceManager:
                 metrics=["x_velocity", "velocity_consistency", "acceleration_smoothness", "distance"],
                 reward_components=["velocity", "propulsion", "smoothness"],
                 dependencies=["eficiencia_biomecanica"],
-                activation_threshold=0.35,
+                activation_threshold=0.5,
                 mastery_threshold=0.5,
                 regression_threshold=0.35,
                 min_episodes=35
@@ -220,7 +220,7 @@ class ValenceManager:
                         "terrain_handling", "distance", "velocity_consistency"],
                 reward_components=["robustness", "adaptation", "recovery", "velocity", "propulsion"],
                 dependencies=["propulsao_avancada", "coordenacao_fundamental"],
-                activation_threshold=0.4,
+                activation_threshold=0.55,
                 mastery_threshold=0.5,
                 regression_threshold=0.4,
                 min_episodes=50
@@ -231,34 +231,22 @@ class ValenceManager:
         """Atualiza valências com DEBUG EXPANDIDO"""
         self.episode_count += 1
         
-        # ✅ DEBUG CRÍTICO: Verificar dados de entrada
-        distance_raw = episode_results.get("distance", "N/A")
-        self.logger.info(f"🔍 VALENCE_INPUT - Ep {self.episode_count}, Distance: {distance_raw}, Type: {type(distance_raw)}")
-        
         self.performance_history.append(episode_results)
         self.update_irl_system(episode_results)
         
         valence_levels = {}
-        for valence_name, valence_config in self.valences.items():
+        for valence_name in self.valences.items():
             level = self._calculate_valence_level(valence_name, episode_results)
             valence_levels[valence_name] = level
             
-            # ✅ DEBUG expandido para movimento_basico
-            if valence_name == "movimento_basico" and self.episode_count % 20 == 0:
-                self.logger.info(f"🔍 movimento_basico RESULT: dist={episode_results.get('distance', 'N/A')} -> level={level:.1%}")
-            
             perf = self.valence_performance[valence_name]
-            old_level = perf.current_level
             perf.update_level(level, self.episode_count)
             perf.episodes_active += 1 if valence_name in self.active_valences else 0
             
-            # ✅ Log de mudanças significativas
-            if abs(level - old_level) > 0.1 and self.episode_count % 50 == 0:
-                self.logger.info(f"📈 VALENCE_UPDATE: {valence_name} {old_level:.1%} -> {level:.1%}")
-        
         self._update_valence_states(valence_levels)
         self.valence_weights = self._calculate_valence_weights(valence_levels)
-        mission_bonus = self._update_missions(valence_levels)
+        mission_bonus = 1
+        # mission_bonus = self._update_missions(valence_levels)
         self.overall_progress = self._calculate_overall_progress(valence_levels)
         
         return self.valence_weights, mission_bonus
@@ -302,40 +290,30 @@ class ValenceManager:
             return {'progress': 0.3, 'stability': 0.4, 'efficiency': 0.2, 'coordination': 0.1}
     
     def _calculate_valence_level(self, valence_name: str, results: Dict) -> float:
-        """VALÊNCIA - COM SMOOTHING para evitar oscilações"""
-        try:
-            raw_distance = results.get("distance", 0)
-            if not isinstance(raw_distance, (int, float)):
-                distance = 0.0
-            else:
-                distance = float(raw_distance)
-
-            # IGNORAR distâncias negativas para movimento_basico
-            if valence_name == "movimento_basico" and distance < 0:
-                return 0.0
-
-        except:
+        
+        raw_distance = results.get("distance", 0)
+        if not isinstance(raw_distance, (int, float)):
             distance = 0.0
+        else:
+            distance = float(raw_distance)
 
-        # MOVIMENTO BÁSICO 
+            # MOVIMENTO BÁSICO - Correção crítica
         if valence_name == "movimento_basico":
             if distance <= 0:
                 return 0.0 
 
-            # ESCALA MAIS SUAVE E CONSISTENTE
-            if distance > 1.0: return 0.95
-            if distance > 0.8: return 0.85
-            if distance > 0.6: return 0.75
-            if distance > 0.5: return 0.65
-            if distance > 0.4: return 0.55
-            if distance > 0.3: return 0.45
-            if distance > 0.25: return 0.35
-            if distance > 0.2: return 0.25
-            if distance > 0.15: return 0.18
-            if distance > 0.1: return 0.12
-            if distance > 0.05: return 0.07
-            if distance > 0.02: return 0.04
-            return 0.02
+            # Escala mais realista baseada em performance real
+            if distance > 2.0: return 0.9
+            if distance > 1.5: return 0.8
+            if distance > 1.0: return 0.7
+            if distance > 0.7: return 0.6
+            if distance > 0.5: return 0.5
+            if distance > 0.3: return 0.4
+            if distance > 0.2: return 0.3
+            if distance > 0.1: return 0.2
+            if distance > 0.05: return 0.15
+            if distance > 0.02: return 0.1
+            return 0.05
 
         # ESTABILIDADE POSTURAL
         elif valence_name == "estabilidade_postural":
@@ -430,8 +408,9 @@ class ValenceManager:
 
             # MOVIMENTO BÁSICO - SEMPRE ATIVO
             if valence_name == "movimento_basico":
-                perf.state = ValenceState.LEARNING
-                self.active_valences.add(valence_name)
+                if current_level > 0.05: 
+                    perf.state = ValenceState.LEARNING
+                    self.active_valences.add(valence_name)
                 continue
 
             # Para outras valências, verificar dependências 
@@ -439,21 +418,16 @@ class ValenceManager:
             for dep in config.dependencies:
                 if dep in self.valence_performance:
                     dep_level = self.valence_performance[dep].current_level
-                    if dep_level < 0.15:  
+                    if dep_level < 0.1:  
                         dependencies_met = False
                         break
-                else:
-                    dependencies_met = False
-                    break
 
-            if not dependencies_met:
+            if dependencies_met and current_level > 0.05:
+                perf.state = ValenceState.LEARNING
+                self.active_valences.add(valence_name)
+            else:
                 perf.state = ValenceState.INACTIVE
                 self.active_valences.discard(valence_name)
-                continue
-
-            # SE dependências atendidas, ATIVAR imediatamente
-            perf.state = ValenceState.LEARNING
-            self.active_valences.add(valence_name)
     
     def _calculate_valence_weights(self, valence_levels: Dict[str, float]) -> Dict[str, float]:
         """Calcula pesos dinâmicos baseados em déficit de performance"""
@@ -510,26 +484,26 @@ class ValenceManager:
         return total_bonus
     
     def _generate_mission(self, valence_levels: Dict[str, float]) -> Optional[Mission]:
-        """MISSÕES COM METAS REALISTAS E PROGRESSIVAS"""
+        """MISSÕES COM METAS MAIS REALISTAS"""
         episode = self.episode_count
 
-        # MISSÃO MOVIMENTO BÁSICO - sempre que estiver baixo
+        # MISSÃO MOVIMENTO BÁSICO - metas mais alcançáveis
         movimento_level = valence_levels.get('movimento_basico', 0)
-        if movimento_level < 0.4:  
+        if movimento_level < 0.3:  
             if not any(m.valence_name == 'movimento_basico' for m in self.current_missions):
-                mission = Mission('movimento_basico', 0.4, 150)  
+                mission = Mission('movimento_basico', 0.3, 100)  
                 mission.start_level = movimento_level
-                mission.bonus_multiplier = 2.0
+                mission.bonus_multiplier = 1.5  
                 return mission
 
         # MISSÃO ESTABILIDADE - quando movimento_basico estiver OK
-        elif episode < 2000 and movimento_level >= 0.3:
+        elif episode < 1500 and movimento_level >= 0.2: 
             estabilidade_level = valence_levels.get('estabilidade_postural', 0)
-            if estabilidade_level < 0.4:
+            if estabilidade_level < 0.3:  
                 if not any(m.valence_name == 'estabilidade_postural' for m in self.current_missions):
-                    mission = Mission('estabilidade_postural', 0.4, 200)
+                    mission = Mission('estabilidade_postural', 0.3, 150) 
                     mission.start_level = estabilidade_level
-                    mission.bonus_multiplier = 1.8
+                    mission.bonus_multiplier = 1.3  
                     return mission
 
         # MISSÃO PROPULSÃO - quando estabilidade estiver OK
@@ -539,9 +513,9 @@ class ValenceManager:
                 propulsao_level = valence_levels.get('propulsao_basica', 0)
                 if propulsao_level < 0.5:
                     if not any(m.valence_name == 'propulsao_basica' for m in self.current_missions):
-                        mission = Mission('propulsao_basica', 0.5, 250)
+                        mission = Mission('propulsao_basica', 0.3, 200)
                         mission.start_level = propulsao_level
-                        mission.bonus_multiplier = 1.6
+                        mission.bonus_multiplier = 1.1
                         return mission
 
         return None
@@ -685,7 +659,8 @@ class OptimizedValenceManager(ValenceManager):
         
         self._update_valence_states(valence_levels)
         self.valence_weights = self._calculate_valence_weights(valence_levels)
-        mission_bonus = self._update_missions(valence_levels)
+        mission_bonus = 1
+        # mission_bonus = self._update_missions(valence_levels)
         
         if self._should_update_irl():
             self.update_irl_system(episode_results)

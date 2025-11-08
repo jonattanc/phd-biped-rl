@@ -50,31 +50,33 @@ class RewardCalculator:
         }
     
     def calculate(self, sim, action, phase_info: Dict) -> float:
-        """RECOMPENSA FOCADA NA SEQUÊNCIA DA MARCHA"""
+        """RECOMPENSA FOCADA EM PROGRESSO CONSISTENTE"""
         base_reward = 0.0
         distance = max(getattr(sim, "episode_distance", 0), 0)
-
-        # BÔNUS PRIMÁRIO: DISTÂNCIA (MASSIVO)
+        
+        # BÔNUS PRIMÁRIO: DISTÂNCIA (mais progressivo)
         if distance > 0:
-            base_reward += distance * 5000.0  # 5000 pontos por metro!
-
-            # BÔNUS PROGRESSIVO AGRESSIVO
-            if distance > 0.5: base_reward += 10000.0
-            elif distance > 0.3: base_reward += 5000.0
-            elif distance > 0.2: base_reward += 2000.0
-            elif distance > 0.1: base_reward += 1000.0
-            elif distance > 0.05: base_reward += 500.0
-            elif distance > 0.02: base_reward += 200.0
-            elif distance > 0.01: base_reward += 100.0
-
-        # BÔNUS SECUNDÁRIO: SEQUÊNCIA DA MARCHA
+            distance_reward = distance * 200.0  # Reduzido de 500.0
+            
+            # BÔNUS PROGRESSIVO MAIS REALISTA
+            if distance > 2.0: base_reward += 800.0
+            elif distance > 1.5: base_reward += 400.0
+            elif distance > 1.0: base_reward += 200.0
+            elif distance > 0.7: base_reward += 100.0
+            elif distance > 0.5: base_reward += 50.0
+            elif distance > 0.3: base_reward += 20.0
+            elif distance > 0.1: base_reward += 10.0
+    
+            base_reward += distance_reward
+    
+        # BÔNUS DE SEQUÊNCIA DA MARCHA (reduzido)
         sequence_bonus = self.calculate_marcha_sequence_bonus(sim, action)
-        base_reward += sequence_bonus
-
-        # BÔNUS DE SOBREVIVÊNCIA
+        base_reward += sequence_bonus * 0.5  # Antes: bonus completo
+    
+        # BÔNUS DE SOBREVIVÊNCIA (reduzido)
         if not getattr(sim, "episode_terminated", True) and distance > 0.01:
-            base_reward += 500.0
-
+            base_reward += 100.0  # Antes: 500.0
+    
         return max(base_reward, 0.0)
     
     def _calculate_global_penalties(self, sim, action) -> float:
@@ -116,26 +118,95 @@ class RewardCalculator:
 
     def calculate_marcha_sequence_bonus(self, sim, action) -> float:
         """BÔNUS MASSIVO para a sequência correta da marcha"""
-        bonus = 0.0
+        bonus = 1.0
         
         # 1. Verificar inclinação do tronco para frente
         pitch = getattr(sim, "robot_pitch", 0)
-        if pitch > 0.05:  # Inclinação para frente
+        if pitch > 0.05:  
             bonus += 50.0
         
         # 2. Verificar movimento alternado das pernas
         left_hip = getattr(sim, "robot_left_hip_angle", 0)
         right_hip = getattr(sim, "robot_right_hip_angle", 0)
+        hip_difference = abs(left_hip - right_hip)
+    
+        if hip_difference > 0.4:  
+            bonus += 100.0  
+        elif hip_difference > 0.2: #inclusão
+            bonus += 40.0
         
-        # Movimento alternado (uma perna flexionada, outra estendida)
-        if abs(left_hip - right_hip) > 0.3:
-            bonus += 100.0
-        
-        # 3. Bônus por velocidade positiva consistente
-        velocity = getattr(sim, "robot_x_velocity", 0)
-        if velocity > 0.1:
-            bonus += velocity * 200.0
-        
+        # 3. CRUZAMENTO ALTERNADO
+        left_foot_x = getattr(sim, "robot_left_foot_x_position", 0)  # Posição X do pé esquerdo
+        right_foot_x = getattr(sim, "robot_right_foot_x_position", 0)  # Posição X do pé direito
+
+        # Verificar se há cruzamento alternado dos pés
+        foot_crossing_occurred = False
+
+        # Pé esquerdo passou o direito (esquerdo na frente)
+        if left_foot_x > right_foot_x + 0.05:  # Esquerdo > Direito + margem
+            if not hasattr(self, '_last_foot_in_front'):
+                self._last_foot_in_front = 'left'
+            elif self._last_foot_in_front != 'left':
+                # Houve alternância: antes estava direito na frente, agora esquerdo
+                bonus += 80.0
+                foot_crossing_occurred = True
+                self._last_foot_in_front = 'left'
+
+        # Pé direito passou o esquerdo (direito na frente)  
+        elif right_foot_x > left_foot_x + 0.05:  # Direito > Esquerdo + margem
+            if not hasattr(self, '_last_foot_in_front'):
+                self._last_foot_in_front = 'right'
+            elif self._last_foot_in_front != 'right':
+                # Houve alternância: antes estava esquerdo na frente, agora direito
+                bonus += 80.0
+                foot_crossing_occurred = True
+                self._last_foot_in_front = 'right'
+
+        # 4. PENALIDADE POR PERNAS MUITO ABERTAS (equilíbrio estático)
+        left_hip_lateral = abs(getattr(sim, "robot_left_hip_lateral_angle", 0))
+        right_hip_lateral = abs(getattr(sim, "robot_right_hip_lateral_angle", 0))
+
+        if left_hip_lateral > 0.6 or right_hip_lateral > 0.6:
+            bonus -= 50.0  
+
+        # 5. CRUZAMENTO COMBINADO COM MOVIMENTO ALTERNADO
+        if foot_crossing_occurred and hip_difference > 0.3:
+            bonus += 20.0  
+
+        # 6. SEQUÊNCIA RÍTMICA DE CRUZAMENTOS
+        if hasattr(self, '_last_crossing_time'):
+            current_time = time.time()
+            time_since_last_crossing = current_time - self._last_crossing_time
+
+            if foot_crossing_occurred and time_since_last_crossing < 2.0:  
+                rhythm_bonus = max(0, 1.0 - time_since_last_crossing) * 15.0
+                bonus += rhythm_bonus
+
+            if foot_crossing_occurred:
+                self._last_crossing_time = current_time
+        else:
+            if foot_crossing_occurred:
+                self._last_crossing_time = time.time()
+
+        # 7. DETECÇÃO DE PASSADA (avanço do pé dianteiro)
+        if hasattr(self, '_last_left_foot_x'):
+            left_foot_advance = left_foot_x - self._last_left_foot_x
+            right_foot_advance = right_foot_x - self._last_right_foot_x
+
+            # Bônus por avanço significativo do pé da frente
+            if left_foot_x > right_foot_x and left_foot_advance > 0.02:  
+                bonus += 25.0
+            elif right_foot_x > left_foot_x and right_foot_advance > 0.02: 
+                bonus += 25.0
+
+        # 8. BÔNUS por FASE DE VOO (marcha dinâmica)
+        if not left_hip and not right_hip:
+            bonus += 25.0 
+
+        # Atualizar posições anteriores para próximo cálculo
+        self._last_left_foot_x = left_foot_x
+        self._last_right_foot_x = right_foot_x
+            
         return bonus
 
     def _calculate_stability_reward(self, sim, phase_info) -> float:
@@ -430,12 +501,12 @@ class RewardCalculator:
             base_reward += distance * 1000.0
 
             # BÔNUS por marcos - QUALQUER progresso
-            if distance > 2.0: base_reward += 5000.0
-            elif distance > 1.5: base_reward += 3000.0
+            if distance > 2.0: base_reward += 3000.0
+            elif distance > 1.5: base_reward += 2500.0
             elif distance > 1.0: base_reward += 2000.0
-            elif distance > 0.7: base_reward += 1000.0
-            elif distance > 0.5: base_reward += 500.0
-            elif distance > 0.3: base_reward += 300.0
+            elif distance > 0.7: base_reward += 1500.0
+            elif distance > 0.5: base_reward += 1000.0
+            elif distance > 0.3: base_reward += 500.0
             elif distance > 0.2: base_reward += 200.0
             elif distance > 0.1: base_reward += 100.0
             elif distance > 0.05: base_reward += 50.0
@@ -633,24 +704,40 @@ class CachedRewardCalculator(RewardCalculator):
         self._gait_phase_cache = {}
         
     def calculate(self, sim, action, phase_info: Dict) -> float:
-        sim_state = self._get_sim_state_fingerprint(sim)
-        
-        if (self._last_sim_state and 
-            self._sim_states_similar(sim_state, self._last_sim_state)):
-            return self._last_reward
-        
-        cache_key = self._generate_cache_key(sim, phase_info)
-        cached_reward = self.cache.get(cache_key)
-        
-        if cached_reward is not None:
-            return cached_reward
-        
-        reward = self._calculate_prioritized_reward(sim, action, phase_info)
-        self.cache.set(cache_key, reward, ttl=20)
-        self._last_sim_state = sim_state
-        self._last_reward = reward
-        
-        return reward
+        base_reward = 0.0
+        distance = max(getattr(sim, "episode_distance", 0), 0)
+
+        # 1. BÔNUS PRIMÁRIO: PADRÃO DE MARCHA (60% da recompensa)
+        marcha_bonus = self.calculate_marcha_sequence_bonus(sim, action)
+        base_reward += marcha_bonus
+
+        # 2. BÔNUS SECUNDÁRIO: DISTÂNCIA (30% da recompensa)
+        if distance > 0:
+            distance_reward = distance * 100.0  
+            base_reward += distance_reward
+
+            # BÔNUS progressivo por marcos de DISTÂNCIA COM MARCHA
+            if distance > 1.5: base_reward += 200.0
+            elif distance > 1.0: base_reward += 100.0
+            elif distance > 0.7: base_reward += 50.0
+            elif distance > 0.5: base_reward += 20.0
+            elif distance > 0.3: base_reward += 10.0
+
+        # 3. BÔNUS TERCIÁRIO: COORDENAÇÃO (10% da recompensa)
+        left_contact = getattr(sim, "robot_left_foot_contact", False)
+        right_contact = getattr(sim, "robot_right_foot_contact", False)
+
+        if left_contact != right_contact:  
+            base_reward += 15.0
+
+        # 4. PENALIDADES LEVES por instabilidade 
+        roll = abs(getattr(sim, "robot_roll", 0))
+        pitch = abs(getattr(sim, "robot_pitch", 0))
+
+        if roll > 0.5: base_reward -= roll * 10.0  
+        if pitch > 0.5: base_reward -= pitch * 8.0  
+
+        return max(base_reward, 0.0)
     
     def _get_sim_state_fingerprint(self, sim) -> str:
         """Fingerprint rápido do estado da simulação"""

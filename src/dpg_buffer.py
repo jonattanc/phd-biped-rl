@@ -121,7 +121,7 @@ class PrioritizedBuffer:
             priority = self._calculate_priority(experience)
 
         try:
-            # ✅ SE há espaço, adiciona normalmente
+            # SE há espaço, adiciona normalmente
             if len(self.buffer) < self.capacity:
                 self.buffer.append(experience)
                 self.priorities.append(priority)
@@ -131,7 +131,7 @@ class PrioritizedBuffer:
 
                 return True
             else:
-                # ✅ SE buffer cheio, substitui a de menor prioridade
+                # SE buffer cheio, substitui a de menor prioridade
                 min_priority = min(self.priorities) if self.priorities else 0
                 if priority > min_priority:
                     min_idx = self.priorities.index(min_priority)
@@ -142,7 +142,7 @@ class PrioritizedBuffer:
                     heapq.heappush(self._quality_heap, (-experience.quality, experience))
                     return True
                 else:
-                    return False  # ✅ Prioridade muito baixa, não armazena
+                    return False  # Prioridade muito baixa, não armazena
 
         except Exception as e:
             return False
@@ -272,8 +272,8 @@ class OptimizedBufferManager:
         # Sistema de buffers otimizado
         self.group_buffers = {}
         for group in [1, 2, 3]:
-            self.group_buffers[group] = PrioritizedBuffer(capacity=3000)
-        self.core_buffer = PrioritizedBuffer(capacity=2000)
+            self.group_buffers[group] = PrioritizedBuffer(capacity=2000)
+        self.core_buffer = PrioritizedBuffer(capacity=1000)
         self.current_group = 1
         if self.current_group in self.group_buffers:
             self.current_group_buffer = self.group_buffers[self.current_group].buffer
@@ -395,17 +395,17 @@ class OptimizedBufferManager:
             metrics = experience.info.get("metrics", {})
             distance = metrics.get("distance", 0)
 
-            # ✅ ARMAZENAR QUALQUER experiência com movimento positivo
+            # ARMAZENAR QUALQUER experiência com movimento positivo
             if distance > 0.001:
                 return True
 
-            # ✅ ARMAZENAR experiências de estabilidade mesmo sem movimento
+            # ARMAZENAR experiências de estabilidade mesmo sem movimento
             roll = abs(metrics.get("roll", 0))
             pitch = abs(metrics.get("pitch", 0))
             if roll < 0.2 and pitch < 0.2:  # Muito estável
                 return True
 
-            # ✅ ARMAZENAR algumas experiências negativas para aprendizado (10%)
+            # ARMAZENAR algumas experiências negativas para aprendizado (10%)
             if distance < 0 and np.random.random() < 0.1:
                 return True
 
@@ -456,31 +456,117 @@ class OptimizedBufferManager:
         return current_buffer.buffer[-count:].copy() 
     
     def _store_optimized(self, experience: Experience, group: int):
-        """Armazenamento com DEBUG expandido"""
+        """Armazenamento COM LIMPEZA CONSERVADORA"""
         try:
-            # Calcula prioridade multifatorial
+            # Adicionar informação de episódio para tracking de idade
+            if hasattr(self, '_dpg_manager') and self._dpg_manager:
+                experience.episode_created = self._dpg_manager.episode_count
+
+            # Calcular prioridade
             priority = self._calculate_experience_priority(experience)
 
-            # Armazena no buffer do grupo
-            success = self.group_buffers[group].add(experience, priority)
+            # VERIFICAR SE PRECISA LIMPAR (apenas quando >95% cheio)
+            current_buffer = self.group_buffers[group]
+            needs_cleanup = len(current_buffer.buffer) >= current_buffer.capacity * 0.95
+
+            if needs_cleanup:
+                self.cleanup_low_quality_experiences(min_quality_threshold=0.1)  # Só remove qualidade < 0.1
+                
+            # Tentar armazenar
+            success = current_buffer.add(experience, priority)
 
             if success:
-                len(self.group_buffers[group].buffer)
+                self.current_group_buffer = current_buffer.buffer
+
+                # Se for boa, vai para core buffer
+                if experience.quality > 0.6 or self._is_core_experience(experience):
+                    self.core_buffer.add(experience, priority * 1.2)
+
+                return True
             else:
-                self.logger.info(f"❌ FALHA ao armazenar no grupo {group}: Buffer cheio?")
-
-            self.current_group_buffer = self.group_buffers[group].buffer
-
-            # Se for excepcional, vai para core buffer
-            if experience.quality > 0.8 or self._is_core_experience(experience):
-                self.core_buffer.add(experience, priority * 1.2)
-
-            return success
+                # Se falhou, é uma experiência de prioridade muito baixa
+                return False
 
         except Exception as e:
             self.logger.error(f"❌ Erro em _store_optimized: {e}")
             return False
     
+    def cleanup_low_quality_experiences(self, min_quality_threshold=0.3):
+        """Remove experiências de baixa qualidade para liberar espaço"""
+        try:
+            total_removed = 0
+
+            # Limpar todos os buffers
+            for group_id in [1, 2, 3]:
+                if group_id in self.group_buffers:
+                    buffer = self.group_buffers[group_id]
+                    if hasattr(buffer, 'buffer') and buffer.buffer:
+
+                        # Filtrar experiências mantendo apenas as de alta qualidade
+                        high_quality_exps = []
+                        for exp in buffer.buffer:
+                            if exp.quality >= min_quality_threshold:
+                                high_quality_exps.append(exp)
+                            else:
+                                total_removed += 1
+
+                        # Reconstruir buffer com as melhores
+                        buffer.buffer = high_quality_exps
+
+                        # Reconstruir heap de qualidade
+                        buffer._quality_heap = []
+                        for exp in high_quality_exps:
+                            heapq.heappush(buffer._quality_heap, (-exp.quality, exp))
+
+            # Limpar core buffer também
+            if hasattr(self.core_buffer, 'buffer') and self.core_buffer.buffer:
+                high_quality_core = []
+                for exp in self.core_buffer.buffer:
+                    if exp.quality >= min_quality_threshold:
+                        high_quality_core.append(exp)
+                    else:
+                        total_removed += 1
+
+                self.core_buffer.buffer = high_quality_core
+                self.core_buffer._quality_heap = []
+                for exp in high_quality_core:
+                    heapq.heappush(self.core_buffer._quality_heap, (-exp.quality, exp))
+
+            return total_removed
+
+        except Exception as e:
+            self.logger.error(f"❌ Erro na limpeza do buffer: {e}")
+            return 0
+
+    def cleanup_old_experiences(self, max_age_episodes=1000):
+        """Remove experiências muito antigas"""
+        try:
+            total_removed = 0
+            current_episode = getattr(self._dpg_manager, 'episode_count', 0) if self._dpg_manager else 0
+
+            for group_id in [1, 2, 3]:
+                if group_id in self.group_buffers:
+                    buffer = self.group_buffers[group_id]
+                    if hasattr(buffer, 'buffer') and buffer.buffer:
+
+                        # Manter apenas experiências recentes
+                        recent_exps = []
+                        for exp in buffer.buffer:
+                            exp_episode = getattr(exp, 'episode_created', 0)
+                            if current_episode - exp_episode <= max_age_episodes:
+                                recent_exps.append(exp)
+                            else:
+                                total_removed += 1
+
+                        buffer.buffer = recent_exps
+
+            return total_removed
+
+        except Exception as e:
+            self.logger.warning(f"Erro ao limpar experiências antigas: {e}")
+            return 0
+        
+        
     def _calculate_experience_priority(self, experience: Experience) -> float:
         """Calcula prioridade baseada em múltiplos fatores"""
         quality_factor = experience.quality * 0.5

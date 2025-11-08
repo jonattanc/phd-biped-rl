@@ -162,7 +162,7 @@ class ValenceAwareCritic:
             if not regressing_valences and len(learning_valences) < 2:
                 self.weights.irl_influence = max(self.weights.irl_influence - 0.02, 0.1)
             elif regressing_valences:
-                self.weights.irl_influence = min(self.weights.irl_influence + 0.05, 0.8)
+                self.weights.irl_influence = min(self.weights.irl_influence + 0.05, 0.5)
                 
         except Exception as e:
             self.logger.warning(f"Erro na atualização dos pesos do critic: {e}")
@@ -526,10 +526,26 @@ class DPGManager:
         self._update_metrics_history(episode_results)
         self._check_irl_activations(episode_results)
 
+        if self.episode_count > 3000 and self.episode_count % 500 == 0:
+            self._perform_periodic_cleanup()
+
         if (self.episode_count - self.last_report_episode) >= self.report_interval:
             self._generate_comprehensive_report()
             self.last_report_episode = self.episode_count
         
+    def _perform_periodic_cleanup(self):
+        """Limpeza periódica do buffer"""
+        try:
+            if hasattr(self, 'buffer_manager') and self.buffer_manager:
+                self.buffer_manager.cleanup_low_quality_experiences(min_quality_threshold=0.35)
+                   
+                # Limpar experiências muito antigas a cada 1000 episódios
+                if self.episode_count % 1000 == 0:
+                    self.buffer_manager.cleanup_old_experiences(max_age_episodes=1500)
+                       
+        except Exception as e:
+            self.logger.warning(f"Erro na limpeza periódica: {e}")
+            
     def _should_update_valences(self, episode_results) -> bool:
         """Verifica se atualização de valências é necessária"""
         if (self.episode_count - self.last_valence_update_episode) < self.valence_update_interval:
@@ -645,26 +661,26 @@ class DPGManager:
         valence_status = self.valence_manager.get_valence_status()
         overall_progress = valence_status['overall_progress']
 
-        if overall_progress < 1.0:  
-            self.critic.weights.propulsion = 0.90  
-            self.critic.weights.stability = 0.05     
-            self.critic.weights.coordination = 0.02
-            self.critic.weights.efficiency = 0.02
-            self.critic.weights.irl_influence = 0.8  
-
-        elif overall_progress < 2.0:
-            self.critic.weights.propulsion = 0.75
-            self.critic.weights.stability = 0.15
-            self.critic.weights.coordination = 0.05
+        if overall_progress < 0.3:  # Estágio inicial
+            self.critic.weights.coordination = 0.4
+            self.critic.weights.propulsion = 0.4  
+            self.critic.weights.stability = 0.15     
             self.critic.weights.efficiency = 0.05
-            self.critic.weights.irl_influence = 0.5
+            self.critic.weights.irl_influence = 0.3  
+
+        elif overall_progress < 0.6:
+            self.critic.weights.coordination = 0.5
+            self.critic.weights.propulsion = 0.20
+            self.critic.weights.stability = 0.15
+            self.critic.weights.efficiency = 0.05
+            self.critic.weights.irl_influence = 0.2  
 
         else:
-            self.critic.weights.stability = 0.35
-            self.critic.weights.propulsion = 0.30
-            self.critic.weights.coordination = 0.20
-            self.critic.weights.efficiency = 0.15
-            self.critic.weights.irl_influence = 0.3
+            self.critic.weights.coordination = 0.6
+            self.critic.weights.propulsion = 0.15
+            self.critic.weights.stability = 0.2
+            self.critic.weights.efficiency = 0.05
+            self.critic.weights.irl_influence = 0.1  
 
         self._normalize_critic_weights()
 
@@ -764,11 +780,14 @@ class DPGManager:
     def _check_irl_activations(self, episode_results):
         """Ativação AGRESSIVA de IRL quando movimento é insuficiente"""
         distance = episode_results.get('distance', 0)
+        alternating = episode_results.get('alternating', False)
         # Ativa IRL de propulsão
         if distance < 0.5:  
             self.activate_propulsion_irl()
-        elif distance > 2 and distance < 4:
+        elif distance < 1:
             self.activate_stabilization_irl()
+        elif distance < 2 and not alternating:
+            self.activate_coordination_focus()
         else:
             self.critic.weights.irl_influence = max(0.1, self.critic.weights.irl_influence - 0.01)
         
@@ -786,7 +805,7 @@ class DPGManager:
         self.critic.weights.stability = 0.04
         self.critic.weights.coordination = 0.005
         self.critic.weights.efficiency = 0.005
-        self.critic.weights.irl_influence = 0.95
+        self.critic.weights.irl_influence = 0.5
 
         self.valence_manager.irl_weights = propulsion_irl_weights
 
@@ -809,6 +828,24 @@ class DPGManager:
             return
         self.critic.weights.irl_influence = min(self.critic.weights.irl_influence + 0.1, 0.4)
    
+    def activate_coordination_focus(self):
+        """ATIVA FOCO MÁXIMO EM COORDENAÇÃO"""
+        coordination_irl_weights = {
+            'coordination': 0.70,      
+            'propulsion': 0.20,          
+            'stability': 0.08,        
+            'efficiency': 0.02         
+        }
+
+        # FORÇAR pesos do critic para coordenação
+        self.critic.weights.coordination = 0.80
+        self.critic.weights.propulsion = 0.15
+        self.critic.weights.stability = 0.04
+        self.critic.weights.efficiency = 0.01
+        self.critic.weights.irl_influence = 0.1  
+
+        self.valence_manager.irl_weights = coordination_irl_weights
+    
     def _get_adaptive_config(self):
         """Retorna configuração para preservação adaptativa"""
         valence_status = self.valence_manager.get_valence_status()
@@ -845,37 +882,32 @@ class DPGManager:
             self.current_group = new_group
     
     def update_crutch_system(self, episode_results):
-        """SISTEMA DE CRUTCH PARA 10.000 EPISÓDIOS"""
+        """SISTEMA DE CRUTCH MAIS AGRESSIVO"""
         distance = max(episode_results.get('distance', 0), 0)
 
-        # PROGRESSÃO MAIS GRADUAL PARA 10.000 EPISÓDIOS
-        if self.episode_count < 1500:
-            new_level = 0.95  # MÁXIMA AJUDA
-        elif self.episode_count < 3000:
-            new_level = 0.85
-        elif self.episode_count < 4500:
-            new_level = 0.75
+        if self.episode_count < 800:  
+            new_level = 0.8  
+        elif self.episode_count < 1500:
+            new_level = 0.6  
+        elif self.episode_count < 2500:
+            new_level = 0.4  
+        elif self.episode_count < 4000:
+            new_level = 0.25 
         elif self.episode_count < 6000:
-            new_level = 0.65
-        elif self.episode_count < 7500:
-            new_level = 0.5
-        elif self.episode_count < 9000:
-            new_level = 0.3
+            new_level = 0.15 
         else:
-            new_level = 0.1  # MÍNIMA AJUDA
+            new_level = 0.05 
 
-        # AJUSTE DINÂMICO BASEADO EM PERFORMANCE
+        # REDUÇÃO BASEADA EM PERFORMANCE REAL
         valence_status = self.valence_manager.get_valence_status()
-        mastered_count = sum(1 for details in valence_status['valence_details'].values() 
-                            if details['state'] == 'mastered')
+        movimento_level = valence_status['valence_details'].get('movimento_basico', {}).get('current_level', 0)
 
-        # REDUÇÃO ACELERADA SE ESTIVER INDO BEM
-        if mastered_count >= 3:
+        if movimento_level > 0.5:
+            new_level *= 0.7  
+        elif distance > 1.0:
             new_level *= 0.8
-        elif distance > 2.0:  # BOM DESEMPENHO
-            new_level *= 0.9
 
-        self.crutches["level"] = max(new_level, 0.05)  # Mínimo 5% de ajuda
+        self.crutches["level"] = max(new_level, 0.02)  
         self._update_crutch_stage()
 
     def _update_crutch_stage(self):
