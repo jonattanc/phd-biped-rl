@@ -120,12 +120,15 @@ class RewardCalculator:
         """BÔNUS MASSIVO para a sequência correta da marcha"""
         bonus = 1.0
 
-        # 1. Verificar inclinação do tronco para frente
+        # 1. Verificar inclinação do tronco para frente (adaptativa para rampas)
         pitch = getattr(sim, "robot_pitch", 0)
-        if pitch > 0.05:  
-            bonus += 50.0
+        # Em rampas, a inclinação ideal muda - ser mais permissivo
+        if pitch > 0.03:  # Limite mais baixo para acomodar rampas
+            bonus += 40.0
+        elif pitch < -0.08:  # Penalizar inclinação excessiva para trás (especialmente em rampas descendentes)
+            bonus -= 30.0
 
-        # 2. Verificar movimento alternado das pernas
+        # 2. Verificar movimento alternado das pernas (CRUCIAL em todos os terrenos)
         left_hip = getattr(sim, "robot_left_hip_angle", 0)
         right_hip = getattr(sim, "robot_right_hip_angle", 0)
         hip_difference = abs(left_hip - right_hip)
@@ -135,85 +138,158 @@ class RewardCalculator:
         elif hip_difference > 0.2:
             bonus += 40.0
 
-        # 3. Bônus por velocidade positiva consistente
+        # 3. Bônus por velocidade positiva consistente (adaptado para terrenos difíceis)
         velocity = getattr(sim, "robot_x_velocity", 0)
-        if velocity > 0.1:
-            bonus += velocity * 50.0
+        if velocity > 0.05:  # Limite mais baixo para terrenos difíceis
+            bonus += velocity * 40.0  # Reduzido para não penalizar muito em terrenos difíceis
 
-        # 4. PENALIDADE POR PERNAS MUITO ABERTAS (equilíbrio estático)
+        # 4. PENALIDADE POR PERNAS MUITO ABERTAS (mas menos severa para terrenos instáveis)
         left_hip_lateral = abs(getattr(sim, "robot_left_hip_lateral_angle", 0))
         right_hip_lateral = abs(getattr(sim, "robot_right_hip_lateral_angle", 0))
 
-        if left_hip_lateral > 0.6 or right_hip_lateral > 0.6:
-            bonus -= 50.0  
+        # Em terrenos instáveis (granulado), pernas mais abertas podem ser necessárias
+        if left_hip_lateral > 0.7 or right_hip_lateral > 0.7:  # Threshold aumentado
+            bonus -= 30.0  # Penalidade reduzida
 
-        # 5. BÔNUS por FASE DE VOO (marcha dinâmica)
+        # 5. BÔNUS por FASE DE VOO (marcha dinâmica) - crucial para todos os terrenos
         left_contact = getattr(sim, "robot_left_foot_contact", False)
         right_contact = getattr(sim, "robot_right_foot_contact", False)
 
         if not left_contact and not right_contact:
             bonus += 25.0 
 
-        # 6. BÔNUS POR FLEXÃO DOS JOELHOS PARA CIMA (DURANTE BALANÇO)
+        # 6. BÔNUS POR FLEXÃO DOS JOELHOS PARA CIMA (ESSENCIAL para clearance em terrenos irregulares)
         left_knee = getattr(sim, "robot_left_knee_angle", 0)
         right_knee = getattr(sim, "robot_right_knee_angle", 0)
 
         # JOELHO ESQUERDO FLEXIONADO PARA CIMA durante balanço
         if not left_contact:
-            if left_knee > 1.2:  
-                bonus += 60.0
-            elif left_knee > 0.9:  
-                bonus += 40.0
-            elif left_knee > 0.6:  
-                bonus += 20.0
-            elif left_knee > 0.3:  
-                bonus += 10.0
+            if left_knee > 1.2:  # FLEXÃO ALTA (joelho bem erguido)
+                bonus += 70.0  # Aumentado para terrenos irregulares
+            elif left_knee > 0.9:  # FLEXÃO BOA
+                bonus += 50.0  # Aumentado
+            elif left_knee > 0.6:  # FLEXÃO MÍNIMA
+                bonus += 25.0
+            elif left_knee > 0.3:  # PEQUENA FLEXÃO
+                bonus += 12.0
 
         # JOELHO DIREITO FLEXIONADO PARA CIMA durante balanço  
         if not right_contact:
-            if right_knee > 1.2:  
-                bonus += 60.0
-            elif right_knee > 0.9:  
-                bonus += 40.0
-            elif right_knee > 0.6:  
-                bonus += 20.0
-            elif right_knee > 0.3:  
-                bonus += 10.0
+            if right_knee > 1.2:  # FLEXÃO ALTA (joelho bem erguido)
+                bonus += 70.0  # Aumentado para terrenos irregulares
+            elif right_knee > 0.9:  # FLEXÃO BOA
+                bonus += 50.0  # Aumentado
+            elif right_knee > 0.6:  # FLEXÃO MÍNIMA
+                bonus += 25.0
+            elif right_knee > 0.3:  # PEQUENA FLEXÃO
+                bonus += 12.0
 
-        # 7. BÔNUS POR CLEARANCE ADEQUADO DOS PÉS 
+        # 7. BÔNUS POR CLEARANCE ADEQUADO DOS PÉS (CRÍTICO para terrenos irregulares)
         left_foot_height = getattr(sim, "robot_left_foot_height", 0)
         right_foot_height = getattr(sim, "robot_right_foot_height", 0)
 
-        # Pé esquerdo com clearance adequado durante balanço
-        if not left_contact and left_foot_height > 0.08:  
-            bonus += 25.0
-        elif not left_contact and left_foot_height > 0.05:  
-            bonus += 12.0
+        # Clearance MAIS IMPORTANTE em terrenos irregulares
+        if not left_contact:
+            if left_foot_height > 0.10:  # 10cm de clearance (aumentado para terrenos irregulares)
+                bonus += 35.0
+            elif left_foot_height > 0.07:  # 7cm de clearance
+                bonus += 20.0
+            elif left_foot_height > 0.04:  # 4cm de clearance mínimo
+                bonus += 8.0
 
-        # Pé direito com clearance adequado durante balanço
-        if not right_contact and right_foot_height > 0.08:  
-            bonus += 25.0
-        elif not right_contact and right_foot_height > 0.05:  
-            bonus += 12.0
+        if not right_contact:
+            if right_foot_height > 0.10:  # 10cm de clearance (aumentado para terrenos irregulares)
+                bonus += 35.0
+            elif right_foot_height > 0.07:  # 7cm de clearance
+                bonus += 20.0
+            elif right_foot_height > 0.04:  # 4cm de clearance mínimo
+                bonus += 8.0
 
-        # 8. BÔNUS COMBINADO: Joelho erguido + Clearance (VOLTEI!)
+        # 8. BÔNUS COMBINADO: Joelho erguido + Clearance (MAIS IMPORTANTE em terrenos irregulares)
         if ((not left_contact and left_knee > 0.7 and left_foot_height > 0.06) or
             (not right_contact and right_knee > 0.7 and right_foot_height > 0.06)):
-            bonus += 35.0  # Bônus extra por coordenação completa
+            bonus += 45.0  # Bônus extra aumentado para coordenação completa
 
-        # 9. BÔNUS EXTRA POR COORDENAÇÃO: Joelho flexionado + Quadril estendido
-        if not left_contact and left_knee > 0.8 and left_hip < -0.1:  # Joelho flexionado + quadril para trás
-            bonus += 30.0
-        if not right_contact and right_knee > 0.8 and right_hip < -0.1:  # Joelho flexionado + quadril para trás
-            bonus += 30.0
+        # 9. BÔNUS POR ADAPTAÇÃO A BLOQUEIOS ARTICULARES
+        # Detectar movimento suave mesmo com possíveis bloqueios
+        joint_velocities = getattr(sim, "joint_velocities", [])
+        if joint_velocities:
+            avg_joint_velocity = np.mean(np.abs(joint_velocities))
+            # Movimento suave é recompensado (indica adaptação a bloqueios)
+            if avg_joint_velocity > 0.1 and avg_joint_velocity < 0.8:  # Nem muito lento, nem muito rápido
+                bonus += 20.0
 
-        # 10. BÔNUS POR PADRÃO ALTERNADO DE FLEXÃO DOS JOELHOS
+        # 10. BÔNUS POR ESTABILIDADE EM SUPERFÍCIES DE BAIXO ATRITO
+        # Verificar se está mantendo trajetória estável mesmo com baixo atrito
+        y_velocity = abs(getattr(sim, "robot_y_velocity", 0))
+        if y_velocity < 0.2:  # Baixa velocidade lateral indica boa estabilidade
+            bonus += 15.0
+
+        # 11. BÔNUS POR RECUPERAÇÃO DE EQUILÍBRIO (importante para terrenos irregulares)
+        roll = abs(getattr(sim, "robot_roll", 0))
+        pitch_abs = abs(pitch)
+
+        # Recompensar por manter equilíbrio apesar de perturbações
+        if roll < 0.3 and pitch_abs < 0.4:  # Boa estabilidade angular
+            bonus += 20.0
+
+        # 12. BÔNUS POR PADRÃO ALTERNADO DE FLEXÃO DOS JOELHOS
         if (not left_contact and left_knee > 0.7 and 
             right_contact and right_knee < 0.3):  # Esquerdo flexionado, direito estendido
             bonus += 25.0
         if (not right_contact and right_knee > 0.7 and 
             left_contact and left_knee < 0.3):  # Direito flexionado, esquerdo estendido
             bonus += 25.0
+
+        # 13. BÔNUS POR FLEXÃO DOS PÉS (NOVO - CRÍTICO PARA TRABALHO EM RAMPAS)
+        left_foot_pitch = getattr(sim, "robot_left_foot_pitch", 0)
+        right_foot_pitch = getattr(sim, "robot_right_foot_pitch", 0)
+
+        # FLEXÃO PLANTAR (ponta do pé para baixo) durante apoio - MELHOR TRAÇÃO
+        if left_contact and left_foot_pitch > 0.1:  # Pé esquerdo com flexão plantar
+            bonus += 35.0
+        elif left_contact and left_foot_pitch > 0.05:
+            bonus += 20.0
+
+        if right_contact and right_foot_pitch > 0.1:  # Pé direito com flexão plantar
+            bonus += 35.0
+        elif right_contact and right_foot_pitch > 0.05:
+            bonus += 20.0
+
+        # 14. BÔNUS POR PRONAÇÃO/SUPINAÇÃO DOS PÉS (NOVO - ESTABILIDADE EM RAMPAS)
+        left_foot_roll = getattr(sim, "robot_left_foot_roll", 0)
+        right_foot_roll = getattr(sim, "robot_right_foot_roll", 0)
+
+        # Pés com inclinação lateral controlada (nem muita pronação nem supinação)
+        left_foot_stability = 1.0 - min(abs(left_foot_roll) / 0.3, 1.0)  # Ideal: roll próximo de 0
+        right_foot_stability = 1.0 - min(abs(right_foot_roll) / 0.3, 1.0)
+
+        bonus += left_foot_stability * 20.0  # Até +20 por pé estável
+        bonus += right_foot_stability * 20.0
+
+        # 15. BÔNUS POR CONTATO FIRME COM O SOLO (NOVO - IMPORTANTE EM RAMPAS)
+        # Pés com orientação adequada para máximo contato
+        if left_contact and abs(left_foot_pitch - 0.15) < 0.1:  # Ângulo ideal para rampas
+            bonus += 25.0
+        if right_contact and abs(right_foot_pitch - 0.15) < 0.1:
+            bonus += 25.0
+
+        # 16. BÔNUS COMBINADO: Joelho flexionado + Pé com flexão plantar
+        if ((not left_contact and left_knee > 0.8) and 
+            (right_contact and right_foot_pitch > 0.08)):
+            bonus += 40.0  # Coordenação perfeita para rampas
+
+        if ((not right_contact and right_knee > 0.8) and 
+            (left_contact and left_foot_pitch > 0.08)):
+            bonus += 40.0
+
+        # 17. BÔNUS POR PADRÃO ALTERNADO COM ADAPTAÇÃO À RAMPA
+        if (not left_contact and left_knee > 0.7 and 
+            right_contact and right_foot_pitch > 0.06):  # Esquerdo balanço, direito tração
+            bonus += 30.0
+        if (not right_contact and right_knee > 0.7 and 
+            left_contact and left_foot_pitch > 0.06):  # Direito balanço, esquerdo tração
+            bonus += 30.0
 
         return bonus
 
@@ -896,6 +972,6 @@ class CachedRewardCalculator(RewardCalculator):
     
     def get_cache_stats(self) -> Dict:
         """Retorna estatísticas do cache para monitoramento"""
-        if hasattr(self.cache, 'get_stats'):
+        if hasattr(self, 'cache') and hasattr(self.cache, 'get_stats'):
             return self.cache.get_stats()
-        return {"cache_status": "active", "cache_size": "unknown"}
+        return {"hit_rate": 0.0, "hits": 0, "misses": 0, "size": 0}
