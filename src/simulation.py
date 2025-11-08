@@ -379,7 +379,7 @@ class Simulation(gym.Env):
         except Exception as e:
             self.logger.exception("Erro ao transmitir dados do episódio")
 
-        if self.episode_count % 10 == 0:
+        if self.episode_count % 100 == 0:
             self.logger.info(f"Episódio {self.episode_count} concluído")
 
     def apply_action(self, action):
