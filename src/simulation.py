@@ -272,6 +272,7 @@ class Simulation(gym.Env):
         self.episode_steps = 0
         self.episode_info = {}
         self.joint_lock_timers = [0] * self.action_dim
+        self.target_positions = [0] * self.action_dim
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -397,7 +398,7 @@ class Simulation(gym.Env):
         joint_positions, joint_velocities = self.robot.get_joint_states()
 
         max_step_size = self.max_motor_velocity * self.time_step_s
-        target_positions = [current_angle + action_value * max_step_size for current_angle, action_value in zip(joint_positions, action)]
+        self.target_positions = [current_angle + action_value * max_step_size for current_angle, action_value in zip(joint_positions, action)]
 
         if self.environment.name == "PRB":
             for i in range(self.action_dim):
@@ -408,7 +409,7 @@ class Simulation(gym.Env):
                     self.joint_lock_timers[i] = self.lock_duration_steps
 
                 if self.joint_lock_timers[i] > 0:
-                    target_positions[i] = joint_positions[i]
+                    self.target_positions[i] = joint_positions[i]
 
         forces = [self.max_motor_torque] * self.action_dim
 
@@ -416,7 +417,7 @@ class Simulation(gym.Env):
             bodyIndex=self.robot.id,
             jointIndices=self.robot.revolute_indices,
             controlMode=p.POSITION_CONTROL,
-            targetPositions=target_positions,
+            targetPositions=self.target_positions,
             forces=forces,
             positionGains=[0.5] * self.action_dim,
         )
@@ -561,6 +562,7 @@ class Simulation(gym.Env):
             self.add_episode_metrics("joint_velocities", self.joint_velocities)
             self.add_episode_metrics("episode_distance", self.episode_distance)
             self.add_episode_metrics("joint_lock_timers", self.joint_lock_timers)
+            self.add_episode_metrics("target_positions", self.target_positions)
 
         # Coletar info final quando o episódio terminar
         if self.episode_done:
