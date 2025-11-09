@@ -421,10 +421,10 @@ class Robot:
                 ramp_height = 0
 
             elif x < self.ramp_end:
-                ramp_height = self.ramp_signal * (x - self.ramp_start) * math.tan(self.ramp_angle_rad)
+                ramp_height = -self.ramp_signal * (x - self.ramp_start) * math.tan(self.ramp_angle_rad)
 
             else:
-                ramp_height = self.ramp_signal * self.ramp_height
+                ramp_height = -self.ramp_signal * self.ramp_height
 
             return z + ramp_height
 
