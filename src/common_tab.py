@@ -211,6 +211,9 @@ class GUITab:
         if self.env_var.get() == "PBA":
             environment_settings["middle_link"] = {"lateral_friction": 0.85, "spinning_friction": 0.425, "rolling_friction": 0.001, "restitution": 0.0}
 
+        elif self.env_var.get() == "PRA" or self.env_var.get() == "PRD":
+            environment_settings["middle_link"] = {"lateral_friction": 10.0, "spinning_friction": 2.0, "rolling_friction": 0.01, "restitution": 0.0}
+
         self.logger.info(f"environment_settings: {environment_settings}")
         return environment_settings
 
