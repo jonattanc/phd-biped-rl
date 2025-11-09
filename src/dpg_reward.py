@@ -256,7 +256,7 @@ class RewardCalculator:
         elif right_contact and right_foot_pitch > 0.05:
             bonus += 20.0
 
-        # 14. BÔNUS POR PRONAÇÃO/SUPINAÇÃO DOS PÉS (NOVO - ESTABILIDADE EM RAMPAS)
+        # 14. BÔNUS POR PRONAÇÃO/SUPINAÇÃO DOS PÉS (ESTABILIDADE EM RAMPAS)
         left_foot_roll = getattr(sim, "robot_left_foot_roll", 0)
         right_foot_roll = getattr(sim, "robot_right_foot_roll", 0)
 
@@ -267,7 +267,7 @@ class RewardCalculator:
         bonus += left_foot_stability * 20.0  # Até +20 por pé estável
         bonus += right_foot_stability * 20.0
 
-        # 15. BÔNUS POR CONTATO FIRME COM O SOLO (NOVO - IMPORTANTE EM RAMPAS)
+        # 15. BÔNUS POR CONTATO FIRME COM O SOLO
         # Pés com orientação adequada para máximo contato
         if left_contact and abs(left_foot_pitch - 0.15) < 0.1:  # Ângulo ideal para rampas
             bonus += 25.0
@@ -290,6 +290,24 @@ class RewardCalculator:
         if (not right_contact and right_knee > 0.7 and 
             left_contact and left_foot_pitch > 0.06):  # Direito balanço, esquerdo tração
             bonus += 30.0
+
+        # 16. BÔNUS ESPECÍFICO PARA COORDENAÇÃO EM RAMPAS
+        pitch = getattr(sim, "robot_pitch", 0)
+        if abs(pitch) > 0.15:  
+            left_contact = getattr(sim, "robot_left_foot_contact", False)
+            right_contact = getattr(sim, "robot_right_foot_contact", False)
+
+            # BÔNUS MASSIVO por padrão alternado em rampas
+            if left_contact != right_contact:
+                bonus += 80.0  
+
+            # BÔNUS por adaptação à inclinação
+            if pitch > 0:  
+                # Flexão adequada de joelhos para subida
+                left_knee = getattr(sim, "robot_left_knee_angle", 0)
+                right_knee = getattr(sim, "robot_right_knee_angle", 0)
+                if (not left_contact and left_knee > 0.8) or (not right_contact and right_knee > 0.8):
+                    bonus += 40.0
 
         return bonus
 

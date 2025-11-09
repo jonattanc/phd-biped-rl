@@ -772,7 +772,10 @@ class DPGManager:
         """Ativação AGRESSIVA de IRL quando movimento é insuficiente"""
         distance = episode_results.get('distance', 0)
         alternating = episode_results.get('alternating', False)
-        self.valence_manager.get_valence_status()
+        pitch = abs(episode_results.get('pitch', 0))
+        valence_status = self.valence_manager.get_valence_status()
+        movimento_level = valence_status['valence_details'].get('movimento_basico', {}).get('current_level', 0)
+        coordenacao_level = valence_status['valence_details'].get('coordenacao_fundamental', {}).get('current_level', 0)
     
         # SÓ ativa IRL se critic não estiver já focando no mesmo componente
         current_focus = max([
@@ -781,6 +784,12 @@ class DPGManager:
             ('stability', self.critic.weights.stability)
         ], key=lambda x: x[1])
 
+        if pitch > 0.15 and not alternating:
+            self.activate_coordination_focus()
+        
+        if movimento_level > 0.6 and coordenacao_level < 0.3:
+            self.activate_coordination_focus()
+        
         # Se critic já está focado em propulsão, NÃO ativa IRL de propulsão
         if current_focus[0] == 'propulsion' and current_focus[1] > 0.7:
             if distance < 0.5:
@@ -836,18 +845,18 @@ class DPGManager:
     def activate_coordination_focus(self):
         """ATIVA FOCO MÁXIMO EM COORDENAÇÃO"""
         coordination_irl_weights = {
-            'coordination': 0.70,      
-            'propulsion': 0.20,          
-            'stability': 0.08,        
-            'efficiency': 0.02         
+            'coordination': 0.60,      
+            'propulsion': 0.25,          
+            'stability': 0.12,        
+            'efficiency': 0.03         
         }
 
         # FORÇAR pesos do critic para coordenação
-        self.critic.weights.coordination = 0.80
-        self.critic.weights.propulsion = 0.15
-        self.critic.weights.stability = 0.04
-        self.critic.weights.efficiency = 0.01
-        self.critic.weights.irl_influence = 0.1  
+        self.critic.weights.coordination = 0.65
+        self.critic.weights.propulsion = 0.25
+        self.critic.weights.stability = 0.08
+        self.critic.weights.efficiency = 0.02
+        self.critic.weights.irl_influence = 0.15  
 
         self.valence_manager.irl_weights = coordination_irl_weights
     
@@ -993,10 +1002,9 @@ class DPGManager:
         critic_weights = self.critic.weights
         self.logger.info(f"   Estabilidade: {critic_weights.stability:.3f} | Propulsão: {critic_weights.propulsion:.3f}")
         self.logger.info(f"   Coordenação: {critic_weights.coordination:.3f} | Eficiência: {critic_weights.efficiency:.3f}")
-        self.logger.info(f"   Influência IRL: {critic_weights.irl_influence:.1%}")
 
         # SEÇÃO 2: SISTEMA IRL (Aprendizado por Reforço Inverso)
-        self.logger.info("🔍 SISTEMA IRL (Preferências):")
+        self.logger.info(f"🔍 SISTEMA IRL com {critic_weights.irl_influence:.1%} de influência (Preferências):")
         if irl_weights:
             irl_total = sum(irl_weights.values())
             if irl_total > 0:
@@ -1004,11 +1012,10 @@ class DPGManager:
                 self.logger.info(f"   Eficiência: {irl_weights.get('efficiency', 0):.3f} | Coordenação: {irl_weights.get('coordination', 0):.3f}")
 
         # SEÇÃO 3: SISTEMA DE MULETAS
-        self.logger.info("🦯 SISTEMA DE MULETAS (Suporte):")
         crutch_stage_names = ["MÁXIMO", "ALTO", "MÉDIO", "BAIXO", "MÍNIMO"]
         stage_idx = self.crutches["current_stage"]
-        self.logger.info(f"   Nível: {self.crutches['level']:.3f} | Estágio: {crutch_stage_names[stage_idx]}")
-        self.logger.info(f"   Multiplicador: {self.crutches['base_reward_boost'] * self.crutches['level']:.2f}x")
+        self.logger.info(f"🦯 SISTEMA DE MULETAS (Suporte) no estágio {crutch_stage_names[stage_idx]}")
+        self.logger.info(f"   Nível: {self.crutches['level']:.3f} | Multiplicador: {self.crutches['base_reward_boost'] * self.crutches['level']:.2f}x")
 
         # SEÇÃO 4: MISSÕES ATIVAS
         if valence_status["current_missions"]:
@@ -1064,15 +1071,14 @@ class DPGManager:
             self.logger.info("   ⚠️  Nenhuma valência ativa ainda")
 
         # SEÇÃO 6: RECOMPENSAS E EFICIÊNCIA
-        self.logger.info("💰 SISTEMA DE RECOMPENSAS:")
+        self.logger.info("💰 SISTEMA DE RECOMPENSAS (média):")
         avg_reward = buffer_status.get('avg_reward', 0)
         avg_quality = buffer_status.get('avg_quality', 0)
 
         reward_efficiency = "ALTA" if avg_reward > 50 else "MÉDIA" if avg_reward > 20 else "BAIXA"
         quality_efficiency = "ALTA" if avg_quality > 0.7 else "MÉDIA" if avg_quality > 0.4 else "BAIXA"
 
-        self.logger.info(f"   Recompensa média: {avg_reward:.1f} ({reward_efficiency})")
-        self.logger.info(f"   Qualidade média: {avg_quality:.1%} ({quality_efficiency})")
+        self.logger.info(f"   Recompensa: {avg_reward:.1f} ({reward_efficiency})| Qualidade: {avg_quality:.1%} ({quality_efficiency})")
 
         # Cache performance se disponível
         if cache_stats and 'hit_rate' in cache_stats:

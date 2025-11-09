@@ -179,11 +179,11 @@ class ValenceManager:
                 target_level=0.6,
                 metrics=["alternating_consistency", "step_length_consistency", "gait_pattern_score"],
                 reward_components=["coordination", "rhythm", "gait_pattern"],
-                dependencies=["propulsao_basica", "estabilidade_postural"],
-                activation_threshold=0.35,
+                dependencies=["movimento_basico"],  
+                activation_threshold=0.25,  
                 mastery_threshold=0.5,
                 regression_threshold=0.3,
-                min_episodes=25
+                min_episodes=15  
             ),
 
             # FASE 5: Eficiência Biomecânica (Episódios 2500-6000)
@@ -303,17 +303,16 @@ class ValenceManager:
                 return 0.0 
 
             # Escala mais realista baseada em performance real
-            if distance > 2.0: return 0.9
-            if distance > 1.5: return 0.8
-            if distance > 1.0: return 0.7
-            if distance > 0.7: return 0.6
+            if distance > 1.5: return 0.9
+            if distance > 1.0: return 0.8
+            if distance > 0.7: return 0.7
+            if distance > 0.6: return 0.6
             if distance > 0.5: return 0.5
-            if distance > 0.3: return 0.4
-            if distance > 0.2: return 0.3
-            if distance > 0.1: return 0.2
-            if distance > 0.05: return 0.15
-            if distance > 0.02: return 0.1
-            return 0.05
+            if distance > 0.4: return 0.4
+            if distance > 0.3: return 0.3
+            if distance > 0.2: return 0.2
+            if distance > 0.1: return 0.15
+            return 0.1
 
         # ESTABILIDADE POSTURAL
         elif valence_name == "estabilidade_postural":
@@ -348,18 +347,26 @@ class ValenceManager:
         elif valence_name == "coordenacao_fundamental":
             alternating = results.get("alternating", False)
             movimento_level = self.valence_performance["movimento_basico"].current_level
-            propulsao_level = self.valence_performance["propulsao_basica"].current_level
 
-            if movimento_level < 0.5 or propulsao_level < 0.3:
-                return 0.0
+            # CONDIÇÃO MAIS PERMISSIVA - ativar mais cedo
+            if movimento_level >= 0.3:  # Reduzido de 0.5
+                base_level = 0.4  # Base mais alta
 
-            base_level = 0.3
-            if alternating:
-                base_level += 0.4
-            if results.get("gait_pattern_score", 0) > 0.6:
-                base_level += 0.2
+                if alternating:
+                    base_level += 0.4  # Bônus maior por padrão alternado
 
-            return min(base_level, 0.9)
+                gait_score = results.get("gait_pattern_score", 0)
+                if gait_score > 0.5:
+                    base_level += 0.2
+
+                # BÔNUS POR MOVIMENTO EM RAMPA
+                pitch = abs(results.get("pitch", 0))
+                if pitch > 0.2:  # Inclinação de rampa
+                    base_level += 0.3  # Bônus extra para coordenação em rampas
+
+                return min(base_level, 0.9)
+
+            return 0.0
 
         # EFICIÊNCIA BIOMECÂNICA
         elif valence_name == "eficiencia_biomecanica":
