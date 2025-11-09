@@ -175,93 +175,8 @@ class PrioritizedBuffer:
                 min(experience.reward * 0.1, 0.3) + 
                 sum(experience.skills.values()) * 0.1)
 
-class SkillTransferMap:
-    """Mapeamento de habilidades transferíveis entre grupos"""
-    
-    def __init__(self):
-        self.skill_transfer_rules = {
-            # Fundação → Desenvolvimento
-            (1, 2): {
-                "transferable_skills": ["estabilidade", "controle_postural", "progresso_basico", "coordenação"],
-                "skill_weights": {"estabilidade": 0.4, "controle_postural": 0.3, "progresso_basico": 0.2, "coordenação": 0.1},
-                "relevance_threshold": 0.5
-            },
-            # Desenvolvimento → Domínio
-            (2, 3): {
-                "transferable_skills": ["coordenação", "controle_velocidade", "eficiência", "estabilidade"],
-                "skill_weights": {"coordenação": 0.3, "controle_velocidade": 0.3, "eficiência": 0.2, "estabilidade": 0.1},
-                "relevance_threshold": 0.6
-            },
-            # Regressões
-            (2, 1): {
-                "transferable_skills": ["estabilidade", "controle_postural", "progresso_basico"],
-                "skill_weights": {"estabilidade": 0.5, "controle_postural": 0.3, "progresso_basico": 0.2},
-                "relevance_threshold": 0.5 
-            },
-            (3, 2): {
-                "transferable_skills": ["coordenação", "eficiência", "estabilidade"],
-                "skill_weights": {"coordenação": 0.4, "eficiência": 0.3, "estabilidade": 0.3},
-                "relevance_threshold": 0.6 
-            }
-        }
-    
-    def get_transfer_rules(self, old_group: int, new_group: int) -> Dict:
-        """Obtém regras de transferência para transição"""
-        if old_group == new_group:
-            return {
-                "transferable_skills": ["estabilidade", "controle_postural", "progresso_basico", "coordenação", "eficiência", "controle_velocidade"],
-                "skill_weights": {
-                    "estabilidade": 0.2, 
-                    "controle_postural": 0.2, 
-                    "progresso_basico": 0.2, 
-                    "coordenação": 0.15, 
-                    "eficiência": 0.15,
-                    "controle_velocidade": 0.1
-                },
-                "relevance_threshold": 0.3  
-            }
-        
-        return self.skill_transfer_rules.get((old_group, new_group), {
-            "transferable_skills": ["estabilidade", "controle_postural", "progresso_basico"],
-            "skill_weights": {"estabilidade": 0.4, "controle_postural": 0.4, "progresso_basico": 0.2},
-            "relevance_threshold": 0.5  
-        })
-    
-    def calculate_skill_relevance(self, experience: Experience, target_group: int) -> float:
-        """Calcula relevância da experiência para o grupo alvo - CORRIGIDO"""
-        rules = self.get_transfer_rules(experience.group, target_group)
 
-        if not rules["transferable_skills"]:
-            return 0.0
-
-        relevance = 0.0
-        total_weight = 0.0
-
-        # Itera sobre skills transferíveis
-        for skill in rules["transferable_skills"]:
-            weight = rules["skill_weights"].get(skill, 0.0)
-            skill_value = experience.skills.get(skill, 0.0)
-            relevance += skill_value * weight
-            total_weight += weight
-
-        # Normaliza pela soma dos pesos
-        if total_weight > 0:
-            relevance /= total_weight
-
-        # Bônus por qualidade
-        if experience.quality > 0.8:
-            relevance *= 1.3  
-        elif experience.quality > 0.6:
-            relevance *= 1.1  
-
-        # Bônus adicional para transições entre grupos próximos
-        group_diff = abs(experience.group - target_group)
-        if group_diff == 1:  
-            relevance *= 1.2
-
-        return min(relevance, 1.0)
-
-class OptimizedBufferManager:
+class BufferManager:
     """BUFFER DE ALTA PERFORMANCE"""
     
     def __init__(self, logger, config, max_experiences=50000):
@@ -283,7 +198,6 @@ class OptimizedBufferManager:
         # Sistemas de otimização
         self.quality_cache = QualityCache(max_size=1000)
         self.state_compressor = StateCompressor()
-        self.skill_map = SkillTransferMap()
         
         # Estatísticas
         self.episode_count = 0
@@ -415,33 +329,6 @@ class OptimizedBufferManager:
             self.logger.warning(f"Erro em _should_store: {e}")
             return True  # Em caso de erro, armazena por segurança
 
-    def _is_fundamental_skill(self, experience: Experience) -> bool:
-        """Habilidades fundamentais CORRIGIDAS"""
-        metrics = experience.info.get("metrics", {})
-        distance = max(metrics.get("distance", 0), 0)
-
-        # Foco em movimento POSITIVO com estabilidade
-        return (distance > 0.2 and 
-                experience.skills.get("estabilidade", 0) > 0.5 and
-                experience.skills.get("progresso_basico", 0) > 0.3)
-    
-    def _is_novel_experience(self, experience: Experience) -> bool:
-        """Verifica se experiência é nova/diversa"""
-        # Implementação simplificada - verifica similaridade com recentes
-        recent_experiences = self._get_recent_experiences(20)
-        if not recent_experiences:
-            return True
-            
-        similarities = []
-        for exp in recent_experiences:
-            exp_state = np.array(exp.state)
-            current_state = np.array(experience.state)
-            sim = np.linalg.norm(current_state - exp_state)
-            similarities.append(sim)
-            
-        avg_similarity = np.mean(similarities) if similarities else 0
-        return avg_similarity > 0.3  # Considera nova se for diferente o suficiente
-    
     def _get_recent_experiences(self, count: int) -> List[Experience]:
         """Obtém experiências recentes para análise de novidade"""
         current_buffer = self.group_buffers.get(self.current_group)
@@ -658,60 +545,6 @@ class OptimizedBufferManager:
 
         return 1 
 
-    def transition_with_preservation(self, old_group: int, new_group: int, adaptive_config: Dict):
-        """Transição OTIMIZADA com preservação inteligente"""
-        self.current_group = new_group
-
-        # Garante que o buffer do grupo existe
-        if new_group not in self.group_buffers:
-            self.group_buffers[new_group] = PrioritizedBuffer(capacity=1500)
-
-        self.current_group_buffer = self.group_buffers[new_group].buffer
-
-        if old_group == new_group:
-            return
-
-        # Verifica se o grupo antigo existe e tem experiências
-        if old_group not in self.group_buffers:
-            self.logger.warning(f"Grupo antigo {old_group} não encontrado nos buffers")
-            return
-
-        old_buffer = self.group_buffers[old_group]
-
-        # Verifica se há experiências no buffer antigo
-        if not old_buffer.buffer:
-            self.logger.info(f"ℹ️  Buffer do grupo {old_group} vazio - nada para preservar")
-            return
-
-        # Preserva experiências relevantes do grupo antigo
-        relevant_experiences = []
-
-        for exp in old_buffer.buffer:
-            metrics = exp.info.get("metrics", {})
-            distance = max(metrics.get("distance", 0), 0)
-
-            # PRIORIDADE: Experiências com movimento significativo
-            movement_bonus = min(distance / 1.0, 1.0) 
-
-            relevance = self.skill_map.calculate_skill_relevance(exp, new_group)
-            adjusted_relevance = relevance * (1.0 + movement_bonus * 0.5)
-
-            if adjusted_relevance > 0.3 or exp.quality > 0.5:
-                relevant_experiences.append((exp, adjusted_relevance))
-
-        # Ordena por relevância + qualidade
-        relevant_experiences.sort(key=lambda x: (x[1] * 0.7 + x[0].quality * 0.3), reverse=True)
-
-        # Limita o número de experiências transferidas
-        transfer_limit = min(len(relevant_experiences), 200)  
-
-        preserved_count = 0
-        for exp, relevance in relevant_experiences[:transfer_limit]:
-            priority = self._calculate_experience_priority(exp) * (1.0 + relevance)
-            success = self.group_buffers[new_group].add(exp, priority)
-            if success:
-                preserved_count += 1
-
     def get_status(self):
         """Métricas CORRIGIDAS - contar TODAS as experiências"""
         try:
@@ -791,20 +624,6 @@ class OptimizedBufferManager:
         except Exception as e:
             self.logger.error(f"❌ Erro em _calculate_avg_distance: {e}")
             return 0.0
-    
-    def _calculate_avg_quality(self) -> float:
-        """Calcula qualidade média de forma eficiente"""
-        total_quality = 0.0
-        count = 0
-        
-        for buffer in self.group_buffers.values():
-            if buffer.buffer:
-                total_quality += sum(exp.quality for exp in buffer.buffer[:50])  # Amostra
-                count += min(len(buffer.buffer), 50)
-        
-        if count > 0:
-            return total_quality / count
-        return 0.0
 
     def get_metrics(self) -> Dict:
         """Métricas focadas em performance - OTIMIZADAS"""
