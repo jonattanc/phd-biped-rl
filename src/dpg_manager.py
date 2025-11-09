@@ -3,7 +3,7 @@ import numpy as np
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 from dpg_valence import ValenceManager, ValenceState
-from dpg_reward import CachedRewardCalculator
+from dpg_reward import RewardCalculator
 from dpg_buffer import BufferManager
 
 CROSS_TERRAIN_CONFIG = {
@@ -225,7 +225,7 @@ class DPGManager:
         self.config.valence_system = True
 
         self.valence_manager = ValenceManager(logger, {}) 
-        self.reward_calculator = CachedRewardCalculator(logger, {}) 
+        self.reward_calculator = RewardCalculator(logger, {}) 
         self.buffer_manager = BufferManager(logger, {})
         self.buffer_manager._dpg_manager = self
 

@@ -7,8 +7,6 @@ from collections import deque
 from functools import lru_cache
 import time
 
-from dpg_valence import ValenceState
-
 @dataclass
 class Experience:
     """Estrutura para armazenar experiências"""
@@ -33,50 +31,95 @@ class Experience:
             return False
         return self.quality == other.quality
 
-class QualityCache:
-    """Cache inteligente para cálculos de qualidade"""
+class Cache:
+    """Cache unificado com múltiplas estratégias de evição"""
     
-    def __init__(self, max_size=500):
+    def __init__(self, max_size=1000, default_ttl=100, strategy="adaptive"):
         self._cache = {}
         self._max_size = max_size
-        self._access_count = {}
-    
-    def get_quality(self, state_fingerprint: str, metrics: Dict) -> float:
-        """Obtém qualidade do cache se disponível"""
-        cache_key = self._generate_quality_key(state_fingerprint, metrics)
-        if cache_key in self._cache:
-            self._access_count[cache_key] = self._access_count.get(cache_key, 0) + 1
-            return self._cache[cache_key]
+        self._default_ttl = default_ttl
+        self._strategy = strategy
+        
+        # Estatísticas
+        self._hits = 0
+        self._misses = 0
+        self._access_pattern = {}
+        
+    def get(self, key: str) -> Any:
+        """Obtém valor do cache com verificação de TTL"""
+        if key in self._cache:
+            value, timestamp, ttl, priority = self._cache[key]
+            if time.time() - timestamp < ttl:
+                self._hits += 1
+                self._access_pattern[key] = self._access_pattern.get(key, 0) + 1
+                return value
+            else:
+                # Expirou - remover
+                del self._cache[key]
+                if key in self._access_pattern:
+                    del self._access_pattern[key]
+        
+        self._misses += 1
         return None
     
-    def set_quality(self, state_fingerprint: str, metrics: Dict, quality: float):
-        """Armazena qualidade no cache"""
-        cache_key = self._generate_quality_key(state_fingerprint, metrics)
-        
+    def set(self, key: str, value: Any, ttl: int = None, priority: float = 1.0):
+        """Armazena valor no cache com prioridade"""
         if len(self._cache) >= self._max_size:
-            self._evict_least_used()
-        
-        self._cache[cache_key] = quality
-        self._access_count[cache_key] = 1
-    
-    def _generate_quality_key(self, state_fp: str, metrics: Dict) -> str:
-        """Gera chave única para cache"""
-        essential_metrics = {
-            'distance': metrics.get('distance', 0),
-            'speed': metrics.get('speed', 0),
-            'roll': metrics.get('roll', 0),
-            'pitch': metrics.get('pitch', 0),
-            'success': metrics.get('success', False)
-        }
-        return f"{state_fp}_{str(essential_metrics)}"
-    
-    def _evict_least_used(self):
-        """Remove entradas menos usadas do cache"""
+            self._evict_entries()
+            
+        actual_ttl = ttl or self._default_ttl
+        self._cache[key] = (value, time.time(), actual_ttl, priority)
+        self._access_pattern[key] = self._access_pattern.get(key, 0) + 1
+
+    def _evict_entries(self):
+        """Estratégias de evição adaptativas"""
         if not self._cache:
             return
-        min_key = min(self._access_count.keys(), key=lambda k: self._access_count[k])
-        del self._cache[min_key]
-        del self._access_count[min_key]
+            
+        if self._strategy == "lru":
+            self._evict_lru()
+        elif self._strategy == "priority":
+            self._evict_low_priority()
+        else:  # adaptive
+            self._evict_adaptive()
+    
+    def _evict_adaptive(self):
+        """Combina frequência de acesso, idade e prioridade"""
+        def eviction_score(k):
+            value, timestamp, ttl, priority = self._cache[k]
+            age = time.time() - timestamp
+            access_count = self._access_pattern.get(k, 0)
+            # Score mais alto = mais provável de ser removido
+            return age / (access_count + 1) / (priority + 0.1)
+            
+        key_to_remove = min(self._cache.keys(), key=eviction_score)
+        del self._cache[key_to_remove]
+        if key_to_remove in self._access_pattern:
+            del self._access_pattern[key_to_remove]
+    
+    def get_stats(self) -> Dict:
+        """Estatísticas completas do cache"""
+        total = self._hits + self._misses
+        return {
+            "hits": self._hits,
+            "misses": self._misses,
+            "hit_rate": self._hits / total if total > 0 else 0.0,
+            "size": len(self._cache),
+            "max_size": self._max_size,
+            "strategy": self._strategy
+        }
+    
+    def clear_expired(self):
+        """Limpa entradas expiradas"""
+        current_time = time.time()
+        expired_keys = [
+            k for k, (_, timestamp, ttl, _) in self._cache.items()
+            if current_time - timestamp >= ttl
+        ]
+        for key in expired_keys:
+            del self._cache[key]
+            if key in self._access_pattern:
+                del self._access_pattern[key]
 
 class StateCompressor:
     """Compressor eficiente de estados para economizar memória"""
@@ -97,13 +140,6 @@ class StateCompressor:
             else:
                 return state[:8]  # Fallback
         return state
-    
-    def train_compressor(self, states: List[np.ndarray]):
-        """Treina compressor - placeholder para implementação futura"""
-        if len(states) < 50:
-            return
-        # Em uma implementação completa, aqui viria PCA incremental
-        self._is_trained = True
 
 class PrioritizedBuffer:
     """Buffer com amostragem prioritária"""
@@ -196,7 +232,7 @@ class BufferManager:
             self.current_group_buffer = []
         
         # Sistemas de otimização
-        self.quality_cache = QualityCache(max_size=1000)
+        self.quality_cache = Cache(max_size=1000)
         self.state_compressor = StateCompressor()
         
         # Estatísticas
@@ -613,17 +649,17 @@ class BufferManager:
                 "quality_calculation_working": True,
                 "error": str(e)
             }
-    
+        
     def _calculate_avg_distance(self) -> float:
-        """Calcula distância média"""
-        try:
-            status = self.get_status()
-            avg_distance = status.get("avg_distance", 0.0)
-            return avg_distance
-
-        except Exception as e:
-            self.logger.error(f"❌ Erro em _calculate_avg_distance: {e}")
-            return 0.0
+            """Calcula distância média"""
+            try:
+                status = self.get_status()
+                avg_distance = status.get("avg_distance", 0.0)
+                return avg_distance
+    
+            except Exception as e:
+                self.logger.error(f"❌ Erro em _calculate_avg_distance: {e}")
+                return 0.0
 
     def get_metrics(self) -> Dict:
         """Métricas focadas em performance - OTIMIZADAS"""

@@ -6,8 +6,8 @@ from enum import Enum
 import time
 
 class ValenceState(Enum):
-    INACTIVE = "inactive"
-    LEARNING = "learning" 
+    INACTIVE = "inative"
+    LEARNING = "learning"
     CONSOLIDATING = "consolidating"
     MASTERED = "mastered"
     REGRESSING = "regressing"
@@ -36,7 +36,7 @@ class ValenceTracker:
         self.learning_rate = 0.0
         self.consistency_score = 0.5
         self.episodes_active = 0
-        self.state = ValenceState.INACTIVE
+        self.state = ValenceState. INACTIVE
     
     def update_level(self, new_level: float, episode: int):
         """Atualiza nível com cálculo de taxa de aprendizado"""
@@ -54,7 +54,7 @@ class ValenceTracker:
             self.history.pop(0)
 
 class ValenceManager:
-    """SISTEMA DE VALÊNCIAS OTIMIZADO - Versão Unificada"""
+    """SISTEMA DE VALÊNCIAS OTIMIZADO"""
     
     def __init__(self, logger, config=None):
         self.logger = logger
@@ -255,7 +255,7 @@ class ValenceManager:
                 activation_threshold = 0.1
                 
             if current_level > activation_threshold:
-                perf.state = ValenceState.LEARNING
+                perf.state = ValenceState.LEARNING 
                 self.active_valences.add(valence_name)
             else:
                 perf.state = ValenceState.INACTIVE
