@@ -326,14 +326,18 @@ class Simulation(gym.Env):
             else:
                 key = "default"
 
-            p.changeDynamics(
-                self.environment.id,
-                link_index,
-                lateralFriction=self.environment_settings[key]["lateral_friction"],
-                spinningFriction=self.environment_settings[key]["spinning_friction"],
-                rollingFriction=self.environment_settings[key]["rolling_friction"],
-                restitution=self.environment_settings[key]["restitution"],
-            )
+            environment_selected_settings = {
+                "lateralFriction": self.environment_settings[key]["lateral_friction"],
+                "spinningFriction": self.environment_settings[key]["spinning_friction"],
+                "rollingFriction": self.environment_settings[key]["rolling_friction"],
+                "restitution": self.environment_settings[key]["restitution"],
+            }
+
+            if "contactStiffness" in self.environment_settings[key]:
+                environment_selected_settings["contactStiffness"] = self.environment_settings[key]["contactStiffness"]
+                environment_selected_settings["contactDamping"] = self.environment_settings[key]["contactDamping"]
+
+            p.changeDynamics(self.environment.id, link_index, **environment_selected_settings)
 
         # Reduzir damping para menos oscilação
         p.changeDynamics(self.robot.id, -1, linearDamping=0.04, angularDamping=0.04)
