@@ -209,7 +209,22 @@ class GUITab:
         environment_settings = {"default": {"lateral_friction": 2.0, "spinning_friction": 1.0, "rolling_friction": 0.001, "restitution": 0.0}}
 
         if self.env_var.get() == "PBA":
-            environment_settings["middle_link"] = {"lateral_friction": 0.85, "spinning_friction": 0.425, "rolling_friction": 0.001, "restitution": 0.0}
+            environment_settings["middle_link"] = {
+                "lateral_friction": 0.85,
+                "spinning_friction": 0.425,
+                "rolling_friction": environment_settings["default"]["rolling_friction"],
+                "restitution": environment_settings["default"]["restitution"],
+            }
+
+        elif self.env_var.get() == "PG":
+            environment_settings["middle_link"] = {
+                "lateral_friction": environment_settings["default"]["lateral_friction"],
+                "spinning_friction": environment_settings["default"]["spinning_friction"],
+                "rolling_friction": environment_settings["default"]["rolling_friction"],
+                "restitution": environment_settings["default"]["restitution"],
+                "contactStiffness": 1000,
+                "contactDamping": 500,
+            }
 
         elif self.env_var.get() == "PRA" or self.env_var.get() == "PRD":
             environment_settings["middle_link"] = {"lateral_friction": 10.0, "spinning_friction": 2.0, "rolling_friction": 0.01, "restitution": 0.0}
