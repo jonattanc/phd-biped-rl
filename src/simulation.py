@@ -77,6 +77,7 @@ class Simulation(gym.Env):
         self.max_steps = self.max_training_steps
         self.lock_per_second = 0.5  # lock/s
         self.lock_time = 0.5  # s
+        self.action_noise_std = 1e-3
 
         # Configurar ambiente de simulação PRIMEIRO
         self.setup_sim_env()
@@ -218,13 +219,9 @@ class Simulation(gym.Env):
         obs, _ = self.reset()
         self.metrics[str(self.episode_count + 1)] = {"step_data": {}}  # Criar espaço para primeiro episódio
 
-        noise_std = 1e-3
-
         while self.episode_count < episodes and not self.exit_value.value:
             obs = self.wrapped_env.normalize_obs(obs)
             action, _ = self.agent.model.predict(obs, deterministic=deterministic)
-            noise = np.random.normal(0, noise_std, size=action.shape)
-            action = np.clip(action + noise, -1, 1)
 
             next_obs, reward, episode_terminated, episode_truncated, info = self.step(action, evaluation=True)
             done = episode_terminated or episode_truncated
@@ -397,7 +394,8 @@ class Simulation(gym.Env):
             self.logger.info(f"Episódio {self.episode_count} concluído")
 
     def apply_action(self, action):
-        action = np.clip(action, -1.0, 1.0)
+        noise = np.random.normal(0, self.action_noise_std, size=action.shape)
+        action = np.clip(action + noise, -1, 1)
 
         joint_positions, joint_velocities = self.robot.get_joint_states()
 
