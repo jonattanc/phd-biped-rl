@@ -121,7 +121,7 @@ class Agent:
                 train_freq=(1, "step"),
                 gradient_steps=1,
                 policy_delay=3,
-                target_policy_noise=0.2,
+                target_policy_noise=0.4,
                 target_noise_clip=0.5,
                 tensorboard_log="./logs/",
                 device=device,
