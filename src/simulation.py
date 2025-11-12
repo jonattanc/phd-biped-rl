@@ -255,6 +255,7 @@ class Simulation(gym.Env):
 
     def reset_episode_vars(self):
         self.episode_reward = 0.0
+        self.episode_filtered_reward = 0.0
         self.episode_start_time = time.time()
         self.episode_robot_x_initial_position = 0.0
         self.episode_robot_y_initial_position = 0.0
@@ -353,6 +354,7 @@ class Simulation(gym.Env):
             "type": "episode_data",
             "episodes": self.episode_count,
             "rewards": self.episode_reward,
+            "rewards_filtered": self.episode_filtered_reward,
             "times": self.episode_steps * self.time_step_s,
             "steps": self.episode_steps,
             "total_steps": self.total_steps,
@@ -516,6 +518,7 @@ class Simulation(gym.Env):
         # Calcular recompensa
         reward = self.reward_system.calculate_reward(self, action)
         self.episode_reward += reward
+        self.episode_filtered_reward = 0.1 * self.episode_reward + 0.9 * self.episode_filtered_reward
 
         if self.config_changed_value.value:  # Se houve mudança de configuração
             if self.pause_value.value:

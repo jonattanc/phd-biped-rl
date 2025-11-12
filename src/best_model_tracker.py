@@ -22,28 +22,28 @@ class BestModelTracker:
         if self.sim.episode_distance > self.best_distance:
             self.best_distance = self.sim.episode_distance
 
-        if self.sim.episode_reward < self.reward_reference:
-            self.reward_reference = self.sim.episode_reward
+        if self.sim.episode_filtered_reward < self.reward_reference:
+            self.reward_reference = self.sim.episode_filtered_reward
 
         # Primeira recompensa sempre é considerada melhoria
         if self.best_reward == -float("inf"):
-            self.best_reward = self.sim.episode_reward
+            self.best_reward = self.sim.episode_filtered_reward
             self.last_improvement_steps = self.sim.total_steps
             self.steps_since_improvement = 0
             return False
 
         # Calcular melhoria percentual
-        normalized_episode_reward = self.sim.episode_reward - self.reward_reference
+        normalized_episode_filtered_reward = self.sim.episode_filtered_reward - self.reward_reference
         normalized_best_reward = self.best_reward - self.reward_reference
 
         if normalized_best_reward == 0:
             improvement = 0.0
 
         else:
-            improvement = (normalized_episode_reward - normalized_best_reward) / abs(normalized_best_reward)
+            improvement = (normalized_episode_filtered_reward - normalized_best_reward) / abs(normalized_best_reward)
 
         if improvement >= self.improvement_threshold and self.sim.total_steps >= self.sim.agent.minimum_steps_to_save:
-            self.best_reward = self.sim.episode_reward
+            self.best_reward = self.sim.episode_filtered_reward
             self.steps_since_improvement = 0
             self.last_improvement_steps = self.sim.total_steps
             self.auto_save_count += 1
