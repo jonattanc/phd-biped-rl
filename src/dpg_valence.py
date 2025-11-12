@@ -44,7 +44,7 @@ class ValenceTracker:
         self.current_level = new_level
         self.history.append((episode, new_level))
         
-        # Calcular taxa de aprendizado (suavizada)
+        # Calcular taxa de aprendizado 
         if len(self.history) > 1:
             recent_growth = new_level - old_level
             self.learning_rate = 0.8 * self.learning_rate + 0.2 * recent_growth
@@ -66,6 +66,7 @@ class ValenceManager:
         self.active_valences = set()
         self.valence_weights = {}
         self.mastery_callback = None
+        self._ensure_valence_trackers()
         
         # Estado do sistema
         self.episode_count = 0
@@ -100,7 +101,7 @@ class ValenceManager:
         
     def _initialize_valences(self) -> Dict[str, ValenceConfig]:
         return {
-            # FASE 1: Fundamentos - thresholds MAIS BAIXOS
+            # FASE 1: Fundamentos 
             "movimento_basico": ValenceConfig(
                 name="movimento_basico",
                 target_level=0.7,  
@@ -121,7 +122,7 @@ class ValenceManager:
                 metrics=["roll", "pitch", "stability", "com_height_consistency", "lateral_stability"],
                 reward_components=["stability", "posture", "dynamic_balance"],
                 dependencies=["movimento_basico"],
-                activation_threshold=0.15,   
+                activation_threshold=0.1,   
                 mastery_threshold=0.5,
                 regression_threshold=0.25,      
                 min_episodes=10
@@ -134,7 +135,7 @@ class ValenceManager:
                 metrics=["x_velocity", "velocity_consistency", "acceleration_smoothness", "distance"],
                 reward_components=["velocity", "propulsion", "basic_progress"],
                 dependencies=["movimento_basico"],
-                activation_threshold=0.25,  
+                activation_threshold=0.2,  
                 mastery_threshold=0.5,
                 regression_threshold=0.25,      
                 min_episodes=15
@@ -160,7 +161,7 @@ class ValenceManager:
                 metrics=["energy_efficiency", "stride_efficiency", "propulsion_efficiency"],
                 reward_components=["efficiency", "biomechanics", "smoothness"],
                 dependencies=["coordenacao_fundamental"],
-                activation_threshold=0.45,
+                activation_threshold=0.3,
                 mastery_threshold=0.5,
                 regression_threshold=0.3,
                 min_episodes=30
@@ -173,7 +174,7 @@ class ValenceManager:
                 metrics=["x_velocity", "velocity_consistency", "acceleration_smoothness", "distance"],
                 reward_components=["velocity", "propulsion", "smoothness"],
                 dependencies=["eficiencia_biomecanica"],
-                activation_threshold=0.5,
+                activation_threshold=0.35,
                 mastery_threshold=0.5,
                 regression_threshold=0.35,
                 min_episodes=35
@@ -187,7 +188,7 @@ class ValenceManager:
                         "terrain_handling", "distance", "velocity_consistency"],
                 reward_components=["robustness", "adaptation", "recovery", "velocity", "propulsion"],
                 dependencies=["propulsao_avancada", "coordenacao_fundamental"],
-                activation_threshold=0.55,
+                activation_threshold=0.4,
                 mastery_threshold=0.5,
                 regression_threshold=0.4,
                 min_episodes=50
@@ -206,7 +207,6 @@ class ValenceManager:
         
         # PESOS ADAPTATIVOS ao terreno
         self.valence_weights = self._calculate_terrain_aware_weights(valence_levels)
-        
         self.overall_progress = self._calculate_overall_progress(valence_levels)
         
         return self.valence_weights, 1.0
@@ -215,7 +215,7 @@ class ValenceManager:
         """Atualização rápida das valências mais importantes"""
         valence_levels = {}
         
-        # SEMPRE atualizar movimento_basico (fundamental)
+        # SEMPRE atualizar movimento_basico 
         valence_levels["movimento_basico"] = self._calculate_valence_level(
             "movimento_basico", episode_results
         )
@@ -223,7 +223,7 @@ class ValenceManager:
         # Atualizar outras valências baseadas em dependências simples
         movimento_level = valence_levels["movimento_basico"]
         
-        if movimento_level > 0.1:
+        if movimento_level > 0.01:
             valence_levels["estabilidade_postural"] = self._calculate_valence_level(
                 "estabilidade_postural", episode_results
             )
@@ -238,6 +238,11 @@ class ValenceManager:
                 "coordenacao_fundamental", episode_results 
             )
             
+        basic_valences = ["movimento_basico", "estabilidade_postural", "propulsao_basica", "coordenacao_fundamental"]
+        for valence in basic_valences:
+            if valence not in valence_levels:
+                valence_levels[valence] = 0.0
+            
         return valence_levels
 
     def _update_terrain_focused_states(self, valence_levels: Dict[str, float]):
@@ -246,21 +251,33 @@ class ValenceManager:
         focus_valences = self.terrain_adaptation.get(terrain, {}).get("focus", [])
         
         for valence_name, current_level in valence_levels.items():
-            perf = self.valence_performance[valence_name]
+            current_level = valence_levels.get(valence_name, 0.0)
+            perf = self.valence_performance.get(valence_name)
+        
+            if perf is None:
+                continue
             
             # Ativação MAIS RÁPIDA para valências focadas no terreno
             if valence_name in focus_valences:
-                activation_threshold = 0.05
+                activation_threshold = 0.02
             else:
-                activation_threshold = 0.1
+                activation_threshold = 0.05
                 
             if current_level > activation_threshold:
                 perf.state = ValenceState.LEARNING 
                 self.active_valences.add(valence_name)
+                perf.current_level = current_level
+                perf.episodes_active += 1
             else:
                 perf.state = ValenceState.INACTIVE
                 self.active_valences.discard(valence_name)
 
+    def _ensure_valence_trackers(self):
+        """Garante que todos os trackers existam"""
+        for valence_name in self.valences.keys():
+            if valence_name not in self.valence_performance:
+                self.valence_performance[valence_name] = ValenceTracker(valence_name)
+            
     def _calculate_terrain_aware_weights(self, valence_levels: Dict[str, float]) -> Dict[str, float]:
         """Pesos que priorizam valências relevantes para o terreno atual"""
         terrain = getattr(self, '_current_terrain', 'normal')
@@ -308,101 +325,100 @@ class ValenceManager:
 
     def _compute_valence_level(self, valence_name: str, results: Dict) -> float:
         """Cálculo real do nível da valência"""
-        raw_distance = results.get("distance", 0)
-        if not isinstance(raw_distance, (int, float)):
-            distance = 0.0
-        else:
-            distance = float(raw_distance)
+        try:
+            raw_distance = results.get("distance", 0)
+            if not isinstance(raw_distance, (int, float)):
+                distance = 0.0
+            else:
+                distance = float(raw_distance)
 
-        # MOVIMENTO BÁSICO
-        if valence_name == "movimento_basico":
-            if distance <= 0:
-                return 0.0 
-            if distance > 2.0: return 0.9
-            if distance > 1.5: return 0.8
-            if distance > 1.0: return 0.7
-            if distance > 0.7: return 0.6
-            if distance > 0.5: return 0.5
-            if distance > 0.4: return 0.4
-            if distance > 0.3: return 0.3
-            if distance > 0.2: return 0.2
-            if distance > 0.1: return 0.15
-            return 0.1
+            # MOVIMENTO BÁSICO
+            if valence_name == "movimento_basico":
+                if distance <= 0:
+                    return 0.0 
+                if distance > 2.0: return 0.9
+                if distance > 1.5: return 0.8
+                if distance > 1.0: return 0.7
+                if distance > 0.7: return 0.6
+                if distance > 0.5: return 0.5
+                if distance > 0.4: return 0.4
+                if distance > 0.3: return 0.3
+                if distance > 0.2: return 0.2
+                if distance > 0.1: return 0.15
+                return 0.1
 
-        # ESTABILIDADE POSTURAL
-        elif valence_name == "estabilidade_postural":
-            roll = abs(results.get("roll", 0))
-            pitch = abs(results.get("pitch", 0))
-            stability = 1.0 - min((roll + pitch) / 1.0, 1.0)
-            movimento_level = self.valence_performance["movimento_basico"].current_level
-            if movimento_level >= 0.2:  
-                return stability * 0.9
-            return 0.0
-
-        # PROPULSÃO BÁSICA
-        elif valence_name == "propulsao_basica":
-            velocity = results.get("speed", 0)
-            if velocity <= 0:
-                return 0.0
-            movimento_level = self.valence_performance["movimento_basico"].current_level
-            if movimento_level >= 0.25:  
-                if velocity > 1.2: return 0.9
-                if velocity > 0.8: return 0.7
-                if velocity > 0.5: return 0.5
-                if velocity > 0.3: return 0.3
-                if velocity > 0.1: return 0.15
-            return 0.0
-
-        # COORDENAÇÃO FUNDAMENTAL
-        elif valence_name == "coordenacao_fundamental":
-            alternating = results.get("alternating", False)
-            movimento_level = self.valence_performance["movimento_basico"].current_level
-
-            if movimento_level >= 0.3:
-                base_level = 0.4
-                if alternating:
-                    base_level += 0.4
-                gait_score = results.get("gait_pattern_score", 0)
-                if gait_score > 0.5:
-                    base_level += 0.2
+            # ESTABILIDADE POSTURAL
+            elif valence_name == "estabilidade_postural":
+                roll = abs(results.get("roll", 0))
                 pitch = abs(results.get("pitch", 0))
-                if pitch > 0.2:
-                    base_level += 0.3
-                return min(base_level, 0.9)
+                stability = 1.0 - min((roll + pitch) / 1.0, 1.0)
+                if distance > 0.05:  
+                    return stability * 0.9
+                return 0.0
+
+            # PROPULSÃO BÁSICA 
+            elif valence_name == "propulsao_basica":
+                velocity = results.get("speed", 0)
+                if velocity <= 0:
+                    return 0.0
+                if distance > 0.1:  
+                    if velocity > 1.2: return 0.9
+                    if velocity > 0.8: return 0.7
+                    if velocity > 0.5: return 0.5
+                    if velocity > 0.3: return 0.3
+                    if velocity > 0.1: return 0.15
+                return 0.0
+
+            # COORDENAÇÃO FUNDAMENTAL
+            elif valence_name == "coordenacao_fundamental":
+                alternating = results.get("alternating", False)
+
+                if distance > 0.15: 
+                    base_level = 0.4
+                    if alternating:
+                        base_level += 0.4
+                    gait_score = results.get("gait_pattern_score", 0)
+                    if gait_score > 0.5:
+                        base_level += 0.2
+                    return min(base_level, 0.9)
+                return 0.0
+
+            # EFICIÊNCIA BIOMECÂNICA
+            elif valence_name == "eficiencia_biomecanica":
+                efficiency = results.get("propulsion_efficiency", 0.5)
+                coordenacao_level = self.valence_performance["coordenacao_fundamental"].current_level
+                if coordenacao_level < 0.4:
+                    return 0.0
+                return efficiency * 0.8
+
+            # PROPULSÃO AVANÇADA  
+            elif valence_name == "propulsao_avancada":
+                velocity = results.get("speed", 0)
+                eficiencia_level = self.valence_performance["eficiencia_biomecanica"].current_level
+                if eficiencia_level < 0.5:
+                    return 0.0
+                if velocity > 2.0: return 0.9
+                if velocity > 1.5: return 0.7
+                if velocity > 1.0: return 0.5
+                return 0.2
+
+            # MARCHA ROBUSTA
+            elif valence_name == "marcha_robusta":
+                distance = max(results.get("distance", 0), 0)
+                propulsao_level = self.valence_performance["propulsao_avancada"].current_level
+                coordenacao_level = self.valence_performance["coordenacao_fundamental"].current_level
+                if propulsao_level < 0.6 or coordenacao_level < 0.5:
+                    return 0.0
+                if distance > 3.0: return 0.9
+                if distance > 2.0: return 0.7
+                if distance > 1.0: return 0.5
+                return 0.2
+
             return 0.0
-
-        # EFICIÊNCIA BIOMECÂNICA
-        elif valence_name == "eficiencia_biomecanica":
-            efficiency = results.get("propulsion_efficiency", 0.5)
-            coordenacao_level = self.valence_performance["coordenacao_fundamental"].current_level
-            if coordenacao_level < 0.4:
-                return 0.0
-            return efficiency * 0.8
-
-        # PROPULSÃO AVANÇADA  
-        elif valence_name == "propulsao_avancada":
-            velocity = results.get("speed", 0)
-            eficiencia_level = self.valence_performance["eficiencia_biomecanica"].current_level
-            if eficiencia_level < 0.5:
-                return 0.0
-            if velocity > 2.0: return 0.9
-            if velocity > 1.5: return 0.7
-            if velocity > 1.0: return 0.5
-            return 0.2
-
-        # MARCHA ROBUSTA
-        elif valence_name == "marcha_robusta":
-            distance = max(results.get("distance", 0), 0)
-            propulsao_level = self.valence_performance["propulsao_avancada"].current_level
-            coordenacao_level = self.valence_performance["coordenacao_fundamental"].current_level
-            if propulsao_level < 0.6 or coordenacao_level < 0.5:
-                return 0.0
-            if distance > 3.0: return 0.9
-            if distance > 2.0: return 0.7
-            if distance > 1.0: return 0.5
-            return 0.2
-
-        return 0.0
+    
+        except Exception as e:
+            self.logger.warning(f"Erro no cálculo de {valence_name}: {e}")
+            return 0.0
 
     def _calculate_metrics_hash(self, results: Dict) -> int:
         """Calcula hash eficiente para cache"""
@@ -512,7 +528,7 @@ class ValenceManager:
             "cache_size": len(self._cached_levels)
         }
 
-# Manter a classe LightValenceIRL (sem alterações)
+# Manter a classe LightValenceIRL 
 class LightValenceIRL:
     """Sistema IRL leve integrado com valências"""
     

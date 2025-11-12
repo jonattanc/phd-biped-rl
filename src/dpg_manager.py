@@ -395,6 +395,22 @@ class DPGManager:
 
         return extended
 
+    def _force_initial_valence_activation(self, episode_results):
+        """Força ativação das valências básicas no início do treinamento"""
+        if self.episode_count < 100:  # Apenas nos primeiros episódios
+            distance = max(episode_results.get("distance", 0), 0)
+
+            # Se há movimento positivo, ativar valências básicas
+            if distance > 0.01:
+                valence_status = self.valence_manager.get_valence_status()
+
+                # Ativar movimento_basico manualmente
+                if "movimento_basico" in self.valence_manager.valence_performance:
+                    tracker = self.valence_manager.valence_performance["movimento_basico"]
+                    tracker.state = ValenceState.LEARNING
+                    tracker.current_level = min(distance / 0.5, 0.5)  # Normalizar
+                    self.valence_manager.active_valences.add("movimento_basico")
+                
     def _determine_group_from_valences(self, valence_status):
         """Determina grupo baseado nas valências mastered"""
         mastered_count = sum(
@@ -561,20 +577,36 @@ class DPGManager:
 
         self.episode_count += 1
 
-        # DETECÇÃO AUTOMÁTICA DE TERRENO
-        self._detect_terrain_type(episode_results)
+        try:
+            # DETECÇÃO AUTOMÁTICA DE TERRENO
+            self._detect_terrain_type(episode_results)
 
-        # ATUALIZAÇÃO DE SISTEMAS CRÍTICOS (alta eficiência)
-        self._update_critical_systems(episode_results)
+            # ATUALIZAÇÃO DE SISTEMAS CRÍTICOS 
+            self._update_critical_systems(episode_results)
 
-        # ATUALIZAÇÃO CONDICIONAL DE SISTEMAS SECUNDÁRIOS
-        if self._should_update_secondary_systems():
-            self._update_secondary_systems(episode_results)
+            # ATUALIZAÇÃO CONDICIONAL DE SISTEMAS SECUNDÁRIOS
+            if self._should_update_secondary_systems():
+                self._update_secondary_systems(episode_results)
 
-        # LIMPEZA PERIÓDICA (mantida)
-        if self.episode_count % 500 == 0:
-            self._generate_comprehensive_report()
-            self._perform_periodic_cleanup()
+            # LIMPEZA PERIÓDICA
+            if self.episode_count % 500 == 0:
+                self._generate_comprehensive_report()
+                self._perform_periodic_cleanup()
+
+        except Exception as e:
+            self.logger.error(f"Erro em update_phase_progression: {e}")
+            try:
+                extended_results = self._prepare_valence_metrics_optimized(episode_results)
+                # Atualizar apenas movimento_basico para recuperar
+                basic_level = self.valence_manager._calculate_valence_level("movimento_basico", extended_results)
+                if "movimento_basico" in self.valence_manager.valence_performance:
+                    tracker = self.valence_manager.valence_performance["movimento_basico"]
+                    tracker.current_level = basic_level
+                    if basic_level > 0.05:
+                        tracker.state = ValenceState.LEARNING
+                        self.valence_manager.active_valences.add("movimento_basico")
+            except Exception as recovery_error:
+                self.logger.error(f"Falha na recuperação: {recovery_error}")
 
     def _detect_terrain_type(self, episode_results):
         """Detecta automaticamente o tipo de terreno baseado nas métricas"""
@@ -621,6 +653,7 @@ class DPGManager:
         extended_results = self._prepare_valence_metrics_optimized(episode_results)
         valence_weights, _ = self.valence_manager.update_valences(extended_results)
         self._cached_valence_weights = valence_weights
+        self._auto_balance_critic_weights()
 
         # 2. SISTEMA DE MULETAS (crítico)
         self.update_crutch_system(episode_results)
@@ -628,6 +661,22 @@ class DPGManager:
         # 3. ARMAZENAMENTO INTELIGENTE (crítico)
         self._store_optimized_experience(episode_results)
 
+    def _auto_balance_critic_weights(self):
+        """Balanceamento automático dos pesos do critic"""
+        valence_status = self.valence_manager.get_valence_status()
+        overall_progress = valence_status['overall_progress']
+
+        # Se progresso geral está baixo e propulsão domina demais, rebalancear
+        if overall_progress < 0.3 and self.critic.weights.propulsion > 0.7:
+            # Reduzir propulsão, aumentar estabilidade e coordenação
+            excess_propulsion = self.critic.weights.propulsion - 0.5
+            self.critic.weights.propulsion = 0.5
+            self.critic.weights.stability += excess_propulsion * 0.4
+            self.critic.weights.coordination += excess_propulsion * 0.6
+
+            # Normalizar
+            self._normalize_critic_weights()
+    
     def _should_update_secondary_systems(self):
         """Verifica se deve atualizar sistemas secundários"""
         # Atualizar IRL e Critic apenas a cada 50-100 episódios
@@ -730,14 +779,15 @@ class DPGManager:
         try:
             # MÉTRICAS ESSENCIAIS PARA TODAS AS VALÊNCIAS
             try:
-                raw_distance = episode_results.get("distance", 0)
+                if "distance" not in episode_results or episode_results["distance"] is None:
+                    extended["distance"] = getattr(self.robot, "episode_distance", 0)
+            
+                raw_distance = extended["distance"]
                 if not isinstance(raw_distance, (int, float)):
                     self.logger.error(f"❌ DISTÂNCIA NÃO NUMÉRICA: {raw_distance} (type: {type(raw_distance)})")
-                    distance = 0.0
+                    extended["distance"] = 0.0
                 else:
-                    distance = float(raw_distance)
-
-                extended["distance"] = distance
+                    extended["distance"] = float(raw_distance)
 
             except Exception as e:
                 self.logger.error(f"❌ ERRO CRÍTICO ao processar distância: {e}")
@@ -753,7 +803,7 @@ class DPGManager:
                 "roll": float(roll) if isinstance(roll, (int, float)) else 0.0,
                 "pitch": float(pitch) if isinstance(pitch, (int, float)) else 0.0,
                 "stability": 1.0 - min((roll + pitch) / 1.0, 1.0),
-                "positive_movement_rate": 1.0 if distance > 0.1 else 0.0
+                "positive_movement_rate": 1.0 if extended["distance"] > 0.1 else 0.0
             })
 
             # MÉTRICAS DE ESTABILIDADE
@@ -773,7 +823,7 @@ class DPGManager:
 
             # MÉTRICAS DE EFICIÊNCIA
             extended["energy_efficiency"] = episode_results.get("propulsion_efficiency", 0.5)
-            extended["stride_efficiency"] = distance / max(episode_results.get("steps", 1), 1)
+            extended["stride_efficiency"] = extended["distance"] / max(episode_results.get("steps", 1), 1)
 
             # MÉTRICAS DE MARCHA ROBUSTA
             extended["gait_robustness"] = 0.7
@@ -943,27 +993,21 @@ class DPGManager:
         """Sistema de muletas ADAPTATIVO por terreno"""
         distance = max(episode_results.get('distance', 0), 0)
         valence_status = self.valence_manager.get_valence_status()
-        movimento_level = valence_status['valence_details'].get('movimento_basico', {}).get('current_level', 0)
 
-        # REDUÇÃO ADAPTATIVA POR TERRENO
-        terrain_factor = self._get_terrain_difficulty_factor()
+        # CORREÇÃO: Usar progresso geral em vez de movimento_basico específico
+        overall_progress = valence_status['overall_progress']
 
-        if movimento_level < 0.3 and distance < 0.3:
-            new_level = max(self.crutches["level"], 0.6)
+        # CORREÇÃO: Redução mais gradual das muletas
+        if overall_progress < 0.3 and distance < 0.5:
+            new_level = max(self.crutches["level"], 0.8)  
+        elif overall_progress < 0.5:
+            new_level = self.crutches["level"] * 0.98  
+        elif overall_progress < 0.7:
+            new_level = self.crutches["level"] * 0.95
         else:
-            # Redução MAIS LENTA em terrenos difíceis
-            if movimento_level > 0.5:
-                reduction_factor = 0.85
-            elif distance > 0.5:
-                reduction_factor = 0.9  
-            else:
-                reduction_factor = 0.95
+            new_level = self.crutches["level"] * 0.92
 
-            # Aplicar fator de terreno
-            reduction_factor = min(reduction_factor + (1 - terrain_factor) * 0.08, 0.98)
-            new_level = self.crutches["level"] * reduction_factor
-
-        self.crutches["level"] = max(new_level, 0.1)  
+        self.crutches["level"] = max(new_level, 0.1)
         self._update_crutch_stage()
 
     def _get_terrain_difficulty_factor(self):
@@ -1081,7 +1125,7 @@ class DPGManager:
         regressing_valences = []
 
         for valence_name, details in valence_status["valence_details"].items():
-            if details['state'] != 'inactive' or details['current_level'] > 0.1:
+            if details['state'] != 'inactive' and details['current_level'] > 0.01:
                 if details['state'] == 'mastered':
                     mastered_valences.append((valence_name, details))
                 elif details['state'] == 'learning':
@@ -1121,7 +1165,7 @@ class DPGManager:
         avg_reward = buffer_status.get('avg_reward', 0)
         avg_quality = buffer_status.get('avg_quality', 0)
 
-        reward_efficiency = "ALTA" if avg_reward > 50 else "MÉDIA" if avg_reward > 20 else "BAIXA"
+        reward_efficiency = "ALTA" if avg_reward > 200000 else "MÉDIA" if avg_reward > 50000 else "BAIXA"
         quality_efficiency = "ALTA" if avg_quality > 0.7 else "MÉDIA" if avg_quality > 0.4 else "BAIXA"
 
         self.logger.info(f"   Recompensa: {avg_reward:.1f} ({reward_efficiency})| Qualidade: {avg_quality:.1%} ({quality_efficiency})")
