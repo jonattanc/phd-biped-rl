@@ -65,7 +65,7 @@ class Agent:
         self.initial_episode = initial_episode
         self.learning_starts = 10e3
         self.prefill_steps = 100e3
-        self.minimum_steps_to_save = self.learning_starts + self.prefill_steps + 100e3
+        self.minimum_steps_to_save = self.learning_starts + self.prefill_steps + 1e6
 
         dummy_env = DummyVecEnv([lambda: env])
 
