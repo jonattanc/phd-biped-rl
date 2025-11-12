@@ -118,6 +118,7 @@ class Robot:
         joint_positions, joint_velocities = self.get_joint_states()
 
         obs = np.array([self.gait_state, y_position, roll, pitch, yaw, x_velocity, roll_velocity, pitch_velocity] + joint_positions, dtype=np.float32)
+        obs += np.random.normal(0, 1e-6, size=obs.shape)
         return obs
 
     def update_gait_state(self):
