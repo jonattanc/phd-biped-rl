@@ -929,17 +929,15 @@ class TrainingTab(common_tab.GUITab):
             self.logger.exception("Erro ao processar dados do episódio para tracker")
 
     def update_filtered_data(self):
-        window_size = 20
-
         for key in self.keys_to_filter:
             filtered_key = "filtered_" + key
             data = self.episode_data[key]
 
-            if len(data) < 5:
-                self.episode_data[filtered_key].append(float(np.mean(data)))
+            if len(data) <= 1:
+                self.episode_data[filtered_key].append(float(data[0]))
 
             else:
-                self.episode_data[filtered_key].append(float(np.mean(data[-window_size:])))
+                self.episode_data[filtered_key].append(float(0.1 * data[-1] + 0.9 * self.episode_data[filtered_key][-1]))
 
     def ipc_runner(self):
         """Thread para monitorar a fila IPC e atualizar logs"""
