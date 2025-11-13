@@ -271,6 +271,9 @@ class Simulation(gym.Env):
         self.episode_info = {}
         self.joint_lock_timers = [0] * self.action_dim
         self.target_positions = [0] * self.action_dim
+        self.robot_x_sum_velocity = 0
+        self.robot_y_sum_velocity = 0
+        self.robot_z_sum_velocity = 0
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -366,6 +369,9 @@ class Simulation(gym.Env):
             "imu_x_vel": self.robot_x_velocity,
             "imu_y_vel": self.robot_y_velocity,
             "imu_z_vel": self.robot_z_velocity,
+            "imu_average_x_vel": self.robot_x_sum_velocity / self.episode_steps,
+            "imu_average_y_vel": self.robot_y_sum_velocity / self.episode_steps,
+            "imu_average_z_vel": self.robot_z_sum_velocity / self.episode_steps,
             "roll": self.robot_roll,
             "pitch": self.robot_pitch,
             "yaw": self.robot_yaw,
@@ -462,6 +468,9 @@ class Simulation(gym.Env):
         self.robot_x_velocity = robot_velocity[0]
         self.robot_y_velocity = robot_velocity[1]
         self.robot_z_velocity = robot_velocity[2]
+        self.robot_x_sum_velocity += self.robot_x_velocity
+        self.robot_y_sum_velocity += self.robot_y_velocity
+        self.robot_z_sum_velocity += self.robot_z_velocity
         self.robot_roll = robot_orientation[0]
         self.robot_pitch = robot_orientation[1]
         self.robot_yaw = robot_orientation[2]
