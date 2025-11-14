@@ -582,14 +582,16 @@ class EvaluationTab(common_tab.GUITab):
                 plot_separated_data = list(map(list, zip(*plot_raw_data)))
 
                 for i, series in enumerate(plot_separated_data):
-                    self.ax_dynamic.plot(series, label=f"{selected_data}[{i}]")
+                    x = range(1, len(series) + 1)
+                    self.ax_dynamic.plot(x, series, label=f"{selected_data}[{i}]")
 
                 self.ax_dynamic.legend()
                 self.ax_dynamic.set_xlim(1, len(plot_separated_data[0]))
 
             else:
                 plot_separated_data = plot_raw_data
-                self.ax_dynamic.plot(plot_separated_data, color="blue")
+                x = range(1, len(plot_separated_data) + 1)
+                self.ax_dynamic.plot(x, plot_separated_data, color="blue")
                 self.ax_dynamic.set_xlim(1, len(plot_separated_data))
 
             self.ax_dynamic.relim()
