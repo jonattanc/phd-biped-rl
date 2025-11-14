@@ -435,6 +435,7 @@ class Simulation(gym.Env):
         Executa uma ação e retorna (observação, recompensa, done, info).
         """
         if self.should_save_model and not evaluation:
+            self.ipc_queue.put({"type": "lock_for_saving"})
             self.ipc_queue.put({"type": "tracker_status", "tracker_status": self.tracker.get_status()})
             save_path = os.path.join(utils.TEMP_MODEL_SAVE_PATH, f"autosave_{self.tracker.auto_save_count}")
             utils.ensure_directory(save_path)

@@ -977,6 +977,9 @@ class TrainingTab(common_tab.GUITab):
                     elif data_type == "tracker_status":
                         self.tracker_status = msg.get("tracker_status")
 
+                    elif data_type == "lock_for_saving":
+                        self.pause_btn.config(state=tk.DISABLED)  # Bloquear botão de pause durante procedimento de salvamento automático
+
                     elif data_type == "pybullet_window_ready":
                         self.logger.info("Janela do PyBullet pronta para visualização.")
                         self.focus_pybullet_window()
@@ -987,6 +990,7 @@ class TrainingTab(common_tab.GUITab):
                         self.save_training_data(msg["autosave"], msg["save_path"], msg["tracker_status"])  # Salvar dados da gui na mesma pasta do modelo do agente
                         self.pause_values[-1].value = self.last_pause_value  # Restaurar pause, pois o treinamento é pausado ao salvar o modelo do agente
                         self.config_changed_values[-1].value = 1  # Ativa verificação de pause value pelo processo de treinamento
+                        self.pause_btn.config(state=tk.NORMAL)  # Restaurar botão de pause após procedimento de salvamento automático
 
                     elif data_type == "autopause_request":
                         self.pause_training(force_pause=True)
