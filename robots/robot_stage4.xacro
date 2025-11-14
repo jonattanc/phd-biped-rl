@@ -4,46 +4,52 @@
   <xacro:property name="body_radius" value="0.15" />
   <xacro:property name="body_length" value="0.3" />
   <xacro:property name="body_mass" value="5.0" />
-  <xacro:property name="body_ixx" value="0.1" />
-  <xacro:property name="body_iyy" value="0.1" />
-  <xacro:property name="body_izz" value="0.05" />
+  <!-- Inertia for solid cylinder (axis z): Ixx = Iyy = (1/12)*m*(3*r^2+h^2); Izz = (1/2)*m*r^2 -->
+  <xacro:property name="body_ixx" value="${(1.0/12.0) * body_mass * (3 * body_radius * body_radius + body_length * body_length)}" />
+  <xacro:property name="body_iyy" value="${(1.0/12.0) * body_mass * (3 * body_radius * body_radius + body_length * body_length)}" />
+  <xacro:property name="body_izz" value="${0.5 * body_mass * body_radius * body_radius}" />
 
   <!-- Hip properties -->
   <xacro:property name="hip_radius" value="0.05" />
   <xacro:property name="hip_mass" value="0.5" />
-  <xacro:property name="hip_ixx" value="0.01" />
-  <xacro:property name="hip_iyy" value="0.01" />
-  <xacro:property name="hip_izz" value="0.01" />
+  <!-- Inertia for solid sphere: Ixx = Iyy = Izz = (2/5)*m*r^2 -->
+  <xacro:property name="hip_ixx" value="${0.4 * hip_mass * hip_radius * hip_radius}" />
+  <xacro:property name="hip_iyy" value="${0.4 * hip_mass * hip_radius * hip_radius}" />
+  <xacro:property name="hip_izz" value="${0.4 * hip_mass * hip_radius * hip_radius}" />
 
   <!-- Thigh properties -->
   <xacro:property name="thigh_radius" value="0.04" />
   <xacro:property name="thigh_length" value="0.35" />
   <xacro:property name="thigh_mass" value="1.5" />
-  <xacro:property name="thigh_ixx" value="0.02" />
-  <xacro:property name="thigh_iyy" value="0.02" />
-  <xacro:property name="thigh_izz" value="0.01" />
+  <!-- Inertia for solid cylinder (axis z): Ixx = Iyy = (1/12)*m*(3*r^2+h^2); Izz = (1/2)*m*r^2 -->
+  <xacro:property name="thigh_ixx" value="${(1.0/12.0) * thigh_mass * (3 * thigh_radius * thigh_radius + thigh_length * thigh_length)}" />
+  <xacro:property name="thigh_iyy" value="${(1.0/12.0) * thigh_mass * (3 * thigh_radius * thigh_radius + thigh_length * thigh_length)}" />
+  <xacro:property name="thigh_izz" value="${0.5 * thigh_mass * thigh_radius * thigh_radius}" />
 
   <!-- Knee properties -->
   <xacro:property name="knee_radius" value="0.04" />
   <xacro:property name="knee_mass" value="0.5" />
-  <xacro:property name="knee_ixx" value="0.01" />
-  <xacro:property name="knee_iyy" value="0.01" />
-  <xacro:property name="knee_izz" value="0.01" />
+  <!-- Inertia for solid sphere: Ixx = Iyy = Izz = (2/5)*m*r^2 -->
+  <xacro:property name="knee_ixx" value="${0.4 * knee_mass * knee_radius * knee_radius}" />
+  <xacro:property name="knee_iyy" value="${0.4 * knee_mass * knee_radius * knee_radius}" />
+  <xacro:property name="knee_izz" value="${0.4 * knee_mass * knee_radius * knee_radius}" />
 
   <!-- Shin properties -->
   <xacro:property name="shin_radius" value="0.035" />
   <xacro:property name="shin_length" value="0.30" />
   <xacro:property name="shin_mass" value="1.5" />
-  <xacro:property name="shin_ixx" value="0.015" />
-  <xacro:property name="shin_iyy" value="0.015" />
-  <xacro:property name="shin_izz" value="0.008" />
+  <!-- Inertia for solid cylinder (axis z): Ixx = Iyy = (1/12)*m*(3*r^2+h^2); Izz = (1/2)*m*r^2 -->
+  <xacro:property name="shin_ixx" value="${(1.0/12.0) * shin_mass * (3 * shin_radius * shin_radius + shin_length * shin_length)}" />
+  <xacro:property name="shin_iyy" value="${(1.0/12.0) * shin_mass * (3 * shin_radius * shin_radius + shin_length * shin_length)}" />
+  <xacro:property name="shin_izz" value="${0.5 * shin_mass * shin_radius * shin_radius}" />
 
   <!-- Ankle properties -->
   <xacro:property name="ankle_radius" value="0.03" />
   <xacro:property name="ankle_mass" value="0.5" />
-  <xacro:property name="ankle_ixx" value="0.01" />
-  <xacro:property name="ankle_iyy" value="0.01" />
-  <xacro:property name="ankle_izz" value="0.01" />
+  <!-- Inertia for solid sphere: Ixx = Iyy = Izz = (2/5)*m*r^2 -->
+  <xacro:property name="ankle_ixx" value="${0.4 * ankle_mass * ankle_radius * ankle_radius}" />
+  <xacro:property name="ankle_iyy" value="${0.4 * ankle_mass * ankle_radius * ankle_radius}" />
+  <xacro:property name="ankle_izz" value="${0.4 * ankle_mass * ankle_radius * ankle_radius}" />
 
   <!-- Foot properties -->
   <xacro:property name="foot_length" value="0.35" />
@@ -51,25 +57,28 @@
   <xacro:property name="foot_height" value="0.03" />
   <xacro:property name="foot_offset_front" value="0.1" />
   <xacro:property name="foot_mass" value="0.5" />
-  <xacro:property name="foot_ixx" value="0.001" />
-  <xacro:property name="foot_iyy" value="0.001" />
-  <xacro:property name="foot_izz" value="0.0005" />
+  <!-- Inertia for box (length, width, height): Ixx = (1/12)*m*(w^2+h^2); Iyy = (1/12)*m*(l^2+h^2); Izz = (1/12)*m*(l^2+w^2) -->
+  <xacro:property name="foot_ixx" value="${(1.0/12.0) * foot_mass * (foot_width * foot_width + foot_height * foot_height)}" />
+  <xacro:property name="foot_iyy" value="${(1.0/12.0) * foot_mass * (foot_length * foot_length + foot_height * foot_height)}" />
+  <xacro:property name="foot_izz" value="${(1.0/12.0) * foot_mass * (foot_length * foot_length + foot_width * foot_width)}" />
 
   <!-- Head properties -->
   <xacro:property name="head_radius" value="0.1" />
   <xacro:property name="head_mass" value="1.0" />
-  <xacro:property name="head_ixx" value="0.005" />
-  <xacro:property name="head_iyy" value="0.005" />
-  <xacro:property name="head_izz" value="0.005" />
+  <!-- Inertia for solid sphere: Ixx = Iyy = Izz = (2/5)*m*r^2 -->
+  <xacro:property name="head_ixx" value="${0.4 * head_mass * head_radius * head_radius}" />
+  <xacro:property name="head_iyy" value="${0.4 * head_mass * head_radius * head_radius}" />
+  <xacro:property name="head_izz" value="${0.4 * head_mass * head_radius * head_radius}" />
 
   <!-- IMU properties -->
   <xacro:property name="imu_length" value="0.02" />
   <xacro:property name="imu_width" value="0.03" />
   <xacro:property name="imu_height" value="0.01" />
   <xacro:property name="imu_mass" value="0.01" />
-  <xacro:property name="imu_ixx" value="0.00001" />
-  <xacro:property name="imu_iyy" value="0.00001" />
-  <xacro:property name="imu_izz" value="0.00001" />
+  <!-- Inertia for box (length, width, height): Ixx = (1/12)*m*(w^2+h^2); Iyy = (1/12)*m*(l^2+h^2); Izz = (1/12)*m*(l^2+w^2) -->
+  <xacro:property name="imu_ixx" value="${(1.0/12.0) * imu_mass * (imu_width * imu_width + imu_height * imu_height)}" />
+  <xacro:property name="imu_iyy" value="${(1.0/12.0) * imu_mass * (imu_length * imu_length + imu_height * imu_height)}" />
+  <xacro:property name="imu_izz" value="${(1.0/12.0) * imu_mass * (imu_length * imu_length + imu_width * imu_width)}" />
 
   <!-- Controle -->
   <xacro:property name="joint_damping" value="0.2" />

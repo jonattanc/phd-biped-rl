@@ -45,9 +45,9 @@ class TrainingTab(common_tab.GUITab):
             "roll_deg": [],
             "pitch_deg": [],
             "yaw_deg": [],
-            "imu_x_vel": [],
-            "imu_y_vel": [],
-            "imu_z_vel": [],
+            "imu_average_x_vel": [],
+            "imu_average_y_vel": [],
+            "imu_average_z_vel": [],
             "roll_vel_deg": [],
             "pitch_vel_deg": [],
             "yaw_vel_deg": [],
@@ -63,9 +63,9 @@ class TrainingTab(common_tab.GUITab):
             "roll_deg",
             "pitch_deg",
             "yaw_deg",
-            "imu_x_vel",
-            "imu_y_vel",
-            "imu_z_vel",
+            "imu_average_x_vel",
+            "imu_average_y_vel",
+            "imu_average_z_vel",
             "roll_vel_deg",
             "pitch_vel_deg",
             "yaw_vel_deg",
@@ -185,9 +185,9 @@ class TrainingTab(common_tab.GUITab):
         self.canvas_ori = FigureCanvasTkAgg(self.fig_ori, master=self.tab_orientation)
         self.canvas_ori.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
-        # Aba 4: Velocidade (vx, vy, vz)
+        # Aba 4: Velocidade média (vxm, vym, vzm)
         self.tab_velocity = ttk.Frame(self.graph_notebook)
-        self.graph_notebook.add(self.tab_velocity, text="Velocidade")
+        self.graph_notebook.add(self.tab_velocity, text="Velocidade Média")
         self.fig_vel, self.axs_vel = plt.subplots(3, 1, figsize=(10, 10), constrained_layout=True, sharex=True)
         self.canvas_vel = FigureCanvasTkAgg(self.fig_vel, master=self.tab_velocity)
         self.canvas_vel.get_tk_widget().pack(fill=tk.BOTH, expand=True)
@@ -295,12 +295,12 @@ class TrainingTab(common_tab.GUITab):
             self.axs_ori[-1].set_xlabel("Episódio")
             self.canvas_ori.draw_idle()
 
-            # Velocidade (vx, vy, vz)
-            for i, (label, color, key) in enumerate(zip(["Vx", "Vy", "Vz"], ["red", "green", "blue"], ["imu_x_vel", "imu_y_vel", "imu_z_vel"])):
+            # Velocidade média (vxm, vym, vzm)
+            for i, (label, color, key) in enumerate(zip(["Vxm", "Vym", "Vzm"], ["red", "green", "blue"], ["imu_average_x_vel", "imu_average_y_vel", "imu_average_z_vel"])):
                 self.axs_vel[i].clear()
                 self.axs_vel[i].plot(self.episode_data["episodes"], self.episode_data.get(key, []), color=color, linestyle="-", alpha=self.nf_alpha, linewidth=self.nf_linewidth)
                 self.axs_vel[i].plot(self.episode_data["episodes"], self.episode_data.get(f"filtered_{key}", []), label=label, color=color, linestyle="-")
-                self.axs_vel[i].set_title(f"Velocidade {label}")
+                self.axs_vel[i].set_title(f"Velocidade média {label}")
                 self.axs_vel[i].set_ylabel(f"{label} (m/s)")
                 self.axs_vel[i].grid(True, alpha=0.3)
                 self.axs_vel[i].legend(loc="upper left")
@@ -793,7 +793,7 @@ class TrainingTab(common_tab.GUITab):
                     self.axs_ori[-1].set_xlabel("Episódio")
                     self.canvas_ori.draw()
                 elif current_tab == 3:
-                    for i, (label, color, key) in enumerate(zip(["Vx", "Vy", "Vz"], ["red", "green", "blue"], ["imu_x_vel", "imu_y_vel", "imu_z_vel"])):
+                    for i, (label, color, key) in enumerate(zip(["Vxm", "Vym", "Vzm"], ["red", "green", "blue"], ["imu_average_x_vel", "imu_average_y_vel", "imu_average_z_vel"])):
                         self.axs_vel[i].clear()
                         self.axs_vel[i].plot(self.episode_data["episodes"], self.episode_data.get(key, []), color=color, linestyle="-", alpha=self.nf_alpha, linewidth=self.nf_linewidth)
                         self.axs_vel[i].plot(self.episode_data["episodes"], self.episode_data.get(f"filtered_{key}", []), label=label, color=color, linestyle="-")

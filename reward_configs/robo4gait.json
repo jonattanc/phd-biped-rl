@@ -84,6 +84,12 @@
       "min_value": -0.01,
       "max_value": 0
     },
+    "y_axis_deviation_cube_penalty": {
+      "weight": -1e-05,
+      "enabled": false,
+      "min_value": -0.01,
+      "max_value": 0
+    },
     "success_bonus": {
       "weight": 100.0,
       "enabled": false,

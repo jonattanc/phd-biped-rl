@@ -70,6 +70,9 @@ class EvaluationTab(common_tab.GUITab):
         self.create_stop_btn(row2_frame, 7)
         self.create_seed_selector(row2_frame, column=8)
 
+        self.episode_count_label = ttk.Label(row2_frame, text="Episódios: 0")
+        self.episode_count_label.grid(row=0, column=9, padx=5)
+
         # Linha 3: Botões de controle
         row3_frame = ttk.Frame(control_frame)
         row3_frame.pack(fill=tk.X)
@@ -234,6 +237,7 @@ class EvaluationTab(common_tab.GUITab):
         self.lock_gui()
         self.save_results_btn.config(state=tk.DISABLED)
         self.export_plot_btn.config(state=tk.DISABLED)
+        self.episode_count = self.update_episode_count(0)
         self._run_evaluation(agent_model_path)
 
     def _run_evaluation(self, agent_model_path):
@@ -644,6 +648,9 @@ class EvaluationTab(common_tab.GUITab):
                         self.logger.info("Processo de avaliação finalizado.")
                         self.unlock_gui()
 
+                    elif data_type == "episode_data":
+                        self.episode_count = self.update_episode_count(self.episode_count + 1)
+
                     elif data_type == "evaluation_complete":
                         self.metrics_path = msg["metrics_path"]
                         self.load_metrics()
@@ -662,6 +669,10 @@ class EvaluationTab(common_tab.GUITab):
 
             if not self.gui_closed:
                 self.on_closing()
+
+    def update_episode_count(self, episode_count):
+        self.episode_count_label.config(text=f"Episódios: {episode_count}/{self.eval_episodes_var.get()}")
+        return episode_count
 
     def load_metrics(self):
         with open(self.metrics_path, "r", encoding="utf-8") as f:
