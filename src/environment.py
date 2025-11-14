@@ -65,11 +65,19 @@ def create_ramp_stl(input_filename, output_filename, ascending=True):
 
 
 class Environment:
-    def __init__(self, logger, name):
+    def __init__(self, logger, name, robot):
         self.logger = logger
         self.name = name
+        self.robot = robot
 
         self.id = None
+        self.selected_env_index = -1
+
+        if self.name == "todos_alternados":
+            self.env_list = ["PR", "PBA", "PG", "PRA", "PRB", "PRD"]
+
+        else:
+            self.env_list = [self.name]
 
         self.environment_dir = os.path.join(utils.PROJECT_ROOT, "environments")
         self.environment_tmp_dir = os.path.join(utils.TMP_PATH, "environments")
@@ -77,22 +85,69 @@ class Environment:
         if not os.path.exists(self.environment_tmp_dir):
             os.makedirs(self.environment_tmp_dir, exist_ok=True)
 
-        self.urdf_path = self._generate_urdf()
+        self.environment_dict_settings = []
 
-    def _generate_urdf(self):
-        xacro_path = os.path.join(self.environment_dir, f"{self.name}.xacro")
-        urdf_path = os.path.join(self.environment_tmp_dir, f"{self.name}.urdf")
+        for env_name in self.env_list:
+            self.urdf_path = self._generate_urdf(env_name)
+            self.robot.update_env(env_name)
+            self.environment_dict_settings.append(self.get_environment_dict_settings(env_name))
+
+        self.environment_settings = self.environment_dict_settings[0]
+
+    def _generate_urdf(self, env_name):
+        xacro_path = os.path.join(self.environment_dir, f"{env_name}.xacro")
+        urdf_path = os.path.join(self.environment_tmp_dir, f"{env_name}.urdf")
 
         if not os.path.exists(urdf_path):
             XacroDoc.from_file(xacro_path).to_urdf_file(urdf_path)
 
         return urdf_path
 
-    def get_urdf_path(self):
-        return self.urdf_path
+    def get_next_env(self):
+        if self.name != "todos_alternados":
+            return
+
+        self.selected_env_index += 1
+
+        if self.selected_env_index >= len(self.env_list):
+            self.selected_env_index = 0
+
+        env_name = self.env_list[self.selected_env_index]
+        self.urdf_path = os.path.join(self.environment_tmp_dir, f"{env_name}.urdf")
+
+        self.environment_settings = self.environment_dict_settings[self.selected_env_index]
+
+        self.robot.update_env(env_name)
+
+    def get_environment_dict_settings(self, env):
+        environment_settings = {"default": {"lateral_friction": 2.0, "spinning_friction": 1.0, "rolling_friction": 0.001, "restitution": 0.0}}
+
+        if env == "PBA":
+            environment_settings["middle_link"] = {
+                "lateral_friction": 0.85,
+                "spinning_friction": 0.425,
+                "rolling_friction": environment_settings["default"]["rolling_friction"],
+                "restitution": environment_settings["default"]["restitution"],
+            }
+
+        elif env == "PG":
+            environment_settings["middle_link"] = {
+                "lateral_friction": environment_settings["default"]["lateral_friction"],
+                "spinning_friction": environment_settings["default"]["spinning_friction"],
+                "rolling_friction": environment_settings["default"]["rolling_friction"],
+                "restitution": environment_settings["default"]["restitution"],
+                "contactStiffness": 1000,
+                "contactDamping": 500,
+            }
+
+        elif env == "PRA" or env == "PRD":
+            environment_settings["middle_link"] = {"lateral_friction": 10.0, "spinning_friction": 2.0, "rolling_friction": 0.01, "restitution": 0.0}
+
+        self.logger.info(f"{env} environment_settings: {environment_settings}")
+        return environment_settings
 
     def load_in_simulation(self, use_fixed_base=True):
-        # Carrega o URDF que contém as 3 partes conectadas
+        self.get_next_env()
         self.id = p.loadURDF(self.urdf_path, useFixedBase=use_fixed_base)
 
         return self.id

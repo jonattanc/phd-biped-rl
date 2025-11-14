@@ -8,25 +8,15 @@ import math
 
 
 class Robot:
-    def __init__(self, logger, name, env_name):
+    def __init__(self, logger, name):
         self.logger = logger
         self.name = name
-        self.env_name = env_name
 
         self.id = None
         self.revolute_indices = None
         self.gait_state = 0
 
         self.gait_step_size = 0.2
-
-        if self.env_name == "PRA":
-            self.ramp_signal = 1
-
-        elif self.env_name == "PRD":
-            self.ramp_signal = -1
-
-        else:
-            self.ramp_signal = 0
 
         self.initial_section_length = 1
         self.ramp_hypotenuse = 8
@@ -45,6 +35,18 @@ class Robot:
             os.makedirs(self.robots_tmp_dir, exist_ok=True)
 
         self.urdf_path = self._generate_urdf()
+
+    def update_env(self, env):
+        self.env_name = env
+
+        if self.env_name == "PRA":
+            self.ramp_signal = 1
+
+        elif self.env_name == "PRD":
+            self.ramp_signal = -1
+
+        else:
+            self.ramp_signal = 0
 
     def _generate_urdf(self):
         xacro_path = os.path.join(self.robots_dir, f"{self.name}.xacro")

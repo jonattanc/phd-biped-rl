@@ -17,7 +17,6 @@ from dataclasses import asdict
 
 def process_runner(
     selected_environment,
-    environment_settings,
     selected_robot,
     algorithm,
     ipc_queue,
@@ -53,13 +52,12 @@ def process_runner(
         torch.cuda.manual_seed_all(seed)
 
         # Criar componentes
-        environment = Environment(logger, name=selected_environment)
-        robot = Robot(logger, name=selected_robot, env_name=selected_environment)
+        robot = Robot(logger, name=selected_robot)
+        environment = Environment(logger, name=selected_environment, robot=robot)
         sim = Simulation(
             logger,
             robot,
             environment,
-            environment_settings,
             reward_system,
             ipc_queue,
             ipc_queue_main_to_process,
@@ -97,7 +95,6 @@ def process_runner(
 
             metrics_data["hyperparameters"] = {
                 "selected_environment": selected_environment,
-                "environment_settings": environment_settings,
                 "selected_robot": selected_robot,
                 "algorithm": algorithm,
                 "reward_system_components": {key: asdict(value) for key, value in reward_system.components.items()},

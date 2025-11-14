@@ -16,7 +16,6 @@ class Simulation(gym.Env):
         logger,
         robot,
         environment,
-        environment_settings,
         reward_system,
         ipc_queue,
         ipc_queue_main_to_process,
@@ -33,7 +32,6 @@ class Simulation(gym.Env):
 
         self.robot = robot
         self.environment = environment
-        self.environment_settings = environment_settings
         self.ipc_queue = ipc_queue
         self.ipc_queue_main_to_process = ipc_queue_main_to_process
         self.pause_value = pause_value
@@ -309,31 +307,31 @@ class Simulation(gym.Env):
             p.changeDynamics(
                 self.robot.id,
                 link_index,
-                lateralFriction=self.environment_settings["default"]["lateral_friction"],
-                spinningFriction=self.environment_settings["default"]["spinning_friction"],
-                rollingFriction=self.environment_settings["default"]["rolling_friction"],
-                restitution=self.environment_settings["default"]["restitution"],
+                lateralFriction=self.environment.environment_settings["default"]["lateral_friction"],
+                spinningFriction=self.environment.environment_settings["default"]["spinning_friction"],
+                rollingFriction=self.environment.environment_settings["default"]["rolling_friction"],
+                restitution=self.environment.environment_settings["default"]["restitution"],
             )
 
         link_map = self.environment.get_link_indices_by_name()
 
         for link_name, link_index in link_map.items():
-            if link_name in self.environment_settings:
+            if link_name in self.environment.environment_settings:
                 key = link_name
 
             else:
                 key = "default"
 
             environment_selected_settings = {
-                "lateralFriction": self.environment_settings[key]["lateral_friction"],
-                "spinningFriction": self.environment_settings[key]["spinning_friction"],
-                "rollingFriction": self.environment_settings[key]["rolling_friction"],
-                "restitution": self.environment_settings[key]["restitution"],
+                "lateralFriction": self.environment.environment_settings[key]["lateral_friction"],
+                "spinningFriction": self.environment.environment_settings[key]["spinning_friction"],
+                "rollingFriction": self.environment.environment_settings[key]["rolling_friction"],
+                "restitution": self.environment.environment_settings[key]["restitution"],
             }
 
-            if "contactStiffness" in self.environment_settings[key]:
-                environment_selected_settings["contactStiffness"] = self.environment_settings[key]["contactStiffness"]
-                environment_selected_settings["contactDamping"] = self.environment_settings[key]["contactDamping"]
+            if "contactStiffness" in self.environment.environment_settings[key]:
+                environment_selected_settings["contactStiffness"] = self.environment.environment_settings[key]["contactStiffness"]
+                environment_selected_settings["contactDamping"] = self.environment.environment_settings[key]["contactDamping"]
 
             p.changeDynamics(self.environment.id, link_index, **environment_selected_settings)
 

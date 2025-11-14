@@ -262,7 +262,6 @@ class EvaluationTab(common_tab.GUITab):
             self.camera_selection_values.append(camera_selection_val)
             self.config_changed_values.append(config_changed_val)
 
-            environment_settings = self.get_environment_settings(self.env_var.get())
             initial_episode = 0
 
             self.logger.info(f"Iniciando avaliação: {agent_model_path} no ambiente {self.current_env}")
@@ -272,7 +271,6 @@ class EvaluationTab(common_tab.GUITab):
                 target=train_process.process_runner,
                 args=(
                     self.current_env,
-                    environment_settings,
                     self.current_robot,
                     None,
                     self.ipc_queue,
