@@ -168,6 +168,12 @@
       "min_value": -1,
       "max_value": 0
     },
+    "y_axis_deviation_cube_penalty": {
+      "weight": -2.0,
+      "enabled": false,
+      "min_value": -1,
+      "max_value": 0
+    },
     "center_bonus": {
       "weight": 1.0,
       "enabled": false,

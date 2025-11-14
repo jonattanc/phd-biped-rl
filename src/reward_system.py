@@ -259,6 +259,11 @@ class RewardSystem:
             self.components["y_axis_deviation_square_penalty"].value = penalty
             total_reward += penalty * self.components["y_axis_deviation_square_penalty"].weight
 
+        if self.is_component_enabled("y_axis_deviation_cube_penalty"):
+            penalty = distance_y_from_center**3
+            self.components["y_axis_deviation_cube_penalty"].value = penalty
+            total_reward += penalty * self.components["y_axis_deviation_cube_penalty"].weight
+
         if self.is_component_enabled("center_bonus"):
             if distance_y_from_center <= self.safe_zone:
                 safe_factor = 1.0 - (distance_y_from_center / self.safe_zone)
