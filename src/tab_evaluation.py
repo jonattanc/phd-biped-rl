@@ -599,7 +599,12 @@ class EvaluationTab(common_tab.GUITab):
             self.ax_dynamic.set_title(selected_data)
             self.ax_dynamic.set_ylabel(selected_data)
             self.ax_dynamic.grid(True, alpha=0.3)
-            self.ax_dynamic.set_xlabel("Step")
+
+            if selected_data.startswith("episode_data_"):
+                self.ax_dynamic.set_xlabel("Episódio")
+
+            else:
+                self.ax_dynamic.set_xlabel("Step")
 
             self.fig_dynamic.tight_layout()
             self.canvas_dynamic.draw_idle()
