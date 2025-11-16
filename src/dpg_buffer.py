@@ -1,4 +1,5 @@
 # dpg_buffer.py
+import random
 import numpy as np
 from typing import Dict, List, Any, Tuple
 from dataclasses import dataclass
@@ -184,19 +185,34 @@ class PrioritizedBuffer:
             return False
     
     def sample(self, batch_size: int) -> List[Experience]:
-        """Amostra experiências baseado em prioridade"""
+        """Amostragem 70/30 - preserva diversidade + qualidade"""
         if not self.buffer:
             return []
-            
+
         if len(self.buffer) <= batch_size:
             return self.buffer.copy()
-        
-        # Amostragem por prioridade
-        priorities = np.array(self.priorities) + 1e-5  # Evita divisão por zero
-        probabilities = priorities / priorities.sum()
-        
-        indices = np.random.choice(len(self.buffer), batch_size, p=probabilities)
-        return [self.buffer[i] for i in indices]
+
+        # ESTRATÉGIA MISTA (70% aleatório + 30% qualidade)
+        random_count = int(batch_size * 0.7)
+        quality_count = batch_size - random_count
+
+        # Amostra aleatória (rápida)
+        random_samples = []
+        if random_count > 0:
+            random_samples = random.sample(self.buffer, random_count)
+
+        # Amostra por qualidade (mantém aprendizado)
+        quality_samples = []
+        if quality_count > 0 and hasattr(self, '_quality_heap') and self._quality_heap:
+            quality_samples = [exp for _, exp in heapq.nlargest(quality_count, self._quality_heap)]
+
+        # Se não tem qualidade suficiente, completa com aleatório
+        if len(quality_samples) < quality_count:
+            needed = quality_count - len(quality_samples)
+            extra_random = random.sample(self.buffer, min(needed, len(self.buffer)))
+            quality_samples.extend(extra_random)
+
+        return random_samples + quality_samples
     
     def get_high_quality(self, count: int) -> List[Experience]:
         """Recupera experiências de alta qualidade rapidamente"""
@@ -232,7 +248,7 @@ class BufferManager:
             self.current_group_buffer = []
         
         # Sistemas de otimização
-        self.quality_cache = Cache(max_size=1000)
+        self.quality_cache = Cache(max_size=500)
         self.state_compressor = StateCompressor()
         
         # Estatísticas
@@ -669,7 +685,7 @@ class BufferManager:
             return {**base_metrics, "movement_efficiency": 0, "positive_movement_rate": 0}
 
         # Cálculos eficientes
-        recent_experiences = self.current_group_buffer[-100:]  # Amostra recente
+        recent_experiences = self.current_group_buffer[-100:]  
         positive_exps = [exp for exp in recent_experiences 
                         if exp.info.get("metrics", {}).get("distance", 0) > 0.1]
 

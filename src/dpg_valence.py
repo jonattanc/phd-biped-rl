@@ -72,16 +72,14 @@ class ValenceManager:
         self.episode_count = 0
         self.overall_progress = 0.0
         self.performance_history = []
-        self.irl_system = LightValenceIRL(logger)
-        
-        # Otimizações
-        self._last_irl_update = 0
-        self._irl_update_interval = 100  
+
+        # Otimizações 
         self._performance_stagnation_count = 0
         self._last_overall_progress = 0.0
         self._cached_levels = {}
         self._cache_hits = 0
         self._cache_misses = 0
+        self._max_cache_size = 200
         self._last_key_metrics = {}
         self._valence_change_threshold = 0.10  
         self._last_full_update = 0
@@ -305,23 +303,45 @@ class ValenceManager:
         return weights
 
     def _calculate_valence_level(self, valence_name: str, results: Dict) -> float:
-        """Cálculo otimizado de nível de valência com cache"""
-        metrics_hash = self._calculate_metrics_hash(results)
+        """Cache mais agressivo - mesmo cálculo"""
+        # CHAVE MAIS ESTÁVEL (menos sensível a pequenas variações)
+        metrics_hash = self._calculate_stable_metrics_hash(results)
         cache_key = f"{valence_name}_{metrics_hash}"
-        
+
         if cache_key in self._cached_levels:
             self._cache_hits += 1
             return self._cached_levels[cache_key]
-        
+
         self._cache_misses += 1
+
+        # CÁLCULO ORIGINAL (zero alteração)
         level = self._compute_valence_level(valence_name, results)
+
+        # CACHE MAIOR
         self._cached_levels[cache_key] = level
-        
-        if len(self._cached_levels) > 100:
+        if len(self._cached_levels) > self._max_cache_size:
+            # Remove o mais antigo (FIFO simples)
             oldest_key = next(iter(self._cached_levels))
             del self._cached_levels[oldest_key]
-            
+
         return level
+
+    def _calculate_stable_metrics_hash(self, results: Dict) -> int:
+        """Hash menos sensível a pequenas variações"""
+        try:
+            # Arredondar métricas para reduzir variação
+            stable_metrics = {}
+            for k, v in results.items():
+                if isinstance(v, (int, float)):
+                    # Arredondar para reduzir pequenas variações
+                    if abs(v) < 10:
+                        stable_metrics[k] = round(v, 2)  # 2 casas decimais
+                    else:
+                        stable_metrics[k] = round(v, 1)  # 1 casa decimal para valores grandes
+
+            return hash(frozenset(stable_metrics.items()))
+        except:
+            return hash(str(results))
 
     def _compute_valence_level(self, valence_name: str, results: Dict) -> float:
         """Cálculo real do nível da valência"""
@@ -420,15 +440,6 @@ class ValenceManager:
             self.logger.warning(f"Erro no cálculo de {valence_name}: {e}")
             return 0.0
 
-    def _calculate_metrics_hash(self, results: Dict) -> int:
-        """Calcula hash eficiente para cache"""
-        try:
-            numeric_items = {k: v for k, v in results.items() 
-                           if isinstance(v, (int, float))}
-            return hash(frozenset(numeric_items.items()))
-        except:
-            return hash(str(results))
-
     def _calculate_overall_progress(self, valence_levels: Dict[str, float]) -> float:
         """Calcula progresso geral considerando todas as valências"""
         if not valence_levels:
@@ -500,23 +511,6 @@ class ValenceManager:
         
         return component_weights
 
-    def get_irl_weights(self):
-        """Retorna pesos IRL atuais"""
-        try:
-            if hasattr(self, 'irl_weights') and self.irl_weights:
-                return self.irl_weights
-            else:
-                self.irl_weights = {
-                    'progress': 0.3,
-                    'stability': 0.4, 
-                    'efficiency': 0.2,
-                    'coordination': 0.1
-                }
-                return self.irl_weights
-        except Exception as e:
-            self.logger.warning(f"Erro ao obter pesos IRL: {e}")
-            return {'progress': 0.3, 'stability': 0.4, 'efficiency': 0.2, 'coordination': 0.1}
-
     def get_cache_stats(self) -> Dict:
         """Retorna estatísticas do cache para monitoramento"""
         total = self._cache_hits + self._cache_misses
@@ -527,136 +521,3 @@ class ValenceManager:
             "cache_hit_rate": hit_rate,
             "cache_size": len(self._cached_levels)
         }
-
-# Manter a classe LightValenceIRL 
-class LightValenceIRL:
-    """Sistema IRL leve integrado com valências"""
-    
-    def __init__(self, logger):
-        self.logger = logger
-        self.demonstration_buffer = []
-        self.learned_weights = {}
-        self.sample_count = 0
-        self._active = False
-        
-    def should_activate(self, valence_status):
-        """Ativa quando valências base estão consolidadas"""
-        try:
-            if self.sample_count < 50:
-                return False
-                
-            base_valences = ['estabilidade_dinamica', 'propulsao_eficiente']
-            struggling_valences = 0
-            
-            for v in base_valences:
-                if v in valence_status['valence_details']:
-                    details = valence_status['valence_details'][v]
-                    if (details['state'] == 'regressing' or 
-                        details['current_level'] < 0.3 or
-                        (details['learning_rate'] < 0.005 and details['current_level'] < 0.5)):
-                        struggling_valences += 1
-            
-            if struggling_valences >= 1:
-                self._active = True
-                return True
-                
-            overall_progress = valence_status.get('overall_progress', 0)
-            if self.sample_count > 100 and overall_progress < 0.3:
-                self._active = True
-                return True
-                
-            return self._active
-            
-        except Exception as e:
-            self.logger.warning(f"Erro ao verificar ativação IRL: {e}")
-            return False
-    
-    def collect_demonstration(self, episode_results, valence_status):
-        """Coleta demonstrações com critérios liberais"""
-        quality = self._calculate_demo_quality(episode_results)
-        
-        if quality > 0.3:  
-            self.demonstration_buffer.append({
-                'results': episode_results,
-                'quality': quality,
-                'valence_status': valence_status,
-                'timestamp': self.sample_count
-            })
-            self.sample_count += 1
-            
-            if len(self.demonstration_buffer) > 300:  
-                self.demonstration_buffer.pop(0)
-    
-    def _calculate_demo_quality(self, results):
-        """Critérios de qualidade mais restritivos"""
-        quality = 0.0
-        
-        if results.get('success', False):
-            quality += 0.5 
-        elif max(results.get('distance', 0), 0) > 1.0:
-            quality += 0.4 
-        elif results.get('speed', 0) > 0.5:
-            quality += 0.3 
-            
-        roll = abs(results.get('roll', 0))
-        pitch = abs(results.get('pitch', 0))
-        stability = 1.0 - min((roll + pitch) / 2.0, 1.0)
-        if stability > 0.6:
-            quality += 0.3
-            
-        return min(quality, 1.0)
-    
-    def get_irl_weights(self, valence_status):
-        """Retorna pesos IRL se disponíveis e relevantes"""
-        if len(self.demonstration_buffer) < 10:
-            return self.learned_weights
-            
-        high_quality_demos = [d for d in self.demonstration_buffer if d['quality'] > 0.6]
-        if not high_quality_demos:
-            return self.learned_weights
-            
-        new_weights = self._learn_simple_weights(high_quality_demos)
-        if new_weights:
-            self.learned_weights = new_weights
-            
-        return self.learned_weights
-    
-    def _learn_simple_weights(self, demonstrations):
-        """Aprendizado simples de pesos IRL"""
-        feature_scores = {
-            'progress': 0.0,
-            'stability': 0.0, 
-            'efficiency': 0.0,
-            'coordination': 0.0
-        }
-        feature_counts = {k: 0 for k in feature_scores.keys()}
-        
-        for demo in demonstrations:
-            results = demo['results']
-            
-            if max(results.get('distance', 0), 0) > 0.5:
-                feature_scores['progress'] += results['distance']
-                feature_counts['progress'] += 1
-                
-            roll = abs(results.get('roll', 0))
-            pitch = abs(results.get('pitch', 0))
-            stability = 1.0 - min((roll + pitch) / 2.0, 1.0)
-            feature_scores['stability'] += stability
-            feature_counts['stability'] += 1
-            
-            if results.get('propulsion_efficiency', 0) > 0:
-                feature_scores['efficiency'] += results['propulsion_efficiency']
-                feature_counts['efficiency'] += 1
-                
-            if results.get('alternating', False):
-                feature_scores['coordination'] += 1.0
-            feature_counts['coordination'] += 1
-        
-        for feature in feature_scores:
-            if feature_counts[feature] > 0:
-                feature_scores[feature] /= feature_counts[feature]
-        
-        total = sum(feature_scores.values())
-        if total > 0:
-            return {k: v/total for k, v in feature_scores.items()}
-        return {}

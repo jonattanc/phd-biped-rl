@@ -43,99 +43,55 @@ class RewardCalculator:
         }
     
     def calculate(self, sim, action, phase_info: Dict) -> float:
-        """Sistema de recompensas UNIFICADO com cache inteligente"""
         self._total_calculations += 1
-        
-        # Gerar chave de cache baseada no estado essencial
+
+        # CACHE EXPANDIDO - mesma chave por mais tempo
         cache_key = self._generate_essential_cache_key(sim, phase_info)
-        
-        # Verificar cache apenas para estados similares
+
         cached_reward = self.cache.get(cache_key)
         if cached_reward is not None:
             self._cache_hits += 1
             return cached_reward
-        
+
         self._cache_misses += 1
-        
-        # CALCULAR COMPONENTES ESSENCIAIS (sempre calculados)
+
+        # CÁLCULO COMPLETO (preserva qualidade)
         total_reward = 0.0
-        
-        # 1. MOVIMENTO POSITIVO (CRÍTICO - sempre calculado)
+
+        # Componentes ESSENCIAIS (mesmo cálculo original)
         movement_reward = self._calculate_movement_priority_reward(sim, phase_info)
         total_reward += movement_reward
-        
-        # 2. SISTEMA DE MARCHA (CRÍTICO - sempre calculado)
+
         gait_reward = self._calculate_gait_system_reward(sim, phase_info)
         total_reward += gait_reward
-        
-        # 3. PROGRESSO (CRÍTICO - sempre calculado)
+
         progress_reward = self._calculate_progress_reward(sim, phase_info)
         total_reward += progress_reward
-        
-        # 4. PENALIDADES GLOBAIS (CRÍTICO - sempre calculado)
+
         penalties = self._calculate_global_penalties(sim, phase_info)
         total_reward += penalties
-        
-        # 5. COMPONENTES ADICIONAIS baseados nas valências ativas
+
         valence_components = self._calculate_valence_based_components(sim, phase_info)
         total_reward += valence_components
-        
-        # Garantir recompensa não-negativa para movimento positivo
+
         final_reward = max(total_reward, 0.0) if movement_reward > 0 else total_reward
-        
-        # Armazenar no cache apenas se for um estado representativo
-        if self._should_cache_state(sim):
-            self.cache.set(cache_key, final_reward, ttl=30)
-        
+
+        # CACHE POR MAIS TEMPO
+        self.cache.set(cache_key, final_reward, ttl=80)
+
         return final_reward
     
     def _generate_essential_cache_key(self, sim, phase_info: Dict) -> str:
-        """Gera chave de cache baseada em métricas ESSENCIAIS"""
+        """Chave de cache mais estável"""
         try:
-            # Métricas fundamentais para detecção de estado similar
-            distance = max(getattr(sim, "episode_distance", 0), 0)
-            velocity = getattr(sim, "robot_x_velocity", 0)
-            roll = abs(getattr(sim, "robot_roll", 0))
-            pitch = abs(getattr(sim, "robot_pitch", 0))
-            
-            # Estado de contato dos pés (importante para marcha)
-            left_contact = getattr(sim, "robot_left_foot_contact", False)
-            right_contact = getattr(sim, "robot_right_foot_contact", False)
-            
-            # Grupo atual e componentes ativos
-            group = phase_info.get('group_level', 1)
-            active_valences = phase_info.get('valence_status', {}).get('active_valences', [])
-            
-            # Criar fingerprint do estado
-            state_fingerprint = (
-                f"d{distance:.2f}_v{velocity:.2f}_"
-                f"r{roll:.2f}_p{pitch:.2f}_"
-                f"lc{left_contact}_rc{right_contact}_"
-                f"g{group}_v{len(active_valences)}"
-            )
-            
-            return state_fingerprint
-            
+            distance = round(max(getattr(sim, "episode_distance", 0), 0), 1)  # Menos precisão
+            velocity = round(getattr(sim, "robot_x_velocity", 0), 1)
+            roll = round(abs(getattr(sim, "robot_roll", 0)), 1)
+            pitch = round(abs(getattr(sim, "robot_pitch", 0)), 1)
+
+            return f"d{distance}_v{velocity}_r{roll}_p{pitch}"
         except Exception as e:
-            self.logger.warning(f"Erro ao gerar chave de cache: {e}")
             return f"error_{self._total_calculations}"
-    
-    def _should_cache_state(self, sim) -> bool:
-        """Determina se o estado atual deve ser cacheado"""
-        # Cachear apenas estados com movimento significativo ou estabilidade
-        distance = max(getattr(sim, "episode_distance", 0), 0)
-        velocity = getattr(sim, "robot_x_velocity", 0)
-        
-        # Cachear se: movimento positivo OU velocidade estável OU baixa instabilidade
-        return (distance > 0.1 or 
-                abs(velocity) > 0.05 or 
-                self._is_stable_state(sim))
-    
-    def _is_stable_state(self, sim) -> bool:
-        """Verifica se é um estado estável representativo"""
-        roll = abs(getattr(sim, "robot_roll", 0))
-        pitch = abs(getattr(sim, "robot_pitch", 0))
-        return (roll < 0.3 and pitch < 0.3)
     
     def _calculate_movement_priority_reward(self, sim, phase_info) -> float:
         """RECOMPENSA CRÍTICA - Movimento positivo (SEMPRE calculada)"""
