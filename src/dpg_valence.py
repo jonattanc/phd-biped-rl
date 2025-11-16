@@ -254,21 +254,16 @@ class ValenceManager:
         
             if perf is None:
                 continue
-            
-            # Ativação MAIS RÁPIDA para valências focadas no terreno
-            if valence_name in focus_valences:
-                activation_threshold = 0.02
-            else:
-                activation_threshold = 0.05
                 
-            if current_level > activation_threshold:
+            if current_level > 0.01:
                 perf.state = ValenceState.LEARNING 
                 self.active_valences.add(valence_name)
                 perf.current_level = current_level
                 perf.episodes_active += 1
-            else:
-                perf.state = ValenceState.INACTIVE
-                self.active_valences.discard(valence_name)
+
+            # Atualizar nível mesmo se já estava ativa
+            elif valence_name in self.active_valences:
+                perf.current_level = current_level
 
     def _ensure_valence_trackers(self):
         """Garante que todos os trackers existam"""
@@ -371,10 +366,12 @@ class ValenceManager:
             elif valence_name == "estabilidade_postural":
                 roll = abs(results.get("roll", 0))
                 pitch = abs(results.get("pitch", 0))
-                stability = 1.0 - min((roll + pitch) / 1.0, 1.0)
-                if distance > 0.05:  
-                    return stability * 0.9
-                return 0.0
+                stability_score = 1.0 - min((roll + pitch) / 0.8, 1.0)  
+                distance = results.get("distance", 0)
+                if distance > 0.05:
+                    stability_score += 0.2  
+
+                return min(stability_score, 0.9)
 
             # PROPULSÃO BÁSICA 
             elif valence_name == "propulsao_basica":

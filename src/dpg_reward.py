@@ -84,14 +84,14 @@ class RewardCalculator:
     def _generate_essential_cache_key(self, sim, phase_info: Dict) -> str:
         """Chave de cache mais estável"""
         try:
-            distance = round(max(getattr(sim, "episode_distance", 0), 0), 1)  # Menos precisão
-            velocity = round(getattr(sim, "robot_x_velocity", 0), 1)
+            distance = int(getattr(sim, "episode_distance", 0) * 5)
+            velocity = int(getattr(sim, "robot_x_velocity", 0) * 10)
             roll = round(abs(getattr(sim, "robot_roll", 0)), 1)
             pitch = round(abs(getattr(sim, "robot_pitch", 0)), 1)
 
             return f"d{distance}_v{velocity}_r{roll}_p{pitch}"
         except Exception as e:
-            return f"error_{self._total_calculations}"
+            return f"error_{self._total_calculations % 100}"
     
     def _calculate_movement_priority_reward(self, sim, phase_info) -> float:
         """RECOMPENSA CRÍTICA - Movimento positivo (SEMPRE calculada)"""
@@ -100,14 +100,14 @@ class RewardCalculator:
         
         # PENALIDADE NUCLEAR por movimento negativo
         if distance < 0:
-            return -300.0
+            return -100.0
         
         base_reward = 0.0
         
         # RECOMPENSA PROGRESSIVA por movimento positivo
         if distance > 0:
             # Escala linear base + bônus progressivo
-            base_reward += distance * 15.0  # Base aumentada
+            base_reward += distance * 30.0  
             
             # Bônus por marcos de distância
             if distance > 3.0: base_reward += 200.0
@@ -123,13 +123,13 @@ class RewardCalculator:
         
         # Recompensa por velocidade positiva
         if velocity > 0:
-            base_reward += velocity * 2.0
+            base_reward += velocity * 8.0
         elif velocity < -0.01:  # Pequena penalidade por velocidade negativa
-            base_reward -= 50.0
+            base_reward -= 20.0
             
         # Bônus de sobrevivência com movimento
         if not getattr(sim, "episode_terminated", True) and distance > 0.01:
-            base_reward += 50.0
+            base_reward += 80.0
             
         return base_reward
     
