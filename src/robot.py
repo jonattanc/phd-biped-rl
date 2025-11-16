@@ -17,6 +17,7 @@ class Robot:
         self.gait_state = 0
 
         self.gait_step_size = 0.2
+        self.min_knee_angle = math.radians(2)
 
         self.initial_section_length = 1
         self.ramp_hypotenuse = 8
@@ -131,10 +132,12 @@ class Robot:
         left_foot_x_position = left_foot_state[0][0]
         feet_frontal_distance = right_foot_x_position - left_foot_x_position
 
+        right_knee_angle, left_knee_angle = self.get_knee_angles()
+
         new_state = self.gait_state
 
-        if self.gait_state == 0.5:  # Pés paralelos
-            if feet_frontal_distance > self.gait_step_size / 2:
+        if self.gait_state == 0.5:  # Pés paralelos (pé direito deve avançar)
+            if feet_frontal_distance > self.gait_step_size / 2 and abs(right_knee_angle) >= self.min_knee_angle:
                 new_state = 0.25
 
         elif self.gait_state == 0.25:  # Pé direito um pouco avançado
@@ -142,27 +145,27 @@ class Robot:
                 new_state = -1.0
 
         elif self.gait_state == -1.0:  # Pé direito bem avançado
-            if feet_frontal_distance < self.gait_step_size / 2:
+            if feet_frontal_distance < self.gait_step_size / 2 and abs(left_knee_angle) >= self.min_knee_angle:
                 new_state = -0.75
 
-        elif self.gait_state == -0.75:  # Pé direito recuando
-            if feet_frontal_distance < 0:
+        elif self.gait_state == -0.75:  # Pé esquerdo começa a avançar
+            if feet_frontal_distance < 0 and abs(left_knee_angle) >= self.min_knee_angle:
                 new_state = -0.5
 
-        elif self.gait_state == -0.5:  # Pés paralelos (volta)
-            if feet_frontal_distance < -self.gait_step_size / 2:
+        elif self.gait_state == -0.5:  # Pés paralelos (pé esquerdo deve avançar)
+            if feet_frontal_distance < -self.gait_step_size / 2 and abs(left_knee_angle) >= self.min_knee_angle:
                 new_state = -0.25
 
-        elif self.gait_state == -0.25:  # Pé direito um pouco atrás
+        elif self.gait_state == -0.25:  # Pé esquerdo um pouco avançado
             if feet_frontal_distance < -self.gait_step_size:
                 new_state = 1.0
 
-        elif self.gait_state == 1.0:  # Pé direito bem atrás
-            if feet_frontal_distance > -self.gait_step_size / 2:
+        elif self.gait_state == 1.0:  # Pé esquerdo bem avançado
+            if feet_frontal_distance > -self.gait_step_size / 2 and abs(right_knee_angle) >= self.min_knee_angle:
                 new_state = 0.75
 
-        elif self.gait_state == 0.75:  # Pé direito avançando novamente
-            if feet_frontal_distance > 0:
+        elif self.gait_state == 0.75:  # Pé direito começa a avançar
+            if feet_frontal_distance > 0 and abs(right_knee_angle) >= self.min_knee_angle:
                 new_state = 0.5
 
         if new_state != self.gait_state:
