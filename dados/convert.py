@@ -128,7 +128,7 @@ def json_para_csv(json_file_path, csv_file_path):
             csvfile.write(f"# Menor distância, {formatar_numero(estatisticas['menor_distancia'])} , {estatisticas['episodio_menor_distancia']}\n")
             csvfile.write(f"# Média recompensa, {formatar_numero(estatisticas['media_recompensa'])}\n")
             csvfile.write(f"# Média distância, {formatar_numero(estatisticas['media_distancia'])}\n")
-            csvfile.write(f"# Sucessos, {estatisticas['total_sucessos']}/{len(episode_data['success'])}, {formatar_numero(estatisticas['taxa_sucesso']*100)}\n")
+            csvfile.write(f"# Sucessos, {formatar_numero(estatisticas['taxa_sucesso']*100)}, {estatisticas['total_sucessos']}/{len(episode_data['success'])}\n")
             csvfile.write(f"# Total passos, {estatisticas['total_passos']}\n")
             csvfile.write(f"# Total tempo (s), {formatar_numero(estatisticas['total_tempo'])}\n")
             
