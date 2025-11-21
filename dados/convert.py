@@ -125,32 +125,32 @@ def json_to_csv(json_file_path, csv_file_path):
             csvfile.write(f"# Robot: {data['session_info']['robot']}\n")
             csvfile.write(f"# Algorithm: {data['session_info']['algorithm']}\n")
             csvfile.write(f"# Environment: {data['session_info']['environment']}\n")
-            csvfile.write(f"# Total Steps: {data['session_info']['total_steps']}\n")
-            csvfile.write(f"# Total Episodes: {data['session_info']['total_episodes']}\n")
-            csvfile.write(f"# Best Reward: {formatar_numero(data['tracker_status']['best_reward'])}\n")
-            csvfile.write(f"# Best Distance: {formatar_numero(data['tracker_status']['best_distance'])}\n")
+            csvfile.write(f"# Total Steps, {data['session_info']['total_steps']}\n")
+            csvfile.write(f"# Total Episodes, {data['session_info']['total_episodes']}\n")
+            csvfile.write(f"# Best Reward, {formatar_numero(data['tracker_status']['best_reward'])}\n")
+            csvfile.write(f"# Best Distance, {formatar_numero(data['tracker_status']['best_distance'])}\n")
             csvfile.write("#" * 50 + "\n")
             csvfile.write("# ESTATÍSTICAS DE DESEMPENHO\n")
             
             if estatisticas['primeiro_episodio_9m']:
-                csvfile.write(f"# Primeiro episódio >9m: {estatisticas['primeiro_episodio_9m']}\n")
-                csvfile.write(f"# Soma de passos até >9m: {estatisticas['soma_passos_ate_9m']}\n")
+                csvfile.write(f"# Primeiro episódio >9m, {estatisticas['primeiro_episodio_9m']}\n")
+                csvfile.write(f"# Soma de passos até >9m, {estatisticas['soma_passos_ate_9m']}\n")
             else:
-                csvfile.write("# Primeiro episódio >9m: Nenhum episódio atingiu 9m\n")
-                csvfile.write("# Soma de passos até >9m: N/A\n")
+                csvfile.write("# Primeiro episódio >9m, Nenhum episódio atingiu 9m\n")
+                csvfile.write("# Soma de passos até >9m, N/A\n")
             
             if estatisticas['episodio_mais_rapido_9m']:
-                csvfile.write(f"# Episódio mais rápido para >9m: {estatisticas['episodio_mais_rapido_9m']}\n")
-                csvfile.write(f"# Tempo mínimo para >9m: {formatar_numero(estatisticas['tempo_minimo_9m'])}s\n")
+                csvfile.write(f"# Episódio mais rápido para >9m, {estatisticas['episodio_mais_rapido_9m']}\n")
+                csvfile.write(f"# Tempo mínimo para >9m, {formatar_numero(estatisticas['tempo_minimo_9m'])}s\n")
             else:
-                csvfile.write("# Episódio mais rápido para >9m: Nenhum episódio atingiu 9m\n")
-                csvfile.write("# Tempo mínimo para >9m: N/A\n")
+                csvfile.write("# Episódio mais rápido para >9m, Nenhum episódio atingiu 9m\n")
+                csvfile.write("# Tempo mínimo para >9m, N/A\n")
             
             # Estatísticas adicionais
             recompensa_maxima = max(episode_data['rewards'])
             distancia_minima = min(episode_data['distances'])
-            csvfile.write(f"# Maior recompensa: {formatar_numero(recompensa_maxima)}\n")
-            csvfile.write(f"# Menor distância: {formatar_numero(distancia_minima)}\n")
+            csvfile.write(f"# Maior recompensa, {formatar_numero(recompensa_maxima)}\n")
+            csvfile.write(f"# Menor distância, {formatar_numero(distancia_minima)}\n")
             csvfile.write("#" * 50 + "\n")
             
             # Escrever dados
@@ -216,12 +216,12 @@ def json_to_csv_pandas(json_file_path, csv_file_path):
             f.write("#" * 50 + "\n")
             f.write(f"# Robot: {data['session_info']['robot']}\n")
             f.write(f"# Algorithm: {data['session_info']['algorithm']}\n")
-            f.write(f"# Total Episodes: {data['session_info']['total_episodes']}\n")
+            f.write(f"# Total Episodes, {data['session_info']['total_episodes']}\n")
             
             if estatisticas['primeiro_episodio_9m']:
-                f.write(f"# Primeiro episódio >9m: {estatisticas['primeiro_episodio_9m']}\n")
-                f.write(f"# Soma de passos até >9m: {estatisticas['soma_passos_ate_9m']}\n")
-                f.write(f"# Episódio mais rápido >9m: {estatisticas['episodio_mais_rapido_9m']}\n")
+                f.write(f"# Primeiro episódio >9m, {estatisticas['primeiro_episodio_9m']}\n")
+                f.write(f"# Soma de passos até >9m, {estatisticas['soma_passos_ate_9m']}\n")
+                f.write(f"# Episódio mais rápido >9m, {estatisticas['episodio_mais_rapido_9m']}\n")
             
             f.write("#" * 50 + "\n")
         
