@@ -1,35 +1,40 @@
 import json
 import csv
-import pandas as pd
 import os
 import glob
-from datetime import datetime
 
 def formatar_numero(valor):
-    """
-    Formata números para ter até 3 casas decimais
-    """
+    """Formata números para ter até 3 casas decimais"""
     if isinstance(valor, (int, float)):
         return round(valor, 3)
     return valor
 
 def calcular_estatisticas(episode_data):
-    """
-    Calcula estatísticas especiais dos dados
-    """
+    """Calcula estatísticas dos dados"""
     episodios = episode_data['episodes']
     distancias = episode_data['distances']
     tempos = episode_data['times']
     passos = episode_data['steps']
+    recompensas = episode_data['rewards']
+    sucessos = episode_data['success']
     
     estatisticas = {
         'primeiro_episodio_9m': None,
         'soma_passos_ate_9m': 0,
         'episodio_mais_rapido_9m': None,
-        'tempo_minimo_9m': float('inf')
+        'tempo_minimo_9m': float('inf'),
+        'maior_recompensa': max(recompensas) if recompensas else 0,
+        'episodio_maior_recompensa': episodios[recompensas.index(max(recompensas))] if recompensas else None,
+        'menor_distancia': min(distancias) if distancias else 0,
+        'episodio_menor_distancia': episodios[distancias.index(min(distancias))] if distancias else None,
+        'media_recompensa': sum(recompensas) / len(recompensas) if recompensas else 0,
+        'media_distancia': sum(distancias) / len(distancias) if distancias else 0,
+        'total_sucessos': sum(sucessos),
+        'taxa_sucesso': sum(sucessos) / len(sucessos) if sucessos else 0,
+        'total_passos': sum(passos),
+        'total_tempo': sum(tempos)
     }
     
-    # Encontrar primeiro episódio que ultrapassou 9m e soma de passos até ele
     passos_acumulados = 0
     encontrou_9m = False
     
@@ -41,35 +46,25 @@ def calcular_estatisticas(episode_data):
             estatisticas['soma_passos_ate_9m'] = passos_acumulados
             encontrou_9m = True
         
-        # Encontrar episódio que levou menos tempo para completar 9m
         if distancia > 9.0 and tempos[i] < estatisticas['tempo_minimo_9m']:
             estatisticas['episodio_mais_rapido_9m'] = episodios[i]
             estatisticas['tempo_minimo_9m'] = tempos[i]
     
     return estatisticas
 
-def json_to_csv(json_file_path, csv_file_path):
-    """
-    Converte um arquivo JSON de dados de treinamento para CSV
-    """
+def json_para_csv(json_file_path, csv_file_path):
+    """Converte um arquivo JSON para CSV"""
     try:
-        # Ler o arquivo JSON
         with open(json_file_path, 'r', encoding='utf-8') as file:
             data = json.load(file)
         
-        # Extrair dados dos episódios
         episode_data = data['episode_data']
-        episodes = episode_data['episodes']
-        
-        # Calcular estatísticas
         estatisticas = calcular_estatisticas(episode_data)
         
-        # Criar lista de linhas para o CSV
         rows = []
-        
-        for i in range(len(episodes)):
+        for i in range(len(episode_data['episodes'])):
             row = {
-                'episode': episodes[i],
+                'episode': episode_data['episodes'][i],
                 'reward': formatar_numero(episode_data['rewards'][i]),
                 'time': formatar_numero(episode_data['times'][i]),
                 'distance': formatar_numero(episode_data['distances'][i]),
@@ -115,13 +110,11 @@ def json_to_csv(json_file_path, csv_file_path):
             }
             rows.append(row)
         
-        # Escrever para CSV
         with open(csv_file_path, 'w', newline='', encoding='utf-8') as csvfile:
-            # Escrever cabeçalho de informações da sessão
-            csvfile.write("# RESUMO ESTATÍSTICO DO TREINAMENTO\n")
+            # Cabeçalho com estatísticas
+            csvfile.write("# RESUMO ESTATÍSTICO - COMPARAÇÃO DE TREINAMENTOS\n")
+            csvfile.write("##################################################\n")
             csvfile.write(f"# Arquivo: {os.path.basename(json_file_path)}\n")
-            csvfile.write(f"# Data de conversão: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-            csvfile.write("#" * 50 + "\n")
             csvfile.write(f"# Robot: {data['session_info']['robot']}\n")
             csvfile.write(f"# Algorithm: {data['session_info']['algorithm']}\n")
             csvfile.write(f"# Environment: {data['session_info']['environment']}\n")
@@ -129,198 +122,66 @@ def json_to_csv(json_file_path, csv_file_path):
             csvfile.write(f"# Total Episodes, {data['session_info']['total_episodes']}\n")
             csvfile.write(f"# Best Reward, {formatar_numero(data['tracker_status']['best_reward'])}\n")
             csvfile.write(f"# Best Distance, {formatar_numero(data['tracker_status']['best_distance'])}\n")
-            csvfile.write("#" * 50 + "\n")
-            csvfile.write("# ESTATÍSTICAS DE DESEMPENHO\n")
+            csvfile.write("##################################################\n")
+            csvfile.write("# MÉTRICAS DE DESEMPENHO\n")
+            csvfile.write(f"# Maior recompensa, {formatar_numero(estatisticas['maior_recompensa'])} , {estatisticas['episodio_maior_recompensa']}\n")
+            csvfile.write(f"# Menor distância, {formatar_numero(estatisticas['menor_distancia'])} , {estatisticas['episodio_menor_distancia']}\n")
+            csvfile.write(f"# Média recompensa, {formatar_numero(estatisticas['media_recompensa'])}\n")
+            csvfile.write(f"# Média distância, {formatar_numero(estatisticas['media_distancia'])}\n")
+            csvfile.write(f"# Sucessos, {estatisticas['total_sucessos']}/{len(episode_data['success'])}, {formatar_numero(estatisticas['taxa_sucesso']*100)}\n")
+            csvfile.write(f"# Total passos, {estatisticas['total_passos']}\n")
+            csvfile.write(f"# Total tempo (s), {formatar_numero(estatisticas['total_tempo'])}\n")
             
             if estatisticas['primeiro_episodio_9m']:
                 csvfile.write(f"# Primeiro episódio >9m, {estatisticas['primeiro_episodio_9m']}\n")
-                csvfile.write(f"# Soma de passos até >9m, {estatisticas['soma_passos_ate_9m']}\n")
+                csvfile.write(f"# Soma passos até >9m, {estatisticas['soma_passos_ate_9m']}\n")
+                csvfile.write(f"# Episódio mais rápido >9m, {estatisticas['episodio_mais_rapido_9m']}\n")
+                csvfile.write(f"# Tempo mínimo >9m (s), {formatar_numero(estatisticas['tempo_minimo_9m'])}\n")
             else:
-                csvfile.write("# Primeiro episódio >9m, Nenhum episódio atingiu 9m\n")
-                csvfile.write("# Soma de passos até >9m, N/A\n")
+                csvfile.write("# Nenhum episódio atingiu 9m\n")
             
-            if estatisticas['episodio_mais_rapido_9m']:
-                csvfile.write(f"# Episódio mais rápido para >9m, {estatisticas['episodio_mais_rapido_9m']}\n")
-                csvfile.write(f"# Tempo mínimo para >9m, {formatar_numero(estatisticas['tempo_minimo_9m'])}s\n")
-            else:
-                csvfile.write("# Episódio mais rápido para >9m, Nenhum episódio atingiu 9m\n")
-                csvfile.write("# Tempo mínimo para >9m, N/A\n")
+            csvfile.write("##################################################\n")
+            csvfile.write("# DADOS DOS EPISÓDIOS\n")
             
-            # Estatísticas adicionais
-            recompensa_maxima = max(episode_data['rewards'])
-            distancia_minima = min(episode_data['distances'])
-            csvfile.write(f"# Maior recompensa, {formatar_numero(recompensa_maxima)}\n")
-            csvfile.write(f"# Menor distância, {formatar_numero(distancia_minima)}\n")
-            csvfile.write("#" * 50 + "\n")
-            
-            # Escrever dados
+            # Dados dos episódios
             if rows:
                 fieldnames = rows[0].keys()
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                 writer.writeheader()
                 writer.writerows(rows)
         
-        # Mostrar estatísticas no console
-        print(f"✓ Convertido: {os.path.basename(json_file_path)} -> {os.path.basename(csv_file_path)}")
-        print(f"  Episódios: {len(rows)}, Métricas: {len(rows[0]) if rows else 0}")
-        print(f"  Estatísticas:")
-        if estatisticas['primeiro_episodio_9m']:
-            print(f"    - Primeiro >9m: Ep.{estatisticas['primeiro_episodio_9m']} (Passos: {estatisticas['soma_passos_ate_9m']})")
-            print(f"    - Mais rápido >9m: Ep.{estatisticas['episodio_mais_rapido_9m']} ({estatisticas['tempo_minimo_9m']:.1f}s)")
-        else:
-            print(f"    - Nenhum episódio atingiu 9m")
-        print(f"    - Maior recompensa: {recompensa_maxima:.1f}")
-        print(f"    - Menor distância: {distancia_minima:.3f}")
-        
         return True
         
     except Exception as e:
-        print(f"✗ Erro ao converter {json_file_path}: {str(e)}")
+        print(f"Erro ao converter {json_file_path}: {str(e)}")
         return False
 
-def json_to_csv_pandas(json_file_path, csv_file_path):
-    """
-    Versão alternativa usando pandas (mais simples)
-    """
-    try:
-        # Ler o arquivo JSON
-        with open(json_file_path, 'r', encoding='utf-8') as file:
-            data = json.load(file)
-        
-        # Calcular estatísticas
-        estatisticas = calcular_estatisticas(data['episode_data'])
-        
-        # Criar DataFrame a partir dos dados dos episódios
-        episode_data = data['episode_data']
-        
-        # Converter para DataFrame
-        df = pd.DataFrame()
-        
-        # Adicionar todas as colunas do episode_data
-        for key, values in episode_data.items():
-            if key not in ['success']:  # Não formatar booleanos
-                # Aplicar formatação de 3 casas decimais para colunas numéricas
-                if isinstance(values[0], (int, float)):
-                    df[key] = [formatar_numero(v) for v in values]
-                else:
-                    df[key] = values
-            else:
-                df[key] = values
-        
-        # Criar arquivo CSV com cabeçalho informativo
-        with open(csv_file_path, 'w', newline='', encoding='utf-8') as f:
-            # Escrever cabeçalho informativo
-            f.write("# RESUMO ESTATÍSTICO DO TREINAMENTO\n")
-            f.write(f"# Arquivo: {os.path.basename(json_file_path)}\n")
-            f.write(f"# Data de conversão: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-            f.write("#" * 50 + "\n")
-            f.write(f"# Robot: {data['session_info']['robot']}\n")
-            f.write(f"# Algorithm: {data['session_info']['algorithm']}\n")
-            f.write(f"# Total Episodes, {data['session_info']['total_episodes']}\n")
-            
-            if estatisticas['primeiro_episodio_9m']:
-                f.write(f"# Primeiro episódio >9m, {estatisticas['primeiro_episodio_9m']}\n")
-                f.write(f"# Soma de passos até >9m, {estatisticas['soma_passos_ate_9m']}\n")
-                f.write(f"# Episódio mais rápido >9m, {estatisticas['episodio_mais_rapido_9m']}\n")
-            
-            f.write("#" * 50 + "\n")
-        
-        # Adicionar dados ao CSV
-        df.to_csv(csv_file_path, mode='a', index=False)
-        
-        print(f"✓ Convertido (pandas): {os.path.basename(json_file_path)} -> {os.path.basename(csv_file_path)}")
-        print(f"  Shape: {df.shape}")
-        
-        return True
-        
-    except Exception as e:
-        print(f"✗ Erro ao converter {json_file_path} com pandas: {str(e)}")
-        return False
-
-def converter_todos_arquivos_json(pasta='.', usar_pandas=False):
-    """
-    Converte todos os arquivos JSON na pasta para CSV
-    """
-    # Encontrar todos os arquivos JSON
+def converter_todos_json(pasta='.'):
+    """Converte todos os arquivos JSON na pasta para CSV"""
     padrao_json = os.path.join(pasta, '*.json')
     arquivos_json = glob.glob(padrao_json)
     
     if not arquivos_json:
-        print("Nenhum arquivo JSON encontrado na pasta atual.")
+        print("Nenhum arquivo JSON encontrado.")
         return
     
-    print(f"Encontrados {len(arquivos_json)} arquivo(s) JSON:")
-    
-    sucessos = 0
     for arquivo_json in arquivos_json:
-        # Gerar nome do arquivo CSV
         nome_base = os.path.splitext(arquivo_json)[0]
         arquivo_csv = nome_base + '.csv'
         
-        # Converter arquivo
-        if usar_pandas:
-            sucesso = json_to_csv_pandas(arquivo_json, arquivo_csv)
-        else:
-            sucesso = json_to_csv(arquivo_json, arquivo_csv)
-        
-        if sucesso:
-            sucessos += 1
-        print()  # Linha em branco entre arquivos
-    
-    print(f"Resumo: {sucessos}/{len(arquivos_json)} arquivos convertidos com sucesso!")
+        if json_para_csv(arquivo_json, arquivo_csv):
+            print(f"Convertido: {os.path.basename(arquivo_json)} -> {os.path.basename(arquivo_csv)}")
 
-def converter_arquivo_especifico(arquivo_json, usar_pandas=False):
-    """
-    Converte um arquivo JSON específico para CSV
-    """
-    if not os.path.exists(arquivo_json):
-        print(f"Arquivo não encontrado: {arquivo_json}")
-        return
-    
-    # Gerar nome do arquivo CSV
-    nome_base = os.path.splitext(arquivo_json)[0]
-    arquivo_csv = nome_base + '.csv'
-    
-    # Converter arquivo
-    if usar_pandas:
-        json_to_csv_pandas(arquivo_json, arquivo_csv)
-    else:
-        json_to_csv(arquivo_json, arquivo_csv)
-
-# Uso do script
 if __name__ == "__main__":
-    import argparse
+    import sys
     
-    parser = argparse.ArgumentParser(description='Converter arquivos JSON de treinamento para CSV')
-    parser.add_argument('--arquivo', '-a', type=str, help='Converter um arquivo específico')
-    parser.add_argument('--pasta', '-p', type=str, default='.', help='Pasta para procurar arquivos JSON')
-    parser.add_argument('--pandas', action='store_true', help='Usar método pandas para conversão')
-    parser.add_argument('--todos', '-t', action='store_true', help='Converter todos os arquivos JSON da pasta')
-    
-    args = parser.parse_args()
-    
-    if args.todos:
-        # Converter todos os arquivos JSON da pasta
-        converter_todos_arquivos_json(args.pasta, args.pandas)
-    elif args.arquivo:
-        # Converter um arquivo específico
-        converter_arquivo_especifico(args.arquivo, args.pandas)
-    else:
-        # Modo interativo
-        print("=== Conversor JSON para CSV ===")
-        print("Características:")
-        print("- Todos os números com 3 casas decimais")
-        print("- Resumo estatístico incluído no CSV")
-        print("- Estatísticas de desempenho (9m)")
-        print()
-        
-        opcao = input("Converter (1) um arquivo específico ou (2) todos os JSON da pasta? [1/2]: ")
-        
-        if opcao == "1":
-            arquivo = input("Nome do arquivo JSON: ")
-            usar_pandas = input("Usar pandas? [s/N]: ").lower().startswith('s')
-            converter_arquivo_especifico(arquivo, usar_pandas)
+    if len(sys.argv) > 1:
+        arquivo_json = sys.argv[1]
+        if os.path.exists(arquivo_json):
+            nome_base = os.path.splitext(arquivo_json)[0]
+            arquivo_csv = nome_base + '.csv'
+            json_para_csv(arquivo_json, arquivo_csv)
         else:
-            pasta = input("Pasta (enter para pasta atual): ") or "."
-            usar_pandas = input("Usar pandas? [s/N]: ").lower().startswith('s')
-            converter_todos_arquivos_json(pasta, usar_pandas)
+            print(f"Arquivo não encontrado: {arquivo_json}")
+    else:
+        converter_todos_json()
