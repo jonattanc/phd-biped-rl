@@ -84,6 +84,28 @@ class Cache:
         else:  # adaptive
             self._evict_adaptive()
     
+    def _evict_lru(self):
+        """Implementação simples de LRU"""
+        if not self._access_pattern:
+            self._evict_adaptive()  # Fallback
+            return
+
+        key_to_remove = min(self._access_pattern.keys(), 
+                           key=lambda k: self._access_pattern[k])
+        del self._cache[key_to_remove]
+        del self._access_pattern[key_to_remove]
+
+    def _evict_low_priority(self):
+        """Remove item com menor prioridade"""
+        if not self._cache:
+            return
+
+        key_to_remove = min(self._cache.keys(), 
+                           key=lambda k: self._cache[k][3])  # Índice 3 = priority
+        del self._cache[key_to_remove]
+        if key_to_remove in self._access_pattern:
+            del self._access_pattern[key_to_remove]
+        
     def _evict_adaptive(self):
         """Combina frequência de acesso, idade e prioridade"""
         def eviction_score(k):
@@ -235,6 +257,10 @@ class BufferManager:
         self.logger = logger
         self.config = config
         self.max_experiences = max_experiences
+
+        # NOVO: Estatísticas para ajuste de pesos
+        self.component_performance = {}
+        self.weight_learning_rate = 0.01
         
         # Sistema de buffers otimizado
         self.group_buffers = {}
@@ -512,13 +538,34 @@ class BufferManager:
         
         
     def _calculate_experience_priority(self, experience: Experience) -> float:
-        """Calcula prioridade baseada em múltiplos fatores"""
+        """Calcula prioridade incluindo análise de componentes"""
         quality_factor = experience.quality * 0.5
         reward_factor = min(experience.reward * 0.2, 0.3)
         skill_factor = sum(experience.skills.values()) * 0.15
         novelty_factor = self._calculate_novelty(experience) * 0.15
         
-        return quality_factor + reward_factor + skill_factor + novelty_factor
+        # NOVO: Fator baseado em componentes problemáticos
+        component_factor = self._analyze_component_performance(experience) * 0.1
+        
+        return quality_factor + reward_factor + skill_factor + novelty_factor + component_factor
+        
+    def _analyze_component_performance(self, experience: Experience) -> float:
+        """Analisa quais componentes precisam de mais atenção"""
+        metrics = experience.info.get("metrics", {})
+        
+        # Lógica simples: se movimento é bom mas estabilidade ruim, priorizar
+        distance = max(metrics.get("distance", 0), 0)
+        roll = abs(metrics.get("roll", 0))
+        pitch = abs(metrics.get("pitch", 0))
+        
+        stability_score = 1.0 - min((roll + pitch) / 1.0, 1.0)
+        
+        if distance > 0.3 and stability_score < 0.5:
+            return 0.8  # Alta prioridade para experiências instáveis com movimento
+        elif distance < 0.1 and stability_score > 0.7:
+            return 0.6  # Média prioridade para experiências estáveis sem movimento
+            
+        return 0.3 
     
     def _calculate_novelty(self, experience: Experience) -> float:
         """Calcula fator de novidade"""
@@ -678,25 +725,33 @@ class BufferManager:
                 return 0.0
 
     def get_metrics(self) -> Dict:
-        """Métricas focadas em performance - OTIMIZADAS"""
+        """Métricas focadas em performance"""
         base_metrics = self.get_status()
 
+        total_stored = self.stored_count + self.rejected_count
+        rejection_rate = self.rejected_count / total_stored if total_stored > 0 else 0
+        
         if not self.current_group_buffer:
-            return {**base_metrics, "movement_efficiency": 0, "positive_movement_rate": 0}
-
+            return {
+                **base_metrics, 
+                "movement_efficiency": 0, 
+                "positive_movement_rate": 0,
+                "rejection_rate": rejection_rate,
+                "buffer_efficiency": 0
+            }
+    
         # Cálculos eficientes
         recent_experiences = self.current_group_buffer[-100:]  
         positive_exps = [exp for exp in recent_experiences 
                         if exp.info.get("metrics", {}).get("distance", 0) > 0.1]
-
+    
         positive_rate = len(positive_exps) / len(recent_experiences) if recent_experiences else 0
-
+    
         optimization_metrics = {
-            "cache_hit_rate": base_metrics["cache_hit_rate"],
             "positive_movement_rate": positive_rate,
             "movement_efficiency": min(positive_rate * 2.0, 1.0),
-            "rejection_rate": base_metrics["rejection_rate"],
+            "rejection_rate": rejection_rate,
             "buffer_efficiency": len(self.current_group_buffer) / self.max_experiences
         }
-
+    
         return {**base_metrics, **optimization_metrics}

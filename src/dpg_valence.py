@@ -65,7 +65,6 @@ class ValenceManager:
         self.valence_performance = {}
         self.active_valences = set()
         self.valence_weights = {}
-        self.mastery_callback = None
         self._ensure_valence_trackers()
         
         # Estado do sistema
