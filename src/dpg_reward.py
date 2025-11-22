@@ -18,7 +18,7 @@ class RewardCalculator:
         self.logger = logger
         self.config = config
         
-        # NOVO: Apenas 6 componentes macro para o crítico ajustar
+        # Apenas 6 componentes macro para o crítico ajustar
         self.macro_components = {
             "progresso": 1.0,
             "coordenacao": 1.0, 
@@ -29,8 +29,8 @@ class RewardCalculator:
         }
         
         self.base_macro_weights = self.macro_components.copy()
-        self.weight_adjustment_rate = 0.002  # Ainda mais lento
-        self.max_weight_change = 0.4  # 40% de variação máxima
+        self.weight_adjustment_rate = 0.002  
+        self.max_weight_change = 0.4  
         
         # Sistema de cache unificado
         self.cache = Cache(max_size=500, default_ttl=50)
@@ -90,7 +90,7 @@ class RewardCalculator:
         # Cache
         self.cache.set(cache_key, total_reward, ttl=80)
 
-        return max(total_reward, 0.0)  # Garantir não negativo
+        return max(total_reward, 0.0)  
 
     # =========================================================================
     # COMPONENTES MACRO (cada um agrega múltiplas funções específicas)
@@ -203,7 +203,7 @@ class RewardCalculator:
             
             # Eficiência energética (inversa do esforço)
             effort_penalty = abs(self._calculate_effort_penalty(sim, phase_info))
-            energy_efficiency = 1.0 - min(effort_penalty / 10.0, 1.0)  # Normalizar
+            energy_efficiency = 1.0 - min(effort_penalty / 10.0, 1.0)  
             reward += energy_efficiency * 15.0
             
         except Exception as e:
@@ -375,35 +375,35 @@ class RewardCalculator:
     def _generate_essential_cache_key(self, sim, phase_info: Dict) -> str:
         """Gera chave de cache estável baseada em métricas essenciais"""
         try:
-            # Métricas essenciais para cache (evitar variações mínimas)
+            # Métricas essenciais para cache 
             essential_metrics = {}
-            
+
             # Distância (arredondada)
             distance = getattr(sim, "episode_distance", 0)
-            essential_metrics["dist"] = round(distance, 2)  # 2 casas decimais
-            
+            essential_metrics["dist"] = round(distance, 2)  
+
             # Velocidade (arredondada)
             velocity = getattr(sim, "robot_x_velocity", 0)
             essential_metrics["vel"] = round(velocity, 2)
-            
+
             # Estabilidade (roll e pitch)
             roll = abs(getattr(sim, "robot_roll", 0))
             pitch = abs(getattr(sim, "robot_pitch", 0))
             essential_metrics["stab"] = round(roll + pitch, 2)
-            
+
             # Contatos dos pés
             left_contact = getattr(sim, "robot_left_foot_contact", False)
             right_contact = getattr(sim, "robot_right_foot_contact", False)
             essential_metrics["contacts"] = f"{left_contact}_{right_contact}"
-            
+
             # Info da fase (simplificada)
             phase_hash = hash(str(phase_info.get('group_level', 1)))
-            
+
             # Combinar tudo em uma chave única mas estável
             cache_key = f"reward_{essential_metrics['dist']}_{essential_metrics['vel']}_{essential_metrics['stab']}_{essential_metrics['contacts']}_{phase_hash}"
-            
+
             return cache_key
-            
+
         except Exception as e:
             # Fallback em caso de erro
             self.logger.warning(f"Erro ao gerar chave de cache: {e}")

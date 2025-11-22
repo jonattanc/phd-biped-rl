@@ -213,24 +213,34 @@ class ValenceManager:
         valence_levels = {}
         
         # SEMPRE atualizar movimento_basico 
+        distance = max(episode_results.get("distance", 0), 0)
         valence_levels["movimento_basico"] = self._calculate_valence_level(
             "movimento_basico", episode_results
         )
+
+        # FORÇAR ativação se há movimento
+        if distance > 0.01 and valence_levels["movimento_basico"] > 0:
+            movimento_tracker = self.valence_performance["movimento_basico"]
+            movimento_tracker.state = ValenceState.LEARNING
+            self.active_valences.add("movimento_basico")
+            movimento_tracker.episodes_active += 1
         
-        # Atualizar outras valências baseadas em dependências simples
-        movimento_level = valence_levels["movimento_basico"]
-        
-        if movimento_level > 0.01:
+        if distance > 0.05:
             valence_levels["estabilidade_postural"] = self._calculate_valence_level(
                 "estabilidade_postural", episode_results
             )
-            
-        if movimento_level > 0.15:  
+            # Forçar ativação se nível > 0
+            if valence_levels["estabilidade_postural"] > 0.1:
+                self.active_valences.add("estabilidade_postural")
+
+        if distance > 0.1:
             valence_levels["propulsao_basica"] = self._calculate_valence_level(
                 "propulsao_basica", episode_results
             )
+            if valence_levels["propulsao_basica"] > 0.1:
+                self.active_valences.add("propulsao_basica")
             
-        if movimento_level > 0.2:
+        if distance > 0.2:
             valence_levels["coordenacao_fundamental"] = self._calculate_valence_level(
                 "coordenacao_fundamental", episode_results 
             )

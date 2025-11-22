@@ -40,8 +40,6 @@ class Cache:
         self._max_size = max_size
         self._default_ttl = default_ttl
         self._strategy = strategy
-        
-        # Estatísticas
         self._hits = 0
         self._misses = 0
         self._access_pattern = {}
@@ -55,7 +53,6 @@ class Cache:
                 self._access_pattern[key] = self._access_pattern.get(key, 0) + 1
                 return value
             else:
-                # Expirou - remover
                 del self._cache[key]
                 if key in self._access_pattern:
                     del self._access_pattern[key]
@@ -81,13 +78,13 @@ class Cache:
             self._evict_lru()
         elif self._strategy == "priority":
             self._evict_low_priority()
-        else:  # adaptive
+        else:  
             self._evict_adaptive()
     
     def _evict_lru(self):
         """Implementação simples de LRU"""
         if not self._access_pattern:
-            self._evict_adaptive()  # Fallback
+            self._evict_adaptive() 
             return
 
         key_to_remove = min(self._access_pattern.keys(), 
@@ -101,7 +98,7 @@ class Cache:
             return
 
         key_to_remove = min(self._cache.keys(), 
-                           key=lambda k: self._cache[k][3])  # Índice 3 = priority
+                           key=lambda k: self._cache[k][3]) 
         del self._cache[key_to_remove]
         if key_to_remove in self._access_pattern:
             del self._access_pattern[key_to_remove]
@@ -112,7 +109,6 @@ class Cache:
             value, timestamp, ttl, priority = self._cache[k]
             age = time.time() - timestamp
             access_count = self._access_pattern.get(k, 0)
-            # Score mais alto = mais provável de ser removido
             return age / (access_count + 1) / (priority + 0.1)
             
         key_to_remove = min(self._cache.keys(), key=eviction_score)
@@ -154,14 +150,12 @@ class StateCompressor:
         
     def compress_state(self, state: np.ndarray) -> np.ndarray:
         """Compressão simplificada do estado"""
-        if len(state) > 15:  # Apenas comprime estados grandes
-            # Redução dimensional simples - pega características principais
+        if len(state) > 15:  
             if len(state) >= 10:
-                # Mantém primeiras 8 dimensões + últimas 2 (normalmente mais importantes)
                 compressed = np.concatenate([state[:8], state[-2:]])
                 return compressed
             else:
-                return state[:8]  # Fallback
+                return state[:8]  
         return state
 
 class PrioritizedBuffer:
@@ -171,7 +165,7 @@ class PrioritizedBuffer:
         self.capacity = capacity
         self.buffer = []
         self.priorities = []
-        self._quality_heap = []  # Heap para rápida recuperação das melhores
+        self._quality_heap = []  
         self.pos = 0
         
     def add(self, experience: Experience, priority: float = None) -> bool:
@@ -184,8 +178,6 @@ class PrioritizedBuffer:
             if len(self.buffer) < self.capacity:
                 self.buffer.append(experience)
                 self.priorities.append(priority)
-
-                # Mantém heap de qualidade atualizado
                 heapq.heappush(self._quality_heap, (-experience.quality, experience))
 
                 return True
@@ -201,7 +193,7 @@ class PrioritizedBuffer:
                     heapq.heappush(self._quality_heap, (-experience.quality, experience))
                     return True
                 else:
-                    return False  # Prioridade muito baixa, não armazena
+                    return False  
 
         except Exception as e:
             return False
@@ -367,7 +359,6 @@ class BufferManager:
 
         except Exception as e:
             self.logger.error(f"❌ ERRO na criação de experiência: {e}")
-            # Fallback...
             return Experience(
                 state=np.zeros(10),
                 action=np.zeros(6),
@@ -394,10 +385,10 @@ class BufferManager:
             # ARMAZENAR experiências de estabilidade mesmo sem movimento
             roll = abs(metrics.get("roll", 0))
             pitch = abs(metrics.get("pitch", 0))
-            if roll < 0.2 and pitch < 0.2:  # Muito estável
+            if roll < 0.2 and pitch < 0.2:  
                 return True
 
-            # ARMAZENAR algumas experiências negativas para aprendizado (10%)
+            # ARMAZENAR algumas experiências negativas para aprendizado
             if distance < 0 and np.random.random() < 0.1:
                 return True
 
@@ -405,7 +396,7 @@ class BufferManager:
 
         except Exception as e:
             self.logger.warning(f"Erro em _should_store: {e}")
-            return True  # Em caso de erro, armazena por segurança
+            return True  
 
     def _get_recent_experiences(self, count: int) -> List[Experience]:
         """Obtém experiências recentes para análise de novidade"""
@@ -416,7 +407,7 @@ class BufferManager:
             return []
 
         if len(current_buffer.buffer) < count:
-            return current_buffer.buffer.copy()  # retorna cópia
+            return current_buffer.buffer.copy() 
 
         return current_buffer.buffer[-count:].copy() 
     
@@ -544,7 +535,7 @@ class BufferManager:
         skill_factor = sum(experience.skills.values()) * 0.15
         novelty_factor = self._calculate_novelty(experience) * 0.15
         
-        # NOVO: Fator baseado em componentes problemáticos
+        # Fator baseado em componentes problemáticos
         component_factor = self._analyze_component_performance(experience) * 0.1
         
         return quality_factor + reward_factor + skill_factor + novelty_factor + component_factor
@@ -553,7 +544,7 @@ class BufferManager:
         """Analisa quais componentes precisam de mais atenção"""
         metrics = experience.info.get("metrics", {})
         
-        # Lógica simples: se movimento é bom mas estabilidade ruim, priorizar
+        # Se movimento é bom mas estabilidade ruim, priorizar
         distance = max(metrics.get("distance", 0), 0)
         roll = abs(metrics.get("roll", 0))
         pitch = abs(metrics.get("pitch", 0))
@@ -561,9 +552,9 @@ class BufferManager:
         stability_score = 1.0 - min((roll + pitch) / 1.0, 1.0)
         
         if distance > 0.3 and stability_score < 0.5:
-            return 0.8  # Alta prioridade para experiências instáveis com movimento
+            return 0.8  
         elif distance < 0.1 and stability_score > 0.7:
-            return 0.6  # Média prioridade para experiências estáveis sem movimento
+            return 0.6  
             
         return 0.3 
     
@@ -581,7 +572,7 @@ class BufferManager:
             similarities.append(sim)
 
         avg_similarity = np.mean(similarities) if similarities else 0
-        return min(avg_similarity, 1.0)  # Mais similar = menos novidade
+        return min(avg_similarity, 1.0)  
     
     def _is_core_experience(self, experience: Experience) -> bool:
         """Verifica se experiência deve ir para core buffer"""
@@ -617,10 +608,10 @@ class BufferManager:
         # Foco ABSOLUTO em movimento positivo
         movimento_positivo = 0.0
         if distance > 0:
-            movimento_positivo = min(distance / 1.5, 1.0)  # Meta realista
+            movimento_positivo = min(distance / 1.5, 1.0)  
 
         # Estabilidade baseada em thresholds REALISTAS
-        estabilidade = 1.0 - min((roll + pitch) / 0.8, 1.0)  # Mais tolerante
+        estabilidade = 1.0 - min((roll + pitch) / 0.8, 1.0)  
 
         # Progresso baseado em movimento REAL
         progresso_basico = 1.0 if distance > 0.3 else min(distance / 0.3, 0.5)
@@ -645,7 +636,7 @@ class BufferManager:
         return 1 
 
     def get_status(self):
-        """Métricas CORRIGIDAS - contar TODAS as experiências"""
+        """Métricas conta TODAS as experiências"""
         try:
             total_experiences = 0
             total_movement_distance = 0.0
@@ -730,7 +721,7 @@ class BufferManager:
 
         total_stored = self.stored_count + self.rejected_count
         rejection_rate = self.rejected_count / total_stored if total_stored > 0 else 0
-        
+
         if not self.current_group_buffer:
             return {
                 **base_metrics, 
@@ -739,19 +730,19 @@ class BufferManager:
                 "rejection_rate": rejection_rate,
                 "buffer_efficiency": 0
             }
-    
+
         # Cálculos eficientes
         recent_experiences = self.current_group_buffer[-100:]  
         positive_exps = [exp for exp in recent_experiences 
                         if exp.info.get("metrics", {}).get("distance", 0) > 0.1]
-    
+
         positive_rate = len(positive_exps) / len(recent_experiences) if recent_experiences else 0
-    
+
         optimization_metrics = {
             "positive_movement_rate": positive_rate,
             "movement_efficiency": min(positive_rate * 2.0, 1.0),
             "rejection_rate": rejection_rate,
             "buffer_efficiency": len(self.current_group_buffer) / self.max_experiences
         }
-    
+
         return {**base_metrics, **optimization_metrics}

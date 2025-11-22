@@ -582,56 +582,19 @@ class DPGManager:
     def _update_essential_metrics(self, episode_results):
         """Apenas métricas absolutamente essenciais"""
         try:
-            # GARANTIR que temos métricas básicas
             distance = max(episode_results.get("distance", 0), 0)
-            roll = abs(episode_results.get("roll", 0))
-            pitch = abs(episode_results.get("pitch", 0))
-            velocity = episode_results.get("speed", 0)
-    
-            # SEMPRE ATIVAR MOVIMENTO_BASICO SE HÁ MOVIMENTO
+
+            # ATIVAÇÃO GARANTIDA de movimento_basico
             if distance > 0.01:
-                if "movimento_basico" in self.valence_manager.valence_performance:
-                    tracker = self.valence_manager.valence_performance["movimento_basico"]
-                    # CÁLCULO DIRETO baseado na distância REAL
-                    basic_level = min(distance / 1.0, 0.8)  
-                    tracker.state = ValenceState.LEARNING
-                    self.valence_manager.active_valences.add("movimento_basico")
-                    tracker.episodes_active += 1
+                movimento_tracker = self.valence_manager.valence_performance["movimento_basico"]
+                movimento_tracker.current_level = min(distance / 1.0, 0.8)
+                movimento_tracker.state = ValenceState.LEARNING
+                self.valence_manager.active_valences.add("movimento_basico")
+                movimento_tracker.episodes_active = max(movimento_tracker.episodes_active, 1)
 
-            # ATIVAR ESTABILIDADE_POSTURAL SE ESTÁVEL
-            stability_score = 1.0 - min((roll + pitch) / 1.0, 1.0)
-            if stability_score > 0.4 and distance > 0.05:  
-                if "estabilidade_postural" in self.valence_manager.valence_performance:
-                    tracker = self.valence_manager.valence_performance["estabilidade_postural"]
-                    tracker.current_level = stability_score * 0.7
-                    tracker.state = ValenceState.LEARNING
-                    self.valence_manager.active_valences.add("estabilidade_postural")
-                    tracker.episodes_active += 1
-
-            # ATIVAR PROPULSAO_BASICA SE HÁ VELOCIDADE
-            if velocity > 0.1 and distance > 0.1:
-                if "propulsao_basica" in self.valence_manager.valence_performance:
-                    tracker = self.valence_manager.valence_performance["propulsao_basica"]
-                    propulsion_level = min(velocity / 1.0, 0.6)  
-                    tracker.current_level = propulsion_level
-                    tracker.state = ValenceState.LEARNING
-                    self.valence_manager.active_valences.add("propulsao_basica")
-                    tracker.episodes_active += 1
-
-            # ATUALIZAR OVERALL_PROGRESS MANUALMENTE
-            active_levels = []
-            for valence_name in self.valence_manager.active_valences:
-                tracker = self.valence_manager.valence_performance.get(valence_name)
-                if tracker and tracker.current_level > 0:
-                    active_levels.append(tracker.current_level)
-
-            if active_levels:
-                self.overall_progress = sum(active_levels) / len(active_levels)
-            else:
-                self.overall_progress = min(distance / 2.0, 0.3) 
-
-            # ATUALIZAR HISTÓRICO
-            self._update_metrics_history(episode_results)
+            # Limpar cache periódico para evitar estados antigos
+            if self.episode_count % 100 == 0:
+                self.valence_manager._cached_levels.clear()
 
         except Exception as e:
             self.logger.error(f"❌ ERRO CRÍTICO em _update_essential_metrics: {e}")
