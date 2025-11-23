@@ -271,6 +271,9 @@ class DPGManager:
         self.min_batch_size = 32
         self.training_interval = 10  
         self._last_training_episode = 0
+
+        # CONTROLE DO SPARSE SUCCESS PROGRESSIVO
+        self.sparse_success_transition_episode = 2000
         
     def calculate_reward(self, sim, action) -> float:
         """Cálculo de recompensa com integração total dos sistemas"""
@@ -321,7 +324,7 @@ class DPGManager:
     def _build_phase_info(self, valence_status: Dict, buffer_status: Dict) -> Dict:
         """Constroi informações de fase integradas"""
         critic_advice = self.adaptive_critic.get_optimization_advice()
-        
+
         return {
             'group_level': self.current_group,
             'group_name': 'adaptive_system',
@@ -333,7 +336,7 @@ class DPGManager:
             'critic_advice': critic_advice,
             'buffer_quality': buffer_status.get('avg_quality', 0.5),
             'crutch_level': self.crutch_system.crutch_level,
-            'sparse_success_enabled': valence_status.get('overall_progress', 0) > 0.6
+            'sparse_success_enabled': valence_status.get('overall_progress', 0) > 0.4
         }
 
     def update_phase_progression(self, episode_results):
@@ -716,59 +719,74 @@ class DPGManager:
             return False
     
     def _generate_comprehensive_report(self):
-        """RELATÓRIO COMPLETO - SISTEMA INTEGRADO ADAPTATIVO"""
-        integrated_status = self.get_integrated_status()
-        buffer_status = self.buffer_manager.get_adaptive_status()
-        valence_status = self.valence_manager.get_valence_status()
-        
-        recent_rewards = [p['reward'] for p in list(self.performance_history)[-10:]]
-        recent_distances = [p.get('distance', 0) for p in list(self.performance_history)[-10:]]
-        avg_recent_reward = np.mean(recent_rewards) if recent_rewards else 0
-        avg_recent_distance = np.mean(recent_distances) if recent_distances else 0
-        
-        # CABEÇALHO E STATUS GERAL
-        self.logger.info("=" * 60)
-        self.logger.info(f"🎯 EPISÓDIO {self.episode_count} | GRUPO: {self.current_group}")
-        self.logger.info(f"📊 PROGRESSO: {integrated_status['system_integration']['overall_progress']:.1%} | "
-                        f"DISTÂNCIA: {avg_recent_distance:.3f}m")
-        self.logger.info(f"    INTEGRAÇÃO: {integrated_status['system_integration']['integration_score']:.1%} | "
-                        f"RECOMPENSA: {avg_recent_reward:.1f}")
-        
-        # SISTEMA DE CRÍTICO ADAPTATIVO
-        critic_weights = self.adaptive_critic.weights.to_dict()
-        critic_total = sum(critic_weights.values())
-        critic_status = "✅" if 0.99 <= critic_total <= 1.01 else "❌"
+        """RELATÓRIO COMPLETO"""
+        try:
+            integrated_status = self.get_integrated_status()
+            buffer_status = self.buffer_manager.get_adaptive_status()
+            valence_status = self.valence_manager.get_valence_status()
 
-        self.logger.info(f"🧠 CRÍTICO ADAPTATIVO {critic_status}")
-        self.logger.info(f"   Propulsão: {critic_weights['propulsion']:.3f} | Estabilidade: {critic_weights['stability']:.3f}")
-        self.logger.info(f"   Coordenação: {critic_weights['coordination']:.3f} | Eficiência: {critic_weights['efficiency']:.3f}")
+            # ACESSO SEGURO aos dados do buffer
+            total_experiences = buffer_status.get('total_experiences', 0)
+            avg_quality = buffer_status.get('avg_quality', 0.0)
+            buffer_utilization = buffer_status.get('buffer_utilization', 0.0)
+            outdated_experiences = buffer_status.get('outdated_experiences', 0)
 
-        # SISTEMA DE VALÊNCIAS - DETALHAMENTO INTELIGENTE
-        self.logger.info("📈 SISTEMA DE VALÊNCIAS:")
+            recent_rewards = [p['reward'] for p in list(self.performance_history)[-10:]]
+            recent_distances = [p.get('distance', 0) for p in list(self.performance_history)[-10:]]
+            avg_recent_reward = np.mean(recent_rewards) if recent_rewards else 0
+            avg_recent_distance = np.mean(recent_distances) if recent_distances else 0
 
-        for valence_name, details in valence_status["valence_details"].items():
-            state = details['state']
-            level = details['current_level']
+            # CABEÇALHO E STATUS GERAL
+            self.logger.info("=" * 60)
+            self.logger.info(f"🎯 EPISÓDIO {self.episode_count} | GRUPO: {self.current_group}")
+            self.logger.info(f"📊 PROGRESSO: {integrated_status['system_integration']['overall_progress']:.1%} | "
+                            f"DISTÂNCIA: {avg_recent_distance:.3f}m")
+            self.logger.info(f"    INTEGRAÇÃO: {integrated_status['system_integration']['integration_score']:.1%} | "
+                            f"RECOMPENSA: {avg_recent_reward:.1f}")
 
-            if state != "inactive" and level > 0.01:
-                state_icon = "🟢" if state == "learning" else "🟡" if state == "mastered" else "🔴"
-                progress_bar = "█" * int(level * 10) + "░" * (10 - int(level * 10))
-                self.logger.info(f"   {state_icon} {valence_name:.<25} {progress_bar} {level:.1%} ({state})")
+            # SISTEMA DE CRÍTICO ADAPTATIVO
+            critic_weights = self.adaptive_critic.weights.to_dict()
+            critic_total = sum(critic_weights.values())
+            critic_status = "✅" if 0.99 <= critic_total <= 1.01 else "❌"
 
-        # SISTEMA DE MULETAS ADAPTATIVAS
-        stage_names = ["MÁXIMO", "ALTO", "MÉDIO", "BAIXO", "MÍNIMO"]
-        current_stage = self.crutch_system.current_stage
-        stage_name = stage_names[current_stage] if current_stage < len(stage_names) else "CRÍTICO"
+            self.logger.info(f"🧠 CRÍTICO ADAPTATIVO {critic_status}")
+            self.logger.info(f"   Propulsão: {critic_weights['propulsion']:.3f} | Estabilidade: {critic_weights['stability']:.3f}")
+            self.logger.info(f"   Coordenação: {critic_weights['coordination']:.3f} | Eficiência: {critic_weights['efficiency']:.3f}")
 
-        self.logger.info(f"🦯 MULETAS ADAPTATIVAS: {stage_name}")
-        self.logger.info(f"    Nível: {self.crutch_system.crutch_level:.3f} |" f"   Multiplicador: {self.crutch_system.get_reward_multiplier():.1f}x")          
+            # SISTEMA DE VALÊNCIAS - DETALHAMENTO INTELIGENTE
+            self.logger.info("📈 SISTEMA DE VALÊNCIAS:")
 
-        # SISTEMA DE BUFFER ADAPTATIVO
-        buffer_metrics = buffer_status.get('adaptive_status', {})
-        self.logger.info("💾 BUFFER ADAPTATIVO:")
-        self.logger.info(f"   Experiências: {buffer_metrics.get('total_experiences', 0)} | "
-                        f"Qualidade: {buffer_metrics.get('avg_quality', 0):.3f}")
-        self.logger.info(f"   Utilização: {buffer_metrics.get('buffer_utilization', 0):.1%} | "
-                        f"Desatualizadas: {buffer_metrics.get('outdated_experiences', 0)}")
+            for valence_name, details in valence_status["valence_details"].items():
+                state = details['state']
+                level = details['current_level']
 
-        self.logger.info("=" * 60)
+                if state != "inactive" and level > 0.01:
+                    state_icon = "🟢" if state == "learning" else "🟡" if state == "mastered" else "🔴"
+                    progress_bar = "█" * int(level * 10) + "░" * (10 - int(level * 10))
+                    self.logger.info(f"   {state_icon} {valence_name:.<25} {progress_bar} {level:.1%} ({state})")
+
+            # SISTEMA DE MULETAS ADAPTATIVAS
+            stage_names = ["MÁXIMO", "ALTO", "MÉDIO", "BAIXO", "MÍNIMO"]
+            current_stage = self.crutch_system.current_stage
+            stage_name = stage_names[current_stage] if current_stage < len(stage_names) else "CRÍTICO"
+
+            self.logger.info(f"🦯 MULETAS ADAPTATIVAS: {stage_name}")
+            self.logger.info(f"    Nível: {self.crutch_system.crutch_level:.3f} |" 
+                            f"   Multiplicador: {self.crutch_system.get_reward_multiplier():.1f}x")          
+
+            # SISTEMA DE BUFFER ADAPTATIVO
+            self.logger.info("💾 BUFFER ADAPTATIVO:")
+            self.logger.info(f"   Experiências: {total_experiences} | "
+                            f"Qualidade: {avg_quality:.3f}")
+            self.logger.info(f"   Utilização: {buffer_utilization:.1%} | "
+                            f"Desatualizadas: {outdated_experiences}")
+
+            self.logger.info("=" * 60)
+
+        except Exception as e:
+            self.logger.error(f"❌ ERRO no relatório completo: {e}")
+            # Relatório de emergência
+            self.logger.info("=" * 60)
+            self.logger.info(f"🎯 EPISÓDIO {self.episode_count} | GRUPO: {self.current_group}")
+            self.logger.info("⚠️  Relatório parcial devido a erro")
+            self.logger.info("=" * 60)

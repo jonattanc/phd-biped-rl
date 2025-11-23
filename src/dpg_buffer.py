@@ -221,26 +221,116 @@ class Cache:
             "size": len(self._cache)
         }
 
+class SumTree:
+    """Para PER: armazenamento eficiente de prioridades (soma parcial)"""
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.tree = np.zeros(2 * capacity - 1)
+        self.data = np.zeros(capacity, dtype=object)
+        self.write = 0
+        self.n_entries = 0
+
+    def _propagate(self, idx, change):
+        parent = (idx - 1) // 2
+        self.tree[parent] += change
+        if parent != 0:
+            self._propagate(parent, change)
+
+    def update(self, idx, p):
+        change = p - self.tree[idx]
+        self.tree[idx] = p
+        self._propagate(idx, change)
+
+    def add(self, p, data):
+        idx = self.write + self.capacity - 1
+        self.data[self.write] = data
+        self.update(idx, p)
+        self.write += 1
+        if self.write >= self.capacity:
+            self.write = 0
+        if self.n_entries < self.capacity:
+            self.n_entries += 1
+
+    def _retrieve(self, idx, s):
+        left = 2 * idx + 1
+        right = left + 1
+        if left >= len(self.tree):
+            return idx
+        if s <= self.tree[left]:
+            return self._retrieve(left, s)
+        else:
+            return self._retrieve(right, s - self.tree[left])
+
+    def get(self, s):
+        idx = self._retrieve(0, s)
+        data_idx = idx - self.capacity + 1
+        return idx, self.tree[idx], self.data[data_idx]
+
+    def total(self):
+        return self.tree[0]
+    
 class AdaptiveBuffer:
     def __init__(self, capacity=5000):
         self.capacity = capacity
-        self.buffer: Deque[Experience] = deque(maxlen=capacity)  # Especificar tipo
-        self.quality_heap = []  
+        self.buffer: Deque[Experience] = deque(maxlen=capacity)
         self.quality_threshold = 0.3
         self.current_quality_version = 1
         
+        # ✅ Controle de limpeza adaptativo
+        self.episodes_since_cleanup = 0
+        self.cleanup_interval = 500  # Episódios entre limpezas
+        self.min_buffer_size = 1000  # Nunca limpa abaixo disso
+        
     def add(self, experience: Experience) -> bool:
-        """Adiciona experiência com versionamento de qualidade"""
-        if len(self.buffer) < self.capacity:
-            self.buffer.append(experience)
-            return True
+        """Adiciona experiência - estratégia FIFO com limpeza periódica"""
+        # ✅ FIFO puro - máximo desempenho
+        self.buffer.append(experience)
+        return True
+    
+    def periodic_cleanup(self, current_episode: int, force: bool = False):
+        """Limpeza periódica chamada externamente"""
+        if (current_episode % self.cleanup_interval == 0) or force:
+            if len(self.buffer) > self.min_buffer_size:
+                self._cleanup_adaptive()
+    
+    def _cleanup_adaptive(self):
+        """Limpeza adaptativa baseada no tamanho do buffer"""
+        current_size = len(self.buffer)
+        
+        if current_size <= 2000:
+            remove_count = 200  # Limpeza leve
+        elif current_size <= 4000:
+            remove_count = 500  # Limpeza moderada  
         else:
-            # Substitui a de menor qualidade
-            min_idx = self._find_min_quality_index()
-            if experience.quality > self._get_effective_quality(self.buffer[min_idx]):
-                self.buffer[min_idx] = experience
-                return True
-            return False
+            remove_count = 1000  # Limpeza agressiva
+            
+        self._cleanup_low_quality(remove_count)
+    
+    def _cleanup_low_quality(self, remove_count: int):
+        """Remove as piores experiências"""
+        if len(self.buffer) <= remove_count + self.min_buffer_size:
+            return
+            
+        # Coleta qualidades
+        qualities = [(i, self._get_effective_quality(exp)) 
+                    for i, exp in enumerate(self.buffer)]
+        
+        # Ordena por qualidade
+        qualities.sort(key=lambda x: x[1])
+        
+        # Marca as piores para remoção
+        indices_to_remove = {i for i, qual in qualities[:remove_count]}
+        
+        # Reconstrói buffer
+        new_buffer = deque(maxlen=self.capacity)
+        for i, exp in enumerate(self.buffer):
+            if i not in indices_to_remove:
+                new_buffer.append(exp)
+                
+        self.buffer = new_buffer
+        self._rebuild_quality_heap()
+        
+        print(f"🧹 Cleanup: buffer {len(self.buffer)}, removidas {len(indices_to_remove)}")
     
     def _get_effective_quality(self, experience: Experience) -> float:
         """Qualidade efetiva considerando versionamento"""
@@ -365,17 +455,73 @@ class AdaptiveBuffer:
                 
         return min_idx
 
+class ActiveReplayBuffer:
+    def __init__(self, capacity=10000, alpha=0.6, beta_start=0.4, beta_frames=100000):
+        self.tree = SumTree(capacity)
+        self.alpha = alpha
+        self.beta = beta_start
+        self.beta_increment = (1.0 - beta_start) / beta_frames
+        self.epsilon = 1e-5
+        self.capacity = capacity
+
+    def _get_priority(self, error):
+        return (abs(error) + self.epsilon) ** self.alpha
+
+    def add(self, error, sample):
+        p = self._get_priority(error)
+        self.tree.add(p, sample)
+
+    def sample(self, batch_size):
+        batch = []
+        idxs = []
+        segment = self.tree.total() / batch_size
+        priorities = []
+
+        self.beta = np.min([1.0, self.beta + self.beta_increment])
+
+        for i in range(batch_size):
+            a = segment * i
+            b = segment * (i + 1)
+            s = random.uniform(a, b)
+            idx, p, data = self.tree.get(s)
+            priorities.append(p)
+            batch.append(data)
+            idxs.append(idx)
+
+        sampling_probabilities = np.array(priorities) / self.tree.total()
+        is_weights = np.power(self.tree.n_entries * sampling_probabilities, -self.beta)
+        is_weights /= is_weights.max()
+
+        return batch, idxs, np.array(is_weights)
+
+    def update(self, idx, error):
+        p = self._get_priority(error)
+        self.tree.update(idx, p)
+        
 class AdaptiveBufferManager:
     def __init__(self, logger, config, max_experiences=5000):
         self.logger = logger
         self.config = config
         self.max_experiences = max_experiences
-        self.capacity = max_experiences  # ADICIONAR ESTE ATRIBUTO
+        self.capacity = max_experiences
 
         # SISTEMA ADAPTATIVO
         self.quality_evaluator = AdaptiveQualityEvaluator()
         self.main_buffer = AdaptiveBuffer(capacity=max_experiences)
         self.cache = Cache(max_size=200)
+        
+        # Inicializar per_stored_count
+        self.per_stored_count = 0  
+        
+        # Buffer PER híbrido (30% da capacidade)
+        self.per_buffer = ActiveReplayBuffer(
+            capacity=int(max_experiences * 0.3),  
+            alpha=0.6, 
+            beta_start=0.4, 
+            beta_frames=100000
+        )
+        self.use_per = True  
+        self.per_ratio = 0.3
         
         # CONTROLE DE REAVALIAÇÃO
         self.last_reevaluation_episode = 0
@@ -397,6 +543,7 @@ class AdaptiveBufferManager:
             current_group = experience_data.get("group_level", 1)
             quality = self.quality_evaluator.evaluate_quality(metrics, current_group)
             
+            self.logger.debug(f"📊 Qualidade calculada: {quality:.3f}, Distância: {metrics.get('distance', 0):.3f}")
             # FILTRO ADAPTATIVO MAIS PERMISSIVO
             min_threshold = 0.05  
             buffer_size = len(self.main_buffer.buffer)
@@ -409,6 +556,7 @@ class AdaptiveBufferManager:
                 
             if quality < min_threshold:
                 self.rejected_count += 1
+                self.logger.debug(f"❌ Experiência rejeitada: qualidade {quality:.3f} < threshold {min_threshold}")
                 return False
                 
             # Cria experiência
@@ -418,6 +566,13 @@ class AdaptiveBufferManager:
             success = self.main_buffer.add(experience)
             if success:
                 self.stored_count += 1
+                if self.stored_count % 1000 == 0:
+                    self.main_buffer.periodic_cleanup(self.episode_count, force=True)
+
+                if self.use_per and self._should_store_in_per(experience, metrics):
+                    per_priority = self._calculate_per_priority(experience, metrics)
+                    self.per_buffer.add(per_priority, experience)
+                    self.per_stored_count += 1
             else:
                 self.rejected_count += 1
                 
@@ -426,6 +581,48 @@ class AdaptiveBufferManager:
         except Exception as e:
             self.logger.error(f"❌ ERRO no armazenamento adaptativo: {e}")
             return False
+
+    def _should_store_in_per(self, experience: Experience, metrics: Dict) -> bool:
+        """Decide se a experiência deve ir para o PER"""
+        # Armazena no PER apenas experiências especiais
+        return (
+            experience.quality > 0.7 or                    
+            self._detect_fall_event(metrics) or            
+            self._detect_breakthrough(metrics) or          
+            random.random() < 0.05                         
+        )
+
+    def _calculate_per_priority(self, experience: Experience, metrics: Dict) -> float:
+        """Calcula prioridade inicial para PER"""
+        base_priority = experience.quality
+
+        # Bônus para eventos importantes
+        if self._detect_fall_event(metrics):
+            base_priority += 2.0  
+        elif self._detect_breakthrough(metrics):
+            base_priority += 1.5  
+        elif experience.quality > 0.8:
+            base_priority += 0.5  
+
+        return max(base_priority, 0.1)  
+
+    def _detect_fall_event(self, metrics: Dict) -> bool:
+        """Detecta eventos de queda"""
+        return (
+            metrics.get("termination_reason") == "fell" or
+            metrics.get("fall_detected", False) or
+            (abs(metrics.get("roll", 0)) > 0.8) or  
+            (abs(metrics.get("pitch", 0)) > 0.8)
+        )
+
+    def _detect_breakthrough(self, metrics: Dict) -> bool:
+        """Detecta progressos significativos"""
+        distance = metrics.get("distance", 0)
+        return (
+            distance > 1.0 or  
+            (distance > 0.5 and metrics.get("alternating", False)) or  
+            metrics.get("first_success", False)  
+        )
 
     def _create_adaptive_experience(self, data: Dict, quality: float, group: int) -> Experience:
         """Cria experiência com métricas otimizadas"""
@@ -466,6 +663,15 @@ class AdaptiveBufferManager:
         """Status com métricas adaptativas"""
         buffer_size = len(self.main_buffer.buffer)
         
+        # Estatísticas de PER
+        per_stats = {
+            "per_enabled": self.use_per,
+            "per_stored": self.per_stored_count,
+            "per_capacity": self.per_buffer.capacity,
+            "per_utilization": self.per_buffer.tree.n_entries / self.per_buffer.capacity if self.per_buffer.capacity > 0 else 0,
+            "per_ratio": self.per_ratio
+        }
+        
         # Estatísticas de qualidade
         quality_stats = {
             "current_quality_version": self.quality_evaluator.quality_version,
@@ -497,7 +703,7 @@ class AdaptiveBufferManager:
         }
         
         critic_weights = self.quality_evaluator.critic_weights or {}
-        return {**base_status, **quality_stats, **critic_weights}
+        return {**base_status, **quality_stats, **critic_weights, **per_stats}
     
     def update_quality_criteria(self, critic_weights: Dict, current_group: int, 
                               current_episode: int, force_reevaluation: bool = False):
@@ -518,10 +724,37 @@ class AdaptiveBufferManager:
             )
             self.reevaluated_count += reevaluated
             self.last_reevaluation_episode = current_episode
+
+            if current_episode % 500 == 0:  
+                self.main_buffer.periodic_cleanup(current_episode, force=True)
             
     def sample(self, batch_size: int, current_group: int) -> List[Experience]:
-        """Amostra com consciência de grupo"""
-        return self.main_buffer.sample(batch_size, current_group)
+        """Amostragem híbrida: combina buffer adaptativo + PER"""
+        if not self.use_per or self.per_buffer.tree.n_entries == 0:
+            # Fallback para amostragem normal se PER vazio/desativado
+            return self.main_buffer.sample(batch_size, current_group)
+        
+        # Estratégia híbrida: 70% adaptativo, 30% PER
+        adaptive_count = int(batch_size * (1 - self.per_ratio))
+        per_count = batch_size - adaptive_count
+        
+        # Amostra do buffer adaptativo (existente)
+        adaptive_samples = self.main_buffer.sample(adaptive_count, current_group)
+        
+        # Amostra do PER
+        per_samples = []
+        if per_count > 0 and self.per_buffer.tree.n_entries >= per_count:
+            try:
+                per_batch, per_indices, per_weights = self.per_buffer.sample(per_count)
+                per_samples = per_batch
+            except Exception as e:
+                self.logger.warning(f"Erro no sample do PER: {e}")
+                # Fallback: mais amostras do buffer adaptativo
+                extra_samples = self.main_buffer.sample(per_count, current_group)
+                adaptive_samples.extend(extra_samples)
+        
+        # Combina as amostras
+        return adaptive_samples + per_samples
     
     def _analyze_adaptive_skills(self, metrics: Dict) -> Dict[str, float]:
         """Análise de habilidades para reavaliação"""

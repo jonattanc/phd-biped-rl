@@ -119,7 +119,7 @@ class ValenceManager:
                 metrics=["roll", "pitch", "stability", "com_height_consistency", "lateral_stability"],
                 reward_components=["stability", "posture", "dynamic_balance"],
                 dependencies=["movimento_basico"],
-                activation_threshold=0.05,   
+                activation_threshold=0.01,   
                 mastery_threshold=0.5,
                 regression_threshold=0.25,
                 min_episodes=5                
@@ -132,7 +132,7 @@ class ValenceManager:
                 metrics=["x_velocity", "velocity_consistency", "acceleration_smoothness", "distance"],
                 reward_components=["velocity", "propulsion", "basic_progress"],
                 dependencies=["movimento_basico"],
-                activation_threshold=0.1,    
+                activation_threshold=0.05,    
                 mastery_threshold=0.5,
                 regression_threshold=0.25,
                 min_episodes=8                
@@ -295,7 +295,7 @@ class ValenceManager:
         # Coordenação: só com alternating + clearance + d > 10cm
         alternating = episode_results.get("alternating", False)
         clearance_score = episode_results.get("clearance_score", 0.0)
-        if alternating and clearance_score > 0.05 and distance > 0.10:
+        if alternating and clearance_score > 0.02 and distance > 0.03:
             coordination_level = self._calculate_valence_level("coordenacao_fundamental", episode_results)
             valence_levels["coordenacao_fundamental"] = coordination_level
             if coordination_level > 0.1:  

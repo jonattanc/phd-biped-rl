@@ -85,6 +85,9 @@ class RewardCalculator:
         # 6. PENALIDADES (queda, desvios, esforço excessivo)
         component_values["penalidades"] = self._calculate_penalidades_component(sim, phase_info)
 
+        # 7. SPARSE SUCCESS 
+        component_values["sparse_success"] = self._calculate_sparse_success_component(sim, phase_info)
+        
         # SOMA PONDERADA COM OS PESOS MACRO
         total_reward = 0.0
         for component, value in component_values.items():
@@ -106,12 +109,16 @@ class RewardCalculator:
             distance = max(getattr(sim, "episode_distance", 0), 0)
             velocity = getattr(sim, "robot_x_velocity", 0)
             episode_time = getattr(sim, "episode_time", 0)
-
-            # Bônus por distância real (sem exageros)
+            
+            # Bônus por distância inicial
+            if 0.1 <= distance < 0.3:
+                reward += 20 * (distance / 0.3)
+            
+            # Bônus por distância real 
             if distance > 0:
                 reward += distance * 30.0  
 
-            # Marcos de distância (mantidos, mas mais conservadores)
+            # Marcos de distância 
             milestones = {
                 3.0: 180.0, 2.0: 120.0, 1.5: 70.0,
                 1.0: 50.0, 0.7: 35.0, 0.5: 18.0,
@@ -138,10 +145,8 @@ class RewardCalculator:
             if velocity > 0 and stability > 0.6 and alternating:
                 effective_velocity_bonus = velocity * vel_mult
             elif velocity > 0 and stability > 0.6:
-                # Estável mas não alternando → velocidade reduzida
                 effective_velocity_bonus = velocity * 4.0
             elif velocity > 0:
-                # Instável → quase nada
                 effective_velocity_bonus = velocity * 1.0
 
             reward += effective_velocity_bonus
@@ -293,7 +298,7 @@ class RewardCalculator:
         return bonus
     
     def _calculate_sparse_success_component(self, sim, phase_info) -> float:
-        """Recompensa esparsa para tarefas completas (ativada só após progresso alto)"""
+        """Recompensa esparsa progressiva"""
         if not phase_info.get('sparse_success_enabled', False):
             return 0.0
 
@@ -304,25 +309,53 @@ class RewardCalculator:
             terminated = getattr(sim, "episode_terminated", True)
             steps = getattr(sim, "episode_steps", 500)
 
-            # Critérios estritos de sucesso
-            stable = (roll < 0.2 and pitch < 0.2) 
-            efficient = (steps <= int(1.5 * distance * 200)) if distance > 0 else False  # ~200 steps/m baseline
-            completed = (distance >= 3.0)
+            # CRITÉRIOS DE QUALIDADE (mantidos rigorosos)
+            stable = (roll < 0.3 and pitch < 0.3)  
+            efficient = (steps <= int(2.0 * distance * 200)) if distance > 0 else False  
+            if not stable or terminated:
+                return 0.0
 
-            if completed and stable and not terminated and efficient:
-                # Bônus escalonado por eficiência
-                step_bonus = max(0.0, 1.0 - (steps / (distance * 200 + 1e-6)) / 1.5)
-                return 500.0 * (0.7 + 0.3 * step_bonus)  
+            # APPROACH PROGRESSIVO
+            if distance <= 0.1:
+                return 0.0  
 
-            # Bônus parcial para próximos de sucesso
-            if distance >= 2.5 and stable:
-                return 150.0
-            if distance >= 2.0 and stable:
-                return 50.0
+            base_reward = 0.0
+            if distance < 1.0:
+                base_reward = (distance / 1.0) * 100  
+            elif distance < 2.0:
+                base_reward = 100 + ((distance - 1.0) / 1.0) * 150  
+            elif distance < 3.0:
+                base_reward = 250 + ((distance - 2.0) / 1.0) * 200  
+            else:
+                base_reward = 450 + min((distance - 3.0) * 50, 50) 
+
+            # BÔNUS POR EFICIÊNCIA 
+            efficiency_bonus = 0.0
+            if distance > 0.5: 
+                target_steps = distance * 180  
+                actual_steps = steps
+                if actual_steps <= target_steps:
+                    efficiency_ratio = 1.0
+                else:
+                    efficiency_ratio = max(0.0, 1.0 - (actual_steps - target_steps) / target_steps)
+
+                efficiency_bonus = efficiency_ratio * 50 
+
+            # BÔNUS POR ESTABILIDADE AVANÇADA
+            stability_bonus = 0.0
+            if roll < 0.15 and pitch < 0.15:  
+                stability_bonus = 30
+            elif roll < 0.25 and pitch < 0.25:  
+                stability_bonus = 15
+
+            total_reward = base_reward + efficiency_bonus + stability_bonus
+
+            # Limite superior 
+            return min(total_reward, 550.0)  
 
         except Exception as e:
-            self.logger.warning(f"Erro no sparse_success_component: {e}")
-        return 0.0
+            self.logger.warning(f"Erro no sparse_success_component progressivo: {e}")
+            return 0.0
 
     def _calculate_penalidades_component(self, sim, phase_info) -> float:
         """Componente de PENALIDADES: rigor físico realista"""
