@@ -272,6 +272,7 @@ class Simulation(gym.Env):
         self.robot_x_sum_velocity = 0
         self.robot_y_sum_velocity = 0
         self.robot_z_sum_velocity = 0
+        self.episode_environment = self.environment.env_list[self.environment.selected_env_index] if self.environment.name == "todos_alternados" else self.environment.name
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -376,6 +377,7 @@ class Simulation(gym.Env):
             "roll_vel": self.robot_roll_vel,
             "pitch_vel": self.robot_pitch_vel,
             "yaw_vel": self.robot_yaw_vel,
+            "episode_environment": self.episode_environment,
         }
 
         if evaluation:
