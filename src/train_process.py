@@ -72,8 +72,14 @@ def process_runner(
 
         if enable_dpg:
             dpg_manager = DPGManager(logger, robot, reward_system)
-            dpg_manager.enable(True)
+            dpg_manager.enable=True
+            dpg_manager.episode_count = initial_episode
             reward_system.set_dpg_manager(dpg_manager)
+
+            # Configurações otimizadas para aprendizado
+            dpg_manager.learning_enabled = True
+            dpg_manager.min_batch_size = 32
+            dpg_manager.training_interval = 5
             logger.info("Sistema DPG configurado e ativado")
         else:
             logger.info("Usando sistema de recompensa padrão (sem DPG)")
@@ -126,6 +132,27 @@ def process_runner(
 
             while not exit_value.value:
                 timesteps_completed += timesteps_batch_size
+                # TREINAMENTO DPG ADAPTATIVO
+                if enable_dpg and dpg_manager.should_train(sim.episode_count):
+                    try:
+                        batch = dpg_manager.get_training_batch()
+                        if batch:
+                            dpg_manager.on_training_completed(sim.episode_count)
+                    except Exception as e:
+                        logger.error(f"❌ Erro no treinamento DPG: {e}")
+                
+                # Treinamento normal do agente
+                agent.model.learn(total_timesteps=timesteps_batch_size, 
+                                reset_num_timesteps=False, callback=callback)
+
+                # Enviar progresso para GUI
+                if timesteps_completed % 10000 == 0:
+                    logger.info(f"Progresso: {timesteps_completed} timesteps com aprendizagem")
+                    
+                    # Status do DPG
+                    if enable_dpg:
+                        dpg_status = dpg_manager.get_integrated_status()
+                
                 agent.model.learn(total_timesteps=timesteps_batch_size, reset_num_timesteps=False, callback=callback)
 
                 # Enviar progresso para GUI

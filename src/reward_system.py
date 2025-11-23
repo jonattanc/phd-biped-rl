@@ -69,7 +69,7 @@ class RewardSystem:
 
     def calculate_reward(self, sim, action):
         """Método principal - escolhe entre DPG progressivo ou padrão"""
-        if hasattr(self, "dpg_manager") and self.dpg_manager and self.dpg_manager.config.enabled:
+        if hasattr(self, "dpg_manager") and self.dpg_manager and getattr(self.dpg_manager, 'enabled', False):
             return self.dpg_manager.calculate_reward(sim, action)
         else:
             return self.calculate_standard_reward(sim, action)

@@ -179,7 +179,7 @@ class Simulation(gym.Env):
     def pre_fill_buffer(self):
         dpg_enabled = False
         if hasattr(self.reward_system, "dpg_manager") and self.reward_system.dpg_manager:
-            dpg_enabled = self.reward_system.dpg_manager.config.enabled
+            dpg_enabled = getattr(self.reward_system.dpg_manager, 'enabled', False)
         if dpg_enabled:
             return
 
@@ -205,7 +205,7 @@ class Simulation(gym.Env):
                 obs = next_obs
 
         if hasattr(self.reward_system, "dpg_manager") and self.reward_system.dpg_manager:
-            self.reward_system.dpg_manager.config.enabled = dpg_enabled
+            dpg_enabled = getattr(self.reward_system.dpg_manager, 'enabled', False)
 
         self.episode_timeout_s = self.episode_training_timeout_s
         self.max_steps = self.max_training_steps
@@ -434,6 +434,9 @@ class Simulation(gym.Env):
         """
         Executa uma ação e retorna (observação, recompensa, done, info).
         """
+        # SALVAR O ESTADO ATUAL ANTES DA AÇÃO
+        current_obs = self.robot.get_observation().copy()
+
         if self.should_save_model and not evaluation:
             self.ipc_queue.put({"type": "lock_for_saving"})
             self.ipc_queue.put({"type": "tracker_status", "tracker_status": self.tracker.get_status()})
@@ -457,7 +460,7 @@ class Simulation(gym.Env):
 
         # Obter observação
         self.has_gait_state_changed = self.robot.update_gait_state()
-        obs = self.robot.get_observation()
+        next_obs = self.robot.get_observation().copy()
 
         robot_position, robot_velocity, robot_orientation, robot_orientation_velocity = self.robot.get_imu_position_velocity_orientation()
         self.robot_x_position = robot_position[0]
@@ -546,7 +549,7 @@ class Simulation(gym.Env):
 
         if evaluation:
             self.add_episode_metrics("action", action)
-            self.add_episode_metrics("obs", obs)
+            self.add_episode_metrics("obs", next_obs)
             self.add_episode_metrics("reward", reward)
             self.add_episode_metrics("has_gait_state_changed", self.has_gait_state_changed)
             self.add_episode_metrics("is_in_ramp", self.is_in_ramp)
@@ -585,30 +588,41 @@ class Simulation(gym.Env):
                 self.metrics[str(self.episode_count + 1)] = {"step_data": {}}
 
             if hasattr(self.reward_system, "dpg_manager") and self.reward_system.dpg_manager:
+                dpg_manager = self.reward_system.dpg_manager
+                if dpg_manager.enabled and not evaluation:
+                    try:
+                        # Prepara métricas do passo atual
+                        step_metrics = {
+                            "distance": self.episode_distance,
+                            "speed": abs(self.robot_x_velocity),
+                            "roll": self.robot_roll,
+                            "pitch": self.robot_pitch,
+                            "left_contact": self.robot_left_foot_contact,
+                            "right_contact": self.robot_right_foot_contact,
+                            "alternating": self.robot_left_foot_contact != self.robot_right_foot_contact,
+                            "steps": self.episode_steps,
+                            "success": self.episode_success,
+                            "energy_used": self.robot.get_energy_used(),
+                            "gait_pattern_score": self.robot.get_gait_pattern_score(),
+                            "clearance_score": self.robot.get_clearance_score(),
+                            "propulsion_efficiency": self.robot.get_propulsion_efficiency(),
+                        }
 
-                episode_results = {
-                    "distance": self.episode_distance,
-                    "success": self.episode_success,
-                    "duration": self.episode_steps * self.time_step_s,
-                    "reward": self.episode_reward,
-                    "roll": abs(self.robot_roll),
-                    "pitch": abs(self.robot_pitch),
-                    "steps": self.episode_steps,
-                    "left_contact": self.robot_left_foot_contact,
-                    "right_contact": self.robot_right_foot_contact,
-                    "gait_pattern_score": self.robot.get_gait_pattern_score(),
-                    "speed": abs(self.robot_x_velocity),
-                    "energy_used": self.robot.get_energy_used(),
-                    "flight_quality": self.robot.get_flight_phase_quality(),
-                    "clearance_score": self.robot.get_clearance_score(),
-                    "propulsion_efficiency": self.robot.get_propulsion_efficiency(),
-                    "alternating": self.robot_left_foot_contact != self.robot_right_foot_contact,
-                    "action": action.tolist() if hasattr(action, "tolist") else action,
-                }
-                try:
-                    self.reward_system.dpg_manager.update_phase_progression(episode_results)
-                except Exception as e:
-                    self.logger.error(f"Erro ao chamar update_phase: {e}")
+                        # Armazena experiência
+                        storage_success = dpg_manager.store_experience(
+                            state=current_obs, 
+                            action=action,
+                            reward=reward,
+                            next_state=next_obs,  
+                            done=self.episode_done,
+                            episode_results=step_metrics
+                        )
+
+                        # Atualiza a progressão de fase do DPG
+                        dpg_manager.update_phase_progression(step_metrics)
+
+                    except Exception as e:
+                        self.logger.error(f"❌ Erro ao armazenar experiência DPG: {e}")
 
             self.transmit_episode_info(evaluation)
 
@@ -622,7 +636,7 @@ class Simulation(gym.Env):
             self.logger.info("Sinal de saída recebido em step. Finalizando simulação.")
             info["exit"] = True
 
-        return obs, reward, self.episode_terminated, self.episode_truncated, info
+        return next_obs, reward, self.episode_terminated, self.episode_truncated, info
 
     def try_to_resolve_config_change(self):
         self.config_changed_value.value = 0

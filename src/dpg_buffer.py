@@ -1,16 +1,15 @@
 # dpg_buffer.py
 import random
 import numpy as np
-from typing import Dict, List, Any, Tuple
+from typing import Deque, Dict, List, Any, Tuple, Callable
 from dataclasses import dataclass
 import heapq
-from collections import deque
-from functools import lru_cache
+from collections import deque, OrderedDict
 import time
 
 @dataclass
 class Experience:
-    """Estrutura para armazenar experiências"""
+    """Estrutura para armazenar experiências com métricas brutas"""
     state: np.ndarray
     action: np.ndarray
     reward: float
@@ -21,728 +20,522 @@ class Experience:
     sub_phase: int
     quality: float
     skills: Dict[str, float]
+    episode_created: int = 0
+    # MÉTRICAS BRUTAS PARA REAVALIAÇÃO
+    raw_metrics: Dict[str, float] = None
+    quality_version: int = 1  
+
+class AdaptiveQualityEvaluator:
+    """Avaliador de qualidade adaptativo que se ajusta aos pesos do crítico"""
     
-    def __lt__(self, other):
-        """Define comparação para heapq baseado na qualidade"""
-        return self.quality < other.quality
+    def __init__(self):
+        self.quality_functions = {
+            "default": self._default_quality,
+            "movement_focus": self._movement_focus_quality,
+            "stability_focus": self._stability_focus_quality,
+            "coordination_focus": self._coordination_focus_quality,
+            "efficiency_focus": self._efficiency_focus_quality
+        }
+        self.current_strategy = "default"
+        self.critic_weights = None
+        self.quality_version = 1
+        
+    def update_critic_weights(self, weights: Dict[str, float]):
+        """Atualiza pesos do crítico e ajusta estratégia"""
+        self.critic_weights = weights
+        
+        # Determina estratégia baseada nos pesos do crítico
+        if weights:
+            max_component = max(weights.items(), key=lambda x: x[1])[0]
+            if max_component == "stability" and weights["stability"] > 0.4:
+                self.current_strategy = "stability_focus"
+            elif max_component == "propulsion" and weights["propulsion"] > 0.4:
+                self.current_strategy = "movement_focus"
+            elif max_component == "coordination" and weights["coordination"] > 0.4:
+                self.current_strategy = "coordination_focus"
+            elif max_component == "efficiency" and weights["efficiency"] > 0.4:
+                self.current_strategy = "efficiency_focus"
+            else:
+                self.current_strategy = "default"
+        
+        self.quality_version += 1
+        
+    def evaluate_quality(self, metrics: Dict[str, float], current_group: int) -> float:
+        """Avalia qualidade adaptativamente baseado na estratégia atual"""
+        if self.current_strategy in self.quality_functions:
+            base_quality = self.quality_functions[self.current_strategy](metrics, current_group)
+        else:
+            base_quality = self._default_quality(metrics, current_group)
+            
+        # APLICA PESOS DO CRÍTICO SE DISPONÍVEIS
+        if self.critic_weights:
+            weighted_quality = self._apply_critic_weights(metrics, base_quality)
+            return min(weighted_quality, 1.0)
+            
+        return base_quality
     
-    def __eq__(self, other):
-        """Define igualdade para heapq"""
-        if not isinstance(other, Experience):
-            return False
-        return self.quality == other.quality
+    def _default_quality(self, metrics: Dict, group: int) -> float:
+        """Qualidade padrão - balanceada"""
+        distance = max(metrics.get("distance", 0), 0)
+        stability = 1.0 - min((abs(metrics.get("roll", 0)) + abs(metrics.get("pitch", 0))) / 1.0, 1.0)
+        coordination = 1.0 if metrics.get("alternating", False) else 0.3
+        
+        if distance <= 0:
+            return 0.0
+            
+        # Grupo influencia thresholds
+        group_factor = 1.0 + (group - 1) * 0.3
+        
+        base_score = (
+            min(distance / (1.0 * group_factor), 0.5) +
+            stability * 0.3 +
+            coordination * 0.2
+        )
+        
+        return min(base_score, 0.9)
+    
+    def _movement_focus_quality(self, metrics: Dict, group: int) -> float:
+        """Foco em movimento e propulsão"""
+        distance = max(metrics.get("distance", 0), 0)
+        velocity = metrics.get("speed", 0)
+        
+        if distance <= 0:
+            return 0.0
+            
+        group_factor = 1.0 + (group - 1) * 0.4
+        
+        movement_score = min(distance / (0.8 * group_factor), 0.7)
+        velocity_score = min(velocity / (0.6 * group_factor), 0.3)
+        
+        return movement_score + velocity_score
+    
+    def _stability_focus_quality(self, metrics: Dict, group: int) -> float:
+        """Foco em estabilidade e controle postural"""
+        distance = max(metrics.get("distance", 0), 0)
+        roll = abs(metrics.get("roll", 0))
+        pitch = abs(metrics.get("pitch", 0))
+        stability = 1.0 - min((roll + pitch) / 0.6, 1.0)  
+        
+        if distance < 0.05: 
+            return 0.0
+            
+        base_stability = stability * 0.8
+        distance_bonus = min(distance / 2.0, 0.2)  
+        
+        return base_stability + distance_bonus
+    
+    def _coordination_focus_quality(self, metrics: Dict, group: int) -> float:
+        """Foco em coordenação e padrão de marcha"""
+        distance = max(metrics.get("distance", 0), 0)
+        alternating = metrics.get("alternating", False)
+        clearance = metrics.get("clearance_score", 0.0)
+        gait_score = metrics.get("gait_pattern_score", 0.0)
+        
+        if distance < 0.1 or not alternating:
+            return 0.0
+            
+        coordination_base = 0.4 if alternating else 0.0
+        clearance_bonus = min(clearance / 0.1, 0.3)  
+        gait_bonus = gait_score * 0.2
+        distance_bonus = min(distance / 3.0, 0.1)
+        
+        return coordination_base + clearance_bonus + gait_bonus + distance_bonus
+    
+    def _efficiency_focus_quality(self, metrics: Dict, group: int) -> float:
+        """Foco em eficiência energética"""
+        distance = max(metrics.get("distance", 0), 0)
+        efficiency = metrics.get("propulsion_efficiency", 0.5)
+        energy_used = metrics.get("energy_used", 1.0)
+        
+        if distance <= 0:
+            return 0.0
+            
+        # Eficiência é o componente principal
+        efficiency_score = efficiency * 0.6
+        
+        # Distância com eficiência
+        distance_score = min(distance / 2.0, 0.3)
+        
+        # Penalidade por alto consumo energético
+        energy_penalty = max(0, (energy_used - 0.8) * 0.5) if energy_used > 0.8 else 0
+        
+        return max(efficiency_score + distance_score - energy_penalty, 0.1)
+    
+    def _apply_critic_weights(self, metrics: Dict, base_quality: float) -> float:
+        """Aplica pesos do crítico para ajuste fino da qualidade"""
+        if not self.critic_weights:
+            return base_quality
+            
+        # Calcula componentes individuais
+        movement_component = min(metrics.get("distance", 0) / 2.0, 0.4)
+        stability_component = 1.0 - min((abs(metrics.get("roll", 0)) + abs(metrics.get("pitch", 0))) / 1.0, 1.0)
+        coordination_component = 1.0 if metrics.get("alternating", False) else 0.2
+        efficiency_component = metrics.get("propulsion_efficiency", 0.5)
+        
+        # Aplica pesos
+        weighted_score = (
+            self.critic_weights.get("propulsion", 0.25) * movement_component +
+            self.critic_weights.get("stability", 0.25) * stability_component +
+            self.critic_weights.get("coordination", 0.25) * coordination_component +
+            self.critic_weights.get("efficiency", 0.25) * efficiency_component
+        )
+        
+        # Combina com qualidade base
+        return (base_quality * 0.7) + (weighted_score * 0.3)
 
 class Cache:
-    """Cache unificado com múltiplas estratégias de evição"""
+    """Cache unificado com LRU + TTL"""
     
-    def __init__(self, max_size=1000, default_ttl=100, strategy="adaptive"):
-        self._cache = {}
+    def __init__(self, max_size=1000, base_ttl=100):
+        self._cache = OrderedDict()
         self._max_size = max_size
-        self._default_ttl = default_ttl
-        self._strategy = strategy
+        self._base_ttl = base_ttl
         self._hits = 0
         self._misses = 0
-        self._access_pattern = {}
         
     def get(self, key: str) -> Any:
-        """Obtém valor do cache com verificação de TTL"""
         if key in self._cache:
-            value, timestamp, ttl, priority = self._cache[key]
+            value, timestamp, ttl = self._cache[key]
             if time.time() - timestamp < ttl:
                 self._hits += 1
-                self._access_pattern[key] = self._access_pattern.get(key, 0) + 1
+                self._cache.move_to_end(key)
                 return value
             else:
                 del self._cache[key]
-                if key in self._access_pattern:
-                    del self._access_pattern[key]
-        
+                
         self._misses += 1
         return None
     
-    def set(self, key: str, value: Any, ttl: int = None, priority: float = 1.0):
-        """Armazena valor no cache com prioridade"""
+    def set(self, key: str, value: Any, ttl: int = None):
         if len(self._cache) >= self._max_size:
-            self._evict_entries()
+            self._cache.popitem(last=False)
             
-        actual_ttl = ttl or self._default_ttl
-        self._cache[key] = (value, time.time(), actual_ttl, priority)
-        self._access_pattern[key] = self._access_pattern.get(key, 0) + 1
-
-    def _evict_entries(self):
-        """Estratégias de evição adaptativas"""
-        if not self._cache:
-            return
-            
-        if self._strategy == "lru":
-            self._evict_lru()
-        elif self._strategy == "priority":
-            self._evict_low_priority()
-        else:  
-            self._evict_adaptive()
-    
-    def _evict_lru(self):
-        """Implementação simples de LRU"""
-        if not self._access_pattern:
-            self._evict_adaptive() 
-            return
-
-        key_to_remove = min(self._access_pattern.keys(), 
-                           key=lambda k: self._access_pattern[k])
-        del self._cache[key_to_remove]
-        del self._access_pattern[key_to_remove]
-
-    def _evict_low_priority(self):
-        """Remove item com menor prioridade"""
-        if not self._cache:
-            return
-
-        key_to_remove = min(self._cache.keys(), 
-                           key=lambda k: self._cache[k][3]) 
-        del self._cache[key_to_remove]
-        if key_to_remove in self._access_pattern:
-            del self._access_pattern[key_to_remove]
+        actual_ttl = ttl or self._base_ttl
+        self._cache[key] = (value, time.time(), actual_ttl)
         
-    def _evict_adaptive(self):
-        """Combina frequência de acesso, idade e prioridade"""
-        def eviction_score(k):
-            value, timestamp, ttl, priority = self._cache[k]
-            age = time.time() - timestamp
-            access_count = self._access_pattern.get(k, 0)
-            return age / (access_count + 1) / (priority + 0.1)
-            
-        key_to_remove = min(self._cache.keys(), key=eviction_score)
-        del self._cache[key_to_remove]
-        if key_to_remove in self._access_pattern:
-            del self._access_pattern[key_to_remove]
-    
-    def get_stats(self) -> Dict:
-        """Estatísticas completas do cache"""
+    def get_stats(self):
         total = self._hits + self._misses
         return {
-            "hits": self._hits,
-            "misses": self._misses,
+            "hits": self._hits, "misses": self._misses,
             "hit_rate": self._hits / total if total > 0 else 0.0,
-            "size": len(self._cache),
-            "max_size": self._max_size,
-            "strategy": self._strategy
+            "size": len(self._cache)
         }
-    
-    def clear_expired(self):
-        """Limpa entradas expiradas"""
-        current_time = time.time()
-        expired_keys = [
-            k for k, (_, timestamp, ttl, _) in self._cache.items()
-            if current_time - timestamp >= ttl
-        ]
-        for key in expired_keys:
-            del self._cache[key]
-            if key in self._access_pattern:
-                del self._access_pattern[key]
 
-class StateCompressor:
-    """Compressor eficiente de estados para economizar memória"""
-    
-    def __init__(self):
-        self._mean = None
-        self._std = None
-        self._is_trained = False
-        
-    def compress_state(self, state: np.ndarray) -> np.ndarray:
-        """Compressão simplificada do estado"""
-        if len(state) > 15:  
-            if len(state) >= 10:
-                compressed = np.concatenate([state[:8], state[-2:]])
-                return compressed
-            else:
-                return state[:8]  
-        return state
-
-class PrioritizedBuffer:
-    """Buffer com amostragem prioritária"""
-    
+class AdaptiveBuffer:
     def __init__(self, capacity=5000):
         self.capacity = capacity
-        self.buffer = []
-        self.priorities = []
-        self._quality_heap = []  
-        self.pos = 0
+        self.buffer: Deque[Experience] = deque(maxlen=capacity)  # Especificar tipo
+        self.quality_heap = []  
+        self.quality_threshold = 0.3
+        self.current_quality_version = 1
         
-    def add(self, experience: Experience, priority: float = None) -> bool:
-        """Adiciona experiência com capacidade total"""
-        if priority is None:
-            priority = self._calculate_priority(experience)
-
-        try:
-            # SE há espaço, adiciona normalmente
-            if len(self.buffer) < self.capacity:
-                self.buffer.append(experience)
-                self.priorities.append(priority)
-                heapq.heappush(self._quality_heap, (-experience.quality, experience))
-
+    def add(self, experience: Experience) -> bool:
+        """Adiciona experiência com versionamento de qualidade"""
+        if len(self.buffer) < self.capacity:
+            self.buffer.append(experience)
+            return True
+        else:
+            # Substitui a de menor qualidade
+            min_idx = self._find_min_quality_index()
+            if experience.quality > self._get_effective_quality(self.buffer[min_idx]):
+                self.buffer[min_idx] = experience
                 return True
-            else:
-                # SE buffer cheio, substitui a de menor prioridade
-                min_priority = min(self.priorities) if self.priorities else 0
-                if priority > min_priority:
-                    min_idx = self.priorities.index(min_priority)
-                    self.buffer[min_idx] = experience
-                    self.priorities[min_idx] = priority
-
-                    # Atualiza heap
-                    heapq.heappush(self._quality_heap, (-experience.quality, experience))
-                    return True
-                else:
-                    return False  
-
-        except Exception as e:
             return False
     
-    def sample(self, batch_size: int) -> List[Experience]:
-        """Amostragem 70/30 - preserva diversidade + qualidade"""
-        if not self.buffer:
-            return []
-
+    def _get_effective_quality(self, experience: Experience) -> float:
+        """Qualidade efetiva considerando versionamento"""
+        # Se a qualidade está desatualizada, penaliza temporariamente
+        if experience.quality_version < self.current_quality_version:
+            return experience.quality * 0.7 
+        return experience.quality
+    
+    def reevaluate_experiences(self, quality_evaluator: AdaptiveQualityEvaluator, 
+                             current_group: int, batch_size: int = 200):
+        """Reavalia qualidade de experiências desatualizadas em lotes"""
+        reevaluated_count = 0
+        
+        for i, exp in enumerate(self.buffer):
+            if exp.quality_version < quality_evaluator.quality_version:
+                # Recalcula qualidade com métricas brutas
+                new_quality = quality_evaluator.evaluate_quality(
+                    exp.raw_metrics, current_group
+                )
+                
+                # Atualiza experiência
+                exp.quality = new_quality
+                exp.quality_version = quality_evaluator.quality_version
+                reevaluated_count += 1
+                
+                # Limita por batch para não travar o sistema
+                if reevaluated_count >= batch_size:
+                    break
+        
+        # Atualiza versão corrente
+        self.current_quality_version = quality_evaluator.quality_version
+        
+        # Reconstrói heap com qualidades atualizadas
+        self._rebuild_quality_heap()
+        
+        return reevaluated_count
+    
+    def _rebuild_quality_heap(self):
+        """Reconstrói o heap de qualidade completamente"""
+        self.quality_heap = []
+        for i, exp in enumerate(self.buffer):
+            effective_quality = self._get_effective_quality(exp)
+            if effective_quality > self.quality_threshold:
+                heapq.heappush(self.quality_heap, 
+                              (-effective_quality, i, exp.quality_version))
+    
+    def sample(self, batch_size: int, current_group: int) -> List[Experience]:
+        """Amostra com consciência de grupo e qualidade adaptativa"""
         if len(self.buffer) <= batch_size:
-            return self.buffer.copy()
-
-        # ESTRATÉGIA MISTA (70% aleatório + 30% qualidade)
-        random_count = int(batch_size * 0.7)
-        quality_count = batch_size - random_count
-
-        # Amostra aleatória (rápida)
-        random_samples = []
-        if random_count > 0:
-            random_samples = random.sample(self.buffer, random_count)
-
-        # Amostra por qualidade (mantém aprendizado)
-        quality_samples = []
-        if quality_count > 0 and hasattr(self, '_quality_heap') and self._quality_heap:
-            quality_samples = [exp for _, exp in heapq.nlargest(quality_count, self._quality_heap)]
-
-        # Se não tem qualidade suficiente, completa com aleatório
-        if len(quality_samples) < quality_count:
-            needed = quality_count - len(quality_samples)
-            extra_random = random.sample(self.buffer, min(needed, len(self.buffer)))
-            quality_samples.extend(extra_random)
-
-        return random_samples + quality_samples
-    
-    def get_high_quality(self, count: int) -> List[Experience]:
-        """Recupera experiências de alta qualidade rapidamente"""
-        if not self._quality_heap:
-            return self.sample(count)
+            return list(self.buffer)
             
-        return [exp for _, exp in heapq.nlargest(count, self._quality_heap)]
+        # Estratégia adaptativa baseada no grupo
+        if current_group == 1:
+            # Grupo 1: 90% aleatório, 10% qualidade (exploração)
+            random_ratio = 0.9
+        elif current_group == 2:
+            # Grupo 2: 70% aleatório, 30% qualidade (balanceado)
+            random_ratio = 0.7
+        else:
+            # Grupo 3+: 50% aleatório, 50% qualidade (exploração qualificada)
+            random_ratio = 0.5
+            
+        random_count = int(batch_size * random_ratio)
+        quality_count = batch_size - random_count
+        
+        # Amostra aleatória
+        samples = random.sample(self.buffer, random_count) if random_count > 0 else []
+        
+        # Amostra de qualidade (com versão atual)
+        if self.quality_heap and quality_count > 0:
+            quality_samples = self._get_quality_samples(quality_count)
+            samples.extend(quality_samples)
+            
+        return samples
     
-    def _calculate_priority(self, experience: Experience) -> float:
-        """Calcula prioridade baseada em múltiplos fatores"""
-        return (experience.quality * 0.6 + 
-                min(experience.reward * 0.1, 0.3) + 
-                sum(experience.skills.values()) * 0.1)
-
-
-class BufferManager:
-    """BUFFER DE ALTA PERFORMANCE"""
+    def _get_quality_samples(self, count: int) -> List[Experience]:
+        """Obtém amostras de alta qualidade (priorizando versões atualizadas)"""
+        # Separa por versão de qualidade
+        current_version_samples = []
+        outdated_version_samples = []
+        
+        temp_heap = self.quality_heap.copy()
+        sampled_indices = set()
+        
+        while temp_heap and len(sampled_indices) < count * 2:
+            neg_quality, idx, quality_version = heapq.heappop(temp_heap)
+            
+            if idx >= len(self.buffer) or idx in sampled_indices:
+                continue
+                
+            sampled_indices.add(idx)
+            exp = self.buffer[idx]
+            
+            if quality_version == self.current_quality_version:
+                current_version_samples.append(exp)
+            else:
+                outdated_version_samples.append(exp)
+        
+        # Prioriza experiências com qualidade atualizada
+        result = []
+        result.extend(current_version_samples[:count])
+        
+        # Completa com experiências desatualizadas se necessário
+        if len(result) < count:
+            result.extend(outdated_version_samples[:count - len(result)])
+            
+        return result[:count]
     
-    def __init__(self, logger, config, max_experiences=50000):
+    def _find_min_quality_index(self) -> int:
+        """Encontra índice da experiência com menor qualidade efetiva"""
+        if not self.buffer:
+            return 0
+            
+        min_quality = float('inf')
+        min_idx = 0
+        
+        for i, exp in enumerate(self.buffer):
+            effective_quality = self._get_effective_quality(exp)
+            if effective_quality < min_quality:
+                min_quality = effective_quality
+                min_idx = i
+                
+        return min_idx
+
+class AdaptiveBufferManager:
+    def __init__(self, logger, config, max_experiences=5000):
         self.logger = logger
         self.config = config
         self.max_experiences = max_experiences
+        self.capacity = max_experiences  # ADICIONAR ESTE ATRIBUTO
 
-        # NOVO: Estatísticas para ajuste de pesos
-        self.component_performance = {}
-        self.weight_learning_rate = 0.01
+        # SISTEMA ADAPTATIVO
+        self.quality_evaluator = AdaptiveQualityEvaluator()
+        self.main_buffer = AdaptiveBuffer(capacity=max_experiences)
+        self.cache = Cache(max_size=200)
         
-        # Sistema de buffers otimizado
-        self.group_buffers = {}
-        for group in [1, 2, 3]:
-            self.group_buffers[group] = PrioritizedBuffer(capacity=20000)
-        self.core_buffer = PrioritizedBuffer(capacity=10000)
-        self.current_group = 1
-        if self.current_group in self.group_buffers:
-            self.current_group_buffer = self.group_buffers[self.current_group].buffer
-        else:
-            self.current_group_buffer = []
+        # CONTROLE DE REAVALIAÇÃO
+        self.last_reevaluation_episode = 0
+        self.reevaluation_interval = 50  
+        self.reevaluation_batch_size = 100  
         
-        # Sistemas de otimização
-        self.quality_cache = Cache(max_size=500)
-        self.state_compressor = StateCompressor()
-        
-        # Estatísticas
-        self.episode_count = 0
+        # ESTATÍSTICAS ADAPTATIVAS
         self.stored_count = 0
         self.rejected_count = 0
-        self.performance_stats = {
-            "cache_hits": 0,
-            "cache_misses": 0,
-            "compression_savings": 0,
-            "avg_quality_stored": 0.0
-        }
-        
-        # Controles adaptativos
-        self._last_cleanup = 0
-        self.cleanup_interval = 200
+        self.reevaluated_count = 0
         self._dpg_manager = None
+        self.episode_count = 0
         
-    def store_experience(self, experience_data: Dict):
+    def store_experience(self, experience_data: Dict) -> bool:
+        """Armazenamento com critérios mais permissivos"""
         try:
-            if not experience_data:
-                return False
-
-            # Garantir que metrics existe
-            if "metrics" not in experience_data:
-                experience_data["metrics"] = {}
-
-            # Calcular qualidade
-            quality = self._calculate_quality(experience_data)
-            current_group = self.get_current_group()
-            experience_data["group_level"] = current_group
-
-            # Criar experiência
-            experience = self._create_compressed_experience(experience_data)
-            experience.quality = quality
-
-            # VERIFICAR se deve armazenar
-            if not self._should_store(experience):
+            # Calcula qualidade com avaliador atual
+            metrics = experience_data.get("metrics", {})
+            current_group = experience_data.get("group_level", 1)
+            quality = self.quality_evaluator.evaluate_quality(metrics, current_group)
+            
+            # FILTRO ADAPTATIVO MAIS PERMISSIVO
+            min_threshold = 0.05  
+            buffer_size = len(self.main_buffer.buffer)
+            
+            # No início, aceita quase tudo para construir buffer
+            if buffer_size < 100:
+                min_threshold = 0.03
+            elif buffer_size < 500:
+                min_threshold = 0.05
+                
+            if quality < min_threshold:
                 self.rejected_count += 1
                 return False
-
-            # ARMAZENAR no buffer
-            success = self._store_optimized(experience, current_group)
+                
+            # Cria experiência
+            experience = self._create_adaptive_experience(experience_data, quality, current_group)
+            
+            # Armazena no buffer principal
+            success = self.main_buffer.add(experience)
             if success:
                 self.stored_count += 1
             else:
-                self.logger.info(f"❌ FALHA NO ARMAZENAMENTO: Buffer cheio?")
-
+                self.rejected_count += 1
+                
             return success
-
+            
         except Exception as e:
-            self.logger.error(f"❌ ERRO CRÍTICO no armazenamento: {e}")
-            return False
-    
-    def _create_compressed_experience(self, data: Dict) -> Experience:
-        """Cria experiência com estado comprimido"""
-        try:
-            # Garante que estados são numpy arrays
-            state = np.array(data["state"], dtype=np.float32)
-            action = np.array(data["action"], dtype=np.float32)
-
-            compressed_state = self.state_compressor.compress_state(state)
-            compressed_next = self.state_compressor.compress_state(
-                data.get("next_state", data["state"])
-            )
-
-            # Garantir que as métricas estão no info
-            phase_info = data.get("phase_info", {})
-
-            # COPIAR AS MÉTRICAS PARA O INFO
-            info_with_metrics = phase_info.copy()
-            info_with_metrics["metrics"] = data.get("metrics", {})  
-
-            # Calcula qualidade ANTES de criar a experiência
-            quality = self._calculate_quality(data)
-
-            experience = Experience(
-                state=compressed_state,
-                action=action,
-                reward=float(data["reward"]),
-                next_state=compressed_next,
-                done=False,
-                info=info_with_metrics,  
-                group=data.get("group_level", 1),
-                sub_phase=0,
-                quality=quality,
-                skills=self._analyze_skills(data.get("metrics", {}))
-            )
-            return experience
-
-        except Exception as e:
-            self.logger.error(f"❌ ERRO na criação de experiência: {e}")
-            return Experience(
-                state=np.zeros(10),
-                action=np.zeros(6),
-                reward=0,
-                next_state=np.zeros(10),
-                done=False,
-                info={"metrics": {}},  
-                group=1,
-                sub_phase=0,
-                quality=0.0,
-                skills={}
-            )
-    
-    def _should_store(self, experience: Experience) -> bool:
-        """Critérios de armazenamento"""
-        try:
-            metrics = experience.info.get("metrics", {})
-            distance = metrics.get("distance", 0)
-
-            # ARMAZENAR QUALQUER experiência com movimento positivo
-            if distance > 0.001:
-                return True
-
-            # ARMAZENAR experiências de estabilidade mesmo sem movimento
-            roll = abs(metrics.get("roll", 0))
-            pitch = abs(metrics.get("pitch", 0))
-            if roll < 0.2 and pitch < 0.2:  
-                return True
-
-            # ARMAZENAR algumas experiências negativas para aprendizado
-            if distance < 0 and np.random.random() < 0.1:
-                return True
-
+            self.logger.error(f"❌ ERRO no armazenamento adaptativo: {e}")
             return False
 
-        except Exception as e:
-            self.logger.warning(f"Erro em _should_store: {e}")
-            return True  
-
-    def _get_recent_experiences(self, count: int) -> List[Experience]:
-        """Obtém experiências recentes para análise de novidade"""
-        current_buffer = self.group_buffers.get(self.current_group)
-    
-        # Verifica se o buffer existe e tem experiências
-        if not current_buffer or not current_buffer.buffer:
-            return []
-
-        if len(current_buffer.buffer) < count:
-            return current_buffer.buffer.copy() 
-
-        return current_buffer.buffer[-count:].copy() 
-    
-    def _store_optimized(self, experience: Experience, group: int):
-        """Armazenamento com limpeza automática quando necessário"""
-        try:
-            # Adicionar informação de episódio para tracking de idade
-            if hasattr(self, '_dpg_manager') and self._dpg_manager:
-                experience.episode_created = self._dpg_manager.episode_count
-            
-            # Calcular prioridade
-            priority = self._calculate_experience_priority(experience)
-            
-            # VERIFICAR SE PRECISA LIMPAR ANTES DE ARMAZENAR
-            current_buffer = self.group_buffers[group]
-            needs_cleanup = len(current_buffer.buffer) >= current_buffer.capacity * 0.9  # 90% cheio
-            
-            if needs_cleanup:
-                # Limpar experiências de baixa qualidade primeiro
-                self.cleanup_low_quality_experiences(min_quality_threshold=0.4)
-                
-                # Se ainda estiver cheio, limpar experiências antigas
-                if len(current_buffer.buffer) >= current_buffer.capacity * 0.8:
-                    self.cleanup_old_experiences(max_age_episodes=800)
-                                
-            # Tentar armazenar normalmente
-            success = current_buffer.add(experience, priority)
-            
-            if success:
-                # Atualizar buffer atual
-                self.current_group_buffer = current_buffer.buffer
-                
-                # Se for excepcional, vai para core buffer
-                if experience.quality > 0.7 or self._is_core_experience(experience):
-                    self.core_buffer.add(experience, priority * 1.2)
-                    
-                return True
-            else:
-                return False
-    
-        except Exception as e:
-            self.logger.error(f"❌ Erro em _store_optimized: {e}")
-            return False
-    
-    def cleanup_low_quality_experiences(self, min_quality_threshold=0.3):
-        """Remove experiências de baixa qualidade para liberar espaço"""
-        try:
-            total_removed = 0
-
-            # Limpar todos os buffers
-            for group_id in [1, 2, 3]:
-                if group_id in self.group_buffers:
-                    buffer = self.group_buffers[group_id]
-                    if hasattr(buffer, 'buffer') and buffer.buffer:
-
-                        # Filtrar experiências mantendo apenas as de alta qualidade
-                        high_quality_exps = []
-                        for exp in buffer.buffer:
-                            if exp.quality >= min_quality_threshold:
-                                high_quality_exps.append(exp)
-                            else:
-                                total_removed += 1
-
-                        # Reconstruir buffer com as melhores
-                        buffer.buffer = high_quality_exps
-
-                        # Reconstruir heap de qualidade
-                        buffer._quality_heap = []
-                        for exp in high_quality_exps:
-                            heapq.heappush(buffer._quality_heap, (-exp.quality, exp))
-
-            # Limpar core buffer também
-            if hasattr(self.core_buffer, 'buffer') and self.core_buffer.buffer:
-                high_quality_core = []
-                for exp in self.core_buffer.buffer:
-                    if exp.quality >= min_quality_threshold:
-                        high_quality_core.append(exp)
-                    else:
-                        total_removed += 1
-
-                self.core_buffer.buffer = high_quality_core
-                self.core_buffer._quality_heap = []
-                for exp in high_quality_core:
-                    heapq.heappush(self.core_buffer._quality_heap, (-exp.quality, exp))
-
-            return total_removed
-
-        except Exception as e:
-            self.logger.error(f"❌ Erro na limpeza do buffer: {e}")
-            return 0
-
-    def cleanup_old_experiences(self, max_age_episodes=1000):
-        """Remove experiências muito antigas"""
-        try:
-            total_removed = 0
-            current_episode = getattr(self._dpg_manager, 'episode_count', 0) if self._dpg_manager else 0
-
-            for group_id in [1, 2, 3]:
-                if group_id in self.group_buffers:
-                    buffer = self.group_buffers[group_id]
-                    if hasattr(buffer, 'buffer') and buffer.buffer:
-
-                        # Manter apenas experiências recentes
-                        recent_exps = []
-                        for exp in buffer.buffer:
-                            exp_episode = getattr(exp, 'episode_created', 0)
-                            if current_episode - exp_episode <= max_age_episodes:
-                                recent_exps.append(exp)
-                            else:
-                                total_removed += 1
-
-                        buffer.buffer = recent_exps
-
-            return total_removed
-
-        except Exception as e:
-            self.logger.warning(f"Erro ao limpar experiências antigas: {e}")
-            return 0
+    def _create_adaptive_experience(self, data: Dict, quality: float, group: int) -> Experience:
+        """Cria experiência com métricas otimizadas"""
+        state = np.array(data["state"], dtype=np.float32)
+        action = np.array(data["action"], dtype=np.float32)
         
+        # MÉTRICAS BRUTAS COM VALORES PADRÃO
+        raw_metrics = data.get("metrics", {}).copy()
         
-    def _calculate_experience_priority(self, experience: Experience) -> float:
-        """Calcula prioridade incluindo análise de componentes"""
-        quality_factor = experience.quality * 0.5
-        reward_factor = min(experience.reward * 0.2, 0.3)
-        skill_factor = sum(experience.skills.values()) * 0.15
-        novelty_factor = self._calculate_novelty(experience) * 0.15
+        # Garante métricas essenciais
+        essential_metrics = ["distance", "speed", "roll", "pitch", "alternating"]
+        for metric in essential_metrics:
+            if metric not in raw_metrics or raw_metrics[metric] is None:
+                raw_metrics[metric] = 0.0
+
+        # Garante que next_state existe
+        next_state = data.get("next_state", data["state"])
+        if next_state is None:
+            next_state = data["state"]
+
+        return Experience(
+            state=state,  
+            action=action,
+            reward=float(data["reward"]),
+            next_state=np.array(next_state, dtype=np.float32),
+            done=data.get("done", False),
+            info=data.get("phase_info", {}),
+            group=group,
+            sub_phase=0,
+            quality=quality,
+            skills=self._analyze_adaptive_skills(raw_metrics),
+            episode_created=self.episode_count,
+            raw_metrics=raw_metrics,
+            quality_version=self.quality_evaluator.quality_version
+        )
+
+    def get_adaptive_status(self) -> Dict:
+        """Status com métricas adaptativas"""
+        buffer_size = len(self.main_buffer.buffer)
         
-        # Fator baseado em componentes problemáticos
-        component_factor = self._analyze_component_performance(experience) * 0.1
-        
-        return quality_factor + reward_factor + skill_factor + novelty_factor + component_factor
-        
-    def _analyze_component_performance(self, experience: Experience) -> float:
-        """Analisa quais componentes precisam de mais atenção"""
-        metrics = experience.info.get("metrics", {})
-        
-        # Se movimento é bom mas estabilidade ruim, priorizar
-        distance = max(metrics.get("distance", 0), 0)
-        roll = abs(metrics.get("roll", 0))
-        pitch = abs(metrics.get("pitch", 0))
-        
-        stability_score = 1.0 - min((roll + pitch) / 1.0, 1.0)
-        
-        if distance > 0.3 and stability_score < 0.5:
-            return 0.8  
-        elif distance < 0.1 and stability_score > 0.7:
-            return 0.6  
-            
-        return 0.3 
-    
-    def _calculate_novelty(self, experience: Experience) -> float:
-        """Calcula fator de novidade"""
-        recent = self._get_recent_experiences(10)
-        if not recent:
-            return 1.0
-            
-        similarities = []
-        for exp in recent:
-            exp_state = np.array(exp.state)
-            current_state = np.array(experience.state)
-            sim = np.linalg.norm(current_state - exp_state)
-            similarities.append(sim)
-
-        avg_similarity = np.mean(similarities) if similarities else 0
-        return min(avg_similarity, 1.0)  
-    
-    def _is_core_experience(self, experience: Experience) -> bool:
-        """Verifica se experiência deve ir para core buffer"""
-        return (experience.quality > 0.7 and 
-                experience.reward > 2.0 and
-                experience.skills.get("estabilidade", 0) > 0.7)
-    
-    def _calculate_quality(self, data: Dict) -> float:
-        """QUALIDADE FOCADA APENAS EM MOVIMENTO POSITIVO"""
-        metrics = data.get("metrics", {})
-        distante = metrics.get("distance", 0)
-        distance = abs(distante)
-    
-        if distance <= 0:
-            return 0.0  
-
-        if distance > 0.5: return 0.9
-        if distance > 0.3: return 0.8
-        if distance > 0.2: return 0.7
-        if distance > 0.1: return 0.6
-        if distance > 0.05: return 0.5
-        if distance > 0.02: return 0.4
-        if distance > 0.01: return 0.3
-        return 0.2
-    
-    def _analyze_skills(self, metrics: Dict) -> Dict[str, float]:
-        """Análise simplificada de habilidades """
-        distance = max(metrics.get("distance", 0), 0)
-        speed = metrics.get("speed", 0)
-        roll = abs(metrics.get("roll", 0))
-        pitch = abs(metrics.get("pitch", 0))
-
-        # Foco ABSOLUTO em movimento positivo
-        movimento_positivo = 0.0
-        if distance > 0:
-            movimento_positivo = min(distance / 1.5, 1.0)  
-
-        # Estabilidade baseada em thresholds REALISTAS
-        estabilidade = 1.0 - min((roll + pitch) / 0.8, 1.0)  
-
-        # Progresso baseado em movimento REAL
-        progresso_basico = 1.0 if distance > 0.3 else min(distance / 0.3, 0.5)
-
-        return {
-            "movimento_positivo": movimento_positivo,
-            "velocidade_eficiente": min(speed / 0.8, 1.0) if speed > 0 else 0.0,
-            "estabilidade": estabilidade,
-            "progresso_basico": progresso_basico,
-            "coordenação": 0.7 if metrics.get("alternating", False) else 0.3,
-            "controle_postural": 1.0 - min(pitch * 2.0, 1.0),
-        }  
-    
-    def get_current_group(self) -> int:
-        """Retorna grupo atual de forma robusta"""
-        if hasattr(self, 'current_group'):
-            return self.current_group
-
-        if hasattr(self, '_dpg_manager') and self._dpg_manager:
-            return getattr(self._dpg_manager, 'current_group', 1)
-
-        return 1 
-
-    def get_status(self):
-        """Métricas conta TODAS as experiências"""
-        try:
-            total_experiences = 0
-            total_movement_distance = 0.0
-            movement_experience_count = 0
-            total_quality = 0.0
-            total_reward = 0.0
-
-            for group_id in [1, 2, 3]:
-                if group_id in self.group_buffers:
-                    buffer = self.group_buffers[group_id]
-                    if hasattr(buffer, 'buffer') and buffer.buffer:
-                        for exp in buffer.buffer:
-                            try:
-                                metrics = exp.info.get("metrics", {})
-                                distance = metrics.get("distance", 0)
-
-                                if isinstance(distance, (int, float)):
-                                    abs_distance = abs(distance)
-                                    total_experiences += 1
-                                    total_quality += exp.quality
-                                    total_reward += exp.reward
-
-                                    if abs_distance > 0.01:
-                                        total_movement_distance += abs_distance
-                                        movement_experience_count += 1
-                            except Exception as e:
-                                continue
-
-            # Cálculos CORRETOS
-            if total_experiences > 0:
-                avg_quality = total_quality / total_experiences
-                avg_reward = total_reward / total_experiences
-            else:
-                avg_quality = 0.1
-                avg_reward = 0.1
-
-            # Distância média apenas das experiências com movimento
-            if movement_experience_count > 0:
-                avg_distance = total_movement_distance / movement_experience_count
-            else:
-                avg_distance = 0.0
-
-            return {
-                "total_experiences": total_experiences,
-                "movement_experience_count": movement_experience_count,
-                "current_group_experiences": len(self.current_group_buffer) if hasattr(self, 'current_group_buffer') and self.current_group_buffer else 0,
-                "avg_quality": avg_quality,
-                "avg_distance": avg_distance,
-                "avg_reward": avg_reward,
-                "quality_calculation_working": True,
-                "stored_count": self.stored_count,
-                "rejected_count": self.rejected_count
-            }
-
-        except Exception as e:
-            self.logger.error(f"❌ ERRO no get_status: {e}")
-            return {
-                "total_experiences": self.stored_count,
-                "movement_experience_count": 0,
-                "current_group_experiences": self.stored_count,
-                "avg_quality": 0.3,
-                "avg_distance": 0.0,
-                "avg_reward": 10.0,
-                "quality_calculation_working": True,
-                "error": str(e)
-            }
-        
-    def _calculate_avg_distance(self) -> float:
-            """Calcula distância média"""
-            try:
-                status = self.get_status()
-                avg_distance = status.get("avg_distance", 0.0)
-                return avg_distance
-    
-            except Exception as e:
-                self.logger.error(f"❌ Erro em _calculate_avg_distance: {e}")
-                return 0.0
-
-    def get_metrics(self) -> Dict:
-        """Métricas focadas em performance"""
-        base_metrics = self.get_status()
-
-        total_stored = self.stored_count + self.rejected_count
-        rejection_rate = self.rejected_count / total_stored if total_stored > 0 else 0
-
-        if not self.current_group_buffer:
-            return {
-                **base_metrics, 
-                "movement_efficiency": 0, 
-                "positive_movement_rate": 0,
-                "rejection_rate": rejection_rate,
-                "buffer_efficiency": 0
-            }
-
-        # Cálculos eficientes
-        recent_experiences = self.current_group_buffer[-100:]  
-        positive_exps = [exp for exp in recent_experiences 
-                        if exp.info.get("metrics", {}).get("distance", 0) > 0.1]
-
-        positive_rate = len(positive_exps) / len(recent_experiences) if recent_experiences else 0
-
-        optimization_metrics = {
-            "positive_movement_rate": positive_rate,
-            "movement_efficiency": min(positive_rate * 2.0, 1.0),
-            "rejection_rate": rejection_rate,
-            "buffer_efficiency": len(self.current_group_buffer) / self.max_experiences
+        # Estatísticas de qualidade
+        quality_stats = {
+            "current_quality_version": self.quality_evaluator.quality_version,
+            "quality_strategy": self.quality_evaluator.current_strategy,
+            "avg_quality": 0.0,
+            "outdated_experiences": 0,
+            "high_quality_count": 0,
+            "buffer_utilization": buffer_size / self.capacity if self.capacity > 0 else 0
         }
-
-        return {**base_metrics, **optimization_metrics}
+        
+        if buffer_size > 0:
+            qualities = []
+            for exp in self.main_buffer.buffer:
+                qualities.append(exp.quality)
+                if exp.quality_version < quality_stats["current_quality_version"]:
+                    quality_stats["outdated_experiences"] += 1
+                if exp.quality > 0.7:
+                    quality_stats["high_quality_count"] += 1
+            
+            quality_stats["avg_quality"] = sum(qualities) / len(qualities) if qualities else 0.0
+        
+        base_status = {
+            "total_experiences": buffer_size,
+            "capacity": self.capacity,
+            "stored_count": self.stored_count,
+            "rejected_count": self.rejected_count,
+            "reevaluated_count": self.reevaluated_count,
+            "cache_stats": self.cache.get_stats()
+        }
+        
+        critic_weights = self.quality_evaluator.critic_weights or {}
+        return {**base_status, **quality_stats, **critic_weights}
+    
+    def update_quality_criteria(self, critic_weights: Dict, current_group: int, 
+                              current_episode: int, force_reevaluation: bool = False):
+        """Atualiza critérios de qualidade e reavalia se necessário"""
+        # Atualiza avaliador
+        self.quality_evaluator.update_critic_weights(critic_weights)
+        
+        # Verifica se deve reavaliar
+        should_reevaluate = (
+            force_reevaluation or
+            (current_episode - self.last_reevaluation_episode) >= self.reevaluation_interval or
+            len(self.main_buffer.buffer) > self.max_experiences * 0.8
+        )
+        
+        if should_reevaluate:
+            reevaluated = self.main_buffer.reevaluate_experiences(
+                self.quality_evaluator, current_group, self.reevaluation_batch_size
+            )
+            self.reevaluated_count += reevaluated
+            self.last_reevaluation_episode = current_episode
+            
+    def sample(self, batch_size: int, current_group: int) -> List[Experience]:
+        """Amostra com consciência de grupo"""
+        return self.main_buffer.sample(batch_size, current_group)
+    
+    def _analyze_adaptive_skills(self, metrics: Dict) -> Dict[str, float]:
+        """Análise de habilidades para reavaliação"""
+        distance = max(metrics.get("distance", 0), 0)
+        roll = abs(metrics.get("roll", 0))
+        pitch = abs(metrics.get("pitch", 0))
+        alternating = metrics.get("alternating", False)
+        efficiency = metrics.get("propulsion_efficiency", 0.5)
+        
+        return {
+            "movement": min(distance / 2.0, 1.0),
+            "stability": 1.0 - min((roll + pitch) / 0.8, 1.0),
+            "coordination": 0.8 if alternating else 0.2,
+            "efficiency": efficiency,
+            "clearance": metrics.get("clearance_score", 0.0),
+            "gait_quality": metrics.get("gait_pattern_score", 0.5)
+        }

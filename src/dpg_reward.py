@@ -33,7 +33,7 @@ class RewardCalculator:
         self.max_weight_change = 0.4  
         
         # Sistema de cache unificado
-        self.cache = Cache(max_size=500, default_ttl=50)
+        self.cache = Cache(max_size=500)
         self._last_sim_state = None
         self._last_reward = 0.0
         
@@ -41,6 +41,9 @@ class RewardCalculator:
         self._cache_hits = 0
         self._cache_misses = 0
         self._total_calculations = 0
+
+        self.macro_components["sparse_success"] = 0.0  
+        self.base_macro_weights["sparse_success"] = 0.0
     
     def calculate(self, sim, action, phase_info: Dict) -> float:
         self._total_calculations += 1
@@ -88,7 +91,7 @@ class RewardCalculator:
             total_reward += value * self.macro_components[component]
 
         # Cache
-        self.cache.set(cache_key, total_reward, ttl=80)
+        self.cache.set(cache_key, total_reward)
 
         return max(total_reward, 0.0)  
 
@@ -97,71 +100,118 @@ class RewardCalculator:
     # =========================================================================
     
     def _calculate_progresso_component(self, sim, phase_info) -> float:
-        """Componente de PROGRESSO: movimento, velocidade, distância"""
+        """Componente de PROGRESSO: só recompensa movimento *estável e efetivo*"""
         reward = 0.0
-        
-        # Distância percorrida
-        distance = max(getattr(sim, "episode_distance", 0), 0)
-        if distance > 0:
-            reward += distance * 25.0
-            
-            # Bônus progressivo por marcos
-            if distance > 3.0: reward += 150.0
-            elif distance > 2.0: reward += 80.0
-            elif distance > 1.5: reward += 50.0
-            elif distance > 1.0: reward += 30.0
-            elif distance > 0.7: reward += 20.0
-            elif distance > 0.5: reward += 12.0
-            elif distance > 0.3: reward += 8.0
-            elif distance > 0.1: reward += 4.0
-            elif distance > 0.05: reward += 2.0
-            elif distance > 0.01: reward += 1.0
-        
-        # Velocidade positiva
-        velocity = getattr(sim, "robot_x_velocity", 0)
-        if velocity > 0:
-            reward += velocity * 6.0
-            
-        # Bônus de sobrevivência com movimento
-        if not getattr(sim, "episode_terminated", True) and distance > 0.01:
-            reward += 60.0
-            
+        try:
+            distance = max(getattr(sim, "episode_distance", 0), 0)
+            velocity = getattr(sim, "robot_x_velocity", 0)
+            episode_time = getattr(sim, "episode_time", 0)
+
+            # Bônus por distância real (sem exageros)
+            if distance > 0:
+                reward += distance * 30.0  
+
+            # Marcos de distância (mantidos, mas mais conservadores)
+            milestones = {
+                3.0: 180.0, 2.0: 120.0, 1.5: 70.0,
+                1.0: 50.0, 0.7: 35.0, 0.5: 18.0,
+                0.3: 8.0, 0.1: 2.0, 0.05: 1.0
+            }
+            for d, b in milestones.items():
+                if distance >= d:
+                    reward += b
+                    break
+
+            # Só recompensa velocidade se houver estabilidade E progresso
+            roll = abs(getattr(sim, "robot_roll", 0))
+            pitch = abs(getattr(sim, "robot_pitch", 0))
+            stability = 1.0 - min((roll + pitch) / 0.3, 1.0)  
+
+            left_contact = getattr(sim, "robot_left_foot_contact", False)
+            right_contact = getattr(sim, "robot_right_foot_contact", False)
+            alternating = (left_contact != right_contact)
+
+            effective_velocity_bonus = 0.0
+            terrain = getattr(sim, "terrain_type", "normal")
+            vel_mult = 18.0 if terrain == "ramp" else 12.0
+
+            if velocity > 0 and stability > 0.6 and alternating:
+                effective_velocity_bonus = velocity * vel_mult
+            elif velocity > 0 and stability > 0.6:
+                # Estável mas não alternando → velocidade reduzida
+                effective_velocity_bonus = velocity * 4.0
+            elif velocity > 0:
+                # Instável → quase nada
+                effective_velocity_bonus = velocity * 1.0
+
+            reward += effective_velocity_bonus
+
+            # Bônus de sobrevivência só se avançou > 2 cm
+            if not getattr(sim, "episode_terminated", True) and distance > 0.02:
+                reward += 30.0  
+
+        except Exception as e:
+            self.logger.warning(f"Erro no cálculo de progresso: {e}")
         return reward
     
     def _calculate_coordenacao_component(self, sim, phase_info) -> float:
-        """Componente de COORDENAÇÃO: padrão de marcha, alternância, ritmo"""
+        """Componente de COORDENAÇÃO: só recompensa padrão de marcha *funcional*"""
         reward = 0.0
-        
         try:
-            # Padrão alternado
             left_contact = getattr(sim, "robot_left_foot_contact", False)
             right_contact = getattr(sim, "robot_right_foot_contact", False)
-            
-            if left_contact != right_contact:
-                reward += 15.0
-                
-            # Flexão de joelhos durante balanço
+            alternating = (left_contact != right_contact)
+
+            consecutive_alternating = getattr(sim, "consecutive_alternating_steps", 0)
+            coord_duration_bonus = min(consecutive_alternating / 10.0, 1.0)
+
             left_knee = getattr(sim, "robot_left_knee_angle", 0)
             right_knee = getattr(sim, "robot_right_knee_angle", 0)
-            
-            if not left_contact and left_knee > 1.2: reward += 6.0
-            if not right_contact and right_knee > 1.2: reward += 6.0
-            
-            # Clearance dos pés
-            left_foot_height = getattr(sim, "robot_left_foot_height", 0)
-            right_foot_height = getattr(sim, "robot_right_foot_height", 0)
-            
-            if not left_contact and left_foot_height > 0.08: reward += 3.0
-            if not right_contact and right_foot_height > 0.08: reward += 3.0
-            
-            # Coordenação completa
-            if ((not left_contact and left_knee > 0.7 and left_foot_height > 0.06) or
-                (not right_contact and right_knee > 0.7 and right_foot_height > 0.06)):
+
+            left_foot_h = getattr(sim, "robot_left_foot_height", 0)
+            right_foot_h = getattr(sim, "robot_right_foot_height", 0)
+
+            gait_phase = getattr(sim, "gait_phase", 0.5)
+            left_swing = not left_contact and gait_phase < 0.5
+            right_swing = not right_contact and gait_phase > 0.5
+
+            clearance_ok = (
+                (not left_contact and left_foot_h > 0.06) or
+                (not right_contact and right_foot_h > 0.06)
+            )
+            knee_flex_ok = (
+                (not left_contact and left_knee > 0.7) or
+                (not right_contact and right_knee > 0.7)
+            )
+
+            # Base: alternância correta
+            if alternating:
+                reward += 12.0
+            else:
+                reward -= 8.0  
+
+            if alternating and consecutive_alternating >= 5:  
+                reward += 15.0 * coord_duration_bonus
+
+            # Bônus por clearance funcional
+            if clearance_ok:
+                reward += 6.0
+
+            # Bônus por flexão de joelho no swing
+            if knee_flex_ok:
                 reward += 5.0
-                
+
+            # BÔNUS ESTRUTURAL: só se todos os 3 estiverem OK
+            if (left_swing or right_swing) and knee_flex_ok > 0.7 and clearance_ok > 0.06:
+                reward += 12.0 * (1.0 - abs(gait_phase - 0.5))
+    
+            # Gait pattern score (se disponível)
+            gait_score = getattr(sim, "robot_gait_pattern_score", 0.0)
+            if gait_score > 0.5:
+                reward += gait_score * 20.0
+
         except Exception as e:
             self.logger.warning(f"Erro no cálculo de coordenação: {e}")
-            
         return reward
     
     def _calculate_estabilidade_component(self, sim, phase_info) -> float:
@@ -242,50 +292,93 @@ class RewardCalculator:
             
         return bonus
     
-    def _calculate_penalidades_component(self, sim, phase_info) -> float:
-        """Componente de PENALIDADES: todas as penalidades consolidadas"""
-        penalties = 0.0
-        
+    def _calculate_sparse_success_component(self, sim, phase_info) -> float:
+        """Recompensa esparsa para tarefas completas (ativada só após progresso alto)"""
+        if not phase_info.get('sparse_success_enabled', False):
+            return 0.0
+
         try:
-            # Penalidades de instabilidade
+            distance = max(getattr(sim, "episode_distance", 0), 0)
             roll = abs(getattr(sim, "robot_roll", 0))
             pitch = abs(getattr(sim, "robot_pitch", 0))
-            
-            if roll > 0.3:  
-                penalties -= (roll - 0.3) * 8.0
-            if pitch > 0.3:  
-                penalties -= (pitch - 0.3) * 10.0
-                
-            # Penalidade por altura inadequada do COM
+            terminated = getattr(sim, "episode_terminated", True)
+            steps = getattr(sim, "episode_steps", 500)
+
+            # Critérios estritos de sucesso
+            stable = (roll < 0.2 and pitch < 0.2) 
+            efficient = (steps <= int(1.5 * distance * 200)) if distance > 0 else False  # ~200 steps/m baseline
+            completed = (distance >= 3.0)
+
+            if completed and stable and not terminated and efficient:
+                # Bônus escalonado por eficiência
+                step_bonus = max(0.0, 1.0 - (steps / (distance * 200 + 1e-6)) / 1.5)
+                return 500.0 * (0.7 + 0.3 * step_bonus)  
+
+            # Bônus parcial para próximos de sucesso
+            if distance >= 2.5 and stable:
+                return 150.0
+            if distance >= 2.0 and stable:
+                return 50.0
+
+        except Exception as e:
+            self.logger.warning(f"Erro no sparse_success_component: {e}")
+        return 0.0
+
+    def _calculate_penalidades_component(self, sim, phase_info) -> float:
+        """Componente de PENALIDADES: rigor físico realista"""
+        penalties = 0.0
+        try:
+            # --- 1. Instabilidade angular AGRESSIVA ---
+            roll = abs(getattr(sim, "robot_roll", 0))
+            pitch = abs(getattr(sim, "robot_pitch", 0))
+
+            # Penaliza a partir de 8.5° (0.15 rad), não 17°
+            roll_penalty = max(0.0, (roll - 0.15)) * 40.0
+            pitch_penalty = max(0.0, (pitch - 0.15)) * 40.0
+            penalties -= (roll_penalty + pitch_penalty)
+
+            # --- 2. Movimento para trás ou estagnado ---
+            distance = getattr(sim, "episode_distance", 0)
+            episode_time = getattr(sim, "episode_time", 0)
+
+            if distance < 0:
+                # Andar para trás é inaceitável
+                penalties -= abs(distance) * 50.0
+            elif abs(distance) < 0.05 and episode_time > 2.0:
+                # Congelamento após 2s → punição dura
+                penalties -= 100.0
+
+            # --- 3. Desvio lateral excessivo ---
+            y_vel = abs(getattr(sim, "robot_y_velocity", 0))
+            if y_vel > 0.3:
+                penalties -= (y_vel - 0.3) * 100.0
+
+            # --- 4. Altura do COM fora da faixa segura ---
             com_height = getattr(sim, "robot_z_position", 0.8)
             if com_height < 0.6:
-                penalties -= (0.6 - com_height) * 40.0
+                penalties -= (0.6 - com_height) * 50.0
             elif com_height > 1.0:
-                penalties -= (com_height - 1.0) * 25.0
-                
-            # Penalidade por desvio lateral
-            y_velocity = abs(getattr(sim, "robot_y_velocity", 0))
-            if y_velocity > 0.2:  
-                penalties -= (y_velocity - 0.2) * 12.0
-                
-            # Penalidade por ações extremas
-            if hasattr(phase_info, 'action') and phase_info.action is not None:
-                action_magnitude = np.sqrt(np.sum(np.square(phase_info.action)))
-                if action_magnitude > 2.0:
-                    penalties -= (action_magnitude - 2.0) * 8.0
-                    
-            # Penalidades críticas
-            if getattr(sim, "episode_termination", "") == "yaw_deviated":
-                penalties -= 200.0
-            if getattr(sim, "episode_termination", "") == "fell":
+                penalties -= (com_height - 1.0) * 30.0
+
+            # --- 5. Ações extremas (evitar spiking torque) ---
+            action = phase_info.get('action')
+            if action is not None:
+                action_mag = np.linalg.norm(action)
+                if action_mag > 2.5:
+                    penalties -= (action_mag - 2.5) * 10.0
+
+            # --- 6. Penalidades críticas (queda, yaw excessivo) ---
+            termination = getattr(sim, "episode_termination", "")
+            if termination == "fell":
                 penalties -= 300.0
-                
-            # Penalidade por esforço
+            elif termination == "yaw_deviated":
+                penalties -= 200.0
+
+            # --- 7. Esforço biomecânico (já existente) ---
             penalties += self._calculate_effort_penalty(sim, phase_info)
-            
+
         except Exception as e:
             self.logger.warning(f"Erro no cálculo de penalidades: {e}")
-            
         return penalties
 
     def _calculate_effort_penalty(self, sim, phase_info) -> float:
