@@ -152,12 +152,6 @@ def process_runner(
                     # Status do DPG
                     if enable_dpg:
                         dpg_status = dpg_manager.get_integrated_status()
-                
-                agent.model.learn(total_timesteps=timesteps_batch_size, reset_num_timesteps=False, callback=callback)
-
-                # Enviar progresso para GUI
-                if timesteps_completed % 10000 == 0:
-                    logger.info(f"Progresso: {timesteps_completed} timesteps com aprendizagem")
 
             logger.info("Treinamento concluído!")
 
