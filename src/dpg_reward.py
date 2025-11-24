@@ -44,8 +44,56 @@ class RewardCalculator:
 
         self.macro_components["sparse_success"] = 0.0  
         self.base_macro_weights["sparse_success"] = 0.0
+
+        self.terrain_parameters = {
+            "normal": {
+                "speed_weight": 15.0,
+                "clearance_min": 0.06,
+                "stability_weight": 1.0,
+                "coordination_bonus": 15.0
+            },
+            "ramp_up": {
+                "speed_weight": 25.0,  # Mais importante em subida
+                "clearance_min": 0.12, # Clearance maior necessário
+                "stability_weight": 1.3, # Estabilidade crítica
+                "coordination_bonus": 20.0,
+                "pitch_target": 0.2,   # Pitch ideal para subida
+                "uphill_bonus": 1.5    # Bônus extra para subida
+            },
+            "ramp_down": {
+                "speed_weight": 8.0,   # Velocidade controlada em descida
+                "clearance_min": 0.10,
+                "stability_weight": 1.6, # Máxima prioridade para estabilidade
+                "coordination_bonus": 18.0,
+                "pitch_target": -0.15, # Pitch ideal para descida
+                "braking_bonus": 2.0   # Bônus por frenagem controlada
+            },
+            "uneven": {
+                "speed_weight": 10.0,
+                "clearance_min": 0.08,
+                "stability_weight": 1.4,
+                "coordination_bonus": 25.0, # Coordenação muito importante
+                "adaptation_bonus": 1.3
+            },
+            "low_friction": {
+                "speed_weight": 8.0,
+                "clearance_min": 0.07,
+                "stability_weight": 1.5,
+                "coordination_bonus": 20.0,
+                "slip_penalty_multiplier": 2.0
+            },
+            "complex": {
+                "speed_weight": 12.0,
+                "clearance_min": 0.09,
+                "stability_weight": 1.4,
+                "coordination_bonus": 30.0, # Máxima importância
+                "robustness_bonus": 1.4
+            }
+        }
     
     def calculate(self, sim, action, phase_info: Dict) -> float:
+        current_terrain = phase_info.get('current_terrain', 'normal')
+        terrain_params = self.terrain_parameters.get(current_terrain, self.terrain_parameters["normal"])
         self._total_calculations += 1
 
         # Cache otimizado
@@ -59,35 +107,15 @@ class RewardCalculator:
 
         # CÁLCULO POR CATEGORIAS MACRO
         component_values = {
-            "progresso": 0.0,
-            "coordenacao": 0.0,
-            "estabilidade": 0.0, 
-            "eficiencia": 0.0,
-            "valencia_bonus": 0.0,
-            "penalidades": 0.0
+            "progresso": self._calculate_progresso_component(sim, phase_info, terrain_params),
+            "coordenacao": self._calculate_coordenacao_component(sim, phase_info, terrain_params),
+            "estabilidade": self._calculate_estabilidade_component(sim, phase_info, terrain_params),
+            "eficiencia": self._calculate_eficiencia_component(sim, phase_info, terrain_params),
+            "valencia_bonus": self._calculate_valencia_bonus_component(sim, phase_info),
+            "penalidades": self._calculate_penalidades_component(sim, phase_info, terrain_params),
+            "sparse_success": self._calculate_sparse_success_component(sim, phase_info),
         }
 
-        # 1. PROGRESSO (movimento, velocidade, distância)
-        component_values["progresso"] = self._calculate_progresso_component(sim, phase_info)
-        
-        # 2. COORDENAÇÃO (marcha alternada, padrão de gait)
-        component_values["coordenacao"] = self._calculate_coordenacao_component(sim, phase_info)
-        
-        # 3. ESTABILIDADE (roll, pitch, altura COM, equilíbrio)
-        component_values["estabilidade"] = self._calculate_estabilidade_component(sim, phase_info)
-        
-        # 4. EFICIÊNCIA (energia, biomecânica, suavidade)
-        component_values["eficiencia"] = self._calculate_eficiencia_component(sim, phase_info)
-        
-        # 5. BÔNUS DE VALÊNCIAS
-        component_values["valencia_bonus"] = self._calculate_valencia_bonus_component(sim, phase_info)
-        
-        # 6. PENALIDADES (queda, desvios, esforço excessivo)
-        component_values["penalidades"] = self._calculate_penalidades_component(sim, phase_info)
-
-        # 7. SPARSE SUCCESS 
-        component_values["sparse_success"] = self._calculate_sparse_success_component(sim, phase_info)
-        
         # SOMA PONDERADA COM OS PESOS MACRO
         total_reward = 0.0
         for component, value in component_values.items():
@@ -102,169 +130,273 @@ class RewardCalculator:
     # COMPONENTES MACRO (cada um agrega múltiplas funções específicas)
     # =========================================================================
     
-    def _calculate_progresso_component(self, sim, phase_info) -> float:
-        """Componente de PROGRESSO: só recompensa movimento *estável e efetivo*"""
+    def _calculate_progresso_component(self, sim, phase_info, terrain_params) -> float:
+        """PROGRESSO: recompensa distância *apenas* se marcha for funcional e estável."""
         reward = 0.0
         try:
-            distance = max(getattr(sim, "episode_distance", 0), 0)
-            velocity = getattr(sim, "robot_x_velocity", 0)
-            episode_time = getattr(sim, "episode_time", 0)
-            
-            # Bônus por distância inicial
-            if 0.1 <= distance < 0.3:
-                reward += 20 * (distance / 0.3)
-            
-            # Bônus por distância real 
-            if distance > 0:
-                reward += distance * 30.0  
+            dist = max(getattr(sim, "episode_distance", 0.0), 0.0)
+            vel_x = getattr(sim, "robot_x_velocity", 0.0)
+            current_terrain = phase_info.get('current_terrain', 'normal')
 
-            # Marcos de distância 
-            milestones = {
-                3.0: 180.0, 2.0: 120.0, 1.5: 70.0,
-                1.0: 50.0, 0.7: 35.0, 0.5: 18.0,
-                0.3: 8.0, 0.1: 2.0, 0.05: 1.0
-            }
-            for d, b in milestones.items():
-                if distance >= d:
-                    reward += b
-                    break
+            # USA PARÂMETROS DO TERRENO CORRETAMENTE
+            speed_weight = terrain_params["speed_weight"]
+            clearance_min = terrain_params["clearance_min"]
+            uphill_bonus = terrain_params.get("uphill_bonus", 1.0)
 
-            # Só recompensa velocidade se houver estabilidade E progresso
-            roll = abs(getattr(sim, "robot_roll", 0))
-            pitch = abs(getattr(sim, "robot_pitch", 0))
-            stability = 1.0 - min((roll + pitch) / 0.3, 1.0)  
+            # Estabilidade e funcionalidade mínimas
+            roll = abs(getattr(sim, "robot_roll", 0.0))
+            pitch = getattr(sim, "robot_pitch", 0.0)
+
+            # PITCH TARGET ESPECÍFICO POR TERRENO
+            pitch_target = terrain_params.get("pitch_target", 0.0)
+            stable = (roll < 0.25 and abs(pitch - pitch_target) < 0.3)
 
             left_contact = getattr(sim, "robot_left_foot_contact", False)
             right_contact = getattr(sim, "robot_right_foot_contact", False)
             alternating = (left_contact != right_contact)
 
-            effective_velocity_bonus = 0.0
-            terrain = getattr(sim, "terrain_type", "normal")
-            vel_mult = 18.0 if terrain == "ramp" else 12.0
+            left_knee = getattr(sim, "robot_left_knee_angle", 0.0)
+            right_knee = getattr(sim, "robot_right_knee_angle", 0.0)
+            left_h = getattr(sim, "robot_left_foot_height", 0.0)
+            right_h = getattr(sim, "robot_right_foot_height", 0.0)
 
-            if velocity > 0 and stability > 0.6 and alternating:
-                effective_velocity_bonus = velocity * vel_mult
-            elif velocity > 0 and stability > 0.6:
-                effective_velocity_bonus = velocity * 4.0
-            elif velocity > 0:
-                effective_velocity_bonus = velocity * 1.0
+            # COMPORTAMENTO ESPECÍFICO POR TERRENO - CORRIGIDO
+            if current_terrain == "ramp_up":
+                # Bônus extra para progresso em subida
+                if vel_x > 0.1 and dist > 0.2:
+                    reward += uphill_bonus * dist * 20.0
 
-            reward += effective_velocity_bonus
+            elif current_terrain == "ramp_down":
+                # Progresso controlado em descida (não muito rápido)
+                if abs(vel_x) < 0.5 and dist > 0.1:
+                    reward += dist * 25.0
 
-            # Bônus de sobrevivência só se avançou > 2 cm
-            if not getattr(sim, "episode_terminated", True) and distance > 0.02:
-                reward += 30.0  
+            elif current_terrain == "uneven":
+                # Progresso constante é mais valioso que rápido
+                if dist > 0.1 and abs(vel_x) < 0.8:
+                    reward += dist * 30.0
 
-        except Exception as e:
-            self.logger.warning(f"Erro no cálculo de progresso: {e}")
-        return reward
-    
-    def _calculate_coordenacao_component(self, sim, phase_info) -> float:
-        """Componente de COORDENAÇÃO: só recompensa padrão de marcha *funcional*"""
-        reward = 0.0
-        try:
-            left_contact = getattr(sim, "robot_left_foot_contact", False)
-            right_contact = getattr(sim, "robot_right_foot_contact", False)
-            alternating = (left_contact != right_contact)
-
-            consecutive_alternating = getattr(sim, "consecutive_alternating_steps", 0)
-            coord_duration_bonus = min(consecutive_alternating / 10.0, 1.0)
-
-            left_knee = getattr(sim, "robot_left_knee_angle", 0)
-            right_knee = getattr(sim, "robot_right_knee_angle", 0)
-
-            left_foot_h = getattr(sim, "robot_left_foot_height", 0)
-            right_foot_h = getattr(sim, "robot_right_foot_height", 0)
-
-            gait_phase = getattr(sim, "gait_phase", 0.5)
-            left_swing = not left_contact and gait_phase < 0.5
-            right_swing = not right_contact and gait_phase > 0.5
-
-            clearance_ok = (
-                (not left_contact and left_foot_h > 0.06) or
-                (not right_contact and right_foot_h > 0.06)
-            )
-            knee_flex_ok = (
-                (not left_contact and left_knee > 0.7) or
-                (not right_contact and right_knee > 0.7)
+            # USA CLEARANCE_MIN DO TERRENO (não valor fixo)
+            knee_th = 0.8
+            functional = (
+                ((not left_contact) and left_h > clearance_min and left_knee > knee_th) or
+                ((not right_contact) and right_h > clearance_min and right_knee > knee_th)
             )
 
-            # Base: alternância correta
-            if alternating:
-                reward += 12.0
+            # Só recompensa se estável E funcional
+            if stable and functional and alternating:
+                reward += dist * 40.0  
+                reward += vel_x * speed_weight  
+                if dist >= 1.0:
+                    reward += 200.0  
+                elif dist >= 0.5:
+                    reward += 80.0
+            elif stable and alternating:
+                # Progresso básico (sem padrão ideal)
+                reward += dist * 15.0 + vel_x * (speed_weight * 0.3)  
             else:
-                reward -= 8.0  
+                # Progresso instável → quase nada
+                reward += dist * 2.0 + vel_x * 0.5
 
-            if alternating and consecutive_alternating >= 5:  
-                reward += 15.0 * coord_duration_bonus
+            # Sobrevivência só conta se avançou >5 cm
+            if not getattr(sim, "episode_terminated", True) and dist > 0.05:
+                reward += 20.0
 
-            # Bônus por clearance funcional
-            if clearance_ok:
+        except Exception as e:
+            self.logger.warning(f"Erro em progresso (terrain-corrected): {e}")
+        return reward
+
+    def _calculate_coordenacao_component(self, sim, phase_info, terrain_params) -> float:
+        """COORDENAÇÃO: força padrão de marcha funcional."""
+        reward = 0.0
+        try:
+            current_terrain = phase_info.get('current_terrain', 'normal')
+            coordination_bonus = terrain_params["coordination_bonus"]
+            clearance_min = terrain_params["clearance_min"]
+            adaptation_bonus = terrain_params.get("adaptation_bonus", 1.0)
+            robustness_bonus = terrain_params.get("robustness_bonus", 1.0)
+
+            # Dados essenciais
+            left_contact = getattr(sim, "robot_left_foot_contact", False)
+            right_contact = getattr(sim, "robot_right_foot_contact", False)
+            alternating = (left_contact != right_contact)
+            consecutive = getattr(sim, "consecutive_alternating_steps", 0)
+
+            left_knee = getattr(sim, "robot_left_knee_angle", 0.0)
+            right_knee = getattr(sim, "robot_right_knee_angle", 0.0)
+            left_hip_f = getattr(sim, "robot_left_hip_frontal_angle", 0.0)
+            right_hip_f = getattr(sim, "robot_right_hip_frontal_angle", 0.0)
+            left_hip_l = getattr(sim, "robot_left_hip_lateral_angle", 0.0)
+            right_hip_l = getattr(sim, "robot_right_hip_lateral_angle", 0.0)
+
+            left_h = getattr(sim, "robot_left_foot_height", 0.0)
+            right_h = getattr(sim, "robot_right_foot_height", 0.0)
+            left_xv = getattr(sim, "robot_left_foot_x_velocity", 0.0)
+            right_xv = getattr(sim, "robot_right_foot_x_velocity", 0.0)
+            robot_xv = getattr(sim, "robot_velocity", [0,0,0])[0]
+
+            # --- Base: alternância estrita ---
+            if alternating:
+                reward += coordination_bonus * 0.5  
+                if consecutive >= 5:
+                    reward += min(consecutive * 2.0, coordination_bonus * 0.5)  
+            else:
+                reward -= 12.0
+
+            # USA CLEARANCE_MIN DO TERRENO (não valor fixo)
+            left_clear = (not left_contact) and (left_h > clearance_min)
+            right_clear = (not right_contact) and (right_h > clearance_min)
+            if left_clear or right_clear:
                 reward += 6.0
+            if left_clear and right_clear:
+                reward += 4.0
 
-            # Bônus por flexão de joelho no swing
-            if knee_flex_ok:
+            # --- Flexão funcional no swing (joelho + quadril frontal) ---
+            knee_th = 0.9
+            hip_f_th = 0.6
+            left_knee_ok = (not left_contact) and (left_knee > knee_th)
+            right_knee_ok = (not right_contact) and (right_knee > knee_th)
+            left_hip_ok = (not left_contact) and (left_hip_f > hip_f_th)
+            right_hip_ok = (not right_contact) and (right_hip_f > hip_f_th)
+
+            if left_knee_ok or right_knee_ok:
+                reward += 6.0
+            if left_hip_ok or right_hip_ok:
                 reward += 5.0
+            if (left_knee_ok and left_hip_ok) or (right_knee_ok and right_hip_ok):
+                reward += 7.0  
 
-            # BÔNUS ESTRUTURAL: só se todos os 3 estiverem OK
-            if (left_swing or right_swing) and knee_flex_ok > 0.7 and clearance_ok > 0.06:
-                reward += 12.0 * (1.0 - abs(gait_phase - 0.5))
-    
-            # Gait pattern score (se disponível)
-            gait_score = getattr(sim, "robot_gait_pattern_score", 0.0)
-            if gait_score > 0.5:
-                reward += gait_score * 20.0
+            # --- Penalização: abertura excessiva de pernas ---
+            abd_pen = 0.0
+            for hip_l in [left_hip_l, right_hip_l]:
+                if abs(hip_l) > 0.2:
+                    abd_pen += (abs(hip_l) - 0.2) * 20.0
+            reward -= abd_pen
+
+            # --- Penalização: arrasto de pé ---
+            drag_th = 0.2
+            left_drag = (not left_contact) and abs(left_xv - robot_xv) < drag_th
+            right_drag = (not right_contact) and abs(right_xv - robot_xv) < drag_th
+            if left_drag:
+                reward -= 10.0
+            if right_drag:
+                reward -= 10.0
+
+            # BÔNUS ESPECÍFICOS
+            clearance_ok = (left_h > clearance_min) or (right_h > clearance_min)
+
+            if current_terrain == "uneven" and alternating and consecutive >= 3:
+                reward += adaptation_bonus * 10.0
+
+            if current_terrain == "complex" and alternating and clearance_ok:
+                reward += robustness_bonus * 15.0
 
         except Exception as e:
-            self.logger.warning(f"Erro no cálculo de coordenação: {e}")
+            self.logger.warning(f"Erro em coordenação (terrain-corrected): {e}")
+
         return reward
-    
-    def _calculate_estabilidade_component(self, sim, phase_info) -> float:
-        """Componente de ESTABILIDADE: equilíbrio, postura, controle"""
+
+    def _calculate_estabilidade_component(self, sim, phase_info, terrain_params) -> float:
+        """ESTABILIDADE: reforça postura, penaliza abertura de pernas."""
         reward = 0.0
-        
         try:
-            # Estabilidade angular
-            roll = abs(getattr(sim, "robot_roll", 0))
-            pitch = abs(getattr(sim, "robot_pitch", 0))
-            stability = 1.0 - min((roll + pitch) / 1.0, 1.0)
-            reward += stability * 20.0
-            
-            # Altura adequada do COM
-            com_height = getattr(sim, "robot_z_position", 0.8)
-            if 0.7 <= com_height <= 0.9:
-                reward += 15.0
-            elif 0.6 <= com_height < 0.7 or 0.9 < com_height <= 1.0:
-                reward += 8.0
-                
-            # Estabilidade lateral
-            y_velocity = abs(getattr(sim, "robot_y_velocity", 0))
-            lateral_stability = 1.0 - min(y_velocity / 0.3, 1.0)
-            reward += lateral_stability * 10.0
-            
+            current_terrain = phase_info.get('current_terrain', 'normal')
+            stability_weight = terrain_params["stability_weight"]
+
+            # ALVOS ESPECÍFICOS POR TERRENO
+            pitch_target = terrain_params.get("pitch_target", 0.0)
+            pitch = getattr(sim, "robot_pitch", 0.0)
+            pitch_error = abs(pitch - pitch_target)
+
+            roll = abs(getattr(sim, "robot_roll", 0.0))
+            com_z = getattr(sim, "robot_z_position", 0.8)
+            y_vel = abs(getattr(sim, "robot_y_velocity", 0.0))
+            left_hip_l = getattr(sim, "robot_left_hip_lateral_angle", 0.0)
+            right_hip_l = getattr(sim, "robot_right_hip_lateral_angle", 0.0)
+            left_roll = getattr(sim, "robot_left_foot_roll", 0.0)
+            right_roll = getattr(sim, "robot_right_foot_roll", 0.0)
+
+            # --- Estabilidade angular ajustada para terreno ---
+            # USA PITCH_ERROR JÁ CALCULADO (não recalcula)
+            pitch_stab = max(0.0, 1.0 - pitch_error / 0.4) 
+            roll_stab = max(0.0, 1.0 - roll / 0.25)
+            angular_stab = (pitch_stab + roll_stab) / 2.0
+            reward += angular_stab * 20.0
+
+            # --- Altura do COM (ajustada por terreno) ---
+            height_target = terrain_params.get("height_target", 0.8)
+            height_error = abs(com_z - height_target)
+            height_stab = max(0.0, 1.0 - height_error / 0.2)
+            reward += height_stab * 10.0
+
+            # --- Estabilidade lateral ---
+            lateral_penalty = y_vel * 20.0
+            for hip_l in [left_hip_l, right_hip_l]:
+                if abs(hip_l) > 0.15:
+                    lateral_penalty += (abs(hip_l) - 0.15) * 15.0
+            reward -= lateral_penalty
+
+            # --- Alinhamento dos pés ---
+            foot_roll_error = abs(left_roll) + abs(right_roll)
+            if foot_roll_error > 0.3:
+                reward -= foot_roll_error * 10.0
+
+            # APLICA WEIGHT DO TERRENO NO FINAL
+            reward *= stability_weight
+
         except Exception as e:
-            self.logger.warning(f"Erro no cálculo de estabilidade: {e}")
-            
+            self.logger.warning(f"Erro em estabilidade (terrain-corrected): {e}")
         return reward
-    
-    def _calculate_eficiencia_component(self, sim, phase_info) -> float:
-        """Componente de EFICIÊNCIA: energia, biomecânica, suavidade"""
+
+    def _calculate_eficiencia_component(self, sim, phase_info, terrain_params) -> float:
+        """EFICIÊNCIA: prioriza flexão ativa, penaliza esforço em abdução."""
         reward = 0.0
-        
         try:
-            # Eficiência de propulsão
-            propulsion_efficiency = getattr(sim, "robot_propulsion_efficiency", 0.5)
-            reward += propulsion_efficiency * 12.0
-            
-            # Eficiência energética (inversa do esforço)
-            effort_penalty = abs(self._calculate_effort_penalty(sim, phase_info))
-            energy_efficiency = 1.0 - min(effort_penalty / 10.0, 1.0)  
-            reward += energy_efficiency * 15.0
-            
+            current_terrain = phase_info.get('current_terrain', 'normal')
+            efficiency_weight = terrain_params.get("efficiency_weight", 1.0)
+
+            # Esforço articular 
+            effort = 0.0
+            if hasattr(sim, 'joint_velocities'):
+                effort = sum(v**2 for v in sim.joint_velocities) * 0.001
+            effort_eff = max(0.0, 1.0 - effort / 15.0)
+            reward += effort_eff * 8.0
+
+            # --- Eficiência de propulsão ---
+            left_contact = getattr(sim, "robot_left_foot_contact", False)
+            right_contact = getattr(sim, "robot_right_foot_contact", False)
+            left_xv = getattr(sim, "robot_left_foot_x_velocity", 0.0)
+            right_xv = getattr(sim, "robot_right_foot_x_velocity", 0.0)
+            robot_xv = getattr(sim, "robot_velocity", [0,0,0])[0]
+
+            push_left = left_contact and (left_xv < robot_xv - 0.1)
+            push_right = right_contact and (right_xv < robot_xv - 0.1)
+            if push_left or push_right:
+                reward += 6.0
+            if push_left and push_right:
+                reward += 4.0
+
+            # --- Penalização: esforço em abdução ---
+            left_hip_l = getattr(sim, "robot_left_hip_lateral_angle", 0.0)
+            right_hip_l = getattr(sim, "robot_right_hip_lateral_angle", 0.0)
+            abd_effort = 0.0
+            for hip_l in [left_hip_l, right_hip_l]:
+                if abs(hip_l) > 0.15:
+                    abd_effort += abs(hip_l) * 3.0
+            reward -= abd_effort
+
+            # --- Bônus: simetria de esforço ---
+            left_knee = getattr(sim, "robot_left_knee_angle", 0.0)
+            right_knee = getattr(sim, "robot_right_knee_angle", 0.0)
+            symmetry = 1.0 - min(abs(left_knee - right_knee) / 1.0, 1.0)
+            reward += symmetry * 3.0
+
+            # APLICA WEIGHT DE EFICIÊNCIA DO TERRENO
+            reward *= efficiency_weight
+
         except Exception as e:
-            self.logger.warning(f"Erro no cálculo de eficiência: {e}")
-            
-        return reward
+            self.logger.warning(f"Erro em eficiência (terrain-corrected): {e}")
+        return max(reward, -20.0)
     
     def _calculate_valencia_bonus_component(self, sim, phase_info) -> float:
         """Componente de BÔNUS DE VALÊNCIAS: recompensas adaptativas"""
@@ -357,61 +489,106 @@ class RewardCalculator:
             self.logger.warning(f"Erro no sparse_success_component progressivo: {e}")
             return 0.0
 
-    def _calculate_penalidades_component(self, sim, phase_info) -> float:
-        """Componente de PENALIDADES: rigor físico realista"""
+    def _calculate_penalidades_component(self, sim, phase_info, terrain_params) -> float:
+        """Componente de PENALIDADES: rigor físico + detecção de padrões viciados (abertura, jerk, lock incoerente)."""
         penalties = 0.0
         try:
-            # --- 1. Instabilidade angular AGRESSIVA ---
-            roll = abs(getattr(sim, "robot_roll", 0))
-            pitch = abs(getattr(sim, "robot_pitch", 0))
+            current_terrain = phase_info.get('current_terrain', 'normal')
+        
+            # PENALIDADES ESPECÍFICAS
+            if current_terrain == "low_friction":
+                # Penaliza mais deslizamentos em baixo atrito
+                lateral_velocity = abs(getattr(sim, "robot_y_velocity", 0.0))
+                if lateral_velocity > 0.1:
+                    penalties -= lateral_velocity * terrain_params.get("slip_penalty_multiplier", 2.0) * 30.0
 
-            # Penaliza a partir de 8.5° (0.15 rad), não 17°
-            roll_penalty = max(0.0, (roll - 0.15)) * 40.0
-            pitch_penalty = max(0.0, (pitch - 0.15)) * 40.0
-            penalties -= (roll_penalty + pitch_penalty)
+            elif current_terrain == "ramp_down":
+                # Penaliza velocidade excessiva em descida
+                velocity = abs(getattr(sim, "robot_x_velocity", 0.0))
+                if velocity > 0.8:
+                    penalties -= (velocity - 0.8) * 40.0
 
-            # --- 2. Movimento para trás ou estagnado ---
-            distance = getattr(sim, "episode_distance", 0)
-            episode_time = getattr(sim, "episode_time", 0)
+            # === 1. Instabilidade angular AGRESSIVA (mantido, mas ajustado para rampa) ===
+            roll = abs(getattr(sim, "robot_roll", 0.0))
+            pitch = abs(getattr(sim, "robot_pitch", 0.0))
+            yaw_vel = abs(getattr(sim, "robot_orientation_velocity", [0,0,0])[2])
+            ramp_up = current_terrain in ["ramp_up"]
 
+            # Em rampa, pitch elevado é OK → relaxa um pouco
+            pitch_target = 0.2 if ramp_up else 0.0
+            pitch_err = abs(pitch - pitch_target)
+            roll_penalty = max(0.0, roll - 0.15) * 40.0
+            pitch_penalty = max(0.0, pitch_err - 0.15) * 30.0  
+            yaw_penalty = yaw_vel * 25.0
+            penalties -= (roll_penalty + pitch_penalty + yaw_penalty)
+
+            # === 2. Movimento estagnado ou para trás ===
+            distance = getattr(sim, "episode_distance", 0.0)
+            episode_time = getattr(sim, "episode_time", 0.0)
             if distance < 0:
-                # Andar para trás é inaceitável
-                penalties -= abs(distance) * 50.0
-            elif abs(distance) < 0.05 and episode_time > 2.0:
-                # Congelamento após 2s → punição dura
-                penalties -= 100.0
+                penalties -= abs(distance) * 60.0
+            elif distance < 0.03 and episode_time > 1.5:
+                penalties -= 120.0
 
-            # --- 3. Desvio lateral excessivo ---
-            y_vel = abs(getattr(sim, "robot_y_velocity", 0))
-            if y_vel > 0.3:
-                penalties -= (y_vel - 0.3) * 100.0
+            # === 3. Abdução excessiva + incoerência postural (PRINCIPAL vício) ===
+            left_hip_l = getattr(sim, "robot_left_hip_lateral_angle", 0.0)
+            right_hip_l = getattr(sim, "robot_right_hip_lateral_angle", 0.0)
+            y_vel = abs(getattr(sim, "robot_y_velocity", 0.0))
+            # Combinação perigosa: abdução + movimento lateral
+            abduction = max(abs(left_hip_l), abs(right_hip_l))
+            if abduction > 0.2:
+                abd_pen = (abduction - 0.2) * 25.0
+                lateral_pen = y_vel * 20.0
+                penalties -= (abd_pen + lateral_pen)
 
-            # --- 4. Altura do COM fora da faixa segura ---
-            com_height = getattr(sim, "robot_z_position", 0.8)
-            if com_height < 0.6:
-                penalties -= (0.6 - com_height) * 50.0
-            elif com_height > 1.0:
-                penalties -= (com_height - 1.0) * 30.0
+            # === 4. Jerk (aceleração angular súbita) — detecta spiking ===
+            ang_vel = getattr(sim, "robot_orientation_velocity", [0,0,0])
+            ang_speed = np.linalg.norm(ang_vel[:3])  
+            if ang_speed > 2.0:  
+                penalties -= (ang_speed - 2.0) * 15.0
 
-            # --- 5. Ações extremas (evitar spiking torque) ---
+            # === 5. Travamento articular incoerente (lock sem propósito) ===
+            lock_timers = getattr(sim, "joint_lock_timers", [])
+            if lock_timers:
+                long_locks = sum(1 for t in lock_timers if t > 0.3)
+                if long_locks > 2:  
+                    penalties -= long_locks * 8.0
+
+            # === 6. Ações extremas ou oscilatórias (spiking) ===
             action = phase_info.get('action')
             if action is not None:
-                action_mag = np.linalg.norm(action)
-                if action_mag > 2.5:
-                    penalties -= (action_mag - 2.5) * 10.0
+                action = np.asarray(action)
+                mag = np.linalg.norm(action)
+                if mag > 2.5:
+                    penalties -= (mag - 2.5) * 12.0
+                # Detecta oscilação: diferença absoluta entre ações consecutivas
+                if hasattr(self, '_prev_action') and self._prev_action is not None:
+                    diff = np.linalg.norm(action - self._prev_action)
+                    if diff > 3.0:  
+                        penalties -= diff * 2.0
+                self._prev_action = action.copy()
 
-            # --- 6. Penalidades críticas (queda, yaw excessivo) ---
+            # === 7. Padrão de “pernas abertas + tronco torto” (gambá/bailarino) ===
+            left_foot_roll = abs(getattr(sim, "robot_left_foot_roll", 0.0))
+            right_foot_roll = abs(getattr(sim, "robot_right_foot_roll", 0.0))
+            foot_roll = left_foot_roll + right_foot_roll
+            if abduction > 0.25 and roll > 0.2 and foot_roll > 0.4:
+                penalties -= 40.0  
+
+            # === 8. Penalidade por esforço (mantida, mas normalizada) ===
+            effort = self._calculate_effort_penalty(sim, phase_info)
+            penalties += effort
+
+            # === 9. Queda / término crítico (mantido) ===
             termination = getattr(sim, "episode_termination", "")
             if termination == "fell":
                 penalties -= 300.0
             elif termination == "yaw_deviated":
                 penalties -= 200.0
 
-            # --- 7. Esforço biomecânico (já existente) ---
-            penalties += self._calculate_effort_penalty(sim, phase_info)
-
         except Exception as e:
-            self.logger.warning(f"Erro no cálculo de penalidades: {e}")
+            self.logger.warning(f"Erro em penalidades (anti-vício): {e}")
+
         return penalties
 
     def _calculate_effort_penalty(self, sim, phase_info) -> float:
@@ -423,50 +600,6 @@ class RewardCalculator:
             return 0.0
         except:
             return 0.0
-
-    # Ajuste dos pesos macro
-    def adjust_macro_weights(self, weight_adjustments: Dict[str, float]):
-        """Ajusta pesos das 6 categorias macro"""
-        for component, adjustment in weight_adjustments.items():
-            if component in self.macro_components:
-                current_weight = self.macro_components[component]
-                new_weight = current_weight + (adjustment * self.weight_adjustment_rate)
-                
-                # Limitar variação
-                base_weight = self.base_macro_weights[component]
-                max_weight = base_weight * (1 + self.max_weight_change)
-                min_weight = base_weight * (1 - self.max_weight_change)
-                
-                self.macro_components[component] = np.clip(new_weight, min_weight, max_weight)
-
-    def get_macro_weight_status(self) -> Dict:
-        """Status dos pesos macro"""
-        weight_changes = {}
-        for component, current_weight in self.macro_components.items():
-            base_weight = self.base_macro_weights[component]
-            change_pct = ((current_weight - base_weight) / base_weight) * 100
-            weight_changes[component] = {
-                'current': current_weight,
-                'base': base_weight,
-                'change_percent': change_pct
-            }
-        
-        return {
-            "macro_weights": weight_changes,
-            "adjustment_rate": self.weight_adjustment_rate
-        }
-
-    def get_reward_status(self) -> Dict:
-        """Status do sistema de recompensas"""
-        cache_stats = self.get_cache_stats()
-        return {
-        "active_components": list(self.components.keys()),
-            "cache_hit_rate": cache_stats["hit_rate"],
-            "cache_hits": cache_stats["hits"],
-            "cache_misses": cache_stats["misses"],
-            "total_calculations": self._total_calculations,
-            "cache_efficiency": cache_stats["hit_rate"]
-        }
     
     def get_cache_stats(self) -> Dict:
         """Estatísticas de cache """
@@ -479,23 +612,6 @@ class RewardCalculator:
             "hit_rate": hit_rate,
             "total_requests": total_requests,
             "cache_size": len(self.cache._cache) if hasattr(self.cache, '_cache') else 0
-        }
-    
-    def get_weight_status(self) -> Dict:
-        """Status dos pesos para relatórios"""
-        weight_changes = {}
-        for component, current_weight in self.macro_components.items():
-            base_weight = self.base_macro_weights[component]
-            change_pct = ((current_weight - base_weight) / base_weight) * 100
-            weight_changes[component] = {
-                'current': current_weight,
-                'base': base_weight,
-                'change_percent': change_pct
-            }
-
-        return {
-            "adaptive_weights": weight_changes,
-            "adjustment_rate": self.weight_adjustment_rate
         }
     
     def _generate_essential_cache_key(self, sim, phase_info: Dict) -> str:

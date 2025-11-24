@@ -247,7 +247,7 @@ class DPGManager:
         # CONTROLE DE ESTADO
         self.episode_count = 0
         self.current_group = 1
-        self.current_terrain_type = "normal"
+        self._current_terrain = "normal"
         self.overall_progress = 0.0
         self.performance_history = deque(maxlen=100)
         
@@ -322,8 +322,11 @@ class DPGManager:
         return final_reward
 
     def _build_phase_info(self, valence_status: Dict, buffer_status: Dict) -> Dict:
-        """Constroi informações de fase integradas"""
+        """Constroi informações de fase integradas com terreno"""
         critic_advice = self.adaptive_critic.get_optimization_advice()
+        
+        # Obtém status do terreno
+        terrain_status = self.valence_manager.get_terrain_status()
 
         return {
             'group_level': self.current_group,
@@ -336,7 +339,9 @@ class DPGManager:
             'critic_advice': critic_advice,
             'buffer_quality': buffer_status.get('avg_quality', 0.5),
             'crutch_level': self.crutch_system.crutch_level,
-            'sparse_success_enabled': valence_status.get('overall_progress', 0) > 0.4
+            'sparse_success_enabled': valence_status.get('overall_progress', 0) > 0.4,
+            'current_terrain': self._current_terrain,
+            'terrain_status': terrain_status
         }
 
     def update_phase_progression(self, episode_results):
@@ -398,8 +403,47 @@ class DPGManager:
             valence_status, buffer_status
         )
         
+        # APLICA AJUSTES ESPECÍFICOS POR TERRENO
+        adjustments = self._apply_terrain_specific_critic_adjustments(adjustments)
+        
         # ATUALIZAR PESOS
         self.adaptive_critic.update_weights(adjustments, self.current_group)
+
+    def _apply_terrain_specific_critic_adjustments(self, adjustments: Dict[str, float]) -> Dict[str, float]:
+        """Ajusta o crítico baseado no terreno atual - CORRIGIDO"""
+        terrain_adjustments = {
+            "normal": {
+                "propulsion": 0.0, "stability": 0.0, "coordination": 0.0, "efficiency": 0.0
+            },
+            "ramp_up": {
+                "propulsion": 0.4,   
+                "stability": 0.3,    
+                "coordination": 0.1, 
+                "efficiency": 0.2    
+            },
+            "ramp_down": {
+                "propulsion": -0.3,  
+                "stability": 0.6,    
+                "coordination": 0.3, 
+                "efficiency": 0.1    
+            },
+            "uneven": {
+                "propulsion": -0.1, "stability": 0.4, "coordination": 0.3, "efficiency": 0.0
+            },
+            "low_friction": {
+                "propulsion": -0.2, "stability": 0.5, "coordination": 0.2, "efficiency": 0.1
+            },
+            "complex": {
+                "propulsion": 0.1, "stability": 0.3, "coordination": 0.4, "efficiency": 0.0
+            }
+        }
+        
+        current_terrain_adjustments = terrain_adjustments.get(self._current_terrain, {})
+        
+        for component, adjustment in current_terrain_adjustments.items():
+            adjustments[component] = adjustments.get(component, 0.0) + adjustment
+        
+        return adjustments
         
     def _update_adaptive_buffer(self, valence_status: Dict):
         """Atualização do buffer com critérios do crítico"""
@@ -427,6 +471,34 @@ class DPGManager:
             current_episode=self.episode_count
         )
         
+    def set_current_terrain(self, terrain_type: str):
+        """Define o terreno atual para adaptação cross-terreno"""
+        terrain_mapping = {
+            "PRA": "ramp_up",        # Rampa ascendente
+            "PRD": "ramp_down",      # Rampa descendente  
+            "PG": "uneven",          # Pista com grãos (irregular)
+            "PBA": "low_friction",   # Pista baixo atrito
+            "PR": "normal",          # Pista reta (normal)
+            "PRB": "complex"         # Pista reta com bloqueio articular
+        }
+        
+        mapped_terrain = terrain_mapping.get(terrain_type, "normal")
+        self.valence_manager.set_current_terrain(mapped_terrain)
+        self._current_terrain = mapped_terrain
+            
+    def get_integrated_status(self) -> Dict:
+        """Status completo incluindo adaptação ao terreno"""
+        integrated_status = super().get_integrated_status()
+        
+        # Adiciona informações de terreno
+        integrated_status["terrain_adaptation"] = {
+            "current_terrain": self._current_terrain,
+            "terrain_status": self.valence_manager.get_terrain_status(),
+            "critic_terrain_focus": self.adaptive_critic.get_optimization_advice().get("valence_priority", [])
+        }
+        
+        return integrated_status
+    
     def _should_optimize(self, system: str) -> bool:
         """Verifica se deve otimizar um sistema específico"""
         interval = self.optimization_intervals.get(f"{system}_update", 20)
