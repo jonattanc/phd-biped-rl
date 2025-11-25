@@ -30,6 +30,5 @@ tmp/
 
 # Dados de treinamento
 training_data/
-dados/
 
 default_settings.json

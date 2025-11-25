@@ -167,8 +167,8 @@ class AdaptiveCrutchSystem:
         self.valence_progress_history = deque(maxlen=50)
         
         # Configurações adaptativas
-        self.stage_thresholds = [0.8, 0.6, 0.4, 0.2]
-        self.aggression_factors = {1: 0.95, 2: 0.93, 3: 0.90, 4: 0.85}
+        self.stage_thresholds = [0.95, 0.85, 0.7, 0.5]
+        self.aggression_factors = {1: 0.99, 2: 0.97, 3: 0.95, 4: 0.92}
     
     def update_crutch_level(self, valence_status: Dict, buffer_status: Dict, 
                           current_episode: int) -> float:
@@ -221,7 +221,7 @@ class AdaptiveCrutchSystem:
     
     def get_reward_multiplier(self) -> float:
         """Retorna multiplicador de recompensa baseado no estágio"""
-        multipliers = [3.0, 2.0, 1.5, 1.2, 1.0]
+        multipliers = [5.0, 3.0, 2.0, 1.5, 1.0]
         return multipliers[self.current_stage]
     
     def add_performance_sample(self, reward: float):
@@ -273,7 +273,7 @@ class DPGManager:
         self._last_training_episode = 0
 
         # CONTROLE DO SPARSE SUCCESS PROGRESSIVO
-        self.sparse_success_transition_episode = 2000
+        self.sparse_success_transition_episode = 5000
         
     def calculate_reward(self, sim, action) -> float:
         """Cálculo de recompensa com integração total dos sistemas"""
@@ -396,6 +396,15 @@ class DPGManager:
 
     def _update_adaptive_critic(self, valence_status: Dict):
         """Atualização do crítico com análise integrada"""
+        
+        if self.episode_count < 3000:
+            self.adaptive_critic.weights.propulsion = 0.7
+            self.adaptive_critic.weights.stability = 0.2
+            self.adaptive_critic.weights.coordination = 0.1
+            self.adaptive_critic.weights.efficiency = 0.0
+            self.adaptive_critic._normalize_weights()
+            return
+        
         buffer_status = self.buffer_manager.get_adaptive_status()
         
         # ANALISAR NECESSIDADES
@@ -506,22 +515,18 @@ class DPGManager:
 
     def _update_current_group(self, valence_status: Dict):
         """Atualiza grupo atual baseado em valências mestras"""
-        valence_details = valence_status.get('valence_details', {})
+        distance_history = [p.get('distance', 0) for p in list(self.performance_history)[-20:]]
+        avg_distance = np.mean(distance_history) if distance_history else 0
         
-        mastered_count = sum(
-            1 for details in valence_details.values() 
-            if details.get('state') == 'mastered'
-        )
-        
-        if mastered_count >= 4 and self.current_group < 3:
-            self.current_group = 3
-            self.logger.info("🚀 PROMOÇÃO: Grupo 3 ativado")
-        elif mastered_count >= 2 and self.current_group < 2:
-            self.current_group = 2  
-            self.logger.info("📈 PROMOÇÃO: Grupo 2 ativado")
-        elif self.current_group > 1 and mastered_count < 1:
+        # Grupo 1: até 0.5m médio (foco total em propulsão)
+        if avg_distance < 0.5 and self.current_group > 1:
             self.current_group = 1
-            self.logger.warning("⚠️  REGRESSÃO: Grupo 1 reativado")
+        # Grupo 2: 0.5m-1.5m médio (equilíbrio propulsão/estabilidade)
+        elif avg_distance >= 0.5 and avg_distance < 1.5 and self.current_group < 2:
+            self.current_group = 2
+        # Grupo 3: 1.5m+ médio (coordenação e eficiência)
+        elif avg_distance >= 1.5 and self.current_group < 3:
+            self.current_group = 3
 
     def _emergency_optimization(self, episode_results):
         """Otimização de emergência para casos de estagnação"""

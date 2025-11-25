@@ -71,17 +71,17 @@ class ValenceManager:
         return {
             "movimento_basico": ValenceConfig(
                 name="movimento_basico",
-                target_level=0.6,  # Target mais baixo
+                target_level=0.8,  
                 metrics=["distance", "speed"],
                 reward_components=["movement_priority", "basic_progress"],
                 dependencies=[],
-                activation_threshold=0.01,
+                activation_threshold=0.001,
                 mastery_threshold=0.5
             ),
 
             "estabilidade_postural": ValenceConfig(
                 name="estabilidade_postural",
-                target_level=0.5,
+                target_level=0.75,
                 metrics=["roll", "pitch", "stability"],
                 reward_components=["stability", "posture"],
                 dependencies=["movimento_basico"],
@@ -91,11 +91,11 @@ class ValenceManager:
 
             "propulsao_basica": ValenceConfig(
                 name="propulsao_basica",
-                target_level=0.5,
+                target_level=0.7,
                 metrics=["speed", "distance"],
                 reward_components=["velocity", "propulsion"],
                 dependencies=["movimento_basico"],
-                activation_threshold=0.03,
+                activation_threshold=0.01,
                 mastery_threshold=0.4
             ),
 

@@ -64,49 +64,34 @@ def json_para_csv(json_file_path, csv_file_path):
         rows = []
         for i in range(len(episode_data['episodes'])):
             row = {
-                'episode': episode_data['episodes'][i],
-                'reward': formatar_numero(episode_data['rewards'][i]),
-                'time': formatar_numero(episode_data['times'][i]),
-                'distance': formatar_numero(episode_data['distances'][i]),
-                'imu_x': formatar_numero(episode_data['imu_x'][i]),
-                'imu_y': formatar_numero(episode_data['imu_y'][i]),
-                'imu_z': formatar_numero(episode_data['imu_z'][i]),
-                'roll_deg': formatar_numero(episode_data['roll_deg'][i]),
-                'pitch_deg': formatar_numero(episode_data['pitch_deg'][i]),
-                'yaw_deg': formatar_numero(episode_data['yaw_deg'][i]),
-                'imu_average_x_vel': formatar_numero(episode_data['imu_average_x_vel'][i]),
-                'imu_average_y_vel': formatar_numero(episode_data['imu_average_y_vel'][i]),
-                'imu_average_z_vel': formatar_numero(episode_data['imu_average_z_vel'][i]),
-                'roll_vel_deg': formatar_numero(episode_data['roll_vel_deg'][i]),
-                'pitch_vel_deg': formatar_numero(episode_data['pitch_vel_deg'][i]),
-                'yaw_vel_deg': formatar_numero(episode_data['yaw_vel_deg'][i]),
-                'filtered_reward': formatar_numero(episode_data['filtered_rewards'][i]),
-                'filtered_time': formatar_numero(episode_data['filtered_times'][i]),
-                'filtered_distance': formatar_numero(episode_data['filtered_distances'][i]),
-                'filtered_imu_x': formatar_numero(episode_data['filtered_imu_x'][i]),
-                'filtered_imu_y': formatar_numero(episode_data['filtered_imu_y'][i]),
-                'filtered_imu_z': formatar_numero(episode_data['filtered_imu_z'][i]),
-                'filtered_roll_deg': formatar_numero(episode_data['filtered_roll_deg'][i]),
-                'filtered_pitch_deg': formatar_numero(episode_data['filtered_pitch_deg'][i]),
-                'filtered_yaw_deg': formatar_numero(episode_data['filtered_yaw_deg'][i]),
-                'filtered_imu_average_x_vel': formatar_numero(episode_data['filtered_imu_average_x_vel'][i]),
-                'filtered_imu_average_y_vel': formatar_numero(episode_data['filtered_imu_average_y_vel'][i]),
-                'filtered_imu_average_z_vel': formatar_numero(episode_data['filtered_imu_average_z_vel'][i]),
-                'filtered_roll_vel_deg': formatar_numero(episode_data['filtered_roll_vel_deg'][i]),
-                'filtered_pitch_vel_deg': formatar_numero(episode_data['filtered_pitch_vel_deg'][i]),
-                'filtered_yaw_vel_deg': formatar_numero(episode_data['filtered_yaw_vel_deg'][i]),
-                'reward_filtered': formatar_numero(episode_data['rewards_filtered'][i]),
-                'steps': episode_data['steps'][i],
-                'success': episode_data['success'][i],
-                'imu_x_vel': formatar_numero(episode_data['imu_x_vel'][i]),
-                'imu_y_vel': formatar_numero(episode_data['imu_y_vel'][i]),
-                'imu_z_vel': formatar_numero(episode_data['imu_z_vel'][i]),
-                'roll': formatar_numero(episode_data['roll'][i]),
-                'pitch': formatar_numero(episode_data['pitch'][i]),
-                'yaw': formatar_numero(episode_data['yaw'][i]),
-                'roll_vel': formatar_numero(episode_data['roll_vel'][i]),
-                'pitch_vel': formatar_numero(episode_data['pitch_vel'][i]),
-                'yaw_vel': formatar_numero(episode_data['yaw_vel'][i])
+                'Pista': episode_data['episode_environments'][i],
+                'episodio': episode_data['episodes'][i],
+                'distancia': episode_data['distances'][i],
+                'tempo': episode_data['times'][i],
+                'recompensa': episode_data['rewards'][i],
+                'passos': episode_data['steps'][i],
+                'successos': episode_data['success'][i],
+                'imu_x': episode_data['imu_x'][i],
+                'imu_y': episode_data['imu_y'][i],
+                'imu_z': episode_data['imu_z'][i],
+                'roll_deg': episode_data['roll_deg'][i],
+                'pitch_deg': episode_data['pitch_deg'][i],
+                'yaw_deg': episode_data['yaw_deg'][i],
+                'imu_average_x_vel': episode_data['imu_average_x_vel'][i],
+                'imu_average_y_vel': episode_data['imu_average_y_vel'][i],
+                'imu_average_z_vel': episode_data['imu_average_z_vel'][i],
+                'roll_vel_deg': episode_data['roll_vel_deg'][i],
+                'pitch_vel_deg': episode_data['pitch_vel_deg'][i],
+                'yaw_vel_deg': episode_data['yaw_vel_deg'][i],
+                'imu_x_vel': episode_data['imu_x_vel'][i],
+                'imu_y_vel': episode_data['imu_y_vel'][i],
+                'imu_z_vel': episode_data['imu_z_vel'][i],
+                'roll': episode_data['roll'][i],
+                'pitch': episode_data['pitch'][i],
+                'yaw': episode_data['yaw'][i],
+                'roll_vel': episode_data['roll_vel'][i],
+                'pitch_vel': episode_data['pitch_vel'][i],
+                'yaw_vel': episode_data['yaw_vel'][i]
             }
             rows.append(row)
         
@@ -118,25 +103,23 @@ def json_para_csv(json_file_path, csv_file_path):
             csvfile.write(f"# Robot: {data['session_info']['robot']}\n")
             csvfile.write(f"# Algorithm: {data['session_info']['algorithm']}\n")
             csvfile.write(f"# Environment: {data['session_info']['environment']}\n")
-            csvfile.write(f"# Total Steps, {data['session_info']['total_steps']}\n")
-            csvfile.write(f"# Total Episodes, {data['session_info']['total_episodes']}\n")
-            csvfile.write(f"# Best Reward, {formatar_numero(data['tracker_status']['best_reward'])}\n")
-            csvfile.write(f"# Best Distance, {formatar_numero(data['tracker_status']['best_distance'])}\n")
+            csvfile.write(f"# Best Reward, {data['tracker_status']['best_reward']}\n")
+            csvfile.write(f"# Best Distance, {data['tracker_status']['best_distance']}\n")
             csvfile.write("##################################################\n")
             csvfile.write("# MÉTRICAS DE DESEMPENHO\n")
-            csvfile.write(f"# Maior recompensa, {formatar_numero(estatisticas['maior_recompensa'])} , {estatisticas['episodio_maior_recompensa']}\n")
-            csvfile.write(f"# Menor distância, {formatar_numero(estatisticas['menor_distancia'])} , {estatisticas['episodio_menor_distancia']}\n")
-            csvfile.write(f"# Média recompensa, {formatar_numero(estatisticas['media_recompensa'])}\n")
-            csvfile.write(f"# Média distância, {formatar_numero(estatisticas['media_distancia'])}\n")
-            csvfile.write(f"# Sucessos, {formatar_numero(estatisticas['taxa_sucesso']*100)}, {estatisticas['total_sucessos']}/{len(episode_data['success'])}\n")
+            csvfile.write(f"# Maior recompensa, {estatisticas['maior_recompensa']} , {estatisticas['episodio_maior_recompensa']}\n")
+            csvfile.write(f"# Menor distância, {estatisticas['menor_distancia']} , {estatisticas['episodio_menor_distancia']}\n")
+            csvfile.write(f"# Média recompensa, {estatisticas['media_recompensa']}\n")
+            csvfile.write(f"# Média distância, {estatisticas['media_distancia']}\n")
+            csvfile.write(f"# Sucessos, {estatisticas['taxa_sucesso']*100}, {estatisticas['total_sucessos']}/{len(episode_data['success'])}\n")
             csvfile.write(f"# Total passos, {estatisticas['total_passos']}\n")
-            csvfile.write(f"# Total tempo (s), {formatar_numero(estatisticas['total_tempo'])}\n")
+            csvfile.write(f"# Total tempo (s), {estatisticas['total_tempo']}\n")
             
             if estatisticas['primeiro_episodio_9m']:
                 csvfile.write(f"# Primeiro episódio >9m, {estatisticas['primeiro_episodio_9m']}\n")
                 csvfile.write(f"# Soma passos até >9m, {estatisticas['soma_passos_ate_9m']}\n")
                 csvfile.write(f"# Episódio mais rápido >9m, {estatisticas['episodio_mais_rapido_9m']}\n")
-                csvfile.write(f"# Tempo mínimo >9m (s), {formatar_numero(estatisticas['tempo_minimo_9m'])}\n")
+                csvfile.write(f"# Tempo mínimo >9m (s), {(estatisticas['tempo_minimo_9m'])}\n")
             else:
                 csvfile.write("# Nenhum episódio atingiu 9m\n")
             
