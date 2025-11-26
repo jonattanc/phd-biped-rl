@@ -20,13 +20,13 @@ class RewardCalculator:
         
         # Apenas 6 componentes macro para o crítico ajustar
         self.macro_components = {
-            "progresso": 1.5,
-            "coordenacao": 1.0, 
-            "estabilidade": 1.2,
-            "eficiencia": 0.8,
-            "valencia_bonus": 0.5,
-            "penalidades": 1.0,
-            "sparse_success": 3.0
+            "progresso": 1.8,
+            "coordenacao": 1.2, 
+            "estabilidade": 1.5,
+            "eficiencia": 1.0,
+            "valencia_bonus": 0.8,
+            "penalidades": 0.9,
+            "sparse_success": 2.5
         }
         
         self.base_macro_weights = self.macro_components.copy()
@@ -193,7 +193,14 @@ class RewardCalculator:
                 if dist > 0.1 and forward_momentum < 0.8:
                     reward += dist * 30.0
 
-            # USA CLEARANCE_MIN DO TERRENO (não valor fixo)
+            # Bônus para sequências de terrenos consecutivos
+            terrain_sequence = phase_info.get('terrain_sequence', [])
+            if len(terrain_sequence) >= 2:
+                # Bônus crescente por cada terreno completado
+                sequence_bonus = min(len(terrain_sequence) * 25.0, 150.0)
+                reward += sequence_bonus
+    
+            # USA CLEARANCE_MIN DO TERRENO 
             knee_th = 0.8
             functional = (
                 ((not left_contact) and left_h > clearance_min and left_knee > knee_th) or
@@ -223,16 +230,15 @@ class RewardCalculator:
 
             # BÔNUS PROGRESSIVO ESPECIAL PARA LONGAS DISTÂNCIAS
             if dist > 3.0:
-                long_distance_bonus = (dist - 3.0) * 50.0  
+                long_distance_bonus = (dist - 3.0) * 80.0  
                 reward += long_distance_bonus
-
-            # MARCOS PROGRESSIVOS
-            if dist >= 5.0:
-                reward += 300
-            if dist >= 7.0:
-                reward += 500
-            if dist >= 9.0:
-                reward += 1000
+                # Marcos significativos
+                if dist >= 5.0:
+                    reward += 200
+                if dist >= 7.0:
+                    reward += 400
+                if dist >= 8.5:
+                    reward += 800
 
         except Exception as e:
             self.logger.warning(f"Erro em progresso (terrain-corrected): {e}")
@@ -494,6 +500,10 @@ class RewardCalculator:
             return 0.0
 
         try:
+            episode_count = getattr(sim, "total_episodes", 0)
+            if episode_count % 1000 == 0 and episode_count > 0:
+                self.macro_components["sparse_success"] = min(3.0, self.macro_components["sparse_success"] + 0.3)
+
             distance = max(getattr(sim, "episode_distance", 0), 0)
             roll = abs(getattr(sim, "robot_roll", 0))
             pitch = abs(getattr(sim, "robot_pitch", 0))
@@ -504,42 +514,42 @@ class RewardCalculator:
             if not stable or terminated:
                 return 0.0
 
-            if distance <= 0.5:
+            # SISTEMA PROGRESSIVO PARA 9M
+            if distance <= 0.1:
                 return 0.0
 
-            # SISTEMA DE RECOMPENSA PROGRESSIVA PARA 9M
             base_reward = 0.0
-            if distance < 3.0:
-                base_reward = (distance / 3.0) * 300  # Até 300 pontos
-            elif distance < 5.0:
-                base_reward = 300 + ((distance - 3.0) / 2.0) * 450  # Até 750 pontos
-            elif distance < 7.0:
-                base_reward = 750 + ((distance - 5.0) / 2.0) * 700  # Até 1450 pontos
-            elif distance < 9.0:
-                base_reward = 1450 + ((distance - 7.0) / 2.0) * 1550  # Até 3000 pontos
-            else:  # 9m ou mais
-                base_reward = 3000 + (distance - 9.0) * 200  # Bônus adicional
+            if distance < 2.0:
+                base_reward = (distance / 2.0) * 200  
+            elif distance < 4.0:
+                base_reward = 200 + ((distance - 2.0) / 2.0) * 300  
+            elif distance < 6.0:
+                base_reward = 500 + ((distance - 4.0) / 2.0) * 500  
+            elif distance < 8.0:
+                base_reward = 1000 + ((distance - 6.0) / 2.0) * 800  
+            else:  
+                base_reward = 1800 + ((distance - 8.0) / 1.0) * 1200  
 
-            # Bônus por eficiência mantido, mas aumentado
+            # BÔNUS POR EFICIÊNCIA 
             efficiency_bonus = 0.0
             if distance > 1.0:
-                target_steps = distance * 150  # Mais eficiente
+                target_steps = distance * 150  
                 actual_steps = steps
                 if actual_steps <= target_steps:
-                    efficiency_bonus = 100  # Bônus fixo maior
+                    efficiency_bonus = 150  
                 else:
                     efficiency_ratio = max(0.0, 1.0 - (actual_steps - target_steps) / target_steps)
-                    efficiency_bonus = efficiency_ratio * 100
+                    efficiency_bonus = efficiency_ratio * 150
 
             # Bônus por estabilidade aumentado
-            stability_bonus = 0.0
-            if roll < 0.15 and pitch < 0.15:
-                stability_bonus = 100
-            elif roll < 0.20 and pitch < 0.20:
-                stability_bonus = 50
+            stability_bonus = 1.0
+            if distance > 3.0:
+                # Critérios mais rigorosos após 3m
+                if roll > 0.15 or pitch > 0.15:
+                    stability_bonus = max(0.2, 1.0 - (roll + pitch) * 5.0)
 
             total_reward = base_reward + efficiency_bonus + stability_bonus
-            return total_reward
+            return min(total_reward, 3000.0)  
 
         except Exception as e:
             self.logger.warning(f"Erro no sparse_success_component progressivo: {e}")
@@ -571,12 +581,6 @@ class RewardCalculator:
             ramp_up = current_terrain in ["ramp_up"]
 
             learning_progress = phase_info.get('learning_progress', 0)
-            
-            # Reduzir todas as penalidades pela metade nos estágios iniciais
-            if learning_progress < 0.4:
-                penalties *= 0.5
-            elif learning_progress < 0.6:
-                penalties *= 0.75
 
             # PENALIDADES ESPECÍFICAS
             if current_terrain == "low_friction":
@@ -674,14 +678,21 @@ class RewardCalculator:
         except Exception as e:
             self.logger.warning(f"Erro em penalidades (anti-vício): {e}")
         
+        # Reduzir todas as penalidades pela metade nos estágios iniciais
+            if learning_progress < 0.4:
+                penalties *= 0.5
+            elif learning_progress < 0.6:
+                penalties *= 0.75
+        
         # Reduzir impacto das penalidades em longas distâncias
         penalty_reduction_factor = 1.0
         if distance > 3.0:
-            penalty_reduction_factor = max(0.3, 1.0 - (distance - 3.0) / 6.0)  # Reduz gradualmente até 9m
-
-        # Aplicar fator de redução no final
-        total_penalties = penalties * penalty_reduction_factor
-        return total_penalties
+            penalty_reduction_factor = max(0.4, 1.0 - (distance - 3.0) / 6.0)
+        elif distance > 1.0:
+            penalty_reduction_factor = max(0.7, 1.0 - (distance - 1.0) / 4.0)
+        penalties *= penalty_reduction_factor
+        
+        return penalties
 
     def _calculate_effort_penalty(self, sim, phase_info) -> float:
         """Penalidade por esforço (auxiliar para eficiência)"""

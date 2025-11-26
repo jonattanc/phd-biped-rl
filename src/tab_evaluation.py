@@ -309,18 +309,26 @@ class EvaluationTab(common_tab.GUITab):
         """Exibe os resultados da avaliação na interface"""
         try:
             metrics = self.metrics_data["extra_metrics"]
-
+    
             # Atualizar métricas textuais
             self.metrics_text.config(state=tk.NORMAL)
             self.metrics_text.delete(1.0, tk.END)
-
+    
             success_rate = metrics.get("success_rate", 0) * 100
             avg_time = metrics.get("avg_time", 0)
             std_time = metrics.get("std_time", 0)
             success_count = metrics.get("success_count", 0)
             num_episodes = metrics.get("num_episodes", 0)
             total_rewards = metrics.get("total_rewards", [])
-
+            total_times = metrics.get("total_times", [])
+            total_distances = []
+    
+            # Coletar distâncias dos episódios
+            for episode_num, episode_data in self.metrics_data["episodes"].items():
+                if "episode_data" in episode_data:
+                    distance = episode_data["episode_data"].get("distances", 0)
+                    total_distances.append(distance)
+    
             results_text = (
                 "=== RESULTADOS DA AVALIAÇÃO ===\n\n"
                 f"Estatísticas Gerais:\n"
@@ -332,18 +340,34 @@ class EvaluationTab(common_tab.GUITab):
                 f"Métricas de Performance:\n"
                 f"• Taxa de sucesso: {success_rate:.1f}% ({success_count}/{num_episodes})\n"
                 f"• Tempo médio: {avg_time:.2f} ± {std_time:.2f} segundos\n"
-                f"• Melhor tempo: {min(metrics.get('total_times', [0])):.2f}s\n"
-                f"• Pior tempo: {max(metrics.get('total_times', [0])):.2f}s\n"
+                f"• Melhor tempo: {min(total_times) if total_times else 0:.2f}s\n"
+                f"• Pior tempo: {max(total_times) if total_times else 0:.2f}s\n"
                 f"• Recompensa média: {sum(total_rewards)/len(total_rewards) if total_rewards else 0:.2f}\n\n"
                 f"Distribuição de Tempos:\n"
             )
-
-            times = metrics.get("total_times", [])
-            if times:
-                for i, time_val in enumerate(times, 1):
-                    status = "✓" if i <= success_count else "✗"
-                    results_text += f"• Episódio {i}: {time_val:.2f}s {status}\n"
-
+    
+            # Listar cada episódio com ✓ apenas nos bem-sucedidos
+            for i in range(1, num_episodes + 1):
+                episode_key = str(i)
+                if episode_key in self.metrics_data["episodes"]:
+                    episode_data = self.metrics_data["episodes"][episode_key]
+                    
+                    # Obter dados do episódio
+                    time_val = total_times[i-1] if i-1 < len(total_times) else 0
+                    reward_val = total_rewards[i-1] if i-1 < len(total_rewards) else 0
+                    distance_val = total_distances[i-1] if i-1 < len(total_distances) else 0
+                    
+                    # Verificar se foi bem-sucedido
+                    is_success = False
+                    if "episode_extra_data" in episode_data:
+                        is_success = episode_data["episode_extra_data"].get("episode_success", False)
+                    elif "episode_data" in episode_data:
+                        is_success = episode_data["episode_data"].get("success", False)
+                    
+                    success_symbol = "✓" if is_success else ""
+                    
+                    results_text += f"• Episódio {i}: {time_val:.1f}s - {reward_val:.1f} pontos - {distance_val:.1f}m {success_symbol}\n"
+    
             # Análise de performance
             results_text += (
                 "\nAnálise:\n"
@@ -352,17 +376,17 @@ class EvaluationTab(common_tab.GUITab):
                 f"• Consistência: "
                 f"{'ALTA' if std_time < avg_time * 0.1 else 'MÉDIA' if std_time < avg_time * 0.2 else 'BAIXA'}\n"
             )
-
+    
             results_text += "\n=== DADOS BRUTOS ===\n\n"
             data_to_print = {k: v for k, v in self.metrics_data.items() if k != "episodes"}
             results_text += json.dumps(data_to_print, indent=4, ensure_ascii=False)
-
+    
             self.metrics_text.insert(1.0, results_text)
             self.metrics_text.config(state=tk.DISABLED)
-
+    
             # Atualizar gráficos
             self._update_evaluation_plots(metrics)
-
+    
         except Exception as e:
             self.logger.exception("Erro ao exibir resultados")
             messagebox.showerror("Erro", f"Erro ao exibir resultados: {e}")
