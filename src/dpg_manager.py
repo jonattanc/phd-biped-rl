@@ -36,18 +36,28 @@ class DPGManager:
         
         # Sistemas principais
         self.buffer = SimpleBuffer(capacity=3000)
-        self.reward_calculator = RewardCalculator(logger, {})  # ADICIONADO: Inicializar RewardCalculator
+        self.reward_calculator = RewardCalculator(logger, {})  
         
         # Estado simples
         self.episode_count = 0
         self.performance_history = deque(maxlen=50)
         self.learning_progress = 0.0
-        self.current_terrain = "normal"  # ADICIONADO: Definir terreno atual
+        self.current_terrain = "normal"  
 
         # Controle de treinamento
-        self.training_interval = 10  # Treinar a cada 10 episódios
-        self.min_buffer_size = 100   # Tamanho mínimo do buffer para treinar
+        self.training_interval = 5  
+        self.min_buffer_size = 200  
+        self.learning_rate_factor = 1.0
+
+        # Histórico para adaptação
+        self.recent_success_rate = deque(maxlen=100)
+        self.consecutive_failures = 0
+
+        # Variávels para resumo
         self._last_training_episode = 0
+        self.last_report_episode = 0
+        self.episode_metrics_history = deque(maxlen=50)
+        self.terrain_performance = {}
 
     def calculate_reward(self, sim, action) -> float:
         if not self.enabled:
@@ -55,16 +65,16 @@ class DPGManager:
             
         # Info básica para recompensa
         phase_info = {
-            'current_terrain': self.current_terrain,  # CORRIGIDO: usar self.current_terrain
+            'current_terrain': self.current_terrain,  
             'learning_progress': self.learning_progress
         }
         
         reward = self.reward_calculator.calculate(sim, action, phase_info)
         self.performance_history.append(reward)
         
-        return max(reward, 0.0)
+        return reward
 
-    def set_current_terrain(self, terrain):  # ADICIONADO: Método para definir terreno
+    def set_current_terrain(self, terrain):  
         """Define o terreno atual para cálculos de recompensa"""
         self.current_terrain = terrain
 
@@ -93,17 +103,48 @@ class DPGManager:
         """Atualiza progresso baseado em desempenho recente"""
         self.episode_count += 1
         
-        # Progresso baseado em distância e estabilidade
-        distance = episode_results.get("distance", 0)
-        stability = 1.0 - min((abs(episode_results.get("roll", 0)) + 
-                              abs(episode_results.get("pitch", 0))) / 1.0, 1.0)
+        # Garantir que a distância não seja negativa
+        distance = max(episode_results.get("distance", 0), 0)
+        
+        # Cálculo de estabilidade
+        roll = abs(episode_results.get("roll", 0))
+        pitch = abs(episode_results.get("pitch", 0))
+        stability = max(0.0, 1.0 - min((roll + pitch) / 1.0, 1.0))
         
         # Progresso simples: 50% distância, 50% estabilidade
         distance_progress = min(distance / 5.0, 1.0) 
         stability_progress = stability
         
-        self.learning_progress = (distance_progress * 0.5 + stability_progress * 0.5)
+        self.learning_progress = max(0.0, (distance_progress * 0.5 + stability_progress * 0.5))  # Garantir não negativo
         
+        # Atualizar histórico de métricas
+        self.episode_metrics_history.append({
+            "reward": episode_results.get("reward", 0),
+            "distance": distance,
+            "success": distance > 0.5 and stability > 0.6
+        })
+        
+        # Atualizar desempenho por terreno
+        terrain = self.current_terrain
+        if terrain not in self.terrain_performance:
+            self.terrain_performance[terrain] = {
+                'episodes': 0,
+                'total_distance': 0,
+                'total_reward': 0,
+                'successes': 0
+            }
+        
+        self.terrain_performance[terrain]['episodes'] += 1
+        self.terrain_performance[terrain]['total_distance'] += distance
+        self.terrain_performance[terrain]['total_reward'] += episode_results.get("reward", 0)
+        if distance > 0.5 and stability > 0.6:
+            self.terrain_performance[terrain]['successes'] += 1
+        
+        # Gerar relatório a cada 500 episódios
+        if self.episode_count - self.last_report_episode >= 500:
+            self._generate_comprehensive_report()
+            self.last_report_episode = self.episode_count
+            
         # Limpeza periódica do buffer
         if self.episode_count % 100 == 0 and len(self.buffer) > 2000:
             self._cleanup_buffer()
@@ -140,6 +181,96 @@ class DPGManager:
             "learning_progress": self.learning_progress,
             "avg_recent_reward": np.mean(list(self.performance_history)) if self.performance_history else 0
         }
+    
+    def _get_buffer_status(self):
+        """Status simplificado do buffer"""
+        if len(self.buffer) == 0:
+            return {
+                "total_experiences": 0,
+                "avg_quality": 0,
+                "buffer_utilization": 0,
+                "active_experiences": 0,
+                "quality_distribution": {"high": 0, "medium": 0, "low": 0}
+            }
+        
+        buffer_list = list(self.buffer.buffer) if hasattr(self.buffer, 'buffer') else list(self.buffer)
+        qualities = [exp.quality for exp in buffer_list]
+        
+        if not qualities:  
+            return {
+                "total_experiences": 0,
+                "avg_quality": 0,
+                "buffer_utilization": 0,
+                "active_experiences": 0,
+                "quality_distribution": {"high": 0, "medium": 0, "low": 0}
+            }
+        
+        high_quality = sum(1 for q in qualities if q > 0.7)
+        medium_quality = sum(1 for q in qualities if 0.3 <= q <= 0.7)
+        low_quality = sum(1 for q in qualities if q < 0.3)
+        
+        return {
+            "total_experiences": len(buffer_list),
+            "avg_quality": np.mean(qualities),
+            "buffer_utilization": len(buffer_list) / self.buffer.capacity,
+            "active_experiences": len(buffer_list),
+            "quality_distribution": {
+                "high": high_quality,
+                "medium": medium_quality,
+                "low": low_quality
+            }
+        }
+
+    def _generate_comprehensive_report(self):
+        """RELATÓRIO a cada 500 episódios"""
+        try:
+            # Dados básicos do sistema
+            integrated_status = self.get_integrated_status()
+            buffer_status = self._get_buffer_status()
+            
+            # Estatísticas recentes (últimos 50 episódios)
+            recent_episodes = list(self.episode_metrics_history)
+            if recent_episodes:
+                recent_rewards = [ep['reward'] for ep in recent_episodes]
+                recent_distances = [ep['distance'] for ep in recent_episodes]
+                recent_successes = sum(1 for ep in recent_episodes if ep['success'])
+                
+                avg_recent_reward = np.mean(recent_rewards) if recent_rewards else 0
+                avg_recent_distance = np.mean(recent_distances) if recent_distances else 0
+                success_rate = recent_successes / len(recent_episodes) if recent_episodes else 0
+            else:
+                avg_recent_reward = 0
+                avg_recent_distance = 0
+                success_rate = 0
+
+            # RELATÓRIO 
+            self.logger.info("=" * 60)
+            self.logger.info(f"📊 RELATÓRIO - Episódio {self.episode_count}")
+            
+            # Status principal
+            self.logger.info(f"Progresso: {self.learning_progress:.1%} | "
+                           f"Recompensa: {avg_recent_reward:.1f} | "
+                           f"Sucesso: {success_rate:.1%}")
+            
+            # Buffer
+            self.logger.info(f"Buffer: {len(self.buffer)} exp | "
+                           f"Qualidade: {buffer_status['avg_quality']:.3f}")
+            
+            # Terrenos
+            self.logger.info("Terrenos:")
+            if hasattr(self, 'terrain_performance') and self.terrain_performance:
+                for terrain, stats in self.terrain_performance.items():
+                    if stats['episodes'] > 0:
+                        avg_dist = stats['total_distance'] / stats['episodes']
+                        success_rate_terrain = stats['successes'] / stats['episodes']
+                        self.logger.info(f"  {terrain}: {avg_dist:.2f}m, {success_rate_terrain:.1%} sucesso")
+            else:
+                self.logger.info("  Nenhum dado de terreno disponível")
+            
+            self.logger.info("=" * 60)
+
+        except Exception as e:
+            self.logger.error(f"Erro no relatório: {e}")
 
 
 @dataclass
@@ -165,19 +296,19 @@ class RewardCalculator:
         
         # Componentes principais simplificados
         self.components = {
-            "progresso": 1.5,
-            "coordenacao": 1.2, 
-            "estabilidade": 1.3,
-            "eficiencia": 0.8,
-            "penalidades": -1.0 
+            "progresso": 2.5,
+            "coordenacao": 1.0, 
+            "estabilidade": 1.2,
+            "eficiencia": 0.3,
+            "penalidades": -0.5 
         }
         
         # Parâmetros por terreno (mantido para adaptação)
         self.terrain_params = {
-            "normal": TerrainParams(),
-            "ramp_up": TerrainParams(speed_weight=15.0, stability_weight=1.5, clearance_min=0.08, pitch_target=0.2),
-            "ramp_down": TerrainParams(speed_weight=12.0, stability_weight=1.6, clearance_min=0.08, pitch_target=-0.1),
-            "uneven": TerrainParams(stability_weight=1.4, coordination_bonus=20.0)
+            "normal": TerrainParams(speed_weight=30.0, stability_weight=1.0),
+            "ramp_up": TerrainParams(speed_weight=20.0, stability_weight=1.3, clearance_min=0.06),
+            "ramp_down": TerrainParams(speed_weight=18.0, stability_weight=1.4, clearance_min=0.06),
+            "uneven": TerrainParams(stability_weight=1.2, coordination_bonus=15.0)
         }
 
     def calculate(self, sim, action, phase_info: Dict) -> float:
@@ -198,115 +329,45 @@ class RewardCalculator:
         for component, value in component_values.items():
             total_reward += value * self.components[component]
 
-        return max(total_reward, 0.0)
+        return total_reward
 
     def _calculate_progresso(self, sim, phase_info, terrain_params) -> float:
-        """PROGRESSO: recompensa distância *apenas* se marcha for funcional e estável."""
+        """PROGRESSO com recompensas intermediárias"""
         reward = 0.0
         try:
             dist = max(getattr(sim, "episode_distance", 0.0), 0.0)
             vel_x = getattr(sim, "robot_x_velocity", 0.0)
-            current_terrain = phase_info.get('current_terrain', 'normal')
-
-            # USA PARÂMETROS DO TERRENO CORRETAMENTE
-            speed_weight = terrain_params.speed_weight  
-            clearance_min = terrain_params.clearance_min
-            push_phase_bonus = terrain_params.push_phase_bonus
-            uphill_bonus = terrain_params.uphill_bonus
-
-            # Estabilidade e funcionalidade mínimas
-            roll = abs(getattr(sim, "robot_roll", 0.0))
-            pitch = getattr(sim, "robot_pitch", 0.0)
-
-            # PITCH TARGET ESPECÍFICO POR TERRENO
-            pitch_target = terrain_params.pitch_target
-            forward_momentum = vel_x * min(1.0, 1.0 - abs(pitch - pitch_target) / 0.3)
-            stable = (roll < 0.25 and abs(pitch - pitch_target) < 0.3)
-
-            left_contact = getattr(sim, "robot_left_foot_contact", False)
-            right_contact = getattr(sim, "robot_right_foot_contact", False)
-            alternating = (left_contact != right_contact)
-
-            left_knee = getattr(sim, "robot_left_knee_angle", 0.0)
-            right_knee = getattr(sim, "robot_right_knee_angle", 0.0)
-            left_h = getattr(sim, "robot_left_foot_height", 0.0)
-            right_h = getattr(sim, "robot_right_foot_height", 0.0)
-            left_xv = getattr(sim, "robot_left_foot_x_velocity", 0.0)
-            right_xv = getattr(sim, "robot_right_foot_x_velocity", 0.0)
-            robot_xv = getattr(sim, "robot_x_velocity", 0.0)  
             
-            # COMPORTAMENTO ESPECÍFICO POR TERRENO
-            if current_terrain == "ramp_up":
-                # Bônus extra para progresso em subida
-                if forward_momentum > 0.1 and dist > 0.2:
-                    reward += uphill_bonus * dist * 20.0
+            # Recompensas progressivas mais agressivas
+            milestone_bonuses = {
+                0.5: 50.0,    
+                1.0: 100.0,   
+                2.0: 150.0,   
+                3.0: 200.0,   
+                5.0: 300.0,   
+                7.0: 400.0,   
+                9.0: 800.0    
+            }
+            
+            # Verificar marcos atingidos
+            for milestone, bonus in milestone_bonuses.items():
+                if dist >= milestone:
+                    reward += bonus
+                    # Remover para não acumular múltiplas vezes
+                    milestone_bonuses[milestone] = 0
+            
+            # Bônus de velocidade consistente
+            if vel_x > 0.3:  
+                speed_bonus = min(vel_x * 40.0, 100.0)
+                reward += speed_bonus
+            
+            # Bônus de sobrevivência com progresso
+            if not getattr(sim, "episode_terminated", True) and dist > 0.1:
+                survival_bonus = min(dist * 10.0, 50.0)
+                reward += survival_bonus
                 
-                # Bônus por inclinação funcional (pitch > 0.15) + impulso
-                pitch_ok = pitch > 0.15 and pitch < 0.35
-                left_push = left_contact and left_xv < robot_xv - 0.05
-                right_push = right_contact and right_xv < robot_xv - 0.05
-                if pitch_ok and (left_push or right_push):
-                    reward += 8.0 * push_phase_bonus
-
-            elif current_terrain == "ramp_down":
-                # Progresso controlado em descida (não muito rápido)
-                if forward_momentum < 0.5 and dist > 0.1:
-                    reward += dist * 25.0
-
-            elif current_terrain == "uneven":
-                # Progresso constante é mais valioso que rápido
-                if dist > 0.1 and forward_momentum < 0.8:
-                    reward += dist * 30.0
-
-            # Bônus para sequências de terrenos consecutivos
-            terrain_sequence = phase_info.get('terrain_sequence', [])
-            if len(terrain_sequence) >= 2:
-                # Bônus crescente por cada terreno completado
-                sequence_bonus = min(len(terrain_sequence) * 25.0, 150.0)
-                reward += sequence_bonus
-    
-            # USA CLEARANCE_MIN DO TERRENO 
-            knee_th = 0.8
-            functional = (
-                ((not left_contact) and left_h > clearance_min and left_knee > knee_th) or
-                ((not right_contact) and right_h > clearance_min and right_knee > knee_th)
-            )
-
-            # Só recompensa se estável E funcional
-            if stable and functional and alternating:
-                reward += dist * 40.0  
-                reward += forward_momentum * speed_weight  
-                if dist >= 3.0:
-                    reward += 300.0  
-                elif dist >= 1.0:
-                    reward += 150.0  
-                elif dist >= 0.5:
-                    reward += 70.0
-            elif stable and alternating:
-                # Progresso básico (sem padrão ideal)
-                reward += dist * 15.0 + forward_momentum * (speed_weight * 0.3)  
-            else:
-                # Progresso instável → quase nada
-                reward += dist * 2.0 + forward_momentum * 0.5
-
-            # Sobrevivência só conta se avançou >5 cm
-            if not getattr(sim, "episode_terminated", True) and dist > 0.05:
-                reward += 20.0
-
-            # BÔNUS PROGRESSIVO ESPECIAL PARA LONGAS DISTÂNCIAS
-            if dist > 3.0:
-                long_distance_bonus = (dist - 3.0) * 80.0  
-                reward += long_distance_bonus
-                # Marcos significativos
-                if dist >= 5.0:
-                    reward += 200
-                if dist >= 7.0:
-                    reward += 400
-                if dist >= 8.5:
-                    reward += 800
-
         except Exception as e:
-            self.logger.warning(f"Erro em progresso (terrain-corrected): {e}")
+            self.logger.warning(f"Erro em progresso: {e}")
         return reward
 
     def _calculate_coordenacao(self, sim, phase_info, terrain_params) -> float:
@@ -515,136 +576,58 @@ class RewardCalculator:
 
         except Exception as e:
             self.logger.warning(f"Erro em eficiência (terrain-corrected): {e}")
-        return max(reward, -20.0)
+        return reward
 
     def _calculate_penalidades_component(self, sim, phase_info, terrain_params) -> float:
-        """Componente de PENALIDADES: rigor físico + detecção de padrões viciados"""
+        """PENALIDADES otimizadas - menos agressivas no início"""
         penalties = 0.0
         try:
-            current_terrain = phase_info.get('current_terrain', 'normal')
+            learning_progress = phase_info.get('learning_progress', 0)
             distance = getattr(sim, "episode_distance", 0.0)
             
-            # Dados necessários para cálculos
-            left_hip_l = getattr(sim, "robot_left_hip_lateral_angle", 0.0)
-            right_hip_l = getattr(sim, "robot_right_hip_lateral_angle", 0.0)
-            left_contact = getattr(sim, "robot_left_foot_contact", False)
-            right_contact = getattr(sim, "robot_right_foot_contact", False)
-            left_xv = getattr(sim, "robot_left_foot_x_velocity", 0.0)
-            right_xv = getattr(sim, "robot_right_foot_x_velocity", 0.0)
-            robot_xv = getattr(sim, "robot_x_velocity", 0.0)
-            vel_x = getattr(sim, "robot_x_velocity", 0.0)
-
-            push_left = left_contact and (left_xv < robot_xv - 0.1)
-            push_right = right_contact and (right_xv < robot_xv - 0.1)
-        
+            # Penalidades progressivas baseadas no aprendizado
+            penalty_multiplier = 1.0
+            
+            # Reduzir penalidades no início do aprendizado
+            if learning_progress < 0.3:
+                penalty_multiplier = 0.3
+            elif learning_progress < 0.6:
+                penalty_multiplier = 0.6
+            
+            # Penalidades principais 
             roll = abs(getattr(sim, "robot_roll", 0.0))
-            pitch = getattr(sim, "robot_pitch", 0.0)
-            orientation_velocity = getattr(sim, "robot_orientation_velocity", [0,0,0])
-            yaw_vel = abs(orientation_velocity[2]) if len(orientation_velocity) > 2 else 0.0
-            ramp_up = current_terrain in ["ramp_up"]
-
-            learning_progress = phase_info.get('learning_progress', 0)
-
-            # === 1. Instabilidade angular AGRESSIVA ===
-            pitch_target = 0.2 if ramp_up else 0.0
-            pitch_err = abs(pitch - pitch_target)
-            roll_penalty = max(0.0, roll - 0.15) * 40.0
-            pitch_penalty = max(0.0, pitch_err - 0.15) * 30.0  
-            yaw_penalty = yaw_vel * 25.0
-            penalties -= (roll_penalty + pitch_penalty + yaw_penalty)
-
-            # === 2. Movimento estagnado ou para trás ===
-            episode_steps = getattr(sim, "episode_steps", 0)
-            time_step_s = getattr(sim, "time_step_s", 0.033)
-            episode_time = episode_steps * time_step_s
+            pitch = abs(getattr(sim, "robot_pitch", 0.0))
             
-            if distance < 0:
-                penalties -= abs(distance) * 60.0
-            elif distance < 0.03 and episode_time > 1.5:
-                penalties -= 120.0
-
-            # === 3. Abdução excessiva + incoerência postural ===
-            abduction = max(abs(left_hip_l), abs(right_hip_l))
-            y_vel = abs(getattr(sim, "robot_y_velocity", 0.0))
+            # Instabilidade angular 
+            if roll > 0.3:
+                penalties -= (roll - 0.3) * 15.0 * penalty_multiplier
+            if abs(pitch) > 0.4:
+                penalties -= (abs(pitch) - 0.4) * 12.0 * penalty_multiplier
             
-            if abduction > 0.2:
-                abd_pen = (abduction - 0.2) * 25.0
-                lateral_pen = y_vel * 20.0
-                penalties -= (abd_pen + lateral_pen)
-
-            # === 4. Jerk (aceleração angular súbita) ===
-            ang_vel = getattr(sim, "robot_orientation_velocity", [0,0,0])
-            ang_speed = np.linalg.norm(ang_vel[:2])  
-            if ang_speed > 2.0:  
-                penalties -= (ang_speed - 2.0) * 15.0
-
-            # === 5. Travamento articular incoerente ===
-            lock_timers = getattr(sim, "joint_lock_timers", [])
-            if lock_timers:
-                long_locks = sum(1 for t in lock_timers if t > 10)  
-                if long_locks > 2:  
-                    penalties -= long_locks * 8.0
-
-            # === 6. Ações extremas ou oscilatórias ===
-            action = phase_info.get('action', [])
-            if action is not None and len(action) > 0:
-                action = np.asarray(action)
-                mag = np.linalg.norm(action)
-                if mag > 2.5:
-                    penalties -= (mag - 2.5) * 12.0
+            # Movimento para trás 
+            if distance < -0.1:
+                penalties -= abs(distance) * 20.0 * penalty_multiplier
+            elif distance < 0.05 and getattr(sim, "episode_steps", 0) > 20:
+                penalties -= 30.0 * penalty_multiplier  
                 
-                # Detecta oscilação
-                if hasattr(self, '_prev_action') and self._prev_action is not None:
-                    diff = np.linalg.norm(action - self._prev_action)
-                    if diff > 3.0:  
-                        penalties -= diff * 2.0
-                self._prev_action = action.copy()
-
-            # === 7. Padrão de "pernas abertas + tronco torto" ===
-            left_foot_roll = abs(getattr(sim, "robot_left_foot_roll", 0.0))
-            right_foot_roll = abs(getattr(sim, "robot_right_foot_roll", 0.0))
-            foot_roll = left_foot_roll + right_foot_roll
-            if abduction > 0.25 and roll > 0.2 and foot_roll > 0.4:
-                penalties -= 40.0  
-
-            # === 8. Penalidade por esforço ===
-            if hasattr(sim, 'joint_velocities'):
-                effort = sum(v**2 for v in sim.joint_velocities) * 0.01
-                penalties -= effort
-
-            # === 9. Queda / término crítico ===
+            # Queda 
             termination = getattr(sim, "episode_termination", "")
             if termination == "fell":
-                penalties -= 300.0
-            elif termination == "yaw_deviated":
                 penalties -= 200.0
-
-            # Reduzir impacto baseado no progresso de aprendizado
-            if learning_progress < 0.4:
-                penalties *= 0.5
-            elif learning_progress < 0.6:
-                penalties *= 0.75
-            
-            # Reduzir impacto em longas distâncias
-            penalty_reduction_factor = 1.0
-            if distance > 3.0:
-                penalty_reduction_factor = max(0.4, 1.0 - (distance - 3.0) / 6.0)
-            elif distance > 1.0:
-                penalty_reduction_factor = max(0.7, 1.0 - (distance - 1.0) / 4.0)
-            penalties *= penalty_reduction_factor
-            
+            elif termination == "yaw_deviated":
+                penalties -= 150.0
+                
         except Exception as e:
-            self.logger.warning(f"Erro em penalidades (anti-vício): {e}")
-            penalties = 0.0  
-        
+            self.logger.warning(f"Erro em penalidades: {e}")
+            
         return penalties
 
 
 class SimpleBuffer:
-    def __init__(self, capacity=5000):
+    def __init__(self, capacity=10000):
         self.capacity = capacity
         self.buffer = deque(maxlen=capacity)
-        self.quality_threshold = 0.2
+        self.quality_threshold = 0.1
         
     def add(self, experience):
         """Adiciona experiência se atender qualidade mínima"""
@@ -654,24 +637,32 @@ class SimpleBuffer:
         return False
     
     def sample(self, batch_size: int) -> List[Experience]:
-        """Amostragem balanceada: 70% aleatória, 30% de alta qualidade"""
+        """Amostragem balanceada com foco em experiências educativas"""
         if len(self.buffer) <= batch_size:
             return list(self.buffer)
             
-        # Separa experiências por qualidade
-        high_quality = [exp for exp in self.buffer if exp.quality > 0.5]
-        regular = [exp for exp in self.buffer if exp.quality <= 0.5]
+        # Estratificação por qualidade
+        high_quality = [exp for exp in self.buffer if exp.quality > 0.7]
+        medium_quality = [exp for exp in self.buffer if 0.3 <= exp.quality <= 0.7]
+        low_quality = [exp for exp in self.buffer if exp.quality < 0.3]
         
-        # Calcula quantidades
-        high_quality_count = min(int(batch_size * 0.3), len(high_quality))
-        regular_count = batch_size - high_quality_count
+        # Proporções otimizadas
+        high_count = min(int(batch_size * 0.4), len(high_quality)) 
+        medium_count = min(int(batch_size * 0.4), len(medium_quality))
+        low_count = batch_size - high_count - medium_count
         
-        # Amostra
         samples = []
-        if high_quality_count > 0:
-            samples.extend(random.sample(high_quality, high_quality_count))
-        if regular_count > 0:
-            samples.extend(random.sample(regular, regular_count))
+        if high_count > 0:
+            samples.extend(random.sample(high_quality, high_count))
+        if medium_count > 0:
+            samples.extend(random.sample(medium_quality, medium_count))
+        if low_count > 0 and len(low_quality) > 0:
+            samples.extend(random.sample(low_quality, min(low_count, len(low_quality))))
+            
+        # Preencher com amostras aleatórias se necessário
+        if len(samples) < batch_size:
+            additional = random.sample(self.buffer, batch_size - len(samples))
+            samples.extend(additional)
             
         return samples
     

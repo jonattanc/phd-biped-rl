@@ -1,4 +1,5 @@
 # simulation.py
+import random
 import pybullet as p
 import gymnasium as gym
 import time
@@ -592,17 +593,10 @@ class Simulation(gym.Env):
             if hasattr(self.reward_system, "dpg_manager") and self.reward_system.dpg_manager:
                 dpg_manager = self.reward_system.dpg_manager
                 if dpg_manager.enabled and not evaluation:
-                    terrain_map = {
-                        "PRA": "PRA",
-                        "PRD": "PRD",
-                        "PG": "PG", 
-                        "PBA": "PBA",
-                        "PR": "PR",
-                        "PRB": "PRB"
-                    }
-                    current_terrain = terrain_map.get(self.episode_environment, "normal")
+                    # Usar apenas o terreno atual sem sequência adaptativa
+                    current_terrain = self.episode_environment
                     dpg_manager.set_current_terrain(current_terrain)
-                    
+
                     try:
                         # Prepara métricas do passo atual
                         step_metrics = {

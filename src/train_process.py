@@ -73,13 +73,12 @@ def process_runner(
         if enable_dpg:
             dpg_manager = DPGManager(logger, robot, reward_system)
             dpg_manager.enable=True
-            dpg_manager.episode_count = initial_episode
-            reward_system.set_dpg_manager(dpg_manager)
+            dpg_manager.learning_enabled = True
 
             # Configurações otimizadas para aprendizado
-            dpg_manager.learning_enabled = True
-            dpg_manager.min_batch_size = 32
+            dpg_manager.min_buffer_size = 200
             dpg_manager.training_interval = 5
+            dpg_manager.buffer.capacity = 10000
             logger.info("Sistema DPG configurado e ativado")
         else:
             logger.info("Usando sistema de recompensa padrão (sem DPG)")
