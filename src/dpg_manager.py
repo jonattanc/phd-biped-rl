@@ -111,8 +111,8 @@ class DPGManager:
         pitch = abs(episode_results.get("pitch", 0))
         stability = max(0.0, 1.0 - min((roll + pitch) / 1.0, 1.0))
         
-        # Progresso simples: 50% distância, 50% estabilidade
-        distance_progress = min(distance / 5.0, 1.0) 
+        # Progresso simples
+        distance_progress = min(distance / 9.0, 1.0) 
         stability_progress = stability
         
         self.learning_progress = max(0.0, (distance_progress * 0.5 + stability_progress * 0.5))  # Garantir não negativo
@@ -296,11 +296,11 @@ class RewardCalculator:
         
         # Componentes principais simplificados
         self.components = {
-            "progresso": 2.5,
-            "coordenacao": 1.0, 
-            "estabilidade": 1.2,
-            "eficiencia": 0.3,
-            "penalidades": -0.5 
+            "progresso": 2.0,
+            "coordenacao": 1.8, 
+            "estabilidade": 1.4,
+            "eficiencia": 0.5,
+            "penalidades": -0.3 
         }
         
         # Parâmetros por terreno (mantido para adaptação)
@@ -339,32 +339,28 @@ class RewardCalculator:
             vel_x = getattr(sim, "robot_x_velocity", 0.0)
             
             # Recompensas progressivas mais agressivas
-            milestone_bonuses = {
-                0.5: 50.0,    
-                1.0: 100.0,   
-                2.0: 150.0,   
-                3.0: 200.0,   
-                5.0: 300.0,   
-                7.0: 400.0,   
-                9.0: 800.0    
-            }
-            
-            # Verificar marcos atingidos
-            for milestone, bonus in milestone_bonuses.items():
-                if dist >= milestone:
-                    reward += bonus
-                    # Remover para não acumular múltiplas vezes
-                    milestone_bonuses[milestone] = 0
-            
-            # Bônus de velocidade consistente
-            if vel_x > 0.3:  
-                speed_bonus = min(vel_x * 40.0, 100.0)
-                reward += speed_bonus
-            
+            speed_bonus = 0.0
+            if vel_x > 0.1:
+                speed_bonus = min(vel_x * 20.0, 50.0)
+
+            # Bônus por distância *consistente*
+            dist = max(getattr(sim, "episode_distance", 0.0), 0.0)
+            consistency_bonus = 0.0
+            consecutive = getattr(sim, "consecutive_alternating_steps", 0)
+            if dist > 0.5 and consecutive >= 3:
+                consistency_bonus = min(dist * 5.0, 70.0)
+
+            # Bônus final por chegar perto do alvo 
+            near_target_bonus = 0.0
+            if dist >= 7.0:
+                near_target_bonus = (dist - 7.0) * 100.0 
+
             # Bônus de sobrevivência com progresso
             if not getattr(sim, "episode_terminated", True) and dist > 0.1:
                 survival_bonus = min(dist * 10.0, 50.0)
-                reward += survival_bonus
+
+            reward = speed_bonus + consistency_bonus + near_target_bonus + survival_bonus
+
                 
         except Exception as e:
             self.logger.warning(f"Erro em progresso: {e}")
@@ -579,20 +575,28 @@ class RewardCalculator:
         return reward
 
     def _calculate_penalidades_component(self, sim, phase_info, terrain_params) -> float:
-        """PENALIDADES otimizadas - menos agressivas no início"""
+        """PENALIDADES otimizadas menos agressivas no início"""
         penalties = 0.0
         try:
             learning_progress = phase_info.get('learning_progress', 0)
             distance = getattr(sim, "episode_distance", 0.0)
             
             # Penalidades progressivas baseadas no aprendizado
-            penalty_multiplier = 1.0
+            penalty_multiplier = max(0.1, learning_progress)
             
             # Reduzir penalidades no início do aprendizado
-            if learning_progress < 0.3:
-                penalty_multiplier = 0.3
-            elif learning_progress < 0.6:
-                penalty_multiplier = 0.6
+            if learning_progress < 0.2:
+                # Só penaliza se for grave
+                if roll > 0.5:   
+                    penalties -= (roll - 0.5) * 15.0 * penalty_multiplier
+                if abs(pitch) > 0.6:  
+                    penalties -= (abs(pitch) - 0.6) * 12.0 * penalty_multiplier
+            else:
+                # Comportamento padrão 
+                if roll > 0.3:
+                    penalties -= (roll - 0.3) * 15.0 * penalty_multiplier
+                if abs(pitch) > 0.4:
+                    penalties -= (abs(pitch) - 0.4) * 12.0 * penalty_multiplier
             
             # Penalidades principais 
             roll = abs(getattr(sim, "robot_roll", 0.0))
@@ -627,7 +631,7 @@ class SimpleBuffer:
     def __init__(self, capacity=10000):
         self.capacity = capacity
         self.buffer = deque(maxlen=capacity)
-        self.quality_threshold = 0.1
+        self.quality_threshold = 0.3
         
     def add(self, experience):
         """Adiciona experiência se atender qualidade mínima"""
