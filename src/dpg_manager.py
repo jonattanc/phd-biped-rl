@@ -1,869 +1,679 @@
-# dpg_manager.py 
+# dpg_manager.py
 import numpy as np
-from dataclasses import dataclass
-from typing import Dict, List, Optional
-from dpg_valence import ValenceManager, ValenceState
-from dpg_reward import RewardCalculator
-from dpg_buffer import AdaptiveBufferManager, Experience
 from collections import deque
+import random
+from typing import List, Dict, Any
 import time
+from dataclasses import dataclass
 
-@dataclass
-class AdaptiveCriticWeights:
-    """Pesos do crítico dinamicamente ajustáveis"""
-    propulsion: float = 0.3
-    stability: float = 0.3  
-    coordination: float = 0.25
-    efficiency: float = 0.15
-    
-    def to_dict(self) -> Dict[str, float]:
-        return {
-            "propulsion": self.propulsion,
-            "stability": self.stability,
-            "coordination": self.coordination, 
-            "efficiency": self.efficiency
-        }
-
-class AdaptiveCritic:
-    """Crítico que se adapta às necessidades do buffer e valências"""
-    
-    def __init__(self, logger):
-        self.logger = logger
-        self.weights = AdaptiveCriticWeights()
-        self.performance_history = deque(maxlen=100)
-        self.adaptation_rate = 0.02
-        self._last_valence_analysis = {}
+class Experience:
+    def __init__(self, state, action, reward, next_state, done, metrics):
+        self.state = np.array(state, dtype=np.float32)
+        self.action = np.array(action, dtype=np.float32)
+        self.reward = float(reward)
+        self.next_state = np.array(next_state, dtype=np.float32)
+        self.done = done
+        self.quality = self._calculate_quality(metrics)
         
-    def analyze_valence_needs(self, valence_status: Dict, buffer_status: Dict) -> Dict[str, float]:
-        """Analisa quais componentes precisam de mais foco baseado em valências e buffer"""
-        adjustments = {
-            "propulsion": 0.0,
-            "stability": 0.0,
-            "coordination": 0.0,
-            "efficiency": 0.0
-        }
+    def _calculate_quality(self, metrics):
+        """Qualidade simples baseada em distância e estabilidade"""
+        distance = max(metrics.get("distance", 0), 0)
+        stability = 1.0 - min((abs(metrics.get("roll", 0)) + abs(metrics.get("pitch", 0))) / 1.0, 1.0)
         
-        try:
-            valence_details = valence_status.get('valence_details', {})
-            buffer_metrics = buffer_status.get('adaptive_status', {})
+        if distance <= 0:
+            return 0.0
             
-            # ANÁLISE DE DEFICIÊNCIAS NAS VALÊNCIAS
-            low_valences = []
-            for name, details in valence_details.items():
-                current_level = details.get('current_level', 0)
-                target_level = details.get('target_level', 0.5)
-                
-                if current_level < target_level * 0.6:  
-                    low_valences.append((name, current_level, target_level))
-            
-            # MAPEAMENTO VALÊNCIA
-            for valence_name, current, target in low_valences:
-                deficit = target - current
-                
-                if 'movimento' in valence_name or 'propulsao' in valence_name:
-                    adjustments["propulsion"] += deficit * 0.4
-                elif 'estabilidade' in valence_name:
-                    adjustments["stability"] += deficit * 0.5
-                elif 'coordenacao' in valence_name:
-                    adjustments["coordination"] += deficit * 0.6
-                elif 'eficiencia' in valence_name:
-                    adjustments["efficiency"] += deficit * 0.3
-            
-            # ANÁLISE DO BUFFER
-            buffer_quality = buffer_metrics.get('avg_quality', 0.5)
-            outdated_experiences = buffer_metrics.get('outdated_experiences', 0)
-            total_experiences = buffer_metrics.get('total_experiences', 1)
-            
-            # Se muitas experiências desatualizadas, focar em componentes estáveis
-            outdated_ratio = outdated_experiences / total_experiences
-            if outdated_ratio > 0.3:
-                adjustments["stability"] += 0.2
-                adjustments["coordination"] += 0.1
-            
-            # Se qualidade média baixa, focar em fundamentos
-            if buffer_quality < 0.4:
-                adjustments["propulsion"] += 0.3
-                adjustments["stability"] += 0.2
-            
-            # DETECÇÃO DE ESTAGNAÇÃO
-            if len(self.performance_history) > 10:
-                recent_performance = list(self.performance_history)[-5:]
-                avg_recent = np.mean([p.get('reward', 0) for p in recent_performance])
-                
-                if avg_recent < 10:  
-                    # Foco agressivo em movimento básico
-                    adjustments["propulsion"] += 0.5
-                    adjustments["stability"] += 0.3
-            
-        except Exception as e:
-            self.logger.warning(f"Erro na análise do crítico: {e}")
-            
-        return adjustments
-    
-    def update_weights(self, adjustments: Dict[str, float], current_group: int):
-        """Atualiza pesos com taxa adaptativa baseada no grupo"""
-        # Taxa de aprendizado por grupo
-        group_rates = {1: 0.03, 2: 0.02, 3: 0.01}
-        rate = group_rates.get(current_group, 0.02)
+        return min(distance / 2.0, 0.6) + stability * 0.4
         
-        # Aplica ajustes
-        self.weights.propulsion = max(0.1, min(0.7, 
-            self.weights.propulsion + adjustments["propulsion"] * rate))
-        self.weights.stability = max(0.1, min(0.6, 
-            self.weights.stability + adjustments["stability"] * rate))
-        self.weights.coordination = max(0.1, min(0.6, 
-            self.weights.coordination + adjustments["coordination"] * rate))
-        self.weights.efficiency = max(0.05, min(0.4, 
-            self.weights.efficiency + adjustments["efficiency"] * rate))
-        
-        # Normaliza
-        self._normalize_weights()
-    
-    def _normalize_weights(self):
-        """Garante soma 1.0 mantendo proporções relativas"""
-        total = (self.weights.propulsion + self.weights.stability + 
-                self.weights.coordination + self.weights.efficiency)
-        
-        if total > 0:
-            self.weights.propulsion /= total
-            self.weights.stability /= total
-            self.weights.coordination /= total
-            self.weights.efficiency /= total
-    
-    def get_optimization_advice(self) -> Dict:
-        """Retorna conselhos para otimização do sistema"""
-        max_component = max(self.weights.to_dict().items(), key=lambda x: x[1])
-        
-        advice = {
-            "focus_component": max_component[0],
-            "focus_strength": max_component[1],
-            "recommended_buffer_strategy": "",
-            "valence_priority": []
-        }
-        
-        if max_component[0] == "propulsion":
-            advice["recommended_buffer_strategy"] = "movement_focus"
-            advice["valence_priority"] = ["movimento_basico", "propulsao_basica"]
-        elif max_component[0] == "stability":
-            advice["recommended_buffer_strategy"] = "stability_focus" 
-            advice["valence_priority"] = ["estabilidade_postural"]
-        elif max_component[0] == "coordination":
-            advice["recommended_buffer_strategy"] = "coordination_focus"
-            advice["valence_priority"] = ["coordenacao_fundamental"]
-        else:
-            advice["recommended_buffer_strategy"] = "efficiency_focus"
-            advice["valence_priority"] = ["eficiencia_biomecanica"]
-            
-        return advice
-
-class AdaptiveCrutchSystem:
-    """Sistema de muletas que se integra com valências e buffer"""
-    
-    def __init__(self, logger):
-        self.logger = logger
-        self.crutch_level = 1.0
-        self.current_stage = 0
-        self.performance_window = deque(maxlen=20)
-        self.valence_progress_history = deque(maxlen=50)
-        
-        # Configurações adaptativas
-        self.stage_thresholds = [0.95, 0.85, 0.7, 0.5]
-        self.aggression_factors = {1: 0.99, 2: 0.97, 3: 0.95, 4: 0.92}
-    
-    def update_crutch_level(self, valence_status: Dict, buffer_status: Dict, 
-                          current_episode: int) -> float:
-        """Atualiza nível de muleta baseado em múltiplos fatores"""
-        
-        # FATOR 1: Progresso das valências (40% de peso)
-        valence_progress = valence_status.get('overall_progress', 0)
-        active_valences = len(valence_status.get('active_valences', []))
-        valence_factor = (1.0 - valence_progress) * 0.6 + (1.0 - min(active_valences / 5.0, 1.0)) * 0.4
-        
-        # FATOR 2: Qualidade do buffer (30% de peso)
-        buffer_quality = buffer_status.get('adaptive_status', {}).get('avg_quality', 0.5)
-        buffer_utilization = buffer_status.get('adaptive_status', {}).get('buffer_utilization', 0.5)
-        buffer_factor = (1.0 - buffer_quality) * 0.7 + (1.0 - buffer_utilization) * 0.3
-        
-        # FATOR 3: Performance recente (30% de peso)
-        if self.performance_window:
-            avg_recent = np.mean(list(self.performance_window))
-            performance_factor = 1.0 - min(avg_recent / 100.0, 1.0)
-        else:
-            performance_factor = 1.0
-        
-        # CÁLCULO DO NOVO NÍVEL
-        new_level = (
-            valence_factor * 0.4 +
-            buffer_factor * 0.3 + 
-            performance_factor * 0.3
-        )
-        
-        # AGESSIVIDADE POR ESTÁGIO
-        aggression = self.aggression_factors.get(self.current_stage, 0.9)
-        self.crutch_level = max(0.05, self.crutch_level * aggression)
-        
-        # PROTEÇÃO CONTRA REDUÇÃO PRECOCE
-        if current_episode < 1000 and self.crutch_level < 0.3:
-            self.crutch_level = 0.3
-        elif current_episode < 500 and self.crutch_level < 0.5:
-            self.crutch_level = 0.5
-            
-        self._update_stage()
-        return self.crutch_level
-    
-    def _update_stage(self):
-        """Atualiza estágio das muletas"""
-        for i, threshold in enumerate(self.stage_thresholds):
-            if self.crutch_level > threshold:
-                self.current_stage = i
-                return
-        self.current_stage = len(self.stage_thresholds)
-    
-    def get_reward_multiplier(self) -> float:
-        """Retorna multiplicador de recompensa baseado no estágio"""
-        multipliers = [5.0, 3.0, 2.0, 1.5, 1.0]
-        return multipliers[self.current_stage]
-    
-    def add_performance_sample(self, reward: float):
-        """Adiciona amostra de performance para cálculo adaptativo"""
-        self.performance_window.append(min(reward, 200.0))  
 
 class DPGManager:
-    """DPG Manager com integração total ao buffer adaptativo"""
-    
-    def __init__(self, logger, robot, reward_system, state_dim=10, action_dim=6):
+    def __init__(self, logger, robot, reward_system):
         self.logger = logger
         self.robot = robot
         self.reward_system = reward_system
         self.enabled = True
-        
-        # SISTEMAS PRINCIPAIS OTIMIZADOS
-        self.valence_manager = ValenceManager(logger, {})
-        self.reward_calculator = RewardCalculator(logger, {})
-        self.buffer_manager = AdaptiveBufferManager(logger, {}, max_experiences=2000)
-        self.adaptive_critic = AdaptiveCritic(logger)
-        self.crutch_system = AdaptiveCrutchSystem(logger)
-        
-        # CONTROLE DE ESTADO
-        self.episode_count = 0
-        self.current_group = 1
-        self._current_terrain = "normal"
-        self.overall_progress = 0.0
-        self.performance_history = deque(maxlen=100)
-        
-        # CONFIGURAÇÕES ADAPTATIVAS
-        self.optimization_intervals = {
-            "critic_update": 10,      
-            "buffer_reevaluation": 25,  
-            "crutch_update": 5,       
-            "valence_force_update": 50 
-        }
-        
-        self._last_optimization = {
-            "critic": 0,
-            "buffer": 0, 
-            "crutch": 0,
-            "valence": 0
-        }
-
-        # CONTROLE DE APRENDIZADO
         self.learning_enabled = True
-        self.min_batch_size = 32
-        self.training_interval = 10  
+        
+        # Sistemas principais
+        self.buffer = SimpleBuffer(capacity=3000)
+        self.reward_calculator = RewardCalculator(logger, {})  # ADICIONADO: Inicializar RewardCalculator
+        
+        # Estado simples
+        self.episode_count = 0
+        self.performance_history = deque(maxlen=50)
+        self.learning_progress = 0.0
+        self.current_terrain = "normal"  # ADICIONADO: Definir terreno atual
+
+        # Controle de treinamento
+        self.training_interval = 10  # Treinar a cada 10 episódios
+        self.min_buffer_size = 100   # Tamanho mínimo do buffer para treinar
         self._last_training_episode = 0
 
-        # CONTROLE DO SPARSE SUCCESS PROGRESSIVO
-        self.sparse_success_transition_episode = 5000
-        
     def calculate_reward(self, sim, action) -> float:
-        """Cálculo de recompensa com integração total dos sistemas"""
         if not self.enabled:
             return 0.0
             
-        self._current_episode_action = action
-        
-        # OBTER ESTADO ATUAL DO SISTEMA
-        valence_status = self.valence_manager.get_valence_status()
-        buffer_status = self.buffer_manager.get_adaptive_status()
-        
-        # CALCULAR RECOMPENSA BASE
-        phase_info = self._build_phase_info(valence_status, buffer_status)
-        base_reward = self.reward_calculator.calculate(sim, action, phase_info)
-        
-        # APLICAR MULTIPLICADOR ADAPTATIVO DE MULETAS
-        crutch_multiplier = self.crutch_system.get_reward_multiplier()
-        adapted_reward = base_reward * crutch_multiplier
-        
-        # BÔNUS DE ATIVAÇÃO PARA VALÊNCIAS NOVAS
-        valence_bonus = self._calculate_valence_activation_bonus(valence_status)
-        final_reward = max(adapted_reward + valence_bonus, 0.0)
-        
-        # OBTER DISTÂNCIA DO EPISÓDIO
-        try:
-            # Tenta obter a distância do sim
-            if hasattr(sim, 'episode_distance'):
-                distance = sim.episode_distance
-            elif hasattr(sim, 'get_episode_distance'):
-                distance = sim.get_episode_distance()
-            else:
-                distance = 0.0
-        except:
-            distance = 0.0
-        
-        # REGISTRAR PARA OTIMIZAÇÃO
-        self.crutch_system.add_performance_sample(final_reward)
-        self.performance_history.append({
-            'reward': final_reward,
-            'valence_progress': valence_status.get('overall_progress', 0),
-            'crutch_level': self.crutch_system.crutch_level,
-            'distance': distance
-        })
-        
-        return final_reward
-
-    def _build_phase_info(self, valence_status: Dict, buffer_status: Dict) -> Dict:
-        """Constroi informações de fase integradas com terreno"""
-        critic_advice = self.adaptive_critic.get_optimization_advice()
-        
-        # Obtém status do terreno
-        terrain_status = self.valence_manager.get_terrain_status()
-
-        return {
-            'group_level': self.current_group,
-            'group_name': 'adaptive_system',
-            'valence_weights': self.valence_manager.get_valence_weights_for_reward(),
-            'enabled_components': self.valence_manager.get_active_reward_components(),
-            'target_speed': self._get_adaptive_target_speed(valence_status),
-            'learning_progress': valence_status.get('overall_progress', 0),
-            'valence_status': valence_status,
-            'critic_advice': critic_advice,
-            'buffer_quality': buffer_status.get('avg_quality', 0.5),
-            'crutch_level': self.crutch_system.crutch_level,
-            'sparse_success_enabled': valence_status.get('overall_progress', 0) > 0.4,
-            'current_terrain': self._current_terrain,
-            'terrain_status': terrain_status
+        # Info básica para recompensa
+        phase_info = {
+            'current_terrain': self.current_terrain,  # CORRIGIDO: usar self.current_terrain
+            'learning_progress': self.learning_progress
         }
+        
+        reward = self.reward_calculator.calculate(sim, action, phase_info)
+        self.performance_history.append(reward)
+        
+        return max(reward, 0.0)
+
+    def set_current_terrain(self, terrain):  # ADICIONADO: Método para definir terreno
+        """Define o terreno atual para cálculos de recompensa"""
+        self.current_terrain = terrain
+
+    def store_experience(self, state, action, reward, next_state, done, episode_results):
+        if not self.enabled:
+            return False
+
+        try:
+            experience = Experience(
+                state=state,
+                action=action,
+                reward=reward,
+                next_state=next_state,
+                done=done,
+                metrics=episode_results
+            )
+            
+            success = self.buffer.add(experience)
+            return success
+            
+        except Exception as e:
+            self.logger.error(f"Erro ao armazenar experiência: {e}")
+            return False
 
     def update_phase_progression(self, episode_results):
-        """INTEGRAÇÃO TOTAL ENTRE SISTEMAS"""
-        if not self.enabled:
-            return
-
+        """Atualiza progresso baseado em desempenho recente"""
         self.episode_count += 1
+        
+        # Progresso baseado em distância e estabilidade
+        distance = episode_results.get("distance", 0)
+        stability = 1.0 - min((abs(episode_results.get("roll", 0)) + 
+                              abs(episode_results.get("pitch", 0))) / 1.0, 1.0)
+        
+        # Progresso simples: 50% distância, 50% estabilidade
+        distance_progress = min(distance / 5.0, 1.0) 
+        stability_progress = stability
+        
+        self.learning_progress = (distance_progress * 0.5 + stability_progress * 0.5)
+        
+        # Limpeza periódica do buffer
+        if self.episode_count % 100 == 0 and len(self.buffer) > 2000:
+            self._cleanup_buffer()
 
-        try:
-            # ATUALIZAÇÃO DE VALÊNCIAS (SEMPRE)
-            self._update_valence_system(episode_results)
-            valence_status = self.valence_manager.get_valence_status()
-            self.overall_progress = valence_status.get('overall_progress', 0)
-
-            # ATUALIZAÇÃO DO CRÍTICO (COM INTERVALO ADAPTATIVO)
-            if self._should_optimize("critic"):
-                self._update_adaptive_critic(valence_status)
-                self._last_optimization["critic"] = self.episode_count
-
-            # ATUALIZAÇÃO DO BUFFER (COM INTEGRAÇÃO DO CRÍTICO)
-            if self._should_optimize("buffer"):
-                self._update_adaptive_buffer(valence_status)
-                self._last_optimization["buffer"] = self.episode_count
-
-            # ATUALIZAÇÃO DE MULETAS (RESPONSIVA)
-            if self._should_optimize("crutch"):
-                self._update_adaptive_crutches(valence_status)
-                self._last_optimization["crutch"] = self.episode_count
-
-            # ATIVAÇÃO DE EMERGÊNCIA SE ESTAGNADO
-            if self.episode_count % 100 == 0 and self.overall_progress < 0.2:
-                self._emergency_optimization(episode_results)
-
-            # DETECÇÃO AUTOMÁTICA DE GRUPO
-            self._update_current_group(valence_status)
-            
-            if self.episode_count % 500 == 0:
-                self._generate_comprehensive_report()
-
-        except Exception as e:
-            self.logger.error(f"❌ ERRO em update_phase_progression: {e}")
-
-    def _update_valence_system(self, episode_results):
-        """Atualização robusta do sistema de valências"""
-        extended_metrics = self._prepare_valence_metrics_optimized(episode_results)
-        self.valence_manager.update_valences(extended_metrics)
-        
-        # FORÇAR ATIVAÇÃO SE POUCO PROGRESSO
-        if self.episode_count % self.optimization_intervals["valence_force_update"] == 0:
-            self._force_valence_activation(episode_results)
-
-    def _update_adaptive_critic(self, valence_status: Dict):
-        """Atualização do crítico com análise integrada"""
-        
-        if self.episode_count < 3000:
-            self.adaptive_critic.weights.propulsion = 0.7
-            self.adaptive_critic.weights.stability = 0.2
-            self.adaptive_critic.weights.coordination = 0.1
-            self.adaptive_critic.weights.efficiency = 0.0
-            self.adaptive_critic._normalize_weights()
-            return
-        
-        buffer_status = self.buffer_manager.get_adaptive_status()
-        
-        # ANALISAR NECESSIDADES
-        adjustments = self.adaptive_critic.analyze_valence_needs(
-            valence_status, buffer_status
-        )
-        
-        # APLICA AJUSTES ESPECÍFICOS POR TERRENO
-        adjustments = self._apply_terrain_specific_critic_adjustments(adjustments)
-        
-        # ATUALIZAR PESOS
-        self.adaptive_critic.update_weights(adjustments, self.current_group)
-
-    def _apply_terrain_specific_critic_adjustments(self, adjustments: Dict[str, float]) -> Dict[str, float]:
-        """Ajusta o crítico baseado no terreno atual - CORRIGIDO"""
-        terrain_adjustments = {
-            "normal": {
-                "propulsion": 0.0, "stability": 0.0, "coordination": 0.0, "efficiency": 0.0
-            },
-            "ramp_up": {
-                "propulsion": 0.4,   
-                "stability": 0.3,    
-                "coordination": 0.1, 
-                "efficiency": 0.2    
-            },
-            "ramp_down": {
-                "propulsion": -0.3,  
-                "stability": 0.6,    
-                "coordination": 0.3, 
-                "efficiency": 0.1    
-            },
-            "uneven": {
-                "propulsion": -0.1, "stability": 0.4, "coordination": 0.3, "efficiency": 0.0
-            },
-            "low_friction": {
-                "propulsion": -0.2, "stability": 0.5, "coordination": 0.2, "efficiency": 0.1
-            },
-            "complex": {
-                "propulsion": 0.1, "stability": 0.3, "coordination": 0.4, "efficiency": 0.0
-            }
-        }
-        
-        current_terrain_adjustments = terrain_adjustments.get(self._current_terrain, {})
-        
-        for component, adjustment in current_terrain_adjustments.items():
-            adjustments[component] = adjustments.get(component, 0.0) + adjustment
-        
-        return adjustments
-        
-    def _update_adaptive_buffer(self, valence_status: Dict):
-        """Atualização do buffer com critérios do crítico"""
-        critic_weights = self.adaptive_critic.weights.to_dict()
-        
-        self.buffer_manager.update_quality_criteria(
-            critic_weights=critic_weights,
-            current_group=self.current_group,
-            current_episode=self.episode_count,
-            force_reevaluation=True  
-        )
-        
-        # OTIMIZAR TAMANHO DO BUFFER BASEADO NO PROGRESSO
-        buffer_status = self.buffer_manager.get_adaptive_status()
-        if buffer_status.get('total_experiences', 0) > 3000 and self.overall_progress > 0.5:
-            self.buffer_manager.main_buffer.cleanup_low_quality(0.4)
-
-    def _update_adaptive_crutches(self, valence_status: Dict):
-        """Atualização adaptativa do sistema de muletas"""
-        buffer_status = self.buffer_manager.get_adaptive_status()
-        
-        self.crutch_system.update_crutch_level(
-            valence_status=valence_status,
-            buffer_status=buffer_status,
-            current_episode=self.episode_count
-        )
-        
-    def set_current_terrain(self, terrain_type: str):
-        """Define o terreno atual para adaptação cross-terreno"""
-        terrain_mapping = {
-            "PRA": "ramp_up",        # Rampa ascendente
-            "PRD": "ramp_down",      # Rampa descendente  
-            "PG": "uneven",          # Pista com grãos (irregular)
-            "PBA": "low_friction",   # Pista baixo atrito
-            "PR": "normal",          # Pista reta (normal)
-            "PRB": "complex"         # Pista reta com bloqueio articular
-        }
-        
-        mapped_terrain = terrain_mapping.get(terrain_type, "normal")
-        self.valence_manager.set_current_terrain(mapped_terrain)
-        self._current_terrain = mapped_terrain
-            
-    def get_integrated_status(self) -> Dict:
-        """Status completo incluindo adaptação ao terreno"""
-        integrated_status = super().get_integrated_status()
-        
-        # Adiciona informações de terreno
-        integrated_status["terrain_adaptation"] = {
-            "current_terrain": self._current_terrain,
-            "terrain_status": self.valence_manager.get_terrain_status(),
-            "critic_terrain_focus": self.adaptive_critic.get_optimization_advice().get("valence_priority", [])
-        }
-        
-        return integrated_status
-    
-    def _should_optimize(self, system: str) -> bool:
-        """Verifica se deve otimizar um sistema específico"""
-        interval = self.optimization_intervals.get(f"{system}_update", 20)
-        return (self.episode_count - self._last_optimization[system]) >= interval
-
-    def _update_current_group(self, valence_status: Dict):
-        """Atualiza grupo atual baseado em valências mestras"""
-        distance_history = [p.get('distance', 0) for p in list(self.performance_history)[-20:]]
-        avg_distance = np.mean(distance_history) if distance_history else 0
-        
-        # Grupo 1: até 0.5m médio (foco total em propulsão)
-        if avg_distance < 0.5 and self.current_group > 1:
-            self.current_group = 1
-        # Grupo 2: 0.5m-1.5m médio (equilíbrio propulsão/estabilidade)
-        elif avg_distance >= 0.5 and avg_distance < 1.5 and self.current_group < 2:
-            self.current_group = 2
-        # Grupo 3: 1.5m+ médio (coordenação e eficiência)
-        elif avg_distance >= 1.5 and self.current_group < 3:
-            self.current_group = 3
-
-    def _emergency_optimization(self, episode_results):
-        """Otimização de emergência para casos de estagnação"""
-        
-        # ESTRATÉGIAS AGRESSIVAS
-        self.crutch_system.crutch_level = min(1.0, self.crutch_system.crutch_level + 0.3)
-        
-        # FOCO MÁXIMO EM MOVIMENTO BÁSICO
-        self.adaptive_critic.weights.propulsion = 0.7
-        self.adaptive_critic.weights.stability = 0.2
-        self.adaptive_critic.weights.coordination = 0.1
-        self.adaptive_critic.weights.efficiency = 0.0
-        self.adaptive_critic._normalize_weights()
-        
-        # FORÇAR REAVALIAÇÃO COMPLETA DO BUFFER
-        self.buffer_manager.update_quality_criteria(
-            critic_weights=self.adaptive_critic.weights.to_dict(),
-            current_group=1,  # Forçar grupo 1
-            current_episode=self.episode_count,
-            force_reevaluation=True
-        )
+    def _cleanup_buffer(self):
+        """Remove experiências de baixa qualidade periodicamente"""
+        if len(self.buffer.buffer) > 2000:
+            # Mantém apenas as melhores 2000 experiências
+            sorted_experiences = sorted(self.buffer.buffer, key=lambda x: x.quality, reverse=True)
+            self.buffer.buffer = deque(sorted_experiences[:2000], maxlen=self.buffer.capacity)
 
     def should_train(self, current_episode: int) -> bool:
-        """Verifica se deve realizar treinamento"""
+        """Decide se deve treinar neste episódio"""
         if not self.learning_enabled:
             return False
             
-        buffer_status = self.buffer_manager.get_adaptive_status()
-        total_experiences = buffer_status.get('total_experiences', 0)
+        buffer_ready = len(self.buffer) >= self.min_buffer_size
+        interval_ok = (current_episode - self._last_training_episode) >= self.training_interval
         
-        return (total_experiences >= self.min_batch_size and 
-                current_episode - self._last_training_episode >= self.training_interval)
-    
-    def get_training_batch(self, batch_size: int = None) -> List[Experience]:
-        """Obtém batch para treinamento"""
-        if batch_size is None:
-            batch_size = self.min_batch_size
-            
-        return self.buffer_manager.sample(batch_size, self.current_group)
-    
+        return buffer_ready and interval_ok
+
     def on_training_completed(self, episode: int):
-        """Callback quando treinamento é completado"""
+        """Callback quando o treinamento é completado"""
         self._last_training_episode = episode
-        
-    def enable_learning(self, enable: bool = True):
-        """Ativa/desativa aprendizado"""
-        self.learning_enabled = enable
-        self.logger.info(f"📚 Aprendizado do DPG {'ativado' if enable else 'desativado'}")
-        
-    def _calculate_valence_activation_bonus(self, valence_status: Dict) -> float:
-        """Calcula bônus por ativação de novas valências"""
-        bonus = 0.0
-        valence_details = valence_status.get('valence_details', {})
-        
-        for name, details in valence_details.items():
-            if details.get('state') == ValenceState.LEARNING:
-                episodes_active = details.get('episodes_active', 0)
-                if episodes_active < 10:  
-                    bonus += (10 - episodes_active) * 2.0
-                    
-        return bonus
 
-    def _get_adaptive_target_speed(self, valence_status: Dict) -> float:
-        """Velocidade alvo adaptativa baseada em múltiplos fatores"""
-        base_speed = 0.1 + (self.overall_progress * 1.5)
-        
-        # AJUSTE POR COMPONENTE DO CRÍTICO
-        critic_focus = self.adaptive_critic.get_optimization_advice()["focus_component"]
-        
-        if critic_focus == "propulsion":
-            base_speed *= 1.3
-        elif critic_focus == "stability":
-            base_speed *= 0.8  # Mais devagar para focar em estabilidade
-        elif critic_focus == "coordination":
-            base_speed *= 1.1
-            
-        return min(base_speed, 2.0)
+    def get_training_batch(self, batch_size=32) -> List[Experience]:
+        return self.buffer.sample(batch_size)
 
-    def _force_valence_activation(self, episode_results):
-        """Força ativação de valências quando há pouco progresso"""
-        try:
-            valence_status = self.valence_manager.get_valence_status()
-            active_count = len(valence_status.get('active_valences', []))
-            
-            # Se poucas valências ativas, forçar ativação das básicas
-            if active_count < 2:
-                self.logger.warning("🚨 FORÇANDO ATIVAÇÃO DE VALÊNCIAS BÁSICAS")
-                
-                # Forçar movimento_basico se há algum movimento
-                distance = episode_results.get("distance", 0)
-                if distance > 0.01:
-                    self.valence_manager._ensure_valence_active("movimento_basico", min_level=0.2)
-                
-                # Forçar estabilidade_postural se está razoavelmente estável
-                roll = abs(episode_results.get("roll", 0))
-                pitch = abs(episode_results.get("pitch", 0))
-                stability = 1.0 - min((roll + pitch) / 1.0, 1.0)
-                if stability > 0.5:
-                    self.valence_manager._ensure_valence_active("estabilidade_postural", min_level=0.15)
-                
-                # Forçar coordenação se há alternância
-                alternating = episode_results.get("alternating", False)
-                if alternating:
-                    self.valence_manager._ensure_valence_active("coordenacao_fundamental", min_level=0.1)
-                    
-        except Exception as e:
-            self.logger.error(f"Erro ao forçar ativação de valências: {e}")
-            
-    def get_integrated_status(self) -> Dict:
-        """Status completo com integração de todos os sistemas"""
-        valence_status = self.valence_manager.get_valence_status()
-        buffer_status = self.buffer_manager.get_adaptive_status()
-        critic_advice = self.adaptive_critic.get_optimization_advice()
-        
+    def get_integrated_status(self):
         return {
-            "system_integration": {
-                "overall_progress": self.overall_progress,
-                "current_group": self.current_group,
-                "episode_count": self.episode_count,
-                "crutch_stage": self.crutch_system.current_stage,
-                "crutch_level": self.crutch_system.crutch_level,
-                "critic_focus": critic_advice["focus_component"],
-                "buffer_quality": buffer_status.get('avg_quality', 0),
-                "valence_active_count": len(valence_status.get('active_valences', [])),
-                "integration_score": self._calculate_integration_score(
-                    valence_status, buffer_status
-                )
-            },
-            "valence_system": valence_status,
-            "buffer_system": buffer_status,
-            "critic_system": {
-                "weights": self.adaptive_critic.weights.to_dict(),
-                "advice": critic_advice
-            },
-            "crutch_system": {
-                "level": self.crutch_system.crutch_level,
-                "stage": self.crutch_system.current_stage,
-                "multiplier": self.crutch_system.get_reward_multiplier()
-            }
+            "enabled": self.enabled,
+            "episode_count": self.episode_count,
+            "buffer_size": len(self.buffer),
+            "learning_progress": self.learning_progress,
+            "avg_recent_reward": np.mean(list(self.performance_history)) if self.performance_history else 0
         }
 
-    def _calculate_integration_score(self, valence_status: Dict, buffer_status: Dict) -> float:
-        """Calcula quão bem integrados estão os sistemas"""
-        scores = []
-        
-        # ALINHAMENTO CRÍTICO-VALÊNCIA
-        critic_focus = self.adaptive_critic.get_optimization_advice()["focus_component"]
-        valence_priority = self.adaptive_critic.get_optimization_advice()["valence_priority"]
-        
-        # Verifica se valências prioritárias estão ativas
-        active_valences = valence_status.get('active_valences', [])
-        priority_active = sum(1 for v in valence_priority if v in active_valences)
-        scores.append(priority_active / len(valence_priority) if valence_priority else 0.5)
-        
-        # QUALIDADE DO BUFFER
-        buffer_quality = buffer_status.get('avg_quality', 0.5)
-        scores.append(buffer_quality)
-        
-        # PROGRESSO GERAL
-        scores.append(valence_status.get('overall_progress', 0))
-        
-        return np.mean(scores)
 
-    def _prepare_valence_metrics_optimized(self, episode_results):
-        """Preparação de métricas COMPLETA"""
-        extended = episode_results.copy()
+@dataclass
+class TerrainParams:
+    speed_weight: float = 25.0
+    stability_weight: float = 1.2
+    coordination_bonus: float = 15.0
+    clearance_min: float = 0.05
+    push_phase_bonus: float = 1.0
+    uphill_bonus: float = 1.0
+    stance_knee_lock_bonus: float = 1.0
+    adaptation_bonus: float = 1.0
+    robustness_bonus: float = 1.0
+    pitch_target: float = 0.0
+    height_target: float = 0.8
+    efficiency_weight: float = 1.0
 
+
+class RewardCalculator:
+    def __init__(self, logger, config):
+        self.logger = logger
+        self.config = config
+        
+        # Componentes principais simplificados
+        self.components = {
+            "progresso": 1.5,
+            "coordenacao": 1.2, 
+            "estabilidade": 1.3,
+            "eficiencia": 0.8,
+            "penalidades": -1.0 
+        }
+        
+        # Parâmetros por terreno (mantido para adaptação)
+        self.terrain_params = {
+            "normal": TerrainParams(),
+            "ramp_up": TerrainParams(speed_weight=15.0, stability_weight=1.5, clearance_min=0.08, pitch_target=0.2),
+            "ramp_down": TerrainParams(speed_weight=12.0, stability_weight=1.6, clearance_min=0.08, pitch_target=-0.1),
+            "uneven": TerrainParams(stability_weight=1.4, coordination_bonus=20.0)
+        }
+
+    def calculate(self, sim, action, phase_info: Dict) -> float:
+        current_terrain = phase_info.get('current_terrain', 'normal')
+        terrain_params = self.terrain_params.get(current_terrain, self.terrain_params["normal"])
+
+        # Cálculo direto sem cache
+        component_values = {
+            "progresso": self._calculate_progresso(sim, phase_info, terrain_params),
+            "coordenacao": self._calculate_coordenacao(sim, phase_info, terrain_params),
+            "estabilidade": self._calculate_estabilidade(sim, phase_info, terrain_params),
+            "eficiencia": self._calculate_eficiencia(sim, phase_info, terrain_params),
+            "penalidades": self._calculate_penalidades_component(sim, phase_info, terrain_params)  
+        }
+
+        # Soma ponderada simples
+        total_reward = 0.0
+        for component, value in component_values.items():
+            total_reward += value * self.components[component]
+
+        return max(total_reward, 0.0)
+
+    def _calculate_progresso(self, sim, phase_info, terrain_params) -> float:
+        """PROGRESSO: recompensa distância *apenas* se marcha for funcional e estável."""
+        reward = 0.0
         try:
-            # MÉTRICAS ESSENCIAIS PARA TODAS AS VALÊNCIAS
-            try:
-                if "distance" in episode_results and episode_results["distance"] is not None:
-                    raw_distance = episode_results["distance"]
-                elif hasattr(self.robot, 'episode_distance'):
-                    raw_distance = self.robot.episode_distance
-                elif hasattr(self.robot, 'get_episode_distance'):
-                    raw_distance = self.robot.get_episode_distance()
-                else:
-                    raw_distance = 0.0
+            dist = max(getattr(sim, "episode_distance", 0.0), 0.0)
+            vel_x = getattr(sim, "robot_x_velocity", 0.0)
+            current_terrain = phase_info.get('current_terrain', 'normal')
 
-                # Garantir que é numérico
-                if not isinstance(raw_distance, (int, float)):
-                    raw_distance = 0.0
+            # USA PARÂMETROS DO TERRENO CORRETAMENTE
+            speed_weight = terrain_params.speed_weight  
+            clearance_min = terrain_params.clearance_min
+            push_phase_bonus = terrain_params.push_phase_bonus
+            uphill_bonus = terrain_params.uphill_bonus
 
-                extended["distance"] = max(float(raw_distance), 0.0)
+            # Estabilidade e funcionalidade mínimas
+            roll = abs(getattr(sim, "robot_roll", 0.0))
+            pitch = getattr(sim, "robot_pitch", 0.0)
 
-            except Exception as e:
-                self.logger.error(f"❌ ERRO CRÍTICO ao processar distância: {e}")
-                extended["distance"] = 0.0
+            # PITCH TARGET ESPECÍFICO POR TERRENO
+            pitch_target = terrain_params.pitch_target
+            forward_momentum = vel_x * min(1.0, 1.0 - abs(pitch - pitch_target) / 0.3)
+            stable = (roll < 0.25 and abs(pitch - pitch_target) < 0.3)
 
-            velocity = episode_results.get("speed", 0)
-            roll = abs(episode_results.get("roll", 0))
-            pitch = abs(episode_results.get("pitch", 0))
+            left_contact = getattr(sim, "robot_left_foot_contact", False)
+            right_contact = getattr(sim, "robot_right_foot_contact", False)
+            alternating = (left_contact != right_contact)
 
-            # Métricas básicas sempre disponíveis
-            extended.update({
-                "speed": float(velocity) if isinstance(velocity, (int, float)) else 0.0,
-                "roll": float(roll) if isinstance(roll, (int, float)) else 0.0,
-                "pitch": float(pitch) if isinstance(pitch, (int, float)) else 0.0,
-                "stability": 1.0 - min((roll + pitch) / 1.0, 1.0),
-                "positive_movement_rate": 1.0 if extended["distance"] > 0.1 else 0.0
-            })
-
-            # MÉTRICAS DE ESTABILIDADE
-            extended["com_height_consistency"] = 0.8
-            extended["lateral_stability"] = 1.0 - min(abs(getattr(self.robot, "y_velocity", 0)) / 0.3, 1.0)
-
-            # MÉTRICAS DE PROPULSÃO
-            extended["velocity_consistency"] = 0.7
-            extended["acceleration_smoothness"] = 0.8
-
-            # MÉTRICAS DE COORDENAÇÃO
-            left_contact = episode_results.get("left_contact", False)
-            right_contact = episode_results.get("right_contact", False)
-            extended["alternating_consistency"] = 1.0 if left_contact != right_contact else 0.3
-            extended["step_length_consistency"] = 0.7
-            extended["gait_pattern_score"] = 0.8 if left_contact != right_contact else 0.4
-
-            # MÉTRICAS DE EFICIÊNCIA
-            extended["energy_efficiency"] = episode_results.get("propulsion_efficiency", 0.5)
-            extended["stride_efficiency"] = extended["distance"] / max(episode_results.get("steps", 1), 1)
-
-            # MÉTRICAS DE MARCHA ROBUSTA
-            extended["gait_robustness"] = 0.7
-            extended["recovery_success"] = 1.0 if episode_results.get("success", False) else 0.0
-            extended["speed_adaptation"] = 0.8
-            extended["terrain_handling"] = 0.6
-
-        except Exception as e:
-            self.logger.warning(f"Erro ao preparar métricas: {e}")
-
-        return extended
-    
-    def store_experience(self, state, action, reward, next_state, done, episode_results):
-        """Armazena experiência no buffer adaptativo"""
-        if not self.enabled:
-            return False
-
-        try:
-            # Atualizar contador de episódios no buffer manager
-            self.buffer_manager.episode_count = self.episode_count
-
-            # Preparar métricas para qualidade
-            metrics = self._prepare_valence_metrics_optimized(episode_results)
-
-            # Dados da experiência
-            experience_data = {
-                "state": state,
-                "action": action, 
-                "reward": reward,
-                "next_state": next_state,
-                "done": done,
-                "metrics": metrics,
-                "group_level": self.current_group,
-                "phase_info": self._build_phase_info(
-                    self.valence_manager.get_valence_status(),
-                    self.buffer_manager.get_adaptive_status()
-                )
-            }
-
-            # Armazenar no buffer
-            success = self.buffer_manager.store_experience(experience_data)
+            left_knee = getattr(sim, "robot_left_knee_angle", 0.0)
+            right_knee = getattr(sim, "robot_right_knee_angle", 0.0)
+            left_h = getattr(sim, "robot_left_foot_height", 0.0)
+            right_h = getattr(sim, "robot_right_foot_height", 0.0)
+            left_xv = getattr(sim, "robot_left_foot_x_velocity", 0.0)
+            right_xv = getattr(sim, "robot_right_foot_x_velocity", 0.0)
+            robot_xv = getattr(sim, "robot_x_velocity", 0.0)  
+            
+            # COMPORTAMENTO ESPECÍFICO POR TERRENO
+            if current_terrain == "ramp_up":
+                # Bônus extra para progresso em subida
+                if forward_momentum > 0.1 and dist > 0.2:
+                    reward += uphill_bonus * dist * 20.0
                 
-            return success
+                # Bônus por inclinação funcional (pitch > 0.15) + impulso
+                pitch_ok = pitch > 0.15 and pitch < 0.35
+                left_push = left_contact and left_xv < robot_xv - 0.05
+                right_push = right_contact and right_xv < robot_xv - 0.05
+                if pitch_ok and (left_push or right_push):
+                    reward += 8.0 * push_phase_bonus
 
-        except Exception as e:
-            self.logger.error(f"❌ ERRO ao armazenar experiência: {e}")
-            return False
+            elif current_terrain == "ramp_down":
+                # Progresso controlado em descida (não muito rápido)
+                if forward_momentum < 0.5 and dist > 0.1:
+                    reward += dist * 25.0
+
+            elif current_terrain == "uneven":
+                # Progresso constante é mais valioso que rápido
+                if dist > 0.1 and forward_momentum < 0.8:
+                    reward += dist * 30.0
+
+            # Bônus para sequências de terrenos consecutivos
+            terrain_sequence = phase_info.get('terrain_sequence', [])
+            if len(terrain_sequence) >= 2:
+                # Bônus crescente por cada terreno completado
+                sequence_bonus = min(len(terrain_sequence) * 25.0, 150.0)
+                reward += sequence_bonus
     
-    def _generate_comprehensive_report(self):
-        """RELATÓRIO COMPLETO"""
-        try:
-            integrated_status = self.get_integrated_status()
-            buffer_status = self.buffer_manager.get_adaptive_status()
-            valence_status = self.valence_manager.get_valence_status()
+            # USA CLEARANCE_MIN DO TERRENO 
+            knee_th = 0.8
+            functional = (
+                ((not left_contact) and left_h > clearance_min and left_knee > knee_th) or
+                ((not right_contact) and right_h > clearance_min and right_knee > knee_th)
+            )
 
-            # ACESSO SEGURO aos dados do buffer
-            total_experiences = buffer_status.get('total_experiences', 0)
-            avg_quality = buffer_status.get('avg_quality', 0.0)
-            buffer_utilization = buffer_status.get('buffer_utilization', 0.0)
-            outdated_experiences = buffer_status.get('outdated_experiences', 0)
+            # Só recompensa se estável E funcional
+            if stable and functional and alternating:
+                reward += dist * 40.0  
+                reward += forward_momentum * speed_weight  
+                if dist >= 3.0:
+                    reward += 300.0  
+                elif dist >= 1.0:
+                    reward += 150.0  
+                elif dist >= 0.5:
+                    reward += 70.0
+            elif stable and alternating:
+                # Progresso básico (sem padrão ideal)
+                reward += dist * 15.0 + forward_momentum * (speed_weight * 0.3)  
+            else:
+                # Progresso instável → quase nada
+                reward += dist * 2.0 + forward_momentum * 0.5
 
-            recent_rewards = [p['reward'] for p in list(self.performance_history)[-10:]]
-            recent_distances = [p.get('distance', 0) for p in list(self.performance_history)[-10:]]
-            avg_recent_reward = np.mean(recent_rewards) if recent_rewards else 0
-            avg_recent_distance = np.mean(recent_distances) if recent_distances else 0
+            # Sobrevivência só conta se avançou >5 cm
+            if not getattr(sim, "episode_terminated", True) and dist > 0.05:
+                reward += 20.0
 
-            # CABEÇALHO E STATUS GERAL
-            self.logger.info("=" * 60)
-            self.logger.info(f"🎯 EPISÓDIO {self.episode_count} | GRUPO: {self.current_group}")
-            self.logger.info(f"📊 PROGRESSO: {integrated_status['system_integration']['overall_progress']:.1%} | "
-                            f"DISTÂNCIA: {avg_recent_distance:.3f}m")
-            self.logger.info(f"    INTEGRAÇÃO: {integrated_status['system_integration']['integration_score']:.1%} | "
-                            f"RECOMPENSA: {avg_recent_reward:.1f}")
-
-            # SISTEMA DE CRÍTICO ADAPTATIVO
-            critic_weights = self.adaptive_critic.weights.to_dict()
-            critic_total = sum(critic_weights.values())
-            critic_status = "✅" if 0.99 <= critic_total <= 1.01 else "❌"
-
-            self.logger.info(f"🧠 CRÍTICO ADAPTATIVO {critic_status}")
-            self.logger.info(f"   Propulsão: {critic_weights['propulsion']:.3f} | Estabilidade: {critic_weights['stability']:.3f}")
-            self.logger.info(f"   Coordenação: {critic_weights['coordination']:.3f} | Eficiência: {critic_weights['efficiency']:.3f}")
-
-            # SISTEMA DE VALÊNCIAS - DETALHAMENTO INTELIGENTE
-            self.logger.info("📈 SISTEMA DE VALÊNCIAS:")
-
-            for valence_name, details in valence_status["valence_details"].items():
-                state = details['state']
-                level = details['current_level']
-
-                if state != "inactive" and level > 0.01:
-                    state_icon = "🟢" if state == "learning" else "🟡" if state == "mastered" else "🔴"
-                    progress_bar = "█" * int(level * 10) + "░" * (10 - int(level * 10))
-                    self.logger.info(f"   {state_icon} {valence_name:.<25} {progress_bar} {level:.1%} ({state})")
-
-            # SISTEMA DE MULETAS ADAPTATIVAS
-            stage_names = ["MÁXIMO", "ALTO", "MÉDIO", "BAIXO", "MÍNIMO"]
-            current_stage = self.crutch_system.current_stage
-            stage_name = stage_names[current_stage] if current_stage < len(stage_names) else "CRÍTICO"
-
-            self.logger.info(f"🦯 MULETAS ADAPTATIVAS: {stage_name}")
-            self.logger.info(f"    Nível: {self.crutch_system.crutch_level:.3f} |" 
-                            f"   Multiplicador: {self.crutch_system.get_reward_multiplier():.1f}x")          
-
-            # SISTEMA DE BUFFER ADAPTATIVO
-            self.logger.info("💾 BUFFER ADAPTATIVO:")
-            self.logger.info(f"   Experiências: {total_experiences} | "
-                            f"Qualidade: {avg_quality:.3f}")
-            self.logger.info(f"   Utilização: {buffer_utilization:.1%} | "
-                            f"Desatualizadas: {outdated_experiences}")
-
-            self.logger.info("=" * 60)
+            # BÔNUS PROGRESSIVO ESPECIAL PARA LONGAS DISTÂNCIAS
+            if dist > 3.0:
+                long_distance_bonus = (dist - 3.0) * 80.0  
+                reward += long_distance_bonus
+                # Marcos significativos
+                if dist >= 5.0:
+                    reward += 200
+                if dist >= 7.0:
+                    reward += 400
+                if dist >= 8.5:
+                    reward += 800
 
         except Exception as e:
-            self.logger.error(f"❌ ERRO no relatório completo: {e}")
-            # Relatório de emergência
-            self.logger.info("=" * 60)
-            self.logger.info(f"🎯 EPISÓDIO {self.episode_count} | GRUPO: {self.current_group}")
-            self.logger.info("⚠️  Relatório parcial devido a erro")
-            self.logger.info("=" * 60)
+            self.logger.warning(f"Erro em progresso (terrain-corrected): {e}")
+        return reward
+
+    def _calculate_coordenacao(self, sim, phase_info, terrain_params) -> float:
+        """COORDENAÇÃO: força padrão de marcha funcional."""
+        reward = 0.0
+        try:
+            current_terrain = phase_info.get('current_terrain', 'normal')
+            coordination_bonus = terrain_params.coordination_bonus
+            clearance_min = terrain_params.clearance_min
+            stance_knee_lock_bonus = terrain_params.stance_knee_lock_bonus
+            adaptation_bonus = terrain_params.adaptation_bonus
+            robustness_bonus = terrain_params.robustness_bonus
+
+            # Dados essenciais
+            left_contact = getattr(sim, "robot_left_foot_contact", False)
+            right_contact = getattr(sim, "robot_right_foot_contact", False)
+            alternating = (left_contact != right_contact)
+            consecutive = getattr(sim, "consecutive_alternating_steps", 0)
+
+            left_knee = getattr(sim, "robot_left_knee_angle", 0.0)
+            right_knee = getattr(sim, "robot_right_knee_angle", 0.0)
+            left_hip_f = getattr(sim, "robot_left_hip_frontal_angle", 0.0)
+            right_hip_f = getattr(sim, "robot_right_hip_frontal_angle", 0.0)
+            left_hip_l = getattr(sim, "robot_left_hip_lateral_angle", 0.0)
+            right_hip_l = getattr(sim, "robot_right_hip_lateral_angle", 0.0)
+
+            left_h = getattr(sim, "robot_left_foot_height", 0.0)
+            right_h = getattr(sim, "robot_right_foot_height", 0.0)
+            left_xv = getattr(sim, "robot_left_foot_x_velocity", 0.0)
+            right_xv = getattr(sim, "robot_right_foot_x_velocity", 0.0)
+            robot_xv = getattr(sim, "robot_x_velocity", 0.0)
+
+            if current_terrain == "ramp_up":
+                # Bônus por travamento funcional do joelho em stance
+                left_knee_lock_ok = left_contact and abs(left_knee) < 0.2  
+                right_knee_lock_ok = right_contact and abs(right_knee) < 0.2
+                if left_knee_lock_ok or right_knee_lock_ok:
+                    reward += 6.0 * stance_knee_lock_bonus
+                if left_knee_lock_ok and right_knee_lock_ok:
+                    reward += 4.0
+        
+            # --- Base: alternância estrita ---
+            if alternating:
+                reward += coordination_bonus * 0.5  
+                if consecutive >= 5:
+                    reward += min(consecutive * 2.0, coordination_bonus * 0.5)  
+            else:
+                reward -= 12.0
+
+            # USA CLEARANCE_MIN DO TERRENO (não valor fixo)
+            left_clear = (not left_contact) and (left_h > clearance_min)
+            right_clear = (not right_contact) and (right_h > clearance_min)
+            if left_clear or right_clear:
+                reward += 6.0
+            if left_clear and right_clear:
+                reward += 4.0
+
+            # --- Flexão funcional no swing (joelho + quadril frontal) ---
+            knee_th = 0.9
+            hip_f_th = 0.6
+            left_knee_ok = (not left_contact) and (left_knee > knee_th)
+            right_knee_ok = (not right_contact) and (right_knee > knee_th)
+            left_hip_ok = (not left_contact) and (left_hip_f > hip_f_th)
+            right_hip_ok = (not right_contact) and (right_hip_f > hip_f_th)
+
+            if left_knee_ok or right_knee_ok:
+                reward += 6.0
+            if left_hip_ok or right_hip_ok:
+                reward += 5.0
+            if (left_knee_ok and left_hip_ok) or (right_knee_ok and right_hip_ok):
+                reward += 7.0  
+
+            # --- Penalização: abertura excessiva de pernas ---
+            abd_pen = 0.0
+            for hip_l in [left_hip_l, right_hip_l]:
+                if abs(hip_l) > 0.2:
+                    abd_pen += (abs(hip_l) - 0.2) * 20.0
+            reward -= abd_pen
+
+            # --- Penalização: arrasto de pé ---
+            drag_th = 0.2
+            left_drag = (not left_contact) and abs(left_xv - robot_xv) < drag_th
+            right_drag = (not right_contact) and abs(right_xv - robot_xv) < drag_th
+            if left_drag:
+                reward -= 10.0
+            if right_drag:
+                reward -= 10.0
+
+            # BÔNUS ESPECÍFICOS
+            clearance_ok = (left_h > clearance_min) or (right_h > clearance_min)
+
+            if current_terrain == "uneven" and alternating and consecutive >= 3:
+                reward += adaptation_bonus * 10.0
+
+            if current_terrain == "complex" and alternating and clearance_ok:
+                reward += robustness_bonus * 15.0
+
+        except Exception as e:
+            self.logger.warning(f"Erro em coordenação (terrain-corrected): {e}")
+
+        return reward
+
+    def _calculate_estabilidade(self, sim, phase_info, terrain_params) -> float:
+        """ESTABILIDADE: reforça postura, penaliza abertura de pernas."""
+        reward = 0.0
+        try:
+            current_terrain = phase_info.get('current_terrain', 'normal')
+            stability_weight = terrain_params.stability_weight
+
+            # ALVOS ESPECÍFICOS POR TERRENO
+            pitch_target = terrain_params.pitch_target
+            pitch = getattr(sim, "robot_pitch", 0.0)
+            pitch_error = abs(pitch - pitch_target)
+
+            roll = abs(getattr(sim, "robot_roll", 0.0))
+            com_z = getattr(sim, "robot_z_position", 0.8)
+            y_vel = abs(getattr(sim, "robot_y_velocity", 0.0))
+            left_hip_l = getattr(sim, "robot_left_hip_lateral_angle", 0.0)
+            right_hip_l = getattr(sim, "robot_right_hip_lateral_angle", 0.0)
+            left_roll = getattr(sim, "robot_left_foot_roll", 0.0)
+            right_roll = getattr(sim, "robot_right_foot_roll", 0.0)
+
+            # --- Estabilidade angular ajustada para terreno ---
+            if current_terrain == "ramp_up":
+                if 0.15 <= pitch <= 0.35:
+                    pitch_stab = 1.0
+                else:
+                    pitch_stab = max(0.0, 1.0 - abs(pitch - 0.25) / 0.2)
+            else:
+                pitch_stab = max(0.0, 1.0 - pitch_error / 0.4)            
+
+            roll_stab = max(0.0, 1.0 - roll / 0.25)
+            angular_stab = (pitch_stab + roll_stab) / 2.0
+            reward += angular_stab * 20.0
+
+            # --- Altura do COM (ajustada por terreno) ---
+            height_target = terrain_params.height_target
+            height_error = abs(com_z - height_target)
+            height_stab = max(0.0, 1.0 - height_error / 0.2)
+            reward += height_stab * 10.0
+
+            # --- Estabilidade lateral ---
+            lateral_penalty = y_vel * 20.0
+            for hip_l in [left_hip_l, right_hip_l]:
+                if abs(hip_l) > 0.15:
+                    lateral_penalty += (abs(hip_l) - 0.15) * 15.0
+            reward -= lateral_penalty
+
+            # --- Alinhamento dos pés ---
+            foot_roll_error = abs(left_roll) + abs(right_roll)
+            if foot_roll_error > 0.3:
+                reward -= foot_roll_error * 10.0
+
+            # APLICA WEIGHT DO TERRENO NO FINAL
+            reward *= stability_weight
+
+        except Exception as e:
+            self.logger.warning(f"Erro em estabilidade (terrain-corrected): {e}")
+        return reward
+
+    def _calculate_eficiencia(self, sim, phase_info, terrain_params) -> float:
+        """EFICIÊNCIA: prioriza flexão ativa, penaliza esforço em abdução."""
+        reward = 0.0
+        try:
+            current_terrain = phase_info.get('current_terrain', 'normal')
+            efficiency_weight = terrain_params.efficiency_weight
+
+            # Esforço articular 
+            effort = 0.0
+            if hasattr(sim, 'joint_velocities'):
+                effort = sum(v**2 for v in sim.joint_velocities) * 0.001
+            effort_eff = max(0.0, 1.0 - effort / 15.0)
+            reward += effort_eff * 8.0
+
+            # --- Eficiência de propulsão ---
+            left_contact = getattr(sim, "robot_left_foot_contact", False)
+            right_contact = getattr(sim, "robot_right_foot_contact", False)
+            left_xv = getattr(sim, "robot_left_foot_x_velocity", 0.0)
+            right_xv = getattr(sim, "robot_right_foot_x_velocity", 0.0)
+            robot_xv = getattr(sim, "robot_x_velocity", 0.0)
+
+            push_left = left_contact and (left_xv < robot_xv - 0.1)
+            push_right = right_contact and (right_xv < robot_xv - 0.1)
+            if push_left or push_right:
+                reward += 6.0
+            if push_left and push_right:
+                reward += 4.0
+
+            # --- Penalização: esforço em abdução ---
+            left_hip_l = getattr(sim, "robot_left_hip_lateral_angle", 0.0)
+            right_hip_l = getattr(sim, "robot_right_hip_lateral_angle", 0.0)
+            abd_effort = 0.0
+            for hip_l in [left_hip_l, right_hip_l]:
+                if abs(hip_l) > 0.15:
+                    abd_effort += abs(hip_l) * 3.0
+            reward -= abd_effort
+
+            # --- Bônus: simetria de esforço ---
+            left_knee = getattr(sim, "robot_left_knee_angle", 0.0)
+            right_knee = getattr(sim, "robot_right_knee_angle", 0.0)
+            symmetry = 1.0 - min(abs(left_knee - right_knee) / 1.0, 1.0)
+            reward += symmetry * 3.0
+
+            # APLICA WEIGHT DE EFICIÊNCIA DO TERRENO
+            reward *= efficiency_weight
+
+        except Exception as e:
+            self.logger.warning(f"Erro em eficiência (terrain-corrected): {e}")
+        return max(reward, -20.0)
+
+    def _calculate_penalidades_component(self, sim, phase_info, terrain_params) -> float:
+        """Componente de PENALIDADES: rigor físico + detecção de padrões viciados"""
+        penalties = 0.0
+        try:
+            current_terrain = phase_info.get('current_terrain', 'normal')
+            distance = getattr(sim, "episode_distance", 0.0)
+            
+            # Dados necessários para cálculos
+            left_hip_l = getattr(sim, "robot_left_hip_lateral_angle", 0.0)
+            right_hip_l = getattr(sim, "robot_right_hip_lateral_angle", 0.0)
+            left_contact = getattr(sim, "robot_left_foot_contact", False)
+            right_contact = getattr(sim, "robot_right_foot_contact", False)
+            left_xv = getattr(sim, "robot_left_foot_x_velocity", 0.0)
+            right_xv = getattr(sim, "robot_right_foot_x_velocity", 0.0)
+            robot_xv = getattr(sim, "robot_x_velocity", 0.0)
+            vel_x = getattr(sim, "robot_x_velocity", 0.0)
+
+            push_left = left_contact and (left_xv < robot_xv - 0.1)
+            push_right = right_contact and (right_xv < robot_xv - 0.1)
+        
+            roll = abs(getattr(sim, "robot_roll", 0.0))
+            pitch = getattr(sim, "robot_pitch", 0.0)
+            orientation_velocity = getattr(sim, "robot_orientation_velocity", [0,0,0])
+            yaw_vel = abs(orientation_velocity[2]) if len(orientation_velocity) > 2 else 0.0
+            ramp_up = current_terrain in ["ramp_up"]
+
+            learning_progress = phase_info.get('learning_progress', 0)
+
+            # === 1. Instabilidade angular AGRESSIVA ===
+            pitch_target = 0.2 if ramp_up else 0.0
+            pitch_err = abs(pitch - pitch_target)
+            roll_penalty = max(0.0, roll - 0.15) * 40.0
+            pitch_penalty = max(0.0, pitch_err - 0.15) * 30.0  
+            yaw_penalty = yaw_vel * 25.0
+            penalties -= (roll_penalty + pitch_penalty + yaw_penalty)
+
+            # === 2. Movimento estagnado ou para trás ===
+            episode_steps = getattr(sim, "episode_steps", 0)
+            time_step_s = getattr(sim, "time_step_s", 0.033)
+            episode_time = episode_steps * time_step_s
+            
+            if distance < 0:
+                penalties -= abs(distance) * 60.0
+            elif distance < 0.03 and episode_time > 1.5:
+                penalties -= 120.0
+
+            # === 3. Abdução excessiva + incoerência postural ===
+            abduction = max(abs(left_hip_l), abs(right_hip_l))
+            y_vel = abs(getattr(sim, "robot_y_velocity", 0.0))
+            
+            if abduction > 0.2:
+                abd_pen = (abduction - 0.2) * 25.0
+                lateral_pen = y_vel * 20.0
+                penalties -= (abd_pen + lateral_pen)
+
+            # === 4. Jerk (aceleração angular súbita) ===
+            ang_vel = getattr(sim, "robot_orientation_velocity", [0,0,0])
+            ang_speed = np.linalg.norm(ang_vel[:2])  
+            if ang_speed > 2.0:  
+                penalties -= (ang_speed - 2.0) * 15.0
+
+            # === 5. Travamento articular incoerente ===
+            lock_timers = getattr(sim, "joint_lock_timers", [])
+            if lock_timers:
+                long_locks = sum(1 for t in lock_timers if t > 10)  
+                if long_locks > 2:  
+                    penalties -= long_locks * 8.0
+
+            # === 6. Ações extremas ou oscilatórias ===
+            action = phase_info.get('action', [])
+            if action is not None and len(action) > 0:
+                action = np.asarray(action)
+                mag = np.linalg.norm(action)
+                if mag > 2.5:
+                    penalties -= (mag - 2.5) * 12.0
+                
+                # Detecta oscilação
+                if hasattr(self, '_prev_action') and self._prev_action is not None:
+                    diff = np.linalg.norm(action - self._prev_action)
+                    if diff > 3.0:  
+                        penalties -= diff * 2.0
+                self._prev_action = action.copy()
+
+            # === 7. Padrão de "pernas abertas + tronco torto" ===
+            left_foot_roll = abs(getattr(sim, "robot_left_foot_roll", 0.0))
+            right_foot_roll = abs(getattr(sim, "robot_right_foot_roll", 0.0))
+            foot_roll = left_foot_roll + right_foot_roll
+            if abduction > 0.25 and roll > 0.2 and foot_roll > 0.4:
+                penalties -= 40.0  
+
+            # === 8. Penalidade por esforço ===
+            if hasattr(sim, 'joint_velocities'):
+                effort = sum(v**2 for v in sim.joint_velocities) * 0.01
+                penalties -= effort
+
+            # === 9. Queda / término crítico ===
+            termination = getattr(sim, "episode_termination", "")
+            if termination == "fell":
+                penalties -= 300.0
+            elif termination == "yaw_deviated":
+                penalties -= 200.0
+
+            # Reduzir impacto baseado no progresso de aprendizado
+            if learning_progress < 0.4:
+                penalties *= 0.5
+            elif learning_progress < 0.6:
+                penalties *= 0.75
+            
+            # Reduzir impacto em longas distâncias
+            penalty_reduction_factor = 1.0
+            if distance > 3.0:
+                penalty_reduction_factor = max(0.4, 1.0 - (distance - 3.0) / 6.0)
+            elif distance > 1.0:
+                penalty_reduction_factor = max(0.7, 1.0 - (distance - 1.0) / 4.0)
+            penalties *= penalty_reduction_factor
+            
+        except Exception as e:
+            self.logger.warning(f"Erro em penalidades (anti-vício): {e}")
+            penalties = 0.0  
+        
+        return penalties
+
+
+class SimpleBuffer:
+    def __init__(self, capacity=5000):
+        self.capacity = capacity
+        self.buffer = deque(maxlen=capacity)
+        self.quality_threshold = 0.2
+        
+    def add(self, experience):
+        """Adiciona experiência se atender qualidade mínima"""
+        if experience.quality >= self.quality_threshold:
+            self.buffer.append(experience)
+            return True
+        return False
+    
+    def sample(self, batch_size: int) -> List[Experience]:
+        """Amostragem balanceada: 70% aleatória, 30% de alta qualidade"""
+        if len(self.buffer) <= batch_size:
+            return list(self.buffer)
+            
+        # Separa experiências por qualidade
+        high_quality = [exp for exp in self.buffer if exp.quality > 0.5]
+        regular = [exp for exp in self.buffer if exp.quality <= 0.5]
+        
+        # Calcula quantidades
+        high_quality_count = min(int(batch_size * 0.3), len(high_quality))
+        regular_count = batch_size - high_quality_count
+        
+        # Amostra
+        samples = []
+        if high_quality_count > 0:
+            samples.extend(random.sample(high_quality, high_quality_count))
+        if regular_count > 0:
+            samples.extend(random.sample(regular, regular_count))
+            
+        return samples
+    
+    def __len__(self):
+        return len(self.buffer)
