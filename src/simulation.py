@@ -180,7 +180,7 @@ class Simulation(gym.Env):
     def pre_fill_buffer(self):
         dpg_enabled = False
         if hasattr(self.reward_system, "dpg_manager") and self.reward_system.dpg_manager:
-            dpg_enabled = getattr(self.reward_system.dpg_manager, 'enabled', False)
+            dpg_enabled = getattr(self.reward_system.dpg_manager, "enabled", False)
         if dpg_enabled:
             return
 
@@ -206,7 +206,7 @@ class Simulation(gym.Env):
                 obs = next_obs
 
         if hasattr(self.reward_system, "dpg_manager") and self.reward_system.dpg_manager:
-            dpg_enabled = getattr(self.reward_system.dpg_manager, 'enabled', False)
+            dpg_enabled = getattr(self.reward_system.dpg_manager, "enabled", False)
 
         self.episode_timeout_s = self.episode_training_timeout_s
         self.max_steps = self.max_training_steps
@@ -273,7 +273,6 @@ class Simulation(gym.Env):
         self.robot_x_sum_velocity = 0
         self.robot_y_sum_velocity = 0
         self.robot_z_sum_velocity = 0
-        self.episode_environment = self.environment.env_list[self.environment.selected_env_index] if self.environment.name == "todos_alternados" else self.environment.name
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -378,7 +377,7 @@ class Simulation(gym.Env):
             "roll_vel": self.robot_roll_vel,
             "pitch_vel": self.robot_pitch_vel,
             "yaw_vel": self.robot_yaw_vel,
-            "episode_environment": self.episode_environment,
+            "episode_environments": self.environment.env_list[self.environment.selected_env_index],
         }
 
         if evaluation:
@@ -594,7 +593,7 @@ class Simulation(gym.Env):
                 dpg_manager = self.reward_system.dpg_manager
                 if dpg_manager.enabled and not evaluation:
                     # Usar apenas o terreno atual sem sequência adaptativa
-                    current_terrain = self.episode_environment
+                    current_terrain = self.environment.env_list[self.environment.selected_env_index]
                     dpg_manager.set_current_terrain(current_terrain)
 
                     try:
@@ -616,14 +615,7 @@ class Simulation(gym.Env):
                         }
 
                         # Armazena experiência
-                        storage_success = dpg_manager.store_experience(
-                            state=current_obs, 
-                            action=action,
-                            reward=reward,
-                            next_state=next_obs,  
-                            done=self.episode_done,
-                            episode_results=step_metrics
-                        )
+                        storage_success = dpg_manager.store_experience(state=current_obs, action=action, reward=reward, next_state=next_obs, done=self.episode_done, episode_results=step_metrics)
 
                         # Atualiza a progressão de fase do DPG
                         dpg_manager.update_phase_progression(step_metrics)

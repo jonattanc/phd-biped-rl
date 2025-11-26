@@ -970,10 +970,6 @@ class TrainingTab(common_tab.GUITab):
                             self.episode_data["roll_vel_deg"].append(math.degrees(msg.get("roll_vel", 0)))
                             self.episode_data["pitch_vel_deg"].append(math.degrees(msg.get("pitch_vel", 0)))
                             self.episode_data["yaw_vel_deg"].append(math.degrees(msg.get("yaw_vel", 0)))
-                            episode_env = msg.get("episode_environment", "unknown")
-                            if "episode_environments" not in self.episode_data:
-                                self.episode_data["episode_environments"] = []
-                            self.episode_data["episode_environments"].append(episode_env)
                             self.update_filtered_data()
 
                         self.new_plot_data = True
