@@ -79,8 +79,10 @@ def process_runner(
             dpg_manager.min_buffer_size = 200
             dpg_manager.training_interval = 5
             dpg_manager.buffer.capacity = 10000
+            reward_system.dpg_manager = dpg_manager
             logger.info("Sistema DPG configurado e ativado")
         else:
+            dpg_manager = None
             logger.info("Usando sistema de recompensa padrão (sem DPG)")
 
         agent = Agent(logger, env=sim, model_path=model_path, algorithm=algorithm, device=device, initial_episode=initial_episode, seed=seed)

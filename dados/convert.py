@@ -7,7 +7,7 @@ from datetime import datetime
 def formatar_numero_string(valor):
     """Formata números como string com exatamente 3 casas decimais"""
     if isinstance(valor, (int, float)):
-        return f"{valor:.3f}"  # SEMPRE retorna string com 3 casas
+        return f"{valor:.3f}"
     return str(valor)
 
 def formatar_numero_float(valor):
@@ -37,7 +37,7 @@ def calcular_estatisticas_completas(episode_data, tracker_status):
     # Encontrar primeiro sucesso (>9m)
     primeiro_episodio_sucesso = None
     soma_passos_ate_primeiro_sucesso = 0
-    tempo_primeiro_sucesso = None
+    tempo_acumulado_ate_primeiro_sucesso = 0 
     
     # Encontrar episódio mais rápido >9m
     episodio_mais_rapido_9m = None
@@ -48,17 +48,20 @@ def calcular_estatisticas_completas(episode_data, tracker_status):
     melhor_recompensa = tracker_status.get('best_reward', max(recompensas) if recompensas else 0)
     
     passos_acumulados = 0
+    tempo_acumulado = 0  
     encontrou_primeiro_sucesso = False
     passos_ate_ultimo_salvamento = 0
+    tempo_ate_ultimo_salvamento = 0  
     
-    for i, (distancia, sucesso) in enumerate(zip(distancias, sucessos_int)):
+    for i, (distancia, sucesso, tempo_episodio) in enumerate(zip(distancias, sucessos_int, tempos)):
         passos_acumulados += passos[i]
+        tempo_acumulado += tempo_episodio  
         
         # Primeiro sucesso
         if not encontrou_primeiro_sucesso and sucesso == 1:
             primeiro_episodio_sucesso = episodios[i]
             soma_passos_ate_primeiro_sucesso = passos_acumulados
-            tempo_primeiro_sucesso = tempos[i]
+            tempo_acumulado_ate_primeiro_sucesso = tempo_acumulado  
             encontrou_primeiro_sucesso = True
         
         # Episódio mais rápido >9m
@@ -66,9 +69,10 @@ def calcular_estatisticas_completas(episode_data, tracker_status):
             episodio_mais_rapido_9m = episodios[i]
             tempo_minimo_9m = tempos[i]
         
-        # Passos até último salvamento
+        # Passos e tempo até último salvamento
         if episodios[i] <= episodio_ultimo_salvamento:
             passos_ate_ultimo_salvamento = passos_acumulados
+            tempo_ate_ultimo_salvamento = tempo_acumulado
     
     # Calcular sucessos após primeiro sucesso
     if primeiro_episodio_sucesso:
@@ -83,8 +87,10 @@ def calcular_estatisticas_completas(episode_data, tracker_status):
     # Passos de aprendizagem residual
     if primeiro_episodio_sucesso:
         passos_residual = passos_ate_ultimo_salvamento - soma_passos_ate_primeiro_sucesso
+        tempo_residual = tempo_ate_ultimo_salvamento - tempo_acumulado_ate_primeiro_sucesso  # NOVO: tempo residual
     else:
         passos_residual = 0
+        tempo_residual = 0
     
     estatisticas = {
         # Métricas básicas
@@ -104,7 +110,8 @@ def calcular_estatisticas_completas(episode_data, tracker_status):
         # Primeiro sucesso
         'primeiro_episodio_sucesso': primeiro_episodio_sucesso,
         'soma_passos_ate_primeiro_sucesso': soma_passos_ate_primeiro_sucesso,
-        'tempo_primeiro_sucesso': formatar_numero_float(tempo_primeiro_sucesso) if tempo_primeiro_sucesso else None,
+        'tempo_primeiro_sucesso_episodio': formatar_numero_float(tempos[episodios.index(primeiro_episodio_sucesso)]) if primeiro_episodio_sucesso else None,  # Tempo do episódio
+        'tempo_treinamento_ate_primeiro_sucesso': formatar_numero_float(tempo_acumulado_ate_primeiro_sucesso) if primeiro_episodio_sucesso else None,  # Tempo TOTAL de treinamento
         
         # Performance >9m
         'episodio_mais_rapido_9m': episodio_mais_rapido_9m,
@@ -113,8 +120,9 @@ def calcular_estatisticas_completas(episode_data, tracker_status):
         # Evolução do aprendizado
         'percentual_sucessos_apos_primeiro': formatar_numero_float(percentual_sucessos_apos_primeiro),
         'passos_ate_ultimo_salvamento': passos_ate_ultimo_salvamento,
-        'tempo_ate_9m': formatar_numero_float(tempo_primeiro_sucesso) if tempo_primeiro_sucesso else None,
+        'tempo_ate_ultimo_salvamento': formatar_numero_float(tempo_ate_ultimo_salvamento),
         'passos_aprendizagem_residual': passos_residual,
+        'tempo_aprendizagem_residual': formatar_numero_float(tempo_residual),  
         
         # Informações do tracker
         'episodio_ultimo_salvamento': episodio_ultimo_salvamento,

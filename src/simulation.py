@@ -529,11 +529,15 @@ class Simulation(gym.Env):
         self.episode_done = self.episode_truncated or self.episode_terminated
 
         # Calcular recompensa
-        reward = self.reward_system.calculate_reward(self, action)
+        if hasattr(self.reward_system, 'dpg_manager') and self.reward_system.dpg_manager and self.reward_system.dpg_manager.enabled and not evaluation:
+            reward = self.reward_system.dpg_manager.calculate_reward(self, action)
+        else:
+            reward = self.reward_system.calculate_reward(self, action)
+            
         self.episode_reward += reward
         self.episode_filtered_reward = 0.1 * self.episode_reward + 0.9 * self.episode_filtered_reward
 
-        if self.config_changed_value.value:  # Se houve mudança de configuração
+        if self.config_changed_value.value:  
             if self.pause_value.value:
                 self.ipc_queue.put({"type": "tracker_status", "tracker_status": self.tracker.get_status()})
 
@@ -614,8 +618,15 @@ class Simulation(gym.Env):
                             "propulsion_efficiency": self.robot.get_propulsion_efficiency(),
                         }
 
-                        # Armazena experiência
-                        storage_success = dpg_manager.store_experience(state=current_obs, action=action, reward=reward, next_state=next_obs, done=self.episode_done, episode_results=step_metrics)
+                        # Armazena experiência (agora a recompensa já foi calculada usando o RewardSystem)
+                        storage_success = dpg_manager.store_experience(
+                            state=current_obs, 
+                            action=action, 
+                            reward=reward,  
+                            next_state=next_obs, 
+                            done=self.episode_done, 
+                            episode_results=step_metrics
+                        )
 
                         # Atualiza a progressão de fase do DPG
                         dpg_manager.update_phase_progression(step_metrics)
