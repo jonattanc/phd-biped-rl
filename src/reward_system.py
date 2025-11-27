@@ -25,42 +25,11 @@ class RewardSystem:
         self.logger = logger
         self.components = {}
 
-        # DPG
-        self.dpg_manager = None
-        self.phase_detector = None
-        self.gait_phase_dpg = None
-        self.dpg_enabled = False
-
         self.safe_zone = 0.2  # m
         self.warning_zone = 0.4  # m
 
         self.load_configuration_file("default.json", is_default_file=True)
         self.default_components = self.get_configuration_as_dict()
-
-    def set_phase_detector(self, phase_detector):
-        """Configura o detector de fases (para compatibilidade com DPG)"""
-        self.phase_detector = phase_detector
-
-    def set_dpg_manager(self, dpg_manager):
-        """Configura o gerenciador DPG (opcional)"""
-        self.dpg_manager = dpg_manager
-
-    def enable_dpg_progression(self, enabled=True):
-        """Ativa/desativa progressão por fases para DPG"""
-        self.dpg_enabled = enabled
-        if enabled:
-            if not hasattr(self, "gait_phase_dpg"):
-                from dpg_valence import GaitPhaseDPG
-
-                self.gait_phase_dpg = GaitPhaseDPG(self.logger, self)
-
-            self.gait_phase_dpg._apply_phase_config()  # Aplicar configuração inicial
-            self.logger.info("DPG com Fases da Marcha ativado")
-
-            if hasattr(self, "phase_detector") and self.phase_detector:
-                self.logger.info("Detector de fases da marcha inicializado")
-        else:
-            self.logger.info("Sistema de recompensa padrão")
 
     def is_component_enabled(self, name):
         if name not in self.components:
@@ -68,14 +37,7 @@ class RewardSystem:
         return self.components[name].enabled
 
     def calculate_reward(self, sim, action):
-        """Método principal - escolhe entre DPG progressivo ou padrão"""
-        if hasattr(self, "dpg_manager") and self.dpg_manager and getattr(self.dpg_manager, 'enabled', False):
-            return self.dpg_manager.calculate_reward(sim, action)
-        else:
-            return self.calculate_standard_reward(sim, action)
-
-    def calculate_standard_reward(self, sim, action):
-        """Calcula recompensa padrão (sem DPG)"""
+        """Calcula recompensa padrão"""
 
         # Resetar valores dos componentes
         for component in self.components.values():

@@ -62,6 +62,16 @@ class DPGManager:
 
         # Fatores de ajuste por terreno (multiplicadores dos pesos base)
         self.terrain_factors = self._initialize_terrain_factors()
+        
+        # NOVO: Armazenar pesos base originais para evitar overflow
+        self.base_weights = self._capture_base_weights()
+
+    def _capture_base_weights(self):
+        """Captura os pesos base originais do reward system"""
+        base_weights = {}
+        for name, component in self.reward_system.components.items():
+            base_weights[name] = component.weight
+        return base_weights
 
     def _initialize_terrain_factors(self):
         """Fatores multiplicativos para cada tipo de terreno"""
@@ -93,85 +103,85 @@ class DPGManager:
     def _get_pba_factors(self):
         """Gelo - FOCO MÁXIMO EM ESTABILIDADE"""
         return {
-            "progress": 0.4,           # Reduz progresso
-            "stability_pitch": 2.0,    # Dobra ênfase na estabilidade
-            "stability_roll": 3.0,     # Triplica estabilidade lateral
-            "alternating_foot_contact": 3.0,  # Tripla importância
-            "foot_clearance": 0.5,     # Reduz clearance
-            "gait_rhythm": 0.5,        # Ritmo mais conservador
-            "gait_state_change": 1.4,  # 40% mais adaptação
-            "fall_penalty": 1.4,       # 40% mais penalidade
-            "yaw_penalty": 1.2,        # 20% mais penalidade
-            "foot_back_penalty": 2.0,  # Dobra penalidade
-            "effort_square_penalty": 2.0,  # Dobra penalidade de esforço
+            "progress": 0.6,           # Reduz progresso (aumentado de 0.4)
+            "stability_pitch": 1.5,    # Reduzido de 2.0 para evitar overflow
+            "stability_roll": 1.8,     # Reduzido de 3.0 para evitar overflow
+            "alternating_foot_contact": 1.5,  # Reduzido de 3.0
+            "foot_clearance": 0.8,     # Aumentado de 0.5
+            "gait_rhythm": 0.8,        # Aumentado de 0.5
+            "gait_state_change": 1.2,  # Reduzido de 1.4
+            "fall_penalty": 1.2,       # Reduzido de 1.4
+            "yaw_penalty": 1.1,        # Reduzido de 1.2
+            "foot_back_penalty": 1.5,  # Reduzido de 2.0
+            "effort_square_penalty": 1.5,  # Reduzido de 2.0
         }
 
     def _get_pg_factors(self):
         """Areia - FOCO EM IMPULSO E CLEARANCE"""
         return {
-            "progress": 0.8,           # Progresso moderado
-            "stability_pitch": 0.8,    # Estabilidade reduzida
+            "progress": 1.0,           # Aumentado de 0.8
+            "stability_pitch": 1.0,    # Aumentado de 0.8
             "stability_roll": 1.0,     # Estabilidade normal
             "alternating_foot_contact": 1.0,  # Normal
-            "foot_clearance": 3.0,     # TRIPLA importância do clearance
-            "gait_rhythm": 1.5,        # 50% mais ritmo
-            "gait_state_change": 0.8,  # 20% menos adaptação
-            "fall_penalty": 0.9,       # 10% menos penalidade
-            "yaw_penalty": 0.8,        # 20% menos penalidade
-            "foot_back_penalty": 0.8,  # 20% menos penalidade
-            "effort_square_penalty": 0.5,  # 50% menos penalidade de esforço
+            "foot_clearance": 2.0,     # REDUZIDO de 3.0 para evitar overflow
+            "gait_rhythm": 1.2,        # Reduzido de 1.5
+            "gait_state_change": 1.0,  # Aumentado de 0.8
+            "fall_penalty": 1.0,       # Aumentado de 0.9
+            "yaw_penalty": 1.0,        # Aumentado de 0.8
+            "foot_back_penalty": 1.0,  # Aumentado de 0.8
+            "effort_square_penalty": 0.8,  # Aumentado de 0.5
         }
 
     def _get_prb_factors(self):
         """Bloqueios articulares - FOCO EM ROBUSTEZ"""
         return {
-            "progress": 0.6,           # Progresso conservador
-            "stability_pitch": 1.25,   # 25% mais estabilidade
-            "stability_roll": 2.0,     # Dobra estabilidade lateral
-            "alternating_foot_contact": 2.0,  # Dobra importância
+            "progress": 0.8,           # Aumentado de 0.6
+            "stability_pitch": 1.1,    # Reduzido de 1.25
+            "stability_roll": 1.3,     # Reduzido de 2.0
+            "alternating_foot_contact": 1.2,  # Reduzido de 2.0
             "foot_clearance": 1.0,     # Normal
-            "gait_rhythm": 1.25,       # 25% mais ritmo
-            "gait_state_change": 1.6,  # 60% mais adaptação
-            "fall_penalty": 1.15,      # 15% mais penalidade
+            "gait_rhythm": 1.1,        # Reduzido de 1.25
+            "gait_state_change": 1.2,  # Reduzido de 1.6
+            "fall_penalty": 1.05,      # Reduzido de 1.15
             "yaw_penalty": 1.0,        # Normal
-            "foot_back_penalty": 1.2,  # 20% mais penalidade
+            "foot_back_penalty": 1.1,  # Reduzido de 1.2
             "effort_square_penalty": 1.0,  # Normal
         }
 
     def _get_prd_factors(self):
         """Rampa descendente - FOCO EM CONTROLE"""
         return {
-            "progress": 0.5,           # Metade do progresso
-            "stability_pitch": 2.5,    # 2.5x mais estabilidade
-            "stability_roll": 3.0,     # Triplica estabilidade lateral
-            "alternating_foot_contact": 2.0,  # Dobra importância
-            "foot_clearance": 0.8,     # 20% menos clearance
-            "gait_rhythm": 0.75,       # 25% menos ritmo
-            "gait_state_change": 1.2,  # 20% mais adaptação
-            "fall_penalty": 1.7,       # 70% mais penalidade
-            "yaw_penalty": 1.4,        # 40% mais penalidade
-            "foot_back_penalty": 2.5,  # 2.5x mais penalidade
-            "effort_square_penalty": 1.5,  # 50% mais penalidade
+            "progress": 0.7,           # Aumentado de 0.5
+            "stability_pitch": 1.3,    # Reduzido de 2.5
+            "stability_roll": 1.5,     # Reduzido de 3.0
+            "alternating_foot_contact": 1.3,  # Reduzido de 2.0
+            "foot_clearance": 1.0,     # Aumentado de 0.8
+            "gait_rhythm": 1.0,        # Aumentado de 0.75
+            "gait_state_change": 1.1,  # Reduzido de 1.2
+            "fall_penalty": 1.3,       # Reduzido de 1.7
+            "yaw_penalty": 1.2,        # Reduzido de 1.4
+            "foot_back_penalty": 1.3,  # Reduzido de 2.5
+            "effort_square_penalty": 1.2,  # Reduzido de 1.5
         }
 
     def _get_pra_factors(self):
         """Rampa ascendente - FOCO EM PROPULSÃO"""
         return {
-            "progress": 1.2,           # 20% mais progresso
-            "stability_pitch": 1.5,    # 50% mais estabilidade
-            "stability_roll": 2.0,     # Dobra estabilidade lateral
+            "progress": 1.1,           # Reduzido de 1.2
+            "stability_pitch": 1.2,    # Reduzido de 1.5
+            "stability_roll": 1.3,     # Reduzido de 2.0
             "alternating_foot_contact": 1.0,  # Normal
-            "foot_clearance": 1.5,     # 50% mais clearance
-            "gait_rhythm": 1.75,       # 75% mais ritmo
+            "foot_clearance": 1.2,     # Reduzido de 1.5
+            "gait_rhythm": 1.3,        # Reduzido de 1.75
             "gait_state_change": 1.0,  # Normal
-            "fall_penalty": 1.15,      # 15% mais penalidade
+            "fall_penalty": 1.05,      # Reduzido de 1.15
             "yaw_penalty": 1.0,        # Normal
-            "foot_back_penalty": 1.5,  # 50% mais penalidade
-            "effort_square_penalty": 0.8,  # 20% menos penalidade
+            "foot_back_penalty": 1.2,  # Reduzido de 1.5
+            "effort_square_penalty": 1.0,  # Aumentado de 0.8
         }
 
     def _apply_terrain_weights(self, sim):
-        """Aplica fatores multiplicativos aos pesos base do default.json"""
+        """Aplica fatores multiplicativos aos pesos base - COM PROTEÇÃO CONTRA OVERFLOW"""
         if not self.enabled:
             return
 
@@ -185,34 +195,41 @@ class DPGManager:
         # Ajustar fatores baseado na fase atual
         phase_adjustment = self._get_phase_adjustment()
         
+        # NOVO: Limitar learning_rate_factor para evitar crescimento exponencial
+        self.learning_rate_factor = np.clip(self.learning_rate_factor, 0.1, 3.0)
+        
         # Aplicar fatores a cada componente habilitado
         for component_name, component in self.reward_system.components.items():
             if component.enabled and component_name in terrain_factors:
                 # Obter fator do terreno para este componente
                 terrain_factor = terrain_factors[component_name]
                 
-                # Calcular peso ajustado: peso_base * fator_terreno * fator_fase * fator_aprendizado
-                base_weight = self._get_base_weight(component_name)
+                # NOVO: Usar peso base capturado inicialmente em vez do atual
+                base_weight = self.base_weights.get(component_name, component.weight)
+                
+                # Calcular peso ajustado com limites
                 adjusted_weight = base_weight * terrain_factor * phase_adjustment * self.learning_rate_factor
+                
+                # NOVO: Limitar pesos para evitar overflow
+                max_weight = 100.0  # Limite máximo absoluto
+                adjusted_weight = np.clip(adjusted_weight, -max_weight, max_weight)
                 
                 # Aplicar o peso ajustado
                 component.weight = adjusted_weight
 
     def _get_base_weight(self, component_name):
         """Retorna o peso base do componente do default.json"""
-        if component_name in self.reward_system.components:
-            # Retorna o peso original do default.json (sem ajustes anteriores)
-            return self.reward_system.components[component_name].weight
-        return 0.0
+        # NOVO: Usar base_weights em vez do peso atual
+        return self.base_weights.get(component_name, 0.0)
 
     def _get_phase_adjustment(self):
         """Retorna fator de ajuste baseado na fase atual"""
         if self.current_phase == 1:  # Estabilidade
-            return 0.8
+            return 0.9  # Aumentado de 0.8
         elif self.current_phase == 2:  # Progresso
-            return 1.2
+            return 1.1  # Reduzido de 1.2
         else:  # Otimização (fase 3)
-            return 1.5
+            return 1.3  # Reduzido de 1.5
 
     def _update_phase_progression(self, episode_results):
         """Atualiza fase baseada no desempenho"""
@@ -223,21 +240,19 @@ class DPGManager:
         # Critérios de progressão de fase
         if self.current_phase == 1 and distance > 3.0 and stability > 0.7:
             self.current_phase = 2
-            self.logger.info("🎯 DPG: Transição para Fase 2 - Progresso")
             
         elif self.current_phase == 2 and distance > 6.0 and stability > 0.8:
             self.current_phase = 3  
-            self.logger.info("🚀 DPG: Transição para Fase 3 - Otimização")
 
     def calculate_reward(self, sim, action) -> float:
         if not self.enabled:
-            return self.reward_system.calculate_standard_reward(sim, action)
+            return self.reward_system.calculate_reward(sim, action)
             
         # Aplica fatores específicos do terreno e fase
         self._apply_terrain_weights(sim)
         
         # Usa o cálculo padrão do RewardSystem com pesos ajustados
-        reward = self.reward_system.calculate_standard_reward(sim, action)
+        reward = self.reward_system.calculate_reward(sim, action)
         self.performance_history.append(reward)
         
         return reward
@@ -268,7 +283,7 @@ class DPGManager:
             return False
 
     def update_phase_progression(self, episode_results):
-        """Progressão inteligente por fase e terreno"""
+        """Progressão inteligente por fase e terreno - COM PROTEÇÃO CONTRA OVERFLOW"""
         self.episode_count += 1
         
         distance = max(episode_results.get("distance", 0), 0)
@@ -282,11 +297,11 @@ class DPGManager:
         terrain_factor = self._get_terrain_learning_factor()
         performance = (min(distance / 9.0, 1.0) * 0.6 + stability * 0.4)
         
-        # Ajustar taxa de aprendizado baseado no desempenho
+        # NOVO: Ajuste mais conservador da taxa de aprendizado
         if performance > 0.6:  
-            self.learning_rate_factor = min(1.8, self.learning_rate_factor + 0.05 * terrain_factor)
+            self.learning_rate_factor = min(2.0, self.learning_rate_factor + 0.02 * terrain_factor)  # Reduzido de 0.05
         else: 
-            self.learning_rate_factor = max(0.3, self.learning_rate_factor - 0.02 * terrain_factor)
+            self.learning_rate_factor = max(0.5, self.learning_rate_factor - 0.01 * terrain_factor)  # Aumentado de 0.3
          
         if self.episode_count % 500 == 0:
             self._generate_comprehensive_report()
@@ -299,11 +314,11 @@ class DPGManager:
         """Fator de dificuldade por terreno"""
         terrain_difficulty = {
             "PR": 1.0,   # Normal
-            "PBA": 0.6,  # Gelo - mais difícil, aprendizado mais lento
-            "PG": 0.8,   # Areia - moderadamente difícil
-            "PRB": 0.7,  # Bloqueios - difícil
-            "PRD": 0.5,  # Rampa desc - muito difícil
-            "PRA": 0.9,  # Rampa asc - moderado
+            "PBA": 0.8,  # Aumentado de 0.6
+            "PG": 0.9,   # Aumentado de 0.8
+            "PRB": 0.85, # Aumentado de 0.7
+            "PRD": 0.7,  # Aumentado de 0.5
+            "PRA": 0.95, # Aumentado de 0.9
         }
         return terrain_difficulty.get(self.current_terrain, 1.0)
     

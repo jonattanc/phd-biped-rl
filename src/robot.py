@@ -587,7 +587,7 @@ class Robot:
             # Ações mais conservadoras para evitar overflow
             f = 0.5  # Frequência reduzida
             w = 2 * np.pi * f
-
+            
             # PERNA DIREITA (6 juntas) - Amplitudes reduzidas
             hip_right_flexion = -0.2 * np.sin(w * t)  # Flexão/extensão quadril
             hip_right_abduction = 0.08 * np.sin(w * t + 0.5 * np.pi)  # Abdução/adução
@@ -595,7 +595,7 @@ class Robot:
             knee_right = 0.3 * np.sin(w * t + 0.3 * np.pi)  # Flexão joelho
             ankle_right_flexion = -0.15 * np.sin(w * t + 0.6 * np.pi)  # Dorsiflexão/flexão plantar
             ankle_right_inversion = 0.04 * np.sin(w * t + 0.8 * np.pi)  # Inversão/eversão
-
+            
             # PERNA ESQUERDA (6 juntas) - Fase oposta
             hip_left_flexion = -0.2 * np.sin(w * t + np.pi)
             hip_left_abduction = 0.08 * np.sin(w * t + 1.5 * np.pi)
@@ -603,11 +603,11 @@ class Robot:
             knee_left = 0.3 * np.sin(w * t + 1.3 * np.pi)
             ankle_left_flexion = -0.15 * np.sin(w * t + 1.6 * np.pi)
             ankle_left_inversion = 0.04 * np.sin(w * t + 1.8 * np.pi)
-
+            
             # OMBROS (1 junta cada) - Movimento frontal apenas
             shoulder_right = 0.15 * np.sin(w * t + 0.5 * np.pi)  # Balanço frontal
             shoulder_left = 0.15 * np.sin(w * t + 1.5 * np.pi)  # Fase oposta
-
+            
             action_list = [
                 # Pernas direita (6 juntas)
                 hip_right_flexion, hip_right_abduction, hip_right_rotation,
@@ -618,6 +618,10 @@ class Robot:
                 # Ombros (2 juntas)
                 shoulder_right, shoulder_left
             ]
+        
+            # Noise reduzido
+            noise_amplitude = 0.05 
+            action_list = [a + np.random.uniform(-noise_amplitude, noise_amplitude) for a in action_list]
 
         else:
             raise ValueError(f"Número de juntas não suportado para ação de exemplo: {num_joints}")
@@ -627,12 +631,3 @@ class Robot:
         action_list = [a + np.random.uniform(-noise_amplitude, noise_amplitude) for a in action_list]
 
         return np.array(action_list, dtype=np.float32)
-    
-    def normalize_observation(self, obs):
-        """Normaliza a observação para evitar overflow"""
-        obs = np.array(obs, dtype=np.float32)
-        # Limita valores extremos
-        obs = np.clip(obs, -100, 100)
-        # Substitui NaN por zero
-        obs = np.nan_to_num(obs, nan=0.0, posinf=0.0, neginf=0.0)
-        return obs
