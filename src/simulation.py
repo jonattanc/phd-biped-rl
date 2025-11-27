@@ -28,6 +28,7 @@ class Simulation(gym.Env):
         config_changed_value,
         num_episodes=1,
         initial_episode=0,
+        enable_dpg=False,
     ):
         super(Simulation, self).__init__()
 
@@ -69,14 +70,25 @@ class Simulation(gym.Env):
         self.physics_step_s = 1 / 240.0  # 240 Hz, ~4.16 ms
         self.physics_step_multiplier = 8
         self.time_step_s = self.physics_step_s * self.physics_step_multiplier  # 240/5 = 48 Hz, ~20.83 ms # 240/8 = 30 Hz, ~33.33 ms # 240/10 = 24 Hz, ~41.66 ms
-        self.max_motor_velocity = 0.8  # Reduzido de 1.5 rad/s
-        self.max_motor_torque = 80.0   # Reduzido de 130.0 Nm
         self.max_training_steps = int(self.episode_training_timeout_s / self.time_step_s)
         self.max_pre_fill_steps = int(self.episode_pre_fill_timeout_s / self.time_step_s)
         self.max_steps = self.max_training_steps
         self.lock_per_second = 0.5  # lock/s
         self.lock_time = 0.5  # s
-        self.action_noise_std = 1e-4   # Reduzido de 1e-3
+
+        if enable_dpg:
+            self.max_motor_velocity = 0.8  # rad/s
+            self.max_motor_torque = 80.0  # Nm
+            self.action_noise_std = 1e-4
+            self.action_clip_range = 0.3
+            self.position_gains = 0.3
+
+        else:
+            self.max_motor_velocity = 1.5  # rad/s
+            self.max_motor_torque = 130.0  # Nm
+            self.action_noise_std = 1e-3
+            self.action_clip_range = 1.0
+            self.position_gains = 0.5
 
         # Configurar ambiente de simulação PRIMEIRO
         self.setup_sim_env()
@@ -403,7 +415,7 @@ class Simulation(gym.Env):
 
     def apply_action(self, action):
         noise = np.random.normal(0, self.action_noise_std, size=action.shape)
-        action = np.clip(action + noise, -0.5, 0.5) # Range reduzido
+        action = np.clip(action + noise, -self.action_clip_range, self.action_clip_range)
 
         joint_positions, joint_velocities = self.robot.get_joint_states()
 
@@ -429,7 +441,7 @@ class Simulation(gym.Env):
             controlMode=p.POSITION_CONTROL,
             targetPositions=self.target_positions,
             forces=forces,
-            positionGains=[0.3] * self.action_dim, # Gains reduzidos
+            positionGains=[self.position_gains] * self.action_dim,
         )
 
     def step(self, action, evaluation=False):
@@ -529,15 +541,15 @@ class Simulation(gym.Env):
         self.episode_done = self.episode_truncated or self.episode_terminated
 
         # Calcular recompensa
-        if hasattr(self.reward_system, 'dpg_manager') and self.reward_system.dpg_manager and self.reward_system.dpg_manager.enabled and not evaluation:
+        if hasattr(self.reward_system, "dpg_manager") and self.reward_system.dpg_manager and self.reward_system.dpg_manager.enabled and not evaluation:
             reward = self.reward_system.dpg_manager.calculate_reward(self, action)
         else:
             reward = self.reward_system.calculate_reward(self, action)
-            
+
         self.episode_reward += reward
         self.episode_filtered_reward = 0.1 * self.episode_reward + 0.9 * self.episode_filtered_reward
 
-        if self.config_changed_value.value:  
+        if self.config_changed_value.value:
             if self.pause_value.value:
                 self.ipc_queue.put({"type": "tracker_status", "tracker_status": self.tracker.get_status()})
 
@@ -619,14 +631,7 @@ class Simulation(gym.Env):
                         }
 
                         # Armazena experiência (agora a recompensa já foi calculada usando o RewardSystem)
-                        storage_success = dpg_manager.store_experience(
-                            state=current_obs, 
-                            action=action, 
-                            reward=reward,  
-                            next_state=next_obs, 
-                            done=self.episode_done, 
-                            episode_results=step_metrics
-                        )
+                        storage_success = dpg_manager.store_experience(state=current_obs, action=action, reward=reward, next_state=next_obs, done=self.episode_done, episode_results=step_metrics)
 
                         # Atualiza a progressão de fase do DPG
                         dpg_manager.update_phase_progression(step_metrics)

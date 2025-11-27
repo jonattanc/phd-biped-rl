@@ -68,11 +68,12 @@ def process_runner(
             camera_selection_value,
             config_changed_value,
             initial_episode=initial_episode,
+            enable_dpg=enable_dpg,
         )
 
         if enable_dpg:
             dpg_manager = DPGManager(logger, robot, reward_system)
-            dpg_manager.enable=True
+            dpg_manager.enable = True
             dpg_manager.learning_enabled = True
 
             # Configurações otimizadas para aprendizado
@@ -141,15 +142,14 @@ def process_runner(
                             dpg_manager.on_training_completed(sim.episode_count)
                     except Exception as e:
                         logger.error(f"❌ Erro no treinamento DPG: {e}")
-                
+
                 # Treinamento normal do agente
-                agent.model.learn(total_timesteps=timesteps_batch_size, 
-                                reset_num_timesteps=False, callback=callback)
+                agent.model.learn(total_timesteps=timesteps_batch_size, reset_num_timesteps=False, callback=callback)
 
                 # Enviar progresso para GUI
                 if timesteps_completed % 10000 == 0:
                     logger.info(f"Progresso: {timesteps_completed} timesteps com aprendizagem")
-                    
+
                     # Status do DPG
                     if enable_dpg:
                         dpg_status = dpg_manager.get_integrated_status()
