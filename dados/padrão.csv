@@ -6,7 +6,7 @@
 # Environment: todos_alternados
 # Data: 2025-11-27T00:55:09.220705
 ##################################################
-# QUADRO DE RESUMO POR TIPO DE PISTA
+# QUADRO DE RESUMO POR TIPO DE PISTA padrão
 Métrica,PR,PBA,PG,PRB,PRD,PRA,MÉDIA
 Total Episódios,2337,2337,2337,2337,2336,2336,
 Melhor Distancia,9.038,9.041,8.06,9.042,9.041,9.042,
@@ -25,6 +25,24 @@ Número do Episódio mais rápido >9m,12042,7753,0,11302,7091,7743,
 Melhor Tempo do Percurso (9m) (s),12.233,10.6,0,8.9,11.9,12.233,
 % Sucessos depois de 9m,7.40%,38.50%,0.00%,12.90%,8.80%,8.60%,15.24%
 ##################################################
+# QUADRO DE RESUMO POR TIPO DE PISTA DPG
+Métrica,PR,PBA,PG,PRB,PRD,PRA,MÉDIA
+Total Episódios,732,733,733,732,732,732,
+Melhor Distancia,6.064,6.717,5.985,6.326,5.857,3.133,
+Maior Recompensa,3377.265,3147.446,2676.459,2829.803,2028.697,3132.887,
+Menor Distância,-1.235,-1.214,-1.496,-1.322,-1.425,-1.288,
+Média recompensa,177.128,162.533,181.471,163.94,55.309,79.694,136.679
+Média Distância,0.798,0.808,0.841,0.805,0.802,0.129,0.697
+Episodios de sucesso,0,0,0,0,0,0,
+Percentual de Sucessos,0.00%,0.00%,0.00%,0.00%,0.00%,0.00%,0.00%
+Total de Passos,72314,73790,84876,75868,57411,88987,
+Total tempo (s),2410.467,2459.667,2829.2,2528.933,1913.7,2966.233,
+Primeiro episódio de Sucesso,0,0,0,0,0,0,
+Soma passos até Primeiro Sucesso,0,0,0,0,0,0,
+Tempo do Primeiro Sucesso (s),0,0,0,0,0,0,
+Número do Episódio mais rápido >9m,0,0,0,0,0,0,
+Melhor Tempo do Percurso (9m) (s),0,0,0,0,0,0,
+% Sucessos depois de 9m,0.00%,0.00%,0.00%,0.00%,0.00%,0.00%,0.00%
 # DADOS DETALHADOS DOS EPISÓDIOS
 Pista,episodio,distancia,tempo,recompensa,passos,successos,imu_x,imu_y,imu_z,roll_deg,pitch_deg,yaw_deg,imu_average_x_vel,imu_average_y_vel,imu_average_z_vel,roll_vel_deg,pitch_vel_deg,yaw_vel_deg,imu_x_vel,imu_y_vel,imu_z_vel,roll,pitch,yaw,roll_vel,pitch_vel,yaw_vel
 PR,1,0.295,10.000,72.248,300,0,0.445,0.135,0.810,-10.480,29.435,-5.598,0.030,0.013,-0.007,-4.171,1.282,-0.199,0.020,0.057,-0.009,-0.183,0.514,-0.098,-0.073,0.022,-0.003

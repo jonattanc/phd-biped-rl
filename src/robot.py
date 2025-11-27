@@ -582,47 +582,41 @@ class Robot:
 
             action_list = [hip_right_front, hip_right_lateral, knee_right, ankle_right_front, ankle_right_lateral, hip_left_front, hip_left_lateral, knee_left, ankle_left_front, ankle_left_lateral]
 
-        elif num_joints == 14:
-            f = 0.8  # Frequência do movimento
-            w = 2 * np.pi * f  # Velocidade angular
+        elif num_joints == 14:  # 6 juntas por perna (3 quadril + 1 joelho + 2 tornozelo) × 2 = 12 + 2 ombros = 14
+            # ROBÔ STAGE 5 - Modelo Biomecânico Completo (1.70m, 100kg)
+            # Ações mais conservadoras para evitar overflow
+            f = 0.5  # Frequência reduzida
+            w = 2 * np.pi * f
 
-            # Ações para pernas (10 juntas)
-            hip_right_front = -0.3 * np.sin(w * t + 0.0 * np.pi)
-            hip_right_lateral = 0.1 * np.sin(w * t + 0.5 * np.pi)
-            knee_right = 0.4 * np.sin(w * t + 0.2 * np.pi)
-            ankle_right_front = -0.2 * np.sin(w * t + 0.3 * np.pi)
-            ankle_right_lateral = 0.05 * np.sin(w * t + 0.7 * np.pi)
+            # PERNA DIREITA (6 juntas) - Amplitudes reduzidas
+            hip_right_flexion = -0.2 * np.sin(w * t)  # Flexão/extensão quadril
+            hip_right_abduction = 0.08 * np.sin(w * t + 0.5 * np.pi)  # Abdução/adução
+            hip_right_rotation = 0.03 * np.sin(w * t + 0.25 * np.pi)  # Rotação quadril
+            knee_right = 0.3 * np.sin(w * t + 0.3 * np.pi)  # Flexão joelho
+            ankle_right_flexion = -0.15 * np.sin(w * t + 0.6 * np.pi)  # Dorsiflexão/flexão plantar
+            ankle_right_inversion = 0.04 * np.sin(w * t + 0.8 * np.pi)  # Inversão/eversão
 
-            hip_left_front = -0.3 * np.sin(w * t + 1.0 * np.pi)  # Fase oposta
-            hip_left_lateral = 0.1 * np.sin(w * t + 1.5 * np.pi)
-            knee_left = 0.4 * np.sin(w * t + 1.2 * np.pi)
-            ankle_left_front = -0.2 * np.sin(w * t + 1.3 * np.pi)
-            ankle_left_lateral = 0.05 * np.sin(w * t + 1.7 * np.pi)
+            # PERNA ESQUERDA (6 juntas) - Fase oposta
+            hip_left_flexion = -0.2 * np.sin(w * t + np.pi)
+            hip_left_abduction = 0.08 * np.sin(w * t + 1.5 * np.pi)
+            hip_left_rotation = 0.03 * np.sin(w * t + 1.25 * np.pi)
+            knee_left = 0.3 * np.sin(w * t + 1.3 * np.pi)
+            ankle_left_flexion = -0.15 * np.sin(w * t + 1.6 * np.pi)
+            ankle_left_inversion = 0.04 * np.sin(w * t + 1.8 * np.pi)
 
-            # Ações para braços (4 juntas) - apenas ombros
-            shoulder_right_front = 0.2 * np.sin(w * t + 0.5 * np.pi)  # Balanço frontal
-            shoulder_right_lateral = 0.05  # Pequena abertura lateral fixa
-            shoulder_left_front = 0.2 * np.sin(w * t + 1.5 * np.pi)  # Fase oposta
-            shoulder_left_lateral = -0.05  # Pequena abertura lateral fixa
+            # OMBROS (1 junta cada) - Movimento frontal apenas
+            shoulder_right = 0.15 * np.sin(w * t + 0.5 * np.pi)  # Balanço frontal
+            shoulder_left = 0.15 * np.sin(w * t + 1.5 * np.pi)  # Fase oposta
 
             action_list = [
-                # Pernas direita (5 juntas)
-                hip_right_front,
-                hip_right_lateral,
-                knee_right,
-                ankle_right_front,
-                ankle_right_lateral,
-                # Pernas esquerda (5 juntas)
-                hip_left_front,
-                hip_left_lateral,
-                knee_left,
-                ankle_left_front,
-                ankle_left_lateral,
-                # Braços (4 juntas)
-                shoulder_right_front,
-                shoulder_right_lateral,
-                shoulder_left_front,
-                shoulder_left_lateral,
+                # Pernas direita (6 juntas)
+                hip_right_flexion, hip_right_abduction, hip_right_rotation,
+                knee_right, ankle_right_flexion, ankle_right_inversion,
+                # Pernas esquerda (6 juntas)  
+                hip_left_flexion, hip_left_abduction, hip_left_rotation,
+                knee_left, ankle_left_flexion, ankle_left_inversion,
+                # Ombros (2 juntas)
+                shoulder_right, shoulder_left
             ]
 
         else:
@@ -633,3 +627,12 @@ class Robot:
         action_list = [a + np.random.uniform(-noise_amplitude, noise_amplitude) for a in action_list]
 
         return np.array(action_list, dtype=np.float32)
+    
+    def normalize_observation(self, obs):
+        """Normaliza a observação para evitar overflow"""
+        obs = np.array(obs, dtype=np.float32)
+        # Limita valores extremos
+        obs = np.clip(obs, -100, 100)
+        # Substitui NaN por zero
+        obs = np.nan_to_num(obs, nan=0.0, posinf=0.0, neginf=0.0)
+        return obs

@@ -69,14 +69,14 @@ class Simulation(gym.Env):
         self.physics_step_s = 1 / 240.0  # 240 Hz, ~4.16 ms
         self.physics_step_multiplier = 8
         self.time_step_s = self.physics_step_s * self.physics_step_multiplier  # 240/5 = 48 Hz, ~20.83 ms # 240/8 = 30 Hz, ~33.33 ms # 240/10 = 24 Hz, ~41.66 ms
-        self.max_motor_velocity = 1.5  # rad/s
-        self.max_motor_torque = 130.0  # Nm
+        self.max_motor_velocity = 0.8  # Reduzido de 1.5 rad/s
+        self.max_motor_torque = 80.0   # Reduzido de 130.0 Nm
         self.max_training_steps = int(self.episode_training_timeout_s / self.time_step_s)
         self.max_pre_fill_steps = int(self.episode_pre_fill_timeout_s / self.time_step_s)
         self.max_steps = self.max_training_steps
         self.lock_per_second = 0.5  # lock/s
         self.lock_time = 0.5  # s
-        self.action_noise_std = 1e-3
+        self.action_noise_std = 1e-4   # Reduzido de 1e-3
 
         # Configurar ambiente de simulação PRIMEIRO
         self.setup_sim_env()
@@ -403,7 +403,7 @@ class Simulation(gym.Env):
 
     def apply_action(self, action):
         noise = np.random.normal(0, self.action_noise_std, size=action.shape)
-        action = np.clip(action + noise, -1, 1)
+        action = np.clip(action + noise, -0.5, 0.5) # Range reduzido
 
         joint_positions, joint_velocities = self.robot.get_joint_states()
 
@@ -429,7 +429,7 @@ class Simulation(gym.Env):
             controlMode=p.POSITION_CONTROL,
             targetPositions=self.target_positions,
             forces=forces,
-            positionGains=[0.5] * self.action_dim,
+            positionGains=[0.3] * self.action_dim, # Gains reduzidos
         )
 
     def step(self, action, evaluation=False):
