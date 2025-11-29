@@ -38,7 +38,7 @@ class GUITab:
             messagebox.showerror("Erro", f"Nenhum arquivo .xacro encontrado em {utils.ENVIRONMENT_PATH}.")
             return
 
-        xacro_env_files.append("todos_alternados")
+        xacro_env_files.append("CC")
 
         ttk.Label(frame, text="Ambiente:").grid(row=0, column=column, sticky=tk.W, padx=1)
         self.env_var = tk.StringVar(value=xacro_env_files[0])
