@@ -3,7 +3,6 @@ from robot import Robot
 from simulation import Simulation
 from environment import Environment
 from agent import Agent, TrainingCallback
-from dpg_manager import DPGManager
 import metrics_saver
 import utils
 import numpy as np
@@ -32,7 +31,6 @@ def process_runner(
     device="cpu",
     initial_episode=0,
     model_path=None,
-    enable_dpg=True,
     episodes=1000,
     deterministic=False,
 ):
@@ -43,7 +41,6 @@ def process_runner(
     logger.info(f"Câmera: {camera_selection_value.value}")
     logger.info(f"Episódio inicial: {initial_episode}")
     logger.info(f"Modelo carregado: {model_path}")
-    logger.info(f"Dynamic Policy Gradient: {enable_dpg}")
 
     try:
         np.random.seed(seed)
@@ -68,23 +65,7 @@ def process_runner(
             camera_selection_value,
             config_changed_value,
             initial_episode=initial_episode,
-            enable_dpg=enable_dpg,
         )
-
-        if enable_dpg:
-            dpg_manager = DPGManager(logger, robot, reward_system)
-            dpg_manager.enable = True
-            dpg_manager.learning_enabled = True
-
-            # Configurações otimizadas para aprendizado
-            dpg_manager.min_buffer_size = 200
-            dpg_manager.training_interval = 5
-            dpg_manager.buffer.capacity = 10000
-            reward_system.dpg_manager = dpg_manager
-            logger.info("Sistema DPG configurado e ativado")
-        else:
-            dpg_manager = None
-            logger.info("Usando sistema de recompensa padrão (sem DPG)")
 
         agent = Agent(logger, env=sim, model_path=model_path, algorithm=algorithm, device=device, initial_episode=initial_episode, seed=seed)
         sim.set_agent(agent)
@@ -110,7 +91,6 @@ def process_runner(
                 "device": device,
                 "initial_episode": initial_episode,
                 "model_path": model_path,
-                "enable_dpg": enable_dpg,
                 "episodes": episodes,
                 "deterministic": deterministic,
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -134,25 +114,13 @@ def process_runner(
 
             while not exit_value.value:
                 timesteps_completed += timesteps_batch_size
-                # TREINAMENTO DPG ADAPTATIVO
-                if enable_dpg and dpg_manager.should_train(sim.episode_count):
-                    try:
-                        batch = dpg_manager.get_training_batch()
-                        if batch:
-                            dpg_manager.on_training_completed(sim.episode_count)
-                    except Exception as e:
-                        logger.error(f"❌ Erro no treinamento DPG: {e}")
-
+                
                 # Treinamento normal do agente
                 agent.model.learn(total_timesteps=timesteps_batch_size, reset_num_timesteps=False, callback=callback)
 
                 # Enviar progresso para GUI
                 if timesteps_completed % 10000 == 0:
                     logger.info(f"Progresso: {timesteps_completed} timesteps com aprendizagem")
-
-                    # Status do DPG
-                    if enable_dpg:
-                        dpg_status = dpg_manager.get_integrated_status()
 
             logger.info("Treinamento concluído!")
 

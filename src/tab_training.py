@@ -152,7 +152,6 @@ class TrainingTab(common_tab.GUITab):
         self.export_plots_btn = ttk.Button(row2_frame, text="Exportar Gráficos", command=self.export_plots, width=15)
         self.export_plots_btn.grid(row=0, column=2, padx=1)
 
-        self.create_dpg_selector(row2_frame, column=3)
         self.create_enable_visualization_selector(row2_frame, column=4)
         self.create_real_time_selector(row2_frame, column=5)
         self.create_camera_selector(row2_frame, column=6)
@@ -397,7 +396,6 @@ class TrainingTab(common_tab.GUITab):
                     self.device,
                     initial_episode,
                     model_path,
-                    self.enable_dpg_var.get(),
                 ),
             )
             p.start()
@@ -916,17 +914,6 @@ class TrainingTab(common_tab.GUITab):
             self.logger.exception("Erro ao atualizar status do tracker")
             self.tracker_status_label.config(text="Status: Erro no tracker")
 
-    def _handle_episode_data(self, episode_data):
-        try:
-            # Atualizar DPG com fases da marcha
-            if hasattr(self.reward_system, "dpg_manager") and self.reward_system.dpg_manager:
-                self.reward_system.dpg_manager.update_phase_progression(episode_data)
-            elif hasattr(self.reward_system, "gait_phase_dpg") and self.reward_system.gait_phase_dpg:
-                self.reward_system.gait_phase_dpg.update_phase(episode_data)
-
-        except Exception as e:
-            self.logger.exception("Erro ao processar dados do episódio para tracker")
-
     def update_filtered_data(self):
         for key in self.keys_to_filter:
             filtered_key = "filtered_" + key
@@ -973,7 +960,6 @@ class TrainingTab(common_tab.GUITab):
                             self.update_filtered_data()
 
                         self.new_plot_data = True
-                        self._handle_episode_data(msg)
 
                     elif data_type == "tracker_status":
                         self.tracker_status = msg.get("tracker_status")

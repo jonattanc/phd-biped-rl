@@ -66,11 +66,6 @@ class GUITab:
         ttk.Label(frame, text="Seed:").grid(row=0, column=column, sticky=tk.W, padx=1)
         self.seed_input.grid(row=0, column=column + 1, padx=5)
 
-    def create_dpg_selector(self, frame, column):
-        self.enable_dpg_var = tk.BooleanVar(value=self.gui.settings.get("enable_dynamic_policy_gradient", True))
-        self.enable_dpg_check = ttk.Checkbutton(frame, text="Dynamic Policy Gradient", variable=self.enable_dpg_var, width=22)
-        self.enable_dpg_check.grid(row=0, column=column, padx=1)
-
     def create_enable_visualization_selector(self, frame, column):
         self.enable_visualization_var = tk.BooleanVar(value=self.gui.settings.get("enable_visualize_robot", False))
         self.enable_visualization_check = ttk.Checkbutton(frame, text="Visualizar Robô", variable=self.enable_visualization_var, command=self.toggle_visualization, width=15)
@@ -225,9 +220,6 @@ class GUITab:
 
         if hasattr(self, "load_training_btn"):
             self.load_training_btn.config(state=opposite_state)
-
-        if hasattr(self, "enable_dpg_check"):
-            self.enable_dpg_check.config(state=opposite_state)
 
         if hasattr(self, "pause_btn"):
             self.pause_btn.config(state=state)

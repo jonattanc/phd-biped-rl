@@ -83,7 +83,6 @@ class EvaluationTab(common_tab.GUITab):
         self.eval_deterministic_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(row3_frame, text="Modo Determinístico", variable=self.eval_deterministic_var).grid(row=0, column=1, padx=5)
 
-        self.create_dpg_selector(row3_frame, column=3)
         self.create_enable_visualization_selector(row3_frame, column=4)
         self.create_real_time_selector(row3_frame, column=5)
         self.create_camera_selector(row3_frame, column=6)
@@ -290,7 +289,6 @@ class EvaluationTab(common_tab.GUITab):
                     self.device,
                     initial_episode,
                     agent_model_path,
-                    self.enable_dpg_var.get(),
                     episodes,
                     deterministic,
                 ),
@@ -497,7 +495,6 @@ class EvaluationTab(common_tab.GUITab):
             self.eval_episodes_var.set(hyperparameters["episodes"])
             self.eval_deterministic_var.set(hyperparameters["deterministic"])
             self.seed_var.set(hyperparameters["seed"])
-            self.enable_dpg_var.set(hyperparameters["enable_dpg"])
 
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao carregar dados de avaliação: {e}")

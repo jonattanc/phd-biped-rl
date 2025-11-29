@@ -28,7 +28,6 @@ class Simulation(gym.Env):
         config_changed_value,
         num_episodes=1,
         initial_episode=0,
-        enable_dpg=False,
     ):
         super(Simulation, self).__init__()
 
@@ -76,19 +75,11 @@ class Simulation(gym.Env):
         self.lock_per_second = 0.5  # lock/s
         self.lock_time = 0.5  # s
 
-        if enable_dpg:
-            self.max_motor_velocity = 0.8  # rad/s
-            self.max_motor_torque = 80.0  # Nm
-            self.action_noise_std = 1e-4
-            self.action_clip_range = 0.3
-            self.position_gains = 0.3
-
-        else:
-            self.max_motor_velocity = 1.5  # rad/s
-            self.max_motor_torque = 130.0  # Nm
-            self.action_noise_std = 1e-3
-            self.action_clip_range = 1.0
-            self.position_gains = 0.5
+        self.max_motor_velocity = 1.5  # rad/s
+        self.max_motor_torque = 130.0  # Nm
+        self.action_noise_std = 1e-3
+        self.action_clip_range = 1.0
+        self.position_gains = 0.5
 
         # Configurar ambiente de simulação PRIMEIRO
         self.setup_sim_env()
@@ -190,12 +181,6 @@ class Simulation(gym.Env):
         self.wrapped_env = agent.env
 
     def pre_fill_buffer(self):
-        dpg_enabled = False
-        if hasattr(self.reward_system, "dpg_manager") and self.reward_system.dpg_manager:
-            dpg_enabled = getattr(self.reward_system.dpg_manager, "enabled", False)
-        if dpg_enabled:
-            return
-
         obs, _ = self.reset()
 
         self.episode_timeout_s = self.episode_pre_fill_timeout_s
@@ -216,9 +201,6 @@ class Simulation(gym.Env):
 
             else:
                 obs = next_obs
-
-        if hasattr(self.reward_system, "dpg_manager") and self.reward_system.dpg_manager:
-            dpg_enabled = getattr(self.reward_system.dpg_manager, "enabled", False)
 
         self.episode_timeout_s = self.episode_training_timeout_s
         self.max_steps = self.max_training_steps
@@ -540,11 +522,55 @@ class Simulation(gym.Env):
 
         self.episode_done = self.episode_truncated or self.episode_terminated
 
-        # Calcular recompensa
-        if hasattr(self.reward_system, "dpg_manager") and self.reward_system.dpg_manager and self.reward_system.dpg_manager.enabled and not evaluation:
-            reward = self.reward_system.dpg_manager.calculate_reward(self, action)
+        # **DPG APENAS para FastTD3**
+        current_phase = 1
+        phase_weight_multiplier = 1.0
+
+        is_fast_td3_with_dpg = (
+            hasattr(self.agent, 'model') and 
+            hasattr(self.agent.model, 'phase_manager') and
+            hasattr(self.agent.model, 'store_dpg_experience')
+        )
+
+        if is_fast_td3_with_dpg and not evaluation:
+            # Atualizar métricas da fase atual
+            episode_metrics = {
+                'distances': self.episode_distance,
+                'roll': self.robot_roll,
+                'pitch': self.robot_pitch,
+            }
+            self.agent.model.phase_manager.update_phase_metrics(episode_metrics)
+
+            # Obter fase atual e multiplicador
+            current_phase = self.agent.model.phase_manager.current_phase
+            phase_weight_multiplier = self.agent.model.phase_manager.get_phase_weight_multiplier()
+
+        # CALCULAR RECOMPENSA BASE
+        base_reward = self.reward_system.calculate_reward(self, action)
+
+        # APLICAR AJUSTE DE FASE APENAS PARA RECOMPENSAS POSITIVAS
+        if is_fast_td3_with_dpg and not evaluation and current_phase > 1:
+            if base_reward > 0:
+                # Aumentar apenas recompensas positivas
+                adjusted_reward = base_reward * phase_weight_multiplier
+            else:
+                # Manter penalidades inalteradas
+                adjusted_reward = base_reward
         else:
-            reward = self.reward_system.calculate_reward(self, action)
+            # Para outros algoritmos ou avaliação, usar recompensa normal
+            adjusted_reward = base_reward
+
+        reward = adjusted_reward
+
+        # ARMAZENAR NO BUFFER DPG APENAS PARA FastTD3
+        if is_fast_td3_with_dpg and not evaluation:
+            self.agent.model.store_dpg_experience(
+                state=current_obs,
+                action=action,
+                reward=reward,
+                next_state=next_obs,
+                done=self.episode_done
+            )
 
         self.episode_reward += reward
         self.episode_filtered_reward = 0.1 * self.episode_reward + 0.9 * self.episode_filtered_reward
@@ -604,40 +630,6 @@ class Simulation(gym.Env):
 
             if evaluation:
                 self.metrics[str(self.episode_count + 1)] = {"step_data": {}}
-
-            if hasattr(self.reward_system, "dpg_manager") and self.reward_system.dpg_manager:
-                dpg_manager = self.reward_system.dpg_manager
-                if dpg_manager.enabled and not evaluation:
-                    # Usar apenas o terreno atual sem sequência adaptativa
-                    current_terrain = self.environment.env_list[self.environment.selected_env_index]
-                    dpg_manager.set_current_terrain(current_terrain)
-
-                    try:
-                        # Prepara métricas do passo atual
-                        step_metrics = {
-                            "distance": self.episode_distance,
-                            "speed": abs(self.robot_x_velocity),
-                            "roll": self.robot_roll,
-                            "pitch": self.robot_pitch,
-                            "left_contact": self.robot_left_foot_contact,
-                            "right_contact": self.robot_right_foot_contact,
-                            "alternating": self.robot_left_foot_contact != self.robot_right_foot_contact,
-                            "steps": self.episode_steps,
-                            "success": self.episode_success,
-                            "energy_used": self.robot.get_energy_used(),
-                            "gait_pattern_score": self.robot.get_gait_pattern_score(),
-                            "clearance_score": self.robot.get_clearance_score(),
-                            "propulsion_efficiency": self.robot.get_propulsion_efficiency(),
-                        }
-
-                        # Armazena experiência (agora a recompensa já foi calculada usando o RewardSystem)
-                        storage_success = dpg_manager.store_experience(state=current_obs, action=action, reward=reward, next_state=next_obs, done=self.episode_done, episode_results=step_metrics)
-
-                        # Atualiza a progressão de fase do DPG
-                        dpg_manager.update_phase_progression(step_metrics)
-
-                    except Exception as e:
-                        self.logger.error(f"❌ Erro ao armazenar experiência DPG: {e}")
 
             self.transmit_episode_info(evaluation)
 

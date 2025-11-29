@@ -73,7 +73,7 @@ class Environment:
         self.id = None
         self.selected_env_index = -1
 
-        if self.name == "todos_alternados":
+        if self.name == "CC":
             self.env_list = ["PR", "PBA", "PG", "PRA", "PRB", "PRD"]
 
         else:
@@ -104,7 +104,7 @@ class Environment:
         return urdf_path
 
     def get_next_env(self):
-        if self.name != "todos_alternados":
+        if self.name != "CC":
             return
 
         self.selected_env_index += 1

@@ -1,37 +1,106 @@
 # agent.py
+import random
 import numpy as np
 from stable_baselines3 import PPO, TD3
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.noise import NormalActionNoise
+import torch
 
+from utils import PhaseManager
+
+
+class IntelligentBuffer:
+    def __init__(self, capacity=100000):
+        self.buffer = []
+        self.capacity = capacity
+        self.categories = {
+            'excellent': [],    # Recompensa > 5.0
+            'good': [],         # Recompensa 1.0 - 5.0  
+            'neutral': [],      # Recompensa -1.0 - 1.0
+            'poor': []          # Recompensa < -1.0
+        }
+    
+    def add_experience(self, experience):
+        """Adiciona experiência categorizada"""
+        state, action, reward, next_state, done = experience
+        
+        # Classificar por qualidade
+        if reward > 5.0:
+            category = 'excellent'
+        elif reward > 1.0:
+            category = 'good'
+        elif reward > -1.0:
+            category = 'neutral'
+        else:
+            category = 'poor'
+        
+        # Manter balanceamento
+        self.categories[category].append(experience)
+        if len(self.categories[category]) > self.capacity // 4:
+            self.categories[category].pop(0)
+    
+    def sample(self, batch_size=128):
+        """Amostra balanceada do buffer"""
+        samples = []
+        for category in self.categories:
+            if len(self.categories[category]) > 0:
+                # 25% de cada categoria
+                n_samples = batch_size // 4
+                category_samples = random.sample(
+                    self.categories[category], 
+                    min(n_samples, len(self.categories[category]))
+                )
+                samples.extend(category_samples)
+        
+        # Completar com amostras aleatórias se necessário
+        if len(samples) < batch_size:
+            all_experiences = [exp for cat in self.categories.values() for exp in cat]
+            samples.extend(random.sample(all_experiences, batch_size - len(samples)))
+        
+        return samples
+    
+    def __len__(self):
+        return sum(len(category) for category in self.categories.values())
+    
 
 class FastTD3(TD3):
     """
-    Implementação do Fast TD3 com atualizações mais frequentes
+    Fast TD3 com DPG integrado - buffer inteligente e sistema de fases
     """
-
-    def __init__(self, *args, **kwargs):
-        action_dim = kwargs.pop("action_dim", 1)
-
-        # Configurações otimizadas para Fast TD3
-        kwargs.update(
-            {
-                "learning_rate": 3e-4,
-                "buffer_size": 200000,
-                "learning_starts": 5000,
-                "batch_size": 256,
-                "tau": 0.005,
-                "gamma": 0.99,
-                "train_freq": (1, "step"),
-                "gradient_steps": 1,
-                "policy_delay": 2,
-                "target_policy_noise": 0.2,
-                "target_noise_clip": 0.5,
-                "action_noise": NormalActionNoise(mean=np.zeros(action_dim), sigma=0.1 * np.ones(action_dim)),
-            }
+    
+    def __init__(self, policy, env, action_dim, **kwargs):
+        # Configurar action_noise específico para FastTD3
+        action_noise = NormalActionNoise(
+            mean=np.zeros(action_dim), 
+            sigma=0.1 * np.ones(action_dim)
         )
-        super().__init__(*args, **kwargs)
+        super().__init__(
+            policy,
+            env,
+            action_noise=action_noise,
+            **kwargs
+        )
+        
+        # Sistema DPG integrado
+        self.dpg_buffer = IntelligentBuffer(capacity=50000)
+        self.phase_manager = PhaseManager()
+        
+    def store_dpg_experience(self, state, action, reward, next_state, done):
+        """Armazena experiência no buffer DPG"""
+        self.dpg_buffer.add_experience((state, action, reward, next_state, done))
+        
+        # Verificar transição de fase a cada 10 experiências
+        if len(self.dpg_buffer) % 10 == 0:
+            self.phase_manager.should_transition_phase()
+    
+    def get_dpg_status(self):
+        """Retorna status do DPG integrado"""
+        return {
+            'phase': self.phase_manager.current_phase,
+            'buffer_size': len(self.dpg_buffer),
+            'phase_ready': len(self.dpg_buffer) > 1000
+        }
 
 
 class TrainingCallback(BaseCallback):
@@ -61,7 +130,7 @@ class Agent:
         self.model = None
         self.algorithm = algorithm
         self.env = env
-        self.action_dim = env.action_dim
+        self.action_dim = env.action_space.shape[0] if env else None
         self.initial_episode = initial_episode
         self.learning_starts = 10e3
         self.prefill_steps = 100e3
@@ -128,9 +197,11 @@ class Agent:
                 seed=seed,
             )
         elif algorithm.upper() == "FASTTD3":
+            action_dim = self.env.action_space.shape[0]
             return FastTD3(
                 "MlpPolicy",
                 self.env,
+                action_dim=action_dim,
                 learning_rate=3e-4,  # Aumentar LR
                 buffer_size=50000,  # Buffer menor para aprendizado mais rápido
                 learning_starts=2000,  # Começar a aprender mais cedo

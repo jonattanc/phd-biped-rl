@@ -1,4 +1,5 @@
 # utils.py
+from collections import deque
 import os
 import logging
 import multiprocessing
@@ -105,8 +106,7 @@ def load_default_settings():
     default_settings = {
         "default_robot": "robot_stage5",
         "reward_config_file": "default",
-        "enable_dynamic_policy_gradient": True,
-        "enable_visualize_robot": True,
+        "enable_visualize_robot": False,
         "enable_real_time": True,
         "camera_index": 1,
     }
@@ -140,3 +140,62 @@ def make_serializable(obj):
         return obj.isoformat()
     else:
         return obj
+
+
+class PhaseManager:
+    def __init__(self):
+        self.current_phase = 1
+        self.phase_metrics = {
+            'distance_history': deque(maxlen=20),
+            'stability_history': deque(maxlen=20),
+            'success_history': deque(maxlen=10)
+        }
+        
+    def update_phase_metrics(self, episode_metrics):
+        """Atualiza métricas para decisão de fase"""
+        self.phase_metrics['distance_history'].append(episode_metrics.get('distances', 0))
+        
+        # Calcular estabilidade baseado na orientação
+        roll = abs(episode_metrics.get('roll', 0))
+        pitch = abs(episode_metrics.get('pitch', 0))
+        stability = 1.0 - min(1.0, (roll + pitch) / 2.0)
+        self.phase_metrics['stability_history'].append(stability)
+        
+        self.phase_metrics['success_history'].append(episode_metrics.get('success', False))
+    
+    def should_transition_phase(self):
+        """Decide se deve transicionar para próxima fase"""
+        if (len(self.phase_metrics['distance_history']) < 10 or 
+            len(self.phase_metrics['stability_history']) < 10):
+            return False
+            
+        avg_distance = np.mean(self.phase_metrics['distance_history'])
+        avg_stability = np.mean(self.phase_metrics['stability_history'])
+        success_rate = np.mean(self.phase_metrics['success_history'])
+        
+        # Critérios de transição
+        if self.current_phase == 1:
+            # Fase 1 → 2: Robô estável e andando moderadamente
+            if avg_distance > 3.0 and avg_stability > 0.6:
+                self.current_phase = 2
+                print("🎉 DPG: Transição Fase 1 → Fase 2")
+                return True
+                
+        elif self.current_phase == 2:
+            # Fase 2 → 3: Bom desempenho e consistência
+            if avg_distance > 8.0 and success_rate > 0.1:
+                self.current_phase = 3
+                print("🎉 DPG: Transição Fase 2 → Fase 3")
+                return True
+                
+        return False
+    
+    def get_phase_weight_multiplier(self):
+        """Retorna multiplicador de pesos baseado na fase atual"""
+        if self.current_phase == 1:
+            return 1.0    
+        elif self.current_phase == 2:
+            return 1.5    
+        elif self.current_phase == 3:
+            return 2.0    
+        return 1.0
