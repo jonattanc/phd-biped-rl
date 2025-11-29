@@ -36,25 +36,78 @@ class RewardSystem:
             return False
         return self.components[name].enabled
 
-    def calculate_reward(self, sim, action):
+    def calculate_reward(self, sim, action, evaluation=False):
         """Calcula recompensa padrão"""
-
+    
         # Resetar valores dos componentes
         for component in self.components.values():
             component.value = 0.0
-
+    
         total_reward = 0.0
-
-        distance_y_from_center = abs(sim.robot_y_position)
-
+        weight_adjustments = {}  # Multiplicadores específicos por componente
+    
+        # VERIFICAÇÃO FastTD3 - Obter multiplicadores específicos
+        is_fast_td3 = (
+            hasattr(sim, 'agent') and 
+            hasattr(sim.agent, 'model') and 
+            hasattr(sim.agent.model, 'phase_manager')  
+        )
+    
+        if not evaluation and is_fast_td3:
+            weight_adjustments = sim.agent.model.get_phase_weight_adjustments()
+        else:
+            weight_adjustments = {
+                'efficiency_bonus': 1.0,
+                'progress': 1.0, 
+                'gait_state_change': 1.0,
+                'foot_clearance': 1.0
+            }
+    
         # COMPONENTES PARA MARCHA
-
+        distance_y_from_center = abs(sim.robot_y_position)
+    
         # 1. PROGRESSO E VELOCIDADE
         if self.is_component_enabled("progress"):
             progress = sim.target_x_velocity - abs(sim.target_x_velocity - sim.robot_x_velocity)
             self.components["progress"].value = progress
-            total_reward += progress * self.components["progress"].weight
-
+            weight_multiplier = weight_adjustments.get('progress', 1.0)
+            adjusted_weight = self.components["progress"].weight * weight_multiplier
+        
+            total_reward += progress * adjusted_weight
+    
+        # DPG - EFICIÊNCIA
+        if self.is_component_enabled("efficiency_bonus"):
+            steps = max(sim.episode_steps, 1)
+            reward_per_step = sim.episode_reward / steps
+            distance_per_step = sim.episode_distance / steps
+            
+            efficiency_score = (reward_per_step * 0.6 + distance_per_step * 50 * 0.4)
+            efficiency_bonus = max(0, efficiency_score * 2.0)
+            
+            self.components["efficiency_bonus"].value = efficiency_bonus
+            
+            weight_multiplier = weight_adjustments.get('efficiency_bonus', 1.0)
+            adjusted_weight = self.components["efficiency_bonus"].weight * weight_multiplier
+            
+            total_reward += efficiency_bonus * adjusted_weight
+    
+        # DPG - Transições de estado
+        if self.is_component_enabled("gait_state_change"):
+            self.components["gait_state_change"].value = sim.has_gait_state_changed
+            weight_multiplier = weight_adjustments.get('gait_state_change', 1.0)
+            adjusted_weight = self.components["gait_state_change"].weight * weight_multiplier
+        
+            total_reward += self.components["gait_state_change"].value * adjusted_weight
+        
+        # DPG - Clearance
+        if self.is_component_enabled("foot_clearance"):
+            clearance_score = self._calculate_foot_clearance_optimized(sim)
+            self.components["foot_clearance"].value = clearance_score
+            weight_multiplier = weight_adjustments.get('foot_clearance', 1.0)
+            adjusted_weight = self.components["foot_clearance"].weight * weight_multiplier
+        
+            total_reward += clearance_score * adjusted_weight
+         
         # 2. ESTABILIDADE DA MARCHA (Controle postural)
         if self.is_component_enabled("stability_pitch"):
             pitch_error = (sim.robot_pitch - sim.target_pitch_rad) ** 2
@@ -91,11 +144,6 @@ class RewardSystem:
             self.components["foot_clearance_original"].value = foot_height
             total_reward += self.components["foot_clearance_original"].value * self.components["foot_clearance_original"].weight
 
-        if self.is_component_enabled("foot_clearance"):
-            clearance_score = self._calculate_foot_clearance_optimized(sim)
-            self.components["foot_clearance"].value = clearance_score
-            total_reward += clearance_score * self.components["foot_clearance"].weight
-
         # 6. PADRÃO RÍTMICO (Regularidade da marcha)
         if self.is_component_enabled("gait_rhythm"):
             rhythm_score = self._calculate_gait_rhythm(sim)
@@ -128,28 +176,10 @@ class RewardSystem:
 
         # DEMAIS COMPONENTES
 
-        # Transições de estado
-        if self.is_component_enabled("gait_state_change"):
-            self.components["gait_state_change"].value = sim.has_gait_state_changed
-            total_reward += self.components["gait_state_change"].value * self.components["gait_state_change"].weight
-
         # Bonus de distância
         if self.is_component_enabled("distance_bonus"):
             self.components["distance_bonus"].value = sim.episode_distance
             total_reward += sim.episode_distance * self.components["distance_bonus"].weight
-
-        # BONUS DE EFICIÊNCIA
-        if self.is_component_enabled("efficiency_bonus"):
-            steps = max(sim.episode_steps, 1)
-            reward_per_step = (sim.episode_reward + total_reward) / steps
-            distance_per_step = sim.episode_distance / steps
-            
-            # Bonus baseado na eficiência atual
-            efficiency_score = (reward_per_step * 0.6 + distance_per_step * 50 * 0.4)
-            efficiency_bonus = max(0, efficiency_score * 2.0)
-            
-            self.components["efficiency_bonus"].value = efficiency_bonus
-            total_reward += efficiency_bonus * self.components["efficiency_bonus"].weight
             
         # Inclinação frontal
         if self.is_component_enabled("pitch_forward_bonus"):
@@ -251,6 +281,15 @@ class RewardSystem:
                 self.components["warning_penalty"].value = warning_factor
                 total_reward += warning_factor * self.components["warning_penalty"].weight
 
+        # 7. BÔNUS DE SUCESSO ESPECÍFICO PARA FASE 3
+        success_bonus = 0.0
+        if not evaluation and is_fast_td3:
+            phase_info = sim.agent.model.get_phase_info()
+            if phase_info['phase'] == 3 and sim.episode_success:
+                # Bônus extra de sucesso na fase 3
+                success_bonus = 100.0
+                total_reward += success_bonus
+                
         return total_reward
 
     def _calculate_cross_gait_pattern(self, sim):

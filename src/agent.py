@@ -84,6 +84,13 @@ class FastTD3(TD3):
         # Sistema DPG integrado
         self.dpg_buffer = IntelligentBuffer(capacity=50000)
         self.phase_manager = PhaseManager() 
+
+        # Configurações específicas por fase
+        self.phase_configs = {
+            1: {'learning_rate': 1.0e-4, 'noise_sigma': 0.1},  # Fase 1: padrão
+            2: {'learning_rate': 8.0e-5, 'noise_sigma': 0.05}, # Fase 2: mais estável
+            3: {'learning_rate': 5.0e-5, 'noise_sigma': 0.02}  # Fase 3: mais preciso
+        }
         
     def store_dpg_experience(self, state, action, reward, next_state, done):
         """Armazena experiência no buffer DPG"""
@@ -99,8 +106,34 @@ class FastTD3(TD3):
         }
     
     def update_phase_metrics(self, episode_metrics):
-        """Atualiza métricas do phase manager"""
+        """Atualiza métricas e gerencia transições de fase"""
         self.phase_manager.update_phase_metrics(episode_metrics)
+        
+        # Verificar transição de fase
+        if self.phase_manager.should_transition_phase():
+            if self.phase_manager.transition_to_next_phase():
+                self._apply_phase_config()
+                return True
+        return False
+    
+    def _apply_phase_config(self):
+        """Aplica configurações específicas da fase"""
+        phase = self.phase_manager.current_phase
+        config = self.phase_configs.get(phase, {})
+        
+        if 'learning_rate' in config:
+            # Atualizar learning rate
+            for param_group in self.actor.optimizer.param_groups:
+                param_group['lr'] = config['learning_rate']
+            for param_group in self.critic.optimizer.param_groups:
+                param_group['lr'] = config['learning_rate']
+        
+        if 'noise_sigma' in config:
+            # Atualizar noise
+            self.action_noise = NormalActionNoise(
+                mean=np.zeros(self.action_space.shape[0]),
+                sigma=config['noise_sigma'] * np.ones(self.action_space.shape[0])
+            )
     
     def should_transition_phase(self):
         """Verifica transição de fase"""
@@ -113,6 +146,10 @@ class FastTD3(TD3):
     def get_phase_info(self):
         """Retorna informações da fase"""
         return self.phase_manager.get_phase_info()
+
+    def get_phase_weight_adjustments(self):
+        """Retorna ajustes de peso específicos por componente"""
+        return self.phase_manager.get_phase_weight_adjustments()
 
 
 class TrainingCallback(BaseCallback):

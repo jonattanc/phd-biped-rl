@@ -190,7 +190,7 @@ class Simulation(gym.Env):
             t = self.episode_steps * self.time_step_s
             action = self.robot.get_example_action(t)
 
-            next_obs, reward, episode_terminated, episode_truncated, info = self.step(action)
+            next_obs, reward, episode_terminated, episode_truncated, info = self.step(action, evaluation=False)
             done = episode_terminated or episode_truncated
 
             action = np.array(action).flatten()
@@ -520,22 +520,7 @@ class Simulation(gym.Env):
         self.episode_done = self.episode_truncated or self.episode_terminated
 
         # CALCULAR RECOMPENSA BASE
-        base_reward = self.reward_system.calculate_reward(self, action)
-
-        # VERIFICAÇÃO FastTD3
-        is_fast_td3 = (
-            hasattr(self, 'agent') and 
-            hasattr(self.agent, 'model') and 
-            hasattr(self.agent.model, 'phase_manager')  
-        )
-
-        if not evaluation and is_fast_td3:
-            # Sistema de fases inteligente
-            phase_multiplier = self.agent.model.get_phase_multiplier()
-            reward = base_reward * phase_multiplier
-        else:
-            # Recompensa padrão sem modificações
-            reward = base_reward
+        reward = self.reward_system.calculate_reward(self, action, evaluation)
 
         self.episode_reward += reward
         self.episode_filtered_reward = 0.1 * self.episode_reward + 0.9 * self.episode_filtered_reward
@@ -557,8 +542,14 @@ class Simulation(gym.Env):
         self.should_save_model = self.tracker.update()
 
         # LOGS PARA TODOS OS ALGORITMOS A CADA 50 EPISÓDIOS
+        # VERIFICAÇÃO FastTD3 para logging
+        is_fast_td3 = (
+            hasattr(self, 'agent') and 
+            hasattr(self.agent, 'model') and 
+            hasattr(self.agent.model, 'phase_manager')  
+        )
+
         if self.episode_done and not evaluation:
-            # Dados básicos disponíveis para todos os algoritmos
             episode_duration = self.episode_steps * self.time_step_s
             avg_x_velocity = self.robot_x_sum_velocity / max(self.episode_steps, 1)
             
@@ -567,11 +558,19 @@ class Simulation(gym.Env):
                 if is_fast_td3:
                     # LOG DETALHADO PARA FastTD3
                     phase_info = self.agent.model.get_phase_info()
+                    adjustments = phase_info.get('weight_adjustments', {})
+                
+                    active_adjustments = {k: f"{v}x" for k, v in adjustments.items() if v != 1.0}
+                    adjustments_str = " | ".join([f"{k}: {v}" for k, v in active_adjustments.items()])
+                
+                    if adjustments_str:
+                        adjustments_str = f" | Ajustes: {adjustments_str}"
+                    else:
+                        adjustments_str = " | Ajustes: nenhum"
+                        
                     self.logger.info(
                         f"FastTD3 - Episódio {self.episode_count} | "
-                        f"Fase {phase_info['phase']} | "
-                        
-                        f"Multiplicador: {phase_multiplier:.2f}x"
+                        f"Fase {phase_info['phase']}{adjustments_str}"
                     )
                     self.logger.info(
                         f"Distância: {self.episode_distance:.2f}m | "
@@ -579,8 +578,8 @@ class Simulation(gym.Env):
                         f"Recompensa: {self.episode_reward:.1f}"
                     )
                     self.logger.info(
-                        f"RP: {phase_info['current_rps']:.3f}/{phase_info['target_rps']:.3f} | "
-                        f"DP: {phase_info['current_dps']:.3f}/{phase_info['target_dps']:.3f} | "
+                        f"RP: {phase_info['current_rps']:.3f} | "
+                        f"DP: {phase_info['current_dps']:.3f} | "
                         f"Suc: {phase_info['current_success']:.1%} | "
                         f"Vel: {avg_x_velocity:.2f}m/s"
                     )
@@ -591,10 +590,12 @@ class Simulation(gym.Env):
                     self.logger.info(
                         f"{self.agent.algorithm} - Episódio {self.episode_count} | "
                         f"Distância: {self.episode_distance:.2f}m | "
-                        f"Duração: {episode_duration:.1f}s | "
+                        f"Duração: {episode_duration:.1f}s"
+                    )
+                    self.logger.info(
                         f"Recompensa: {self.episode_reward:.1f} | "
-                        f"Sucesso: {success_status} | "
                         f"Vel.X: {avg_x_velocity:.2f}m/s | "
+                        f"Sucesso: {success_status} | "
                         f"Terminação: {self.episode_termination}"
                     )
 
@@ -608,14 +609,14 @@ class Simulation(gym.Env):
             }
             
             # Atualizar métricas no phase manager do FastTD3
-            self.agent.model.update_phase_metrics(episode_metrics)
+            transition_occurred = self.agent.model.update_phase_metrics(episode_metrics)
             
             # Verificar transição de fase (sempre logar transições)
-            if self.agent.model.should_transition_phase():
+            if transition_occurred:
                 phase_info = self.agent.model.get_phase_info()
                 self.logger.info(f"🎉 FastTD3 - TRANSIÇÃO PARA FASE {phase_info['phase']}!")
-                self.logger.info(f"🏆 Metas alcançadas: RPS: {phase_info['current_rps']:.3f}, "
-                               f"DPS: {phase_info['current_dps']:.3f}, "
+                self.logger.info(f"🏆 Metas alcançadas: RP: {phase_info['current_rps']:.3f}, "
+                               f"DP: {phase_info['current_dps']:.3f}, "
                                f"Sucesso: {phase_info['current_success']:.1%}")
                 
                 # Enviar notificação para a GUI

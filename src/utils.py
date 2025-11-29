@@ -6,6 +6,7 @@ import multiprocessing
 import queue
 import json
 from datetime import datetime
+import time
 from typing import Dict
 import numpy as np
 
@@ -146,97 +147,120 @@ def make_serializable(obj):
 class PhaseManager:
     def __init__(self):
         self.current_phase = 1
-        # Metas por fase: [reward_per_step, distance_per_step, success_rate]
-        self.phase_targets = {
-            1: [1.0, 0.015, 0.01],   # Fase Iniciante
-            2: [5.0, 0.020, 0.15],   # Fase Intermediária  
-            3: [10.0, 0.025, 0.30]    # Fase Avançada
+        self.phase_history = []
+        self.metrics_buffer = []
+        self.buffer_size = 50
+        
+        # Critérios de transição
+        self.phase1_to_2_threshold = 6.0  # distância média > 6m
+        self.phase2_to_3_threshold = 9.0  # primeiro sucesso de 9m
+        self.success_achieved = False
+        
+        # AJUSTES de peso por fase (em relação ao default.json)
+        self.phase_weight_adjustments = {
+            1: {},  # Fase 1: usa 100% dos pesos do default.json
+            2: {    # Fase 2: ajusta componentes de eficiência
+                'efficiency_bonus': 25.0,  # 2500% do peso original
+                'progress': 1.8,           # 180% do peso original  
+                'gait_state_change': 1.2,  # 120% do peso original
+                'foot_clearance': 15.0     # 1500% do peso original
+            },
+            3: {    # Fase 3: ajusta componentes de performance
+                'efficiency_bonus': 15.0,  # 1500% do peso original
+                'progress': 2.2,           # 220% do peso original
+                'gait_state_change': 1.0,  # 100% do peso original (mantém)
+                'foot_clearance': 10.0     # 1000% do peso original (mantém)
+            }
         }
-        self.metric_history = {
-            'rps': deque(maxlen=8),    # reward per step
-            'dps': deque(maxlen=8),    # distance per step
-            'success': deque(maxlen=6) # success (1 ou 0)
-        }
-        self.phase_transition_occurred = False
     
     def update_phase_metrics(self, episode_metrics):
-        """Atualiza métricas para decisão de fase"""
-        steps = episode_metrics.get('steps', 1)
-        reward = episode_metrics.get('reward', 0)
-        distance = episode_metrics.get('distances', 0)
-        success = episode_metrics.get('success', False)
-        
-        # Calcular métricas por passo
-        rps = reward / steps if steps > 0 else 0
-        dps = distance / steps if steps > 0 else 0
-        success_value = 1.0 if success else 0.0
-        
-        self.metric_history['rps'].append(rps)
-        self.metric_history['dps'].append(dps)
-        self.metric_history['success'].append(success_value)
+        """Atualiza métricas do episódio"""
+        self.metrics_buffer.append(episode_metrics)
+        if len(self.metrics_buffer) > self.buffer_size:
+            self.metrics_buffer.pop(0)
+            
+        if episode_metrics.get('success', False):
+            self.success_achieved = True
     
     def should_transition_phase(self):
-        """Decide se deve transicionar para a próxima fase"""
-        if (len(self.metric_history['rps']) < 5 or 
-            len(self.metric_history['dps']) < 5 or 
-            len(self.metric_history['success']) < 5):
+        """Verifica se deve transicionar de fase"""
+        if len(self.metrics_buffer) < 10:
             return False
             
-        targets = self.phase_targets[self.current_phase]
-        avg_rps = np.mean(self.metric_history['rps'])
-        avg_dps = np.mean(self.metric_history['dps'])
-        avg_success = np.mean(self.metric_history['success'])
+        current_metrics = self.get_current_metrics()
         
-        # Verificar se atingiu pelo menos 90% da meta em todos os aspectos
-        transition = (avg_rps >= targets[0] * 0.9 and 
-                     avg_dps >= targets[1] * 0.9 and 
-                     avg_success >= targets[2] * 0.9)
-        
-        if transition and self.current_phase < 3:
-            self.current_phase += 1
-            self.phase_transition_occurred = True
-            return True
-            
+        if self.current_phase == 1:
+            # Fase 1 -> 2: distância média > 6m
+            if current_metrics['avg_distance'] > self.phase1_to_2_threshold:
+                return True
+                
+        elif self.current_phase == 2:
+            # Fase 2 -> 3: primeiro sucesso de 9m alcançado
+            if self.success_achieved:
+                return True
+                
         return False
     
-    def get_phase_weight_multiplier(self):
-        """Retorna multiplicador de pesos baseado no progresso na fase atual"""
-        if (len(self.metric_history['rps']) == 0 or 
-            len(self.metric_history['dps']) == 0 or 
-            len(self.metric_history['success']) == 0):
-            return 1.0
-            
-        targets = self.phase_targets[self.current_phase]
-        avg_rps = np.mean(self.metric_history['rps'])
-        avg_dps = np.mean(self.metric_history['dps'])
-        avg_success = np.mean(self.metric_history['success'])
-        
-        progress_rps = min(1.0, avg_rps / targets[0])
-        progress_dps = min(1.0, avg_dps / targets[1])
-        progress_success = min(1.0, avg_success / targets[2])
-        
-        # Progresso geral (ponderado)
-        overall_progress = (progress_rps * 0.4 + progress_dps * 0.4 + progress_success * 0.2)
-        
-        # Multiplicador: 1.0 (sem progresso) até 2.0 (atingiu a meta)
-        multiplier = 1.0 + overall_progress
-        
-        return multiplier
+    def get_current_metrics(self):
+        """Calcula métricas atuais do buffer"""
+        if not self.metrics_buffer:
+            return {
+                'avg_reward': 0, 
+                'avg_distance': 0, 
+                'success_rate': 0,
+                'reward_per_step': 0,
+                'distance_per_step': 0
+            }
+
+        avg_reward = np.mean([m.get('reward', 0) for m in self.metrics_buffer])
+        avg_distance = np.mean([m.get('distances', 0) for m in self.metrics_buffer])
+        success_rate = np.mean([m.get('success', False) for m in self.metrics_buffer])
+        total_reward = sum([m.get('reward', 0) for m in self.metrics_buffer])
+        total_distance = sum([m.get('distances', 0) for m in self.metrics_buffer])
+        total_steps = sum([m.get('steps', 1) for m in self.metrics_buffer])
+
+        if total_steps > 0:
+            reward_per_step = total_reward / total_steps
+            distance_per_step = total_distance / total_steps
+        else:
+            reward_per_step = 0
+            distance_per_step = 0
+
+        return {
+            'avg_reward': avg_reward,
+            'avg_distance': avg_distance, 
+            'success_rate': success_rate,
+            'reward_per_step': reward_per_step,
+            'distance_per_step': distance_per_step
+        }
+    
+    def get_phase_weight_adjustments(self):
+        """Retorna ajustes de peso para a fase atual"""
+        return self.phase_weight_adjustments.get(self.current_phase, {})
+    
+    def transition_to_next_phase(self):
+        """Transiciona para próxima fase"""
+        if self.current_phase < 3:
+            self.current_phase += 1
+            self.phase_history.append({
+                'phase': self.current_phase,
+                'timestamp': time.time(),
+                'metrics': self.get_current_metrics()
+            })
+            return True
+        return False
     
     def get_phase_info(self):
-        """Retorna informações da fase atual para logging"""
-        targets = self.phase_targets[self.current_phase]
-        current_rps = np.mean(self.metric_history['rps']) if self.metric_history['rps'] else 0
-        current_dps = np.mean(self.metric_history['dps']) if self.metric_history['dps'] else 0
-        current_success = np.mean(self.metric_history['success']) if self.metric_history['success'] else 0
+        """Retorna informações detalhadas da fase atual"""
+        current_metrics = self.get_current_metrics()
         
         return {
             'phase': self.current_phase,
-            'target_rps': targets[0],
-            'target_dps': targets[1],
-            'target_success': targets[2],
-            'current_rps': current_rps,
-            'current_dps': current_dps,
-            'current_success': current_success,
-            'progress_percentage': min(100, int(self.get_phase_weight_multiplier() * 50 - 50))
+            'current_rps': current_metrics['reward_per_step'],
+            'current_dps': current_metrics['distance_per_step'], 
+            'current_success': current_metrics['success_rate'],
+            'avg_distance': current_metrics['avg_distance'],
+            'avg_reward': current_metrics['avg_reward'],
+            'success_achieved': self.success_achieved,
+            'weight_adjustments': self.get_phase_weight_adjustments()
         }
