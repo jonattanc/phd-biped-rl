@@ -4,7 +4,23 @@ from scipy import stats
 import os
 import glob
 
-def realizar_testes_t(dados_por_categoria, categorias_validas, metricas):
+def separar_cc_por_pista(df_cc):
+    """Separa o arquivo CC.csv por pista baseado na ordem alternada"""
+    # Ordem das pistas: PBA, PG, PRA, PRB, PRD, PR
+    pistas = ['PBA', 'PG', 'PRA', 'PRB', 'PRD', 'PR']
+    
+    # Criar DataFrames separados para cada pista
+    dados_por_pista = {}
+    
+    for i, pista in enumerate(pistas):
+        # Selecionar episódios desta pista (cada 6 episódios, começando pela posição i)
+        episodios_pista = df_cc.iloc[i::6].copy()
+        episodios_pista['categoria'] = f'CC_{pista}'
+        dados_por_pista[pista] = episodios_pista
+    
+    return dados_por_pista
+
+def realizar_testes_t(dados_por_categoria, categorias_validas, metricas, sufixo=""):
     """Realiza testes t para todas as métricas especificadas"""
     for metrica in metricas:
         tabela_teste_t = []
@@ -33,8 +49,9 @@ def realizar_testes_t(dados_por_categoria, categorias_validas, metricas):
                         continue
         
         if tabela_teste_t:
+            nome_arquivo = f'teste_t_{metrica}{sufixo}.csv'
             df_teste_t = pd.DataFrame(tabela_teste_t)
-            df_teste_t.to_csv(f'teste_t_{metrica}.csv', index=False, encoding='utf-8-sig')
+            df_teste_t.to_csv(nome_arquivo, index=False, encoding='utf-8-sig')
 
 def analisar_ultimos_5000_episodios():
     """Analisa os últimos 5000 episódios de todos os arquivos CSV na pasta"""
@@ -47,43 +64,58 @@ def analisar_ultimos_5000_episodios():
     
     # Coletar dados dos últimos 5000 episódios de cada arquivo
     todos_dados = []
+    todos_dados_cc_separado = []
     
     for arquivo in arquivos_csv:
         try:
             df = pd.read_csv(arquivo)
-            
-            # Pegar últimos 5000 episódios (ou todos se tiver menos)
-            ultimos_episodios = df.tail(5000)
-            
-            # Adicionar identificação do arquivo (categoria)
             nome_arquivo = os.path.splitext(arquivo)[0]
-            ultimos_episodios['categoria'] = nome_arquivo
             
+            # Processar todos os arquivos normalmente (incluindo CC como método geral)
+            ultimos_episodios = df.tail(5000)
+            ultimos_episodios['categoria'] = nome_arquivo
             todos_dados.append(ultimos_episodios)
+            
+            # Se for o arquivo CC, também separar por pista para análises detalhadas
+            if nome_arquivo == 'CC':
+                dados_cc_separados = separar_cc_por_pista(df)
+                
+                # Adicionar cada pista do CC separadamente
+                for pista, df_pista in dados_cc_separados.items():
+                    ultimos_episodios_pista = df_pista.tail(5000)
+                    ultimos_episodios_pista['categoria'] = f'CC_{pista}'
+                    todos_dados_cc_separado.append(ultimos_episodios_pista)
             
         except Exception as e:
             continue
     
-    if not todos_dados:
-        return
+    # ANÁLISE 1: Métodos Gerais (CC como método único)
+    if todos_dados:
+        df_completo_geral = pd.concat(todos_dados, ignore_index=True)
+        analisar_dados_gerais(df_completo_geral)
     
-    # Combinar todos os dados
-    df_completo = pd.concat(todos_dados, ignore_index=True)
+    # ANÁLISE 2: CC Separado por Pista (comparação detalhada)
+    if todos_dados_cc_separado:
+        df_completo_cc_separado = pd.concat(todos_dados_cc_separado, ignore_index=True)
+        analisar_cc_por_pista(df_completo_cc_separado)
+
+def analisar_dados_gerais(df_completo):
+    """Analisa dados considerando CC como método geral"""
     
-    # Lista de categorias para análise
-    categorias = ['PR', 'PBA', 'PG', 'PRB', 'PRD', 'PRA', 'CC']
+    # Lista de categorias para análise (métodos gerais)
+    categorias_gerais = ['PR', 'PBA', 'PG', 'PRB', 'PRD', 'PRA', 'CC']
     
     # Dicionário para armazenar resultados
-    resultados = {}
-    dados_por_categoria = {}
+    resultados_gerais = {}
+    dados_por_categoria_geral = {}
     
-    for categoria in categorias:
+    for categoria in categorias_gerais:
         df_cat = df_completo[df_completo['categoria'] == categoria]
         
         if len(df_cat) == 0:
             continue
             
-        dados_por_categoria[categoria] = {
+        dados_por_categoria_geral[categoria] = {
             'distancia': df_cat['distancia'],
             'tempo': df_cat['tempo'],
             'recompensa': df_cat['recompensa'],
@@ -92,40 +124,91 @@ def analisar_ultimos_5000_episodios():
         }
         
         # Estatísticas básicas
-        resultados[categoria] = {
-            'distancia_media': df_cat['distancia'].mean(),
-            'distancia_mediana': df_cat['distancia'].median(),
-            'distancia_std': df_cat['distancia'].std(),
-            
-            'tempo_media': df_cat['tempo'].mean(),
-            'tempo_mediana': df_cat['tempo'].median(),
-            'tempo_std': df_cat['tempo'].std(),
-            
-            'recompensa_media': df_cat['recompensa'].mean(),
-            'recompensa_mediana': df_cat['recompensa'].median(),
-            'recompensa_std': df_cat['recompensa'].std(),
-            
-            'passos_media': df_cat['passos'].mean(),
-            'passos_mediana': df_cat['passos'].median(),
-            'passos_std': df_cat['passos'].std(),
-            
-            'sucesso_media': df_cat['sucesso'].mean() * 100,
-            'sucesso_mediana': df_cat['sucesso'].median(),
-            'sucesso_std': df_cat['sucesso'].std() * 100,
-            
-            'eficiencia_rp': (df_cat['recompensa'] / df_cat['passos']).mean(),
-            'eficiencia_vt': (df_cat['distancia'] / df_cat['tempo']).mean(),
-            'eficiencia_dp': (df_cat['distancia'] / df_cat['passos']).mean()
-        }
+        resultados_gerais[categoria] = calcular_estatisticas_basicas(df_cat)
     
-    # TESTES T PARA TODAS AS MÉTRICAS
-    categorias_validas = [cat for cat in categorias if cat in resultados]
+    # TESTES T PARA MÉTODOS GERAIS
+    categorias_validas_geral = [cat for cat in categorias_gerais if cat in resultados_gerais]
     
-    if len(categorias_validas) > 1:
+    if len(categorias_validas_geral) > 1:
         metricas_teste = ['distancia', 'tempo', 'recompensa', 'passos', 'sucesso']
-        realizar_testes_t(dados_por_categoria, categorias_validas, metricas_teste)
+        realizar_testes_t(dados_por_categoria_geral, categorias_validas_geral, metricas_teste, "_geral")
     
-    # TABELAS ESTATÍSTICAS BÁSICAS
+    # GERAR TABELAS PARA MÉTODOS GERAIS
+    gerar_tabelas_estatisticas(resultados_gerais, categorias_gerais, "_geral")
+    
+    # PAINEL CONSOLIDADO PARA MÉTODOS GERAIS
+    gerar_painel_consolidado(resultados_gerais, categorias_gerais, "painel_consolidado_geral.csv")
+
+def analisar_cc_por_pista(df_completo_cc):
+    """Analisa CC separado por pista para comparação detalhada"""
+    
+    # Lista de categorias para análise CC por pista
+    categorias_cc = ['CC_PBA', 'CC_PG', 'CC_PRA', 'CC_PRB', 'CC_PRD', 'CC_PR']
+    
+    # Dicionário para armazenar resultados
+    resultados_cc = {}
+    dados_por_categoria_cc = {}
+    
+    for categoria in categorias_cc:
+        df_cat = df_completo_cc[df_completo_cc['categoria'] == categoria]
+        
+        if len(df_cat) == 0:
+            continue
+            
+        dados_por_categoria_cc[categoria] = {
+            'distancia': df_cat['distancia'],
+            'tempo': df_cat['tempo'],
+            'recompensa': df_cat['recompensa'],
+            'passos': df_cat['passos'],
+            'sucesso': df_cat['sucesso']
+        }
+        
+        # Estatísticas básicas
+        resultados_cc[categoria] = calcular_estatisticas_basicas(df_cat)
+    
+    # TESTES T PARA CC POR PISTA
+    categorias_validas_cc = [cat for cat in categorias_cc if cat in resultados_cc]
+    
+    if len(categorias_validas_cc) > 1:
+        metricas_teste = ['distancia', 'tempo', 'recompensa', 'passos', 'sucesso']
+        realizar_testes_t(dados_por_categoria_cc, categorias_validas_cc, metricas_teste, "_cc_pistas")
+    
+    # GERAR TABELAS PARA CC POR PISTA
+    gerar_tabelas_estatisticas(resultados_cc, categorias_cc, "_cc_pistas")
+    
+    # PAINEL CONSOLIDADO PARA CC POR PISTA
+    gerar_painel_consolidado(resultados_cc, categorias_cc, "painel_consolidado_cc_pistas.csv")
+
+def calcular_estatisticas_basicas(df_cat):
+    """Calcula estatísticas básicas para um DataFrame"""
+    return {
+        'distancia_media': df_cat['distancia'].mean(),
+        'distancia_mediana': df_cat['distancia'].median(),
+        'distancia_std': df_cat['distancia'].std(),
+        
+        'tempo_media': df_cat['tempo'].mean(),
+        'tempo_mediana': df_cat['tempo'].median(),
+        'tempo_std': df_cat['tempo'].std(),
+        
+        'recompensa_media': df_cat['recompensa'].mean(),
+        'recompensa_mediana': df_cat['recompensa'].median(),
+        'recompensa_std': df_cat['recompensa'].std(),
+        
+        'passos_media': df_cat['passos'].mean(),
+        'passos_mediana': df_cat['passos'].median(),
+        'passos_std': df_cat['passos'].std(),
+        
+        'sucesso_media': df_cat['sucesso'].mean() * 100,
+        'sucesso_mediana': df_cat['sucesso'].median(),
+        'sucesso_std': df_cat['sucesso'].std() * 100,
+        
+        'eficiencia_rp': (df_cat['recompensa'] / df_cat['passos']).mean(),
+        'eficiencia_vt': (df_cat['distancia'] / df_cat['tempo']).mean(),
+        'eficiencia_dp': (df_cat['distancia'] / df_cat['passos']).mean()
+    }
+
+def gerar_tabelas_estatisticas(resultados, categorias, sufixo):
+    """Gera tabelas estatísticas básicas"""
     
     # Tabela de Distância
     tabela_distancia = []
@@ -140,7 +223,7 @@ def analisar_ultimos_5000_episodios():
             ])
     
     df_distancia = pd.DataFrame(tabela_distancia, columns=['Distância', 'Média', 'Mediana', 'Desvio Padrão'])
-    df_distancia.to_csv('tabela_distancia.csv', index=False, encoding='utf-8-sig')
+    df_distancia.to_csv(f'tabela_distancia{sufixo}.csv', index=False, encoding='utf-8-sig')
     
     # Tabela de Tempo
     tabela_tempo = []
@@ -155,7 +238,7 @@ def analisar_ultimos_5000_episodios():
             ])
     
     df_tempo = pd.DataFrame(tabela_tempo, columns=['Tempo', 'Média', 'Mediana', 'Desvio Padrão'])
-    df_tempo.to_csv('tabela_tempo.csv', index=False, encoding='utf-8-sig')
+    df_tempo.to_csv(f'tabela_tempo{sufixo}.csv', index=False, encoding='utf-8-sig')
     
     # Tabela de Recompensa
     tabela_recompensa = []
@@ -169,7 +252,7 @@ def analisar_ultimos_5000_episodios():
             tabela_recompensa.append([cat, media, mediana, std])
     
     df_recompensa = pd.DataFrame(tabela_recompensa, columns=['Recompensa', 'Média', 'Mediana', 'Desvio Padrão'])
-    df_recompensa.to_csv('tabela_recompensa.csv', index=False, encoding='utf-8-sig')
+    df_recompensa.to_csv(f'tabela_recompensa{sufixo}.csv', index=False, encoding='utf-8-sig')
     
     # Tabela de Passos
     tabela_passos = []
@@ -184,7 +267,7 @@ def analisar_ultimos_5000_episodios():
             ])
     
     df_passos = pd.DataFrame(tabela_passos, columns=['Passos', 'Média', 'Mediana', 'Desvio Padrão'])
-    df_passos.to_csv('tabela_passos.csv', index=False, encoding='utf-8-sig')
+    df_passos.to_csv(f'tabela_passos{sufixo}.csv', index=False, encoding='utf-8-sig')
     
     # Tabela de Sucessos
     tabela_sucessos = []
@@ -199,22 +282,10 @@ def analisar_ultimos_5000_episodios():
             ])
     
     df_sucessos = pd.DataFrame(tabela_sucessos, columns=['Sucessos', 'Média', 'Mediana', 'Desvio Padrão'])
-    df_sucessos.to_csv('tabela_sucessos.csv', index=False, encoding='utf-8-sig')
-    
-    # Tabela de Eficiência
-    tabela_eficiencia = []
-    for cat in categorias:
-        if cat in resultados:
-            dados = resultados[cat]
-            tabela_eficiencia.append([
-                cat,
-                f"{dados['eficiencia_rp']:.2f}".replace('.', ',')
-            ])
-    
-    df_eficiencia = pd.DataFrame(tabela_eficiencia, columns=['Eficiencia', 'Média'])
-    df_eficiencia.to_csv('tabela_eficiencia.csv', index=False, encoding='utf-8-sig')
-    
-    # PAINEL CONSOLIDADO (sem consistência)
+    df_sucessos.to_csv(f'tabela_sucessos{sufixo}.csv', index=False, encoding='utf-8-sig')
+
+def gerar_painel_consolidado(resultados, categorias, nome_arquivo):
+    """Gera painel consolidado"""
     painel_consolidado = []
     
     for cat in categorias:
@@ -266,7 +337,7 @@ def analisar_ultimos_5000_episodios():
     df_painel = df_painel.sort_values('Score_Final_Num', ascending=False)
     df_painel = df_painel.drop('Score_Final_Num', axis=1)
     
-    df_painel.to_csv('painel_consolidado.csv', index=False, encoding='utf-8-sig')
+    df_painel.to_csv(nome_arquivo, index=False, encoding='utf-8-sig')
 
 if __name__ == "__main__":
     analisar_ultimos_5000_episodios()

@@ -6,6 +6,7 @@ import multiprocessing
 import queue
 import json
 from datetime import datetime
+from typing import Dict
 import numpy as np
 
 
@@ -140,62 +141,102 @@ def make_serializable(obj):
         return obj.isoformat()
     else:
         return obj
-
+    
 
 class PhaseManager:
     def __init__(self):
         self.current_phase = 1
-        self.phase_metrics = {
-            'distance_history': deque(maxlen=20),
-            'stability_history': deque(maxlen=20),
-            'success_history': deque(maxlen=10)
+        # Metas por fase: [reward_per_step, distance_per_step, success_rate]
+        self.phase_targets = {
+            1: [1.0, 0.015, 0.01],   # Fase Iniciante
+            2: [5.0, 0.020, 0.15],   # Fase Intermediária  
+            3: [10.0, 0.025, 0.30]    # Fase Avançada
         }
-        
+        self.metric_history = {
+            'rps': deque(maxlen=8),    # reward per step
+            'dps': deque(maxlen=8),    # distance per step
+            'success': deque(maxlen=6) # success (1 ou 0)
+        }
+        self.phase_transition_occurred = False
+    
     def update_phase_metrics(self, episode_metrics):
         """Atualiza métricas para decisão de fase"""
-        self.phase_metrics['distance_history'].append(episode_metrics.get('distances', 0))
+        steps = episode_metrics.get('steps', 1)
+        reward = episode_metrics.get('reward', 0)
+        distance = episode_metrics.get('distances', 0)
+        success = episode_metrics.get('success', False)
         
-        # Calcular estabilidade baseado na orientação
-        roll = abs(episode_metrics.get('roll', 0))
-        pitch = abs(episode_metrics.get('pitch', 0))
-        stability = 1.0 - min(1.0, (roll + pitch) / 2.0)
-        self.phase_metrics['stability_history'].append(stability)
+        # Calcular métricas por passo
+        rps = reward / steps if steps > 0 else 0
+        dps = distance / steps if steps > 0 else 0
+        success_value = 1.0 if success else 0.0
         
-        self.phase_metrics['success_history'].append(episode_metrics.get('success', False))
+        self.metric_history['rps'].append(rps)
+        self.metric_history['dps'].append(dps)
+        self.metric_history['success'].append(success_value)
     
     def should_transition_phase(self):
-        """Decide se deve transicionar para próxima fase"""
-        if (len(self.phase_metrics['distance_history']) < 10 or 
-            len(self.phase_metrics['stability_history']) < 10):
+        """Decide se deve transicionar para a próxima fase"""
+        if (len(self.metric_history['rps']) < 5 or 
+            len(self.metric_history['dps']) < 5 or 
+            len(self.metric_history['success']) < 5):
             return False
             
-        avg_distance = np.mean(self.phase_metrics['distance_history'])
-        avg_stability = np.mean(self.phase_metrics['stability_history'])
-        success_rate = np.mean(self.phase_metrics['success_history'])
+        targets = self.phase_targets[self.current_phase]
+        avg_rps = np.mean(self.metric_history['rps'])
+        avg_dps = np.mean(self.metric_history['dps'])
+        avg_success = np.mean(self.metric_history['success'])
         
-        # Critérios de transição
-        if self.current_phase == 1:
-            # Fase 1 → 2: Robô estável e andando moderadamente
-            if avg_distance > 3.0 and avg_stability > 0.6:
-                self.current_phase = 2
-                print("🎉 DPG: Transição Fase 1 → Fase 2")
-                return True
-                
-        elif self.current_phase == 2:
-            # Fase 2 → 3: Bom desempenho e consistência
-            if avg_distance > 8.0 and success_rate > 0.1:
-                self.current_phase = 3
-                print("🎉 DPG: Transição Fase 2 → Fase 3")
-                return True
-                
+        # Verificar se atingiu pelo menos 90% da meta em todos os aspectos
+        transition = (avg_rps >= targets[0] * 0.9 and 
+                     avg_dps >= targets[1] * 0.9 and 
+                     avg_success >= targets[2] * 0.9)
+        
+        if transition and self.current_phase < 3:
+            self.current_phase += 1
+            self.phase_transition_occurred = True
+            return True
+            
         return False
     
     def get_phase_weight_multiplier(self):
-        """Retorna multiplicador de pesos baseado na fase atual"""
-        if self.current_phase == 1:
-            return 1.0    
-        elif self.current_phase == 2:
-            return 1.5    
-        elif self.current_phase == 3:
-            return 2.0    
-        return 1.0
+        """Retorna multiplicador de pesos baseado no progresso na fase atual"""
+        if (len(self.metric_history['rps']) == 0 or 
+            len(self.metric_history['dps']) == 0 or 
+            len(self.metric_history['success']) == 0):
+            return 1.0
+            
+        targets = self.phase_targets[self.current_phase]
+        avg_rps = np.mean(self.metric_history['rps'])
+        avg_dps = np.mean(self.metric_history['dps'])
+        avg_success = np.mean(self.metric_history['success'])
+        
+        progress_rps = min(1.0, avg_rps / targets[0])
+        progress_dps = min(1.0, avg_dps / targets[1])
+        progress_success = min(1.0, avg_success / targets[2])
+        
+        # Progresso geral (ponderado)
+        overall_progress = (progress_rps * 0.4 + progress_dps * 0.4 + progress_success * 0.2)
+        
+        # Multiplicador: 1.0 (sem progresso) até 2.0 (atingiu a meta)
+        multiplier = 1.0 + overall_progress
+        
+        return multiplier
+    
+    def get_phase_info(self):
+        """Retorna informações da fase atual para logging"""
+        targets = self.phase_targets[self.current_phase]
+        current_rps = np.mean(self.metric_history['rps']) if self.metric_history['rps'] else 0
+        current_dps = np.mean(self.metric_history['dps']) if self.metric_history['dps'] else 0
+        current_success = np.mean(self.metric_history['success']) if self.metric_history['success'] else 0
+        
+        return {
+            'phase': self.current_phase,
+            'target_rps': targets[0],
+            'target_dps': targets[1],
+            'target_success': targets[2],
+            'current_rps': current_rps,
+            'current_dps': current_dps,
+            'current_success': current_success,
+            'progress_percentage': min(100, int(self.get_phase_weight_multiplier() * 50 - 50))
+        }

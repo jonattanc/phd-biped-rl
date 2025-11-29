@@ -70,7 +70,6 @@ class FastTD3(TD3):
     """
     
     def __init__(self, policy, env, action_dim, **kwargs):
-        # Configurar action_noise específico para FastTD3
         action_noise = NormalActionNoise(
             mean=np.zeros(action_dim), 
             sigma=0.1 * np.ones(action_dim)
@@ -84,23 +83,36 @@ class FastTD3(TD3):
         
         # Sistema DPG integrado
         self.dpg_buffer = IntelligentBuffer(capacity=50000)
-        self.phase_manager = PhaseManager()
+        self.phase_manager = PhaseManager() 
         
     def store_dpg_experience(self, state, action, reward, next_state, done):
         """Armazena experiência no buffer DPG"""
         self.dpg_buffer.add_experience((state, action, reward, next_state, done))
-        
-        # Verificar transição de fase a cada 10 experiências
-        if len(self.dpg_buffer) % 10 == 0:
-            self.phase_manager.should_transition_phase()
     
     def get_dpg_status(self):
         """Retorna status do DPG integrado"""
         return {
             'phase': self.phase_manager.current_phase,
             'buffer_size': len(self.dpg_buffer),
-            'phase_ready': len(self.dpg_buffer) > 1000
+            'phase_ready': len(self.dpg_buffer) > 1000,
+            'phase_info': self.phase_manager.get_phase_info()
         }
+    
+    def update_phase_metrics(self, episode_metrics):
+        """Atualiza métricas do phase manager"""
+        self.phase_manager.update_phase_metrics(episode_metrics)
+    
+    def should_transition_phase(self):
+        """Verifica transição de fase"""
+        return self.phase_manager.should_transition_phase()
+    
+    def get_phase_multiplier(self):
+        """Retorna multiplicador da fase"""
+        return self.phase_manager.get_phase_weight_multiplier()
+    
+    def get_phase_info(self):
+        """Retorna informações da fase"""
+        return self.phase_manager.get_phase_info()
 
 
 class TrainingCallback(BaseCallback):
@@ -202,16 +214,16 @@ class Agent:
                 "MlpPolicy",
                 self.env,
                 action_dim=action_dim,
-                learning_rate=3e-4,  # Aumentar LR
-                buffer_size=50000,  # Buffer menor para aprendizado mais rápido
-                learning_starts=2000,  # Começar a aprender mais cedo
-                batch_size=256,  # Batch menor
-                gamma=0.98,  # Desconto menor = foco em recompensas imediatas
-                train_freq=(4, "step"),  # Treinar com menos frequência
-                gradient_steps=1,  # Mais atualizações quando treinar
-                policy_delay=2,
-                target_policy_noise=0.1,
-                target_noise_clip=0.1,
+                learning_rate=1.0e-4,
+                buffer_size=int(1e6),
+                learning_starts=self.learning_starts,
+                batch_size=256,
+                gamma=0.99,
+                train_freq=(1, "step"),
+                gradient_steps=1,
+                policy_delay=3,
+                target_policy_noise=0.4,
+                target_noise_clip=0.5,
                 tensorboard_log="./logs/",
                 device=device,
             )

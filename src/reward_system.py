@@ -138,6 +138,19 @@ class RewardSystem:
             self.components["distance_bonus"].value = sim.episode_distance
             total_reward += sim.episode_distance * self.components["distance_bonus"].weight
 
+        # BONUS DE EFICIÊNCIA
+        if self.is_component_enabled("efficiency_bonus"):
+            steps = max(sim.episode_steps, 1)
+            reward_per_step = (sim.episode_reward + total_reward) / steps
+            distance_per_step = sim.episode_distance / steps
+            
+            # Bonus baseado na eficiência atual
+            efficiency_score = (reward_per_step * 0.6 + distance_per_step * 50 * 0.4)
+            efficiency_bonus = max(0, efficiency_score * 2.0)
+            
+            self.components["efficiency_bonus"].value = efficiency_bonus
+            total_reward += efficiency_bonus * self.components["efficiency_bonus"].weight
+            
         # Inclinação frontal
         if self.is_component_enabled("pitch_forward_bonus"):
             target_forward_pitch = 0.05
