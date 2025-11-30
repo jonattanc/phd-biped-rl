@@ -31,6 +31,7 @@ def process_runner(
     device="cpu",
     initial_episode=0,
     model_path=None,
+    enable_dpg=True,
     episodes=1000,
     deterministic=False,
 ):
@@ -41,6 +42,7 @@ def process_runner(
     logger.info(f"Câmera: {camera_selection_value.value}")
     logger.info(f"Episódio inicial: {initial_episode}")
     logger.info(f"Modelo carregado: {model_path}")
+    logger.info(f"Dynamic Policy Gradient: {enable_dpg}")
 
     try:
         np.random.seed(seed)
@@ -116,7 +118,8 @@ def process_runner(
                 timesteps_completed += timesteps_batch_size
                 
                 # Treinamento normal do agente
-                agent.model.learn(total_timesteps=timesteps_batch_size, reset_num_timesteps=False, callback=callback)
+                agent.model.learn(total_timesteps=timesteps_batch_size, 
+                                reset_num_timesteps=False, callback=callback)
 
                 # Enviar progresso para GUI
                 if timesteps_completed % 10000 == 0:

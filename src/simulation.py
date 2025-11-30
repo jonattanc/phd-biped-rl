@@ -69,17 +69,14 @@ class Simulation(gym.Env):
         self.physics_step_s = 1 / 240.0  # 240 Hz, ~4.16 ms
         self.physics_step_multiplier = 8
         self.time_step_s = self.physics_step_s * self.physics_step_multiplier  # 240/5 = 48 Hz, ~20.83 ms # 240/8 = 30 Hz, ~33.33 ms # 240/10 = 24 Hz, ~41.66 ms
+        self.max_motor_velocity = 1.5  # rad/s
+        self.max_motor_torque = 130.0  # Nm
         self.max_training_steps = int(self.episode_training_timeout_s / self.time_step_s)
         self.max_pre_fill_steps = int(self.episode_pre_fill_timeout_s / self.time_step_s)
         self.max_steps = self.max_training_steps
         self.lock_per_second = 0.5  # lock/s
         self.lock_time = 0.5  # s
-
-        self.max_motor_velocity = 1.5  # rad/s
-        self.max_motor_torque = 130.0  # Nm
         self.action_noise_std = 1e-3
-        self.action_clip_range = 1.0
-        self.position_gains = 0.5
 
         # Configurar ambiente de simulação PRIMEIRO
         self.setup_sim_env()
@@ -190,7 +187,7 @@ class Simulation(gym.Env):
             t = self.episode_steps * self.time_step_s
             action = self.robot.get_example_action(t)
 
-            next_obs, reward, episode_terminated, episode_truncated, info = self.step(action, evaluation=False)
+            next_obs, reward, episode_terminated, episode_truncated, info = self.step(action)
             done = episode_terminated or episode_truncated
 
             action = np.array(action).flatten()
@@ -267,6 +264,7 @@ class Simulation(gym.Env):
         self.robot_x_sum_velocity = 0
         self.robot_y_sum_velocity = 0
         self.robot_z_sum_velocity = 0
+        self.episode_environment = self.environment.env_list[self.environment.selected_env_index] if self.environment.name == "todos_alternados" else self.environment.name
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -371,7 +369,7 @@ class Simulation(gym.Env):
             "roll_vel": self.robot_roll_vel,
             "pitch_vel": self.robot_pitch_vel,
             "yaw_vel": self.robot_yaw_vel,
-            "episode_environments": self.environment.env_list[self.environment.selected_env_index],
+            "episode_environment": self.episode_environment,
         }
 
         if evaluation:
@@ -392,9 +390,12 @@ class Simulation(gym.Env):
         except Exception as e:
             self.logger.exception("Erro ao transmitir dados do episódio")
 
+        if self.episode_count % 100 == 0:
+            self.logger.info(f"Episódio {self.episode_count} concluído")
+
     def apply_action(self, action):
         noise = np.random.normal(0, self.action_noise_std, size=action.shape)
-        action = np.clip(action + noise, -self.action_clip_range, self.action_clip_range)
+        action = np.clip(action + noise, -1, 1)
 
         joint_positions, joint_velocities = self.robot.get_joint_states()
 
@@ -420,7 +421,7 @@ class Simulation(gym.Env):
             controlMode=p.POSITION_CONTROL,
             targetPositions=self.target_positions,
             forces=forces,
-            positionGains=[self.position_gains] * self.action_dim,
+            positionGains=[0.5] * self.action_dim,
         )
 
     def step(self, action, evaluation=False):
@@ -519,13 +520,12 @@ class Simulation(gym.Env):
 
         self.episode_done = self.episode_truncated or self.episode_terminated
 
-        # CALCULAR RECOMPENSA BASE
-        reward = self.reward_system.calculate_reward(self, action, evaluation)
-
+        # Calcular recompensa
+        reward = self.reward_system.calculate_reward(self, action)
         self.episode_reward += reward
         self.episode_filtered_reward = 0.1 * self.episode_reward + 0.9 * self.episode_filtered_reward
 
-        if self.config_changed_value.value:
+        if self.config_changed_value.value:  # Se houve mudança de configuração
             if self.pause_value.value:
                 self.ipc_queue.put({"type": "tracker_status", "tracker_status": self.tracker.get_status()})
 
@@ -541,7 +541,6 @@ class Simulation(gym.Env):
 
         self.should_save_model = self.tracker.update()
 
-        # LOGS PARA TODOS OS ALGORITMOS A CADA 50 EPISÓDIOS
         # VERIFICAÇÃO FastTD3 para logging
         is_fast_td3 = (
             hasattr(self, 'agent') and 
@@ -627,6 +626,7 @@ class Simulation(gym.Env):
                     "phase_info": phase_info
                 })
 
+
         if evaluation:
             self.add_episode_metrics("action", action)
             self.add_episode_metrics("obs", next_obs)
@@ -670,7 +670,7 @@ class Simulation(gym.Env):
             self.transmit_episode_info(evaluation)
 
         self.episode_last_action = action
-        
+
         if self.tracker.should_pause() and not evaluation:
             self.ipc_queue.put({"type": "autopause_request", "tracker_status": self.tracker.get_status()})
             self.tracker.patience_steps += self.tracker.original_patience
@@ -680,7 +680,7 @@ class Simulation(gym.Env):
             info["exit"] = True
 
         return next_obs, reward, self.episode_terminated, self.episode_truncated, info
-    
+
     def try_to_resolve_config_change(self):
         self.config_changed_value.value = 0
         self.is_real_time_enabled = self.enable_real_time_value.value
