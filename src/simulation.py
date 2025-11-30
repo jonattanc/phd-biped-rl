@@ -194,7 +194,7 @@ class Simulation(gym.Env):
             done = episode_terminated or episode_truncated
 
             action = np.array(action).flatten()
-            self.agent.model.replay_buffer.add(obs, next_obs, action, reward, done, infos=[info])
+            self.agent.model.replay_buffer.add(obs, next_obs, action, reward, done)
 
             if done:
                 obs, _ = self.reset()

@@ -5,63 +5,126 @@ from stable_baselines3 import PPO, TD3
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.noise import NormalActionNoise
-import torch
-
 from utils import PhaseManager
+from collections import deque
+from typing import List, Dict, Any
 
 
-class IntelligentBuffer:
-    def __init__(self, capacity=100000):
-        self.buffer = []
+class AdaptiveBuffer:
+    """Buffer de experiências adaptativo com sistema de fases"""
+    
+    def __init__(self, capacity=50000):
         self.capacity = capacity
-        self.categories = {
-            'excellent': [],    # Recompensa > 5.0
-            'good': [],         # Recompensa 1.0 - 5.0  
-            'neutral': [],      # Recompensa -1.0 - 1.0
-            'poor': []          # Recompensa < -1.0
+        self.buffer = deque(maxlen=capacity)
+        self.current_phase = 1
+        self.episode_count = 0
+        
+    def set_phase(self, phase: int):
+        """Altera a fase do buffer"""
+        if 1 <= phase <= 3:
+            self.current_phase = phase
+    
+    def _calculate_quality(self, reward: float) -> float:
+        """Calcula qualidade baseada na recompensa"""
+        if reward > 50: return 0.9
+        elif reward > 20: return 0.8
+        elif reward > 10: return 0.7
+        elif reward > 5: return 0.6
+        elif reward > 0: return 0.5
+        elif reward > -5: return 0.4
+        elif reward > -10: return 0.3
+        elif reward > -20: return 0.2
+        else: return 0.1
+    
+    def add(self, obs, next_obs, action, reward, done):
+        """Adiciona experiência ao buffer"""
+        quality = self._calculate_quality(reward)
+        
+        # Aplicar filtro de qualidade baseado na fase
+        if self.current_phase == 2 and quality < 0.1:  # Fase 2: filtra ruins
+            return
+        elif self.current_phase == 3 and quality < 0.2:  # Fase 3: filtro rigoroso
+            return
+            
+        # Garantir que todos os elementos sejam arrays numpy
+        obs = np.array(obs, dtype=np.float32)
+        next_obs = np.array(next_obs, dtype=np.float32)
+        action = np.array(action, dtype=np.float32)
+        reward = np.float32(reward)
+        done = np.bool_(done)
+        
+        experience = (obs, action, reward, next_obs, done, quality, self.episode_count)
+        self.buffer.append(experience)
+    
+    def sample(self, batch_size: int):
+        """Amostragem balanceada baseada na fase atual"""
+        if len(self.buffer) < batch_size:
+            return list(self.buffer)
+            
+        # Amostragem estratificada simples
+        if self.current_phase == 1:
+            # Fase 1: amostragem aleatória
+            return random.sample(list(self.buffer), batch_size)
+        else:
+            # Fases 2 e 3: priorizar experiências de alta qualidade
+            high_quality = [exp for exp in self.buffer if exp[5] > 0.7]
+            medium_quality = [exp for exp in self.buffer if 0.3 <= exp[5] <= 0.7]
+            low_quality = [exp for exp in self.buffer if exp[5] < 0.3]
+            
+            # Balancear amostras por qualidade
+            if self.current_phase == 2:
+                high_count = min(int(batch_size * 0.5), len(high_quality))
+                medium_count = min(int(batch_size * 0.3), len(medium_quality))
+                low_count = batch_size - high_count - medium_count
+            else:  # Fase 3
+                high_count = min(int(batch_size * 0.7), len(high_quality))
+                medium_count = min(int(batch_size * 0.2), len(medium_quality))
+                low_count = batch_size - high_count - medium_count
+            
+            samples = []
+            if high_count > 0 and high_quality:
+                samples.extend(random.sample(high_quality, high_count))
+            if medium_count > 0 and medium_quality:
+                samples.extend(random.sample(medium_quality, medium_count))
+            if low_count > 0 and low_quality:
+                samples.extend(random.sample(low_quality, low_count))
+                
+            # Completar com amostras aleatórias se necessário
+            if len(samples) < batch_size:
+                additional = random.sample(list(self.buffer), batch_size - len(samples))
+                samples.extend(additional)
+                
+            return samples
+    
+    def update_episode(self, episode_count: int):
+        """Atualiza contador de episódio"""
+        self.episode_count = episode_count
+        
+        # Limpeza periódica simples (a cada 50 episódios)
+        if episode_count % 50 == 0 and len(self.buffer) > self.capacity * 0.8:
+            # Manter apenas as melhores 80% das experiências
+            sorted_buffer = sorted(self.buffer, key=lambda x: x[5], reverse=True)
+            keep_count = int(self.capacity * 0.8)
+            self.buffer = deque(sorted_buffer[:keep_count], maxlen=self.capacity)
+    
+    def get_status(self):
+        """Retorna estatísticas do buffer"""
+        if not self.buffer:
+            return {"size": 0, "phase": self.current_phase, "avg_quality": 0}
+        
+        qualities = [exp[5] for exp in self.buffer]
+        avg_quality = np.mean(qualities)
+        
+        return {
+            "phase": self.current_phase,
+            "size": len(self.buffer),
+            "capacity": self.capacity,
+            "avg_quality": round(avg_quality, 3),
+            "utilization": round(len(self.buffer) / self.capacity * 100, 1)
         }
     
-    def add_experience(self, experience):
-        """Adiciona experiência categorizada"""
-        state, action, reward, next_state, done = experience
-        
-        # Classificar por qualidade
-        if reward > 5.0:
-            category = 'excellent'
-        elif reward > 1.0:
-            category = 'good'
-        elif reward > -1.0:
-            category = 'neutral'
-        else:
-            category = 'poor'
-        
-        # Manter balanceamento
-        self.categories[category].append(experience)
-        if len(self.categories[category]) > self.capacity // 4:
-            self.categories[category].pop(0)
-    
-    def sample(self, batch_size=128):
-        """Amostra balanceada do buffer"""
-        samples = []
-        for category in self.categories:
-            if len(self.categories[category]) > 0:
-                # 25% de cada categoria
-                n_samples = batch_size // 4
-                category_samples = random.sample(
-                    self.categories[category], 
-                    min(n_samples, len(self.categories[category]))
-                )
-                samples.extend(category_samples)
-        
-        # Completar com amostras aleatórias se necessário
-        if len(samples) < batch_size:
-            all_experiences = [exp for cat in self.categories.values() for exp in cat]
-            samples.extend(random.sample(all_experiences, batch_size - len(samples)))
-        
-        return samples
-    
     def __len__(self):
-        return sum(len(category) for category in self.categories.values())
+        return len(self.buffer)
     
 
 class FastTD3(TD3):
@@ -69,87 +132,89 @@ class FastTD3(TD3):
     Fast TD3 com DPG integrado - buffer inteligente e sistema de fases
     """
     
-    def __init__(self, policy, env, action_dim, **kwargs):
-        action_noise = NormalActionNoise(
-            mean=np.zeros(action_dim), 
-            sigma=0.1 * np.ones(action_dim)
-        )
-        super().__init__(
-            policy,
-            env,
-            action_noise=action_noise,
-            **kwargs
-        )
+    def __init__(self, policy, env, custom_logger=None, **kwargs):
+        kwargs.pop('action_dim', None)
+        super().__init__(policy, env, **kwargs)
         
-        # Sistema DPG integrado
-        self.dpg_buffer = IntelligentBuffer(capacity=50000)
-        self.phase_manager = PhaseManager() 
-
-        # Configurações específicas por fase
-        self.phase_configs = {
-            1: {'learning_rate': 1.0e-4, 'noise_sigma': 0.1},  # Fase 1: padrão
-            2: {'learning_rate': 8.0e-5, 'noise_sigma': 0.05}, # Fase 2: mais estável
-            3: {'learning_rate': 5.0e-5, 'noise_sigma': 0.02}  # Fase 3: mais preciso
-        }
+        # Armazenar o logger com um nome diferente para evitar conflito
+        self.custom_logger = custom_logger
         
-    def store_dpg_experience(self, state, action, reward, next_state, done):
-        """Armazena experiência no buffer DPG"""
-        self.dpg_buffer.add_experience((state, action, reward, next_state, done))
+        # Usar nosso buffer adaptativo em vez do buffer padrão
+        buffer_size = kwargs.get('buffer_size', 100000)
+        self.replay_buffer = AdaptiveBuffer(capacity=buffer_size)
+        self.phase_manager = PhaseManager()
     
-    def get_dpg_status(self):
-        """Retorna status do DPG integrado"""
-        return {
-            'phase': self.phase_manager.current_phase,
-            'buffer_size': len(self.dpg_buffer),
-            'phase_ready': len(self.dpg_buffer) > 1000,
-            'phase_info': self.phase_manager.get_phase_info()
-        }
+    def _store_transition(self, replay_buffer, action, new_obs, reward, done, infos):
+        """Armazena transição no nosso buffer adaptativo"""
+        # Ignorar infos para manter compatibilidade com nosso buffer
+        self.replay_buffer.add(self._last_obs, new_obs, action, reward, done)
+    
+    def train(self, gradient_steps, batch_size=100):
+        """
+        Treinamento com buffer adaptativo
+        """
+        # Sincronizar fase atual com o buffer
+        current_phase = self.phase_manager.current_phase
+        self.replay_buffer.set_phase(current_phase)
+        
+        for gradient_step in range(gradient_steps):
+            # Amostrar do nosso buffer adaptativo
+            if len(self.replay_buffer) < batch_size:
+                break
+                
+            replay_data = self.replay_buffer.sample(batch_size)
+            
+            if not replay_data:
+                continue
+                
+            try:
+                # Converter para arrays compatíveis com TD3 - garantir formato consistente
+                observations = np.stack([exp[0] for exp in replay_data])
+                actions = np.stack([exp[1] for exp in replay_data])
+                rewards = np.array([exp[2] for exp in replay_data], dtype=np.float32)
+                next_observations = np.stack([exp[3] for exp in replay_data])
+                dones = np.array([exp[4] for exp in replay_data], dtype=np.bool_)
+                
+                # Verificar se todas as observações têm a mesma dimensão
+                if observations.shape[1] != self.observation_space.shape[0]:
+                    if hasattr(self, 'custom_logger') and self.custom_logger:
+                        self.custom_logger.warn(f"Dimensão inconsistente: esperado {self.observation_space.shape[0]}, obtido {observations.shape[1]}")
+                    continue
+                    
+                # Chamar implementação original do TD3
+                self._train_step(observations, actions, rewards, next_observations, dones)
+                
+            except Exception as e:
+                if hasattr(self, 'custom_logger') and self.custom_logger:
+                    self.custom_logger.warn(f"Erro ao processar batch de treinamento: {e}")
+                continue
     
     def update_phase_metrics(self, episode_metrics):
         """Atualiza métricas e gerencia transições de fase"""
         self.phase_manager.update_phase_metrics(episode_metrics)
         
+        # Atualizar contador de episódio no buffer
+        self.replay_buffer.update_episode(episode_metrics.get('episode_count', 0))
+        
         # Verificar transição de fase
         if self.phase_manager.should_transition_phase():
             if self.phase_manager.transition_to_next_phase():
-                self._apply_phase_config()
+                new_phase = self.phase_manager.current_phase
+                self.replay_buffer.set_phase(new_phase)
                 return True
         return False
     
-    def _apply_phase_config(self):
-        """Aplica configurações específicas da fase"""
-        phase = self.phase_manager.current_phase
-        config = self.phase_configs.get(phase, {})
-        
-        if 'learning_rate' in config:
-            # Atualizar learning rate
-            for param_group in self.actor.optimizer.param_groups:
-                param_group['lr'] = config['learning_rate']
-            for param_group in self.critic.optimizer.param_groups:
-                param_group['lr'] = config['learning_rate']
-        
-        if 'noise_sigma' in config:
-            # Atualizar noise
-            self.action_noise = NormalActionNoise(
-                mean=np.zeros(self.action_space.shape[0]),
-                sigma=config['noise_sigma'] * np.ones(self.action_space.shape[0])
-            )
-    
-    def should_transition_phase(self):
-        """Verifica transição de fase"""
-        return self.phase_manager.should_transition_phase()
-    
-    def get_phase_multiplier(self):
-        """Retorna multiplicador da fase"""
-        return self.phase_manager.get_phase_weight_multiplier()
-    
     def get_phase_info(self):
-        """Retorna informações da fase"""
+        """Retorna informações da fase atual"""
         return self.phase_manager.get_phase_info()
 
     def get_phase_weight_adjustments(self):
         """Retorna ajustes de peso específicos por componente"""
         return self.phase_manager.get_phase_weight_adjustments()
+    
+    def get_buffer_status(self):
+        """Retorna status do buffer adaptativo"""
+        return self.replay_buffer.get_status()
 
 
 class TrainingCallback(BaseCallback):
@@ -246,11 +311,10 @@ class Agent:
                 seed=seed,
             )
         elif algorithm.upper() == "FASTTD3":
-            action_dim = self.env.action_space.shape[0]
             return FastTD3(
                 "MlpPolicy",
                 self.env,
-                action_dim=action_dim,
+                custom_logger=self.logger,
                 learning_rate=1.0e-4,
                 buffer_size=int(1e6),
                 learning_starts=self.learning_starts,
@@ -303,6 +367,8 @@ class Agent:
                 self.algorithm = "FastTD3"
                 if hasattr(self.model, "action_space") and self.model.action_space is not None:
                     self.action_dim = self.model.action_space.shape[0]
+                if hasattr(self.model, 'custom_logger'):
+                    self.model.custom_logger = self.logger
                 self.logger.info(f"Modelo FastTD3 carregado: {model_path}")
 
     def set_agent(self, agent):

@@ -38,21 +38,21 @@ class RewardSystem:
 
     def calculate_reward(self, sim, action, evaluation=False):
         """Calcula recompensa padrão"""
-    
+
         # Resetar valores dos componentes
         for component in self.components.values():
             component.value = 0.0
-    
+
         total_reward = 0.0
         weight_adjustments = {}  # Multiplicadores específicos por componente
-    
+
         # VERIFICAÇÃO FastTD3 - Obter multiplicadores específicos
         is_fast_td3 = (
             hasattr(sim, 'agent') and 
             hasattr(sim.agent, 'model') and 
             hasattr(sim.agent.model, 'phase_manager')  
         )
-    
+
         if not evaluation and is_fast_td3:
             weight_adjustments = sim.agent.model.get_phase_weight_adjustments()
         else:
@@ -60,54 +60,75 @@ class RewardSystem:
                 'efficiency_bonus': 1.0,
                 'progress': 1.0, 
                 'gait_state_change': 1.0,
-                'foot_clearance': 1.0
+                'foot_clearance': 1.0,
+                'fall_penalty': 2.0,
+                'y_axis_deviation_square_penalty': 1.0
             }
-    
+
         # COMPONENTES PARA MARCHA
         distance_y_from_center = abs(sim.robot_y_position)
-    
+
         # 1. PROGRESSO E VELOCIDADE
         if self.is_component_enabled("progress"):
             progress = sim.target_x_velocity - abs(sim.target_x_velocity - sim.robot_x_velocity)
             self.components["progress"].value = progress
             weight_multiplier = weight_adjustments.get('progress', 1.0)
             adjusted_weight = self.components["progress"].weight * weight_multiplier
-        
+
             total_reward += progress * adjusted_weight
-    
+
         # DPG - EFICIÊNCIA
         if self.is_component_enabled("efficiency_bonus"):
             steps = max(sim.episode_steps, 1)
             reward_per_step = sim.episode_reward / steps
             distance_per_step = sim.episode_distance / steps
-            
+
             efficiency_score = (reward_per_step * 0.6 + distance_per_step * 50 * 0.4)
             efficiency_bonus = max(0, efficiency_score * 2.0)
-            
+
             self.components["efficiency_bonus"].value = efficiency_bonus
-            
+
             weight_multiplier = weight_adjustments.get('efficiency_bonus', 1.0)
             adjusted_weight = self.components["efficiency_bonus"].weight * weight_multiplier
-            
+
             total_reward += efficiency_bonus * adjusted_weight
-    
+
         # DPG - Transições de estado
         if self.is_component_enabled("gait_state_change"):
             self.components["gait_state_change"].value = sim.has_gait_state_changed
             weight_multiplier = weight_adjustments.get('gait_state_change', 1.0)
             adjusted_weight = self.components["gait_state_change"].weight * weight_multiplier
-        
+
             total_reward += self.components["gait_state_change"].value * adjusted_weight
-        
+
         # DPG - Clearance
         if self.is_component_enabled("foot_clearance"):
             clearance_score = self._calculate_foot_clearance_optimized(sim)
             self.components["foot_clearance"].value = clearance_score
             weight_multiplier = weight_adjustments.get('foot_clearance', 1.0)
             adjusted_weight = self.components["foot_clearance"].weight * weight_multiplier
-        
-            total_reward += clearance_score * adjusted_weight
+
+            total_reward += self.components["foot_clearance"].value * adjusted_weight
          
+        # DPG - Se manter na pista
+        if self.is_component_enabled("y_axis_deviation_square_penalty"):
+            penalty = distance_y_from_center**2
+            self.components["y_axis_deviation_square_penalty"].value = penalty
+            weight_multiplier = weight_adjustments.get('y_axis_deviation_square_penalty', 1.0)
+            adjusted_weight = self.components["y_axis_deviation_square_penalty"].weight * weight_multiplier
+
+            total_reward += self.components["y_axis_deviation_square_penalty"].value * adjusted_weight
+
+        # DPG - PENALIDADES POR QUEDA
+        if self.is_component_enabled("fall_penalty"):
+            if sim.episode_termination == "fell":
+                self.components["fall_penalty"].value = 1
+                weight_multiplier = weight_adjustments.get('fall_penalty', 1.0)
+                adjusted_weight = self.components["fall_penalty"].weight * weight_multiplier
+
+                total_reward += self.components["fall_penalty"].value * adjusted_weight
+
+
         # 2. ESTABILIDADE DA MARCHA (Controle postural)
         if self.is_component_enabled("stability_pitch"):
             pitch_error = (sim.robot_pitch - sim.target_pitch_rad) ** 2
@@ -167,12 +188,6 @@ class RewardSystem:
             height_error = (sim.robot_z_position - 0.8) ** 2  # Altura ideal ~0.8m
             self.components["height_deviation_square_penalty"].value = height_error
             total_reward += height_error * self.components["height_deviation_square_penalty"].weight
-
-        # 10. PENALIDADES POR QUEDA (Segurança)
-        if self.is_component_enabled("fall_penalty"):
-            if sim.episode_termination == "fell":
-                self.components["fall_penalty"].value = 1
-                total_reward += self.components["fall_penalty"].weight
 
         # DEMAIS COMPONENTES
 
@@ -258,11 +273,6 @@ class RewardSystem:
             penalty = distance_y_from_center
             self.components["y_axis_deviation_penalty"].value = penalty
             total_reward += penalty * self.components["y_axis_deviation_penalty"].weight
-
-        if self.is_component_enabled("y_axis_deviation_square_penalty"):
-            penalty = distance_y_from_center**2
-            self.components["y_axis_deviation_square_penalty"].value = penalty
-            total_reward += penalty * self.components["y_axis_deviation_square_penalty"].weight
 
         if self.is_component_enabled("y_axis_deviation_cube_penalty"):
             penalty = distance_y_from_center**3

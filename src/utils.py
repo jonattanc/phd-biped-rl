@@ -152,7 +152,7 @@ class PhaseManager:
         self.buffer_size = 50
         
         # Critérios de transição
-        self.phase1_to_2_threshold = 6.0  # distância média > 6m
+        self.phase1_to_2_threshold = 4.0  # distância média > 4m
         self.phase2_to_3_threshold = 9.0  # primeiro sucesso de 9m
         self.success_achieved = False
         
@@ -160,16 +160,19 @@ class PhaseManager:
         self.phase_weight_adjustments = {
             1: {},  # Fase 1: usa 100% dos pesos do default.json
             2: {    # Fase 2: ajusta componentes de eficiência
-                'efficiency_bonus': 25.0,  # 2500% do peso original
-                'progress': 1.8,           # 180% do peso original  
-                'gait_state_change': 1.2,  # 120% do peso original
-                'foot_clearance': 15.0     # 1500% do peso original
+                'efficiency_bonus': 25.0,  # 2500% - Eficiência avançada
+                'progress': 2.0,           # 200% do peso original  
+                'gait_state_change': 1.5,  # 150% do peso original
+                'foot_clearance': 15.0,    # 1500% do peso original
+                'y_axis_deviation_square_penalty': 5.0,  # 500% - Precisão lateral
             },
             3: {    # Fase 3: ajusta componentes de performance
-                'efficiency_bonus': 15.0,  # 1500% do peso original
-                'progress': 2.2,           # 220% do peso original
-                'gait_state_change': 1.0,  # 100% do peso original (mantém)
-                'foot_clearance': 10.0     # 1000% do peso original (mantém)
+                'efficiency_bonus': 15.0,  # 1500% - Eficiência avançada
+                'progress': 2.5,           # 250% do peso original
+                'gait_state_change': 2.0,  # 200% do peso original 
+                'foot_clearance': 10.0,    # 1000% do peso original 
+                'fall_penalty': 2.0,       # 200% - Penalidade máxima por queda
+                'y_axis_deviation_square_penalty': 15.0, # 1500% - Precisão lateral
             }
         }
     
@@ -190,7 +193,7 @@ class PhaseManager:
         current_metrics = self.get_current_metrics()
         
         if self.current_phase == 1:
-            # Fase 1 -> 2: distância média > 6m
+            # Fase 1 -> 2: distância média > 4m
             if current_metrics['avg_distance'] > self.phase1_to_2_threshold:
                 return True
                 
