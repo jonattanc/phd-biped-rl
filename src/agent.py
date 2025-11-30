@@ -11,13 +11,19 @@ from typing import List, Dict, Any
 
 
 class AdaptiveBuffer:
-    """Buffer de experiências adaptativo com sistema de fases"""
+    """Buffer de experiências adaptativo"""
     
-    def __init__(self, capacity=50000):
+    def __init__(self, capacity=5000, observation_shape=None):
         self.capacity = capacity
         self.buffer = deque(maxlen=capacity)
         self.current_phase = 1
         self.episode_count = 0
+        self.observation_shape = observation_shape
+
+        # CONFIGURAÇÕES DE LIMPEZA DO DPG FUNCIONAL
+        self.cleanup_interval = 200  
+        self.min_buffer_size = 1000  
+        self.last_cleanup_episode = 0
         
     def set_phase(self, phase: int):
         """Altera a fase do buffer"""
@@ -35,92 +41,192 @@ class AdaptiveBuffer:
         elif reward > -10: return 0.3
         elif reward > -20: return 0.2
         else: return 0.1
-    
+
     def add(self, obs, next_obs, action, reward, done):
-        """Adiciona experiência ao buffer"""
+        """Adiciona experiência"""
         quality = self._calculate_quality(reward)
-        
-        # Aplicar filtro de qualidade baseado na fase
-        if self.current_phase == 2 and quality < 0.1:  # Fase 2: filtra ruins
+
+        # Filtro de qualidade baseado na fase
+        if self.current_phase == 2 and quality < 0.05:
             return
-        elif self.current_phase == 3 and quality < 0.2:  # Fase 3: filtro rigoroso
+        elif self.current_phase == 3 and quality < 0.1:
             return
+
+        try:
+            # CONVERSÃO ROBUSTA
+            obs_array = np.array(obs, dtype=np.float32).flatten()
+            next_obs_array = np.array(next_obs, dtype=np.float32).flatten()
+            action_array = np.array(action, dtype=np.float32).flatten()
             
-        # Garantir que todos os elementos sejam arrays numpy
-        obs = np.array(obs, dtype=np.float32)
-        next_obs = np.array(next_obs, dtype=np.float32)
-        action = np.array(action, dtype=np.float32)
-        reward = np.float32(reward)
-        done = np.bool_(done)
-        
-        experience = (obs, action, reward, next_obs, done, quality, self.episode_count)
+            # Garantir shapes consistentes
+            if self.observation_shape is not None:
+                if len(obs_array) != self.observation_shape:
+                    obs_array = self._adjust_shape(obs_array, self.observation_shape)
+                if len(next_obs_array) != self.observation_shape:
+                    next_obs_array = self._adjust_shape(next_obs_array, self.observation_shape)
+            else:
+                # Definir observation_shape na primeira experiência válida
+                if len(obs_array) > 0:
+                    self.observation_shape = len(obs_array)
+
+        except Exception as e:
+            return  # Silenciosamente descarta experiências com erro
+
+        experience = (obs_array, action_array, float(reward), next_obs_array, bool(done), quality, self.episode_count)
         self.buffer.append(experience)
+
+        # LIMPEZA AUTOMÁTICA QUANDO BUFFER CHEIO
+        if len(self.buffer) >= self.capacity:
+            self._cleanup_aggressive()
     
-    def sample(self, batch_size: int):
-        """Amostragem balanceada baseada na fase atual"""
-        if len(self.buffer) < batch_size:
-            return list(self.buffer)
-            
-        # Amostragem estratificada simples
-        if self.current_phase == 1:
-            # Fase 1: amostragem aleatória
-            return random.sample(list(self.buffer), batch_size)
+    def _adjust_shape(self, array, target_shape):
+        """Ajusta shape do array para o target"""
+        if len(array) < target_shape:
+            # Preencher com zeros
+            padded = np.zeros(target_shape, dtype=np.float32)
+            padded[:len(array)] = array
+            return padded
+        elif len(array) > target_shape:
+            # Cortar excesso
+            return array[:target_shape]
         else:
-            # Fases 2 e 3: priorizar experiências de alta qualidade
-            high_quality = [exp for exp in self.buffer if exp[5] > 0.7]
-            medium_quality = [exp for exp in self.buffer if 0.3 <= exp[5] <= 0.7]
-            low_quality = [exp for exp in self.buffer if exp[5] < 0.3]
+            return array
+        
+    def sample(self, batch_size: int):
+        """Amostragem balanceada"""
+        if len(self.buffer) < batch_size:
+            return None
+
+        # Estratégia por fase
+        if self.current_phase == 1:
+            # Fase 1: 80% aleatório, 20% qualidade
+            samples = self._stratified_sample(batch_size, [0.2, 0.3, 0.5])
+        elif self.current_phase == 2:
+            # Fase 2: 60% alta, 30% média, 10% baixa
+            samples = self._stratified_sample(batch_size, [0.6, 0.3, 0.1])
+        else:  # Fase 3
+            # Fase 3: 80% alta, 15% média, 5% baixa  
+            samples = self._stratified_sample(batch_size, [0.8, 0.15, 0.05])
+
+        return self._convert_to_td3_format(samples)
+    
+    def _stratified_sample(self, batch_size, ratios):
+        """Amostragem estratificada por qualidade"""
+        high_quality = [exp for exp in self.buffer if exp[5] > 0.6]
+        medium_quality = [exp for exp in self.buffer if 0.3 <= exp[5] <= 0.6]
+        low_quality = [exp for exp in self.buffer if exp[5] < 0.3]
+        
+        high_count = min(int(batch_size * ratios[0]), len(high_quality))
+        medium_count = min(int(batch_size * ratios[1]), len(medium_quality))
+        low_count = batch_size - high_count - medium_count
+        
+        samples = []
+        if high_count > 0:
+            samples.extend(random.sample(high_quality, high_count))
+        if medium_count > 0:
+            samples.extend(random.sample(medium_quality, medium_count))
+        if low_count > 0 and len(low_quality) >= low_count:
+            samples.extend(random.sample(low_quality, low_count))
+        
+        # Completar se necessário (fallback para aleatório)
+        if len(samples) < batch_size:
+            needed = batch_size - len(samples)
+            additional = random.sample(self.buffer, needed)
+            samples.extend(additional)
             
-            # Balancear amostras por qualidade
-            if self.current_phase == 2:
-                high_count = min(int(batch_size * 0.5), len(high_quality))
-                medium_count = min(int(batch_size * 0.3), len(medium_quality))
-                low_count = batch_size - high_count - medium_count
-            else:  # Fase 3
-                high_count = min(int(batch_size * 0.7), len(high_quality))
-                medium_count = min(int(batch_size * 0.2), len(medium_quality))
-                low_count = batch_size - high_count - medium_count
+        return samples
+    
+    def _convert_to_td3_format(self, samples):
+        """Conversão para formato TD3"""
+        if not samples:
+            return None
             
-            samples = []
-            if high_count > 0 and high_quality:
-                samples.extend(random.sample(high_quality, high_count))
-            if medium_count > 0 and medium_quality:
-                samples.extend(random.sample(medium_quality, medium_count))
-            if low_count > 0 and low_quality:
-                samples.extend(random.sample(low_quality, low_count))
-                
-            # Completar com amostras aleatórias se necessário
-            if len(samples) < batch_size:
-                additional = random.sample(list(self.buffer), batch_size - len(samples))
-                samples.extend(additional)
-                
-            return samples
+        observations = []
+        actions = []
+        rewards = []
+        next_observations = []
+        dones = []
+
+        for exp in samples:
+            obs, action, reward, next_obs, done, quality, episode_count = exp
+            observations.append(obs)
+            actions.append(action)
+            rewards.append(reward)
+            next_observations.append(next_obs)
+            dones.append(done)
+
+        try:
+            observations_array = np.array(observations, dtype=np.float32)
+            actions_array = np.array(actions, dtype=np.float32)
+            rewards_array = np.array(rewards, dtype=np.float32).reshape(-1, 1)
+            next_observations_array = np.array(next_observations, dtype=np.float32)
+            dones_array = np.array(dones, dtype=np.bool_).reshape(-1, 1)
+            
+            return (observations_array, actions_array, rewards_array, next_observations_array, dones_array)
+        except Exception as e:
+            return None
     
     def update_episode(self, episode_count: int):
-        """Atualiza contador de episódio"""
+        """Limpeza periódica"""
         self.episode_count = episode_count
         
-        # Limpeza periódica simples (a cada 50 episódios)
+        # Limpeza a cada 50 episódios se buffer > 80% capacidade
         if episode_count % 50 == 0 and len(self.buffer) > self.capacity * 0.8:
-            # Manter apenas as melhores 80% das experiências
-            sorted_buffer = sorted(self.buffer, key=lambda x: x[5], reverse=True)
-            keep_count = int(self.capacity * 0.8)
-            self.buffer = deque(sorted_buffer[:keep_count], maxlen=self.capacity)
+            self._cleanup_low_quality(1000)
+    
+    def _cleanup_low_quality(self, remove_count: int):
+        """Remove as piores experiências"""
+        if len(self.buffer) <= remove_count + self.min_buffer_size:
+            return
+            
+        qualities = []
+        for i, exp in enumerate(self.buffer):
+            quality = exp[5]  
+            qualities.append((i, quality))
+        
+        qualities.sort(key=lambda x: x[1])
+        indices_to_remove = {i for i, qual in qualities[:remove_count]}
+        
+        new_buffer = deque(maxlen=self.capacity)
+        for i, exp in enumerate(self.buffer):
+            if i not in indices_to_remove:
+                new_buffer.append(exp)
+                
+        self.buffer = new_buffer
+    
+    def _cleanup_aggressive(self):
+        """Limpeza agressiva"""
+        current_size = len(self.buffer)
+        
+        if current_size <= self.min_buffer_size:
+            return  
+            
+        if current_size <= 2000:
+            remove_count = 200   
+        elif current_size <= 4000:
+            remove_count = 500     
+        else:
+            remove_count = 1000  
+            
+        self._cleanup_low_quality(remove_count)
     
     def get_status(self):
-        """Retorna estatísticas do buffer"""
+        """Status do buffer"""
         if not self.buffer:
             return {"size": 0, "phase": self.current_phase, "avg_quality": 0}
         
         qualities = [exp[5] for exp in self.buffer]
-        avg_quality = np.mean(qualities)
+        avg_quality = np.mean(qualities) if qualities else 0
         
         return {
             "phase": self.current_phase,
             "size": len(self.buffer),
             "capacity": self.capacity,
             "avg_quality": round(avg_quality, 3),
-            "utilization": round(len(self.buffer) / self.capacity * 100, 1)
+            "utilization": round(len(self.buffer) / self.capacity * 100, 1),
+            "cleanup_interval": self.cleanup_interval,
+            "min_buffer_size": self.min_buffer_size,
+            "last_cleanup": self.last_cleanup_episode
         }
     
     def __len__(self):
@@ -129,74 +235,81 @@ class AdaptiveBuffer:
 
 class FastTD3(TD3):
     """
-    Fast TD3 com DPG integrado - buffer inteligente e sistema de fases
+    Fast TD3 com buffer adaptativo funcional
     """
     
     def __init__(self, policy, env, custom_logger=None, **kwargs):
         kwargs.pop('action_dim', None)
         super().__init__(policy, env, **kwargs)
-        
-        # Armazenar o logger com um nome diferente para evitar conflito
+
         self.custom_logger = custom_logger
-        
-        # Usar nosso buffer adaptativo em vez do buffer padrão
+
+        # Obter observation_shape do environment
+        try:
+            if hasattr(env.observation_space, 'shape'):
+                observation_shape = env.observation_space.shape[0]
+            else:
+                # Fallback: tentar obter do env
+                observation_shape = getattr(env, 'obs_shape', [None])[0] if hasattr(env, 'obs_shape') else None
+        except:
+            observation_shape = None
+
         buffer_size = kwargs.get('buffer_size', 100000)
-        self.replay_buffer = AdaptiveBuffer(capacity=buffer_size)
+
+        # Buffer adaptativo funcional
+        self.replay_buffer = AdaptiveBuffer(
+            capacity=buffer_size, 
+            observation_shape=observation_shape
+        )
         self.phase_manager = PhaseManager()
+
+        if self.custom_logger:
+            self.custom_logger.info(f"FastTD3 com buffer adaptativo - observation_shape: {observation_shape}")
     
     def _store_transition(self, replay_buffer, action, new_obs, reward, done, infos):
-        """Armazena transição no nosso buffer adaptativo"""
-        # Ignorar infos para manter compatibilidade com nosso buffer
+        """Armazena transição"""
         self.replay_buffer.add(self._last_obs, new_obs, action, reward, done)
     
     def train(self, gradient_steps, batch_size=100):
         """
-        Treinamento com buffer adaptativo
+        Treinamento adaptado para nosso buffer
         """
-        # Sincronizar fase atual com o buffer
+        # Sincronizar fase
         current_phase = self.phase_manager.current_phase
         self.replay_buffer.set_phase(current_phase)
-        
+
+        successful_steps = 0
+
         for gradient_step in range(gradient_steps):
-            # Amostrar do nosso buffer adaptativo
-            if len(self.replay_buffer) < batch_size:
-                break
-                
-            replay_data = self.replay_buffer.sample(batch_size)
+            # Amostrar do nosso buffer
+            batch_data = self.replay_buffer.sample(batch_size)
             
-            if not replay_data:
+            if batch_data is None:
                 continue
-                
+
             try:
-                # Converter para arrays compatíveis com TD3 - garantir formato consistente
-                observations = np.stack([exp[0] for exp in replay_data])
-                actions = np.stack([exp[1] for exp in replay_data])
-                rewards = np.array([exp[2] for exp in replay_data], dtype=np.float32)
-                next_observations = np.stack([exp[3] for exp in replay_data])
-                dones = np.array([exp[4] for exp in replay_data], dtype=np.bool_)
+                obs, actions, rewards, next_obs, dones = batch_data
                 
-                # Verificar se todas as observações têm a mesma dimensão
-                if observations.shape[1] != self.observation_space.shape[0]:
-                    if hasattr(self, 'custom_logger') and self.custom_logger:
-                        self.custom_logger.warn(f"Dimensão inconsistente: esperado {self.observation_space.shape[0]}, obtido {observations.shape[1]}")
-                    continue
+                # Verificação final de shapes
+                if (obs.shape[0] == batch_size and actions.shape[0] == batch_size and
+                    rewards.shape[0] == batch_size and next_obs.shape[0] == batch_size):
                     
-                # Chamar implementação original do TD3
-                self._train_step(observations, actions, rewards, next_observations, dones)
-                
+                    # Usar método interno do TD3 para treinamento
+                    self._train_step(obs, actions, rewards, next_obs, dones)
+                    successful_steps += 1
+                    
             except Exception as e:
-                if hasattr(self, 'custom_logger') and self.custom_logger:
-                    self.custom_logger.warn(f"Erro ao processar batch de treinamento: {e}")
+                if self.custom_logger:
+                    self.custom_logger.debug(f"Erro no batch: {e}")
                 continue
+
+        return successful_steps
     
     def update_phase_metrics(self, episode_metrics):
-        """Atualiza métricas e gerencia transições de fase"""
+        """Atualiza métricas de fase"""
         self.phase_manager.update_phase_metrics(episode_metrics)
-        
-        # Atualizar contador de episódio no buffer
         self.replay_buffer.update_episode(episode_metrics.get('episode_count', 0))
         
-        # Verificar transição de fase
         if self.phase_manager.should_transition_phase():
             if self.phase_manager.transition_to_next_phase():
                 new_phase = self.phase_manager.current_phase
@@ -205,15 +318,12 @@ class FastTD3(TD3):
         return False
     
     def get_phase_info(self):
-        """Retorna informações da fase atual"""
         return self.phase_manager.get_phase_info()
 
     def get_phase_weight_adjustments(self):
-        """Retorna ajustes de peso específicos por componente"""
         return self.phase_manager.get_phase_weight_adjustments()
     
     def get_buffer_status(self):
-        """Retorna status do buffer adaptativo"""
         return self.replay_buffer.get_status()
 
 
