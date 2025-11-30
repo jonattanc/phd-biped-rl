@@ -1,4 +1,5 @@
 # agent.py
+import math
 import random
 import numpy as np
 from stable_baselines3 import PPO, TD3
@@ -11,24 +12,23 @@ from utils import PhaseManager
 from collections import deque
 from typing import List, Dict, Any
 
-
-class SimpleFastBuffer:
     
-    def __init__(self, capacity=5000, observation_shape=None, action_shape=None):
+class SimpleFastBuffer:
+    def __init__(self, capacity=10000, observation_shape=None, action_shape=None):
         self.capacity = capacity
-        self.target_size_after_cleanup = 2500  
+        self.target_size_after_cleanup = 8000  
         self.buffer = deque(maxlen=capacity)
         self.observation_shape = observation_shape
         self.action_shape = action_shape
         self.current_phase = 1
-        self.min_buffer_size = 1000
+        self.min_buffer_size = 1000  
         self.episode_count = 0
         self.cleanup_frequency = 500  
-        self.quality_threshold = 0.6
-        self.min_quality_for_phase = {1: 0.5, 2: 0.6, 3: 0.7}
+        self.min_quality_for_phase = {1: 0.1, 2: 0.4, 3: 0.8}
+        self.prefill_mode = False
         
     def add(self, obs, next_obs, action, reward, done, infos=None):
-        """Adição simples e confiável"""
+        """Apenas experiências de ALTA QUALIDADE são aceitas"""
         try:
             obs_array = np.asarray(obs, dtype=np.float32).flatten()
             next_obs_array = np.asarray(next_obs, dtype=np.float32).flatten()
@@ -39,10 +39,12 @@ class SimpleFastBuffer:
             next_obs_array = self._adjust_shape(next_obs_array, self.observation_shape)
             action_array = self._adjust_shape(action_array, self.action_shape)
 
-            # Calcular qualidade com critérios rigorosos
+            # CRITÉRIOS DE QUALIDADE MUITO MAIS RESTRITIVOS
             quality = self._calculate_elite_quality(reward, done, infos)
+            
+            # Apenas aceitar experiências de alta qualidade
             min_quality = self.min_quality_for_phase.get(self.current_phase, 0.5)
-
+            
             if quality < min_quality:
                 return False
 
@@ -55,48 +57,48 @@ class SimpleFastBuffer:
                 'quality': quality
             }
 
-            # Substituir pior experiência se buffer cheio
+            # Estratégia de substituição agressiva
             if len(self.buffer) >= self.capacity:
                 self._replace_worst_experience(experience)
             else:
                 self.buffer.append(experience)
 
             return True
+                
         except Exception as e:
             return False
     
     def _calculate_elite_quality(self, reward, done, infos=None):
-        """Qualidade simples baseada na recompensa"""
-        if done and reward < -600:
-            return 0.0
-        if reward > 100:    # Excepcional
-            return 0.95
-        elif reward > 60:   # Muito bom
-            return 0.85
-        elif reward > 30:   # Bom
-            return 0.75
-        elif reward > 15:   # Aceitável
-            return 0.65
-        elif reward > 5:    # Mínimo
-            return 0.55
-        elif reward > 0:    # Quase bom
-            return 0.45
-        else:               # Ruim
-            return 0.1
-
+        """Critério de qualidade RESTRITIVO - apenas experiências elite"""
+        if done and reward < -800: return 0.01
+        if done and reward < -100: return 0.3
+            
+        # COMPORTAMENTOS EXCELENTES
+        if reward > 200:   return 0.99
+        if reward > 100:   return 0.95
+        if reward > 50:    return 0.85
+        if reward > 20:    return 0.70
+        if reward > 10:    return 0.60
+        if reward > 5:     return 0.50
+        if reward > 0:     return 0.40
+        return 0.15
+    
     def sample(self, batch_size: int):
-        """Amostra APENAS das melhores experiências disponíveis"""
+        """Amostragem APENAS das melhores experiências"""
         if len(self.buffer) < batch_size:
             return None
 
-        # Usar ratio maior quando tiver mais experiências
-        available_ratio = min(0.6, batch_size * 3 / len(self.buffer))
-        top_k = max(batch_size, int(len(self.buffer) * available_ratio))
+        # Amostrar apenas do top 30% do buffer
+        elite_size = max(batch_size, int(len(self.buffer) * 0.5))
+        elite_pool = sorted(self.buffer, key=lambda x: x['quality'], reverse=True)[:elite_size]
+        
+        qualities = [exp['quality'] for exp in elite_pool]
+        probs = np.array(qualities) / sum(qualities)
 
-        # Manter compatibilidade com fases se necessário
-        elite_pool = sorted(self.buffer, key=lambda x: x['quality'], reverse=True)[:top_k]
+        indices = np.random.choice(len(elite_pool), size=batch_size, p=probs, replace=False)
+        selected = [elite_pool[i] for i in indices]
 
-        return self._convert_to_arrays(random.sample(elite_pool, batch_size))
+        return self._convert_to_arrays(selected)
     
     def _adjust_shape(self, array, target_shape):
         """Ajuste de shape confiável"""
@@ -120,7 +122,7 @@ class SimpleFastBuffer:
         self.current_phase = phase
 
     def update_episode(self, episode_count: int):
-        """Limpeza agressiva a cada 500 episódios"""
+        """Limpeza agressiva a cada X episódios"""
         self.episode_count = episode_count
 
         if episode_count % self.cleanup_frequency == 0:
@@ -134,7 +136,7 @@ class SimpleFastBuffer:
         # Ordenar por qualidade e manter as melhores
         sorted_buffer = sorted(self.buffer, key=lambda x: x['quality'], reverse=True)
         keep_count = min(
-            self.target_size_after_cleanup + random.randint(-100, 100),  # Pequena variação
+            self.target_size_after_cleanup + random.randint(-100, 100),  
             len(sorted_buffer)
         )
         
@@ -169,11 +171,11 @@ class SimpleFastBuffer:
 class FastTD3(TD3):
     def __init__(self, policy, env, custom_logger=None, **kwargs):
         kwargs.pop('action_dim', None)
+        kwargs['learning_starts'] = 0
         
-        # Inicializar a classe base TD3 primeiro
         super().__init__(policy, env, **kwargs)
         
-        # AGORA podemos sobrescrever o buffer com o nosso
+        # Buffer elite
         observation_shape = env.observation_space.shape[0]
         action_shape = env.action_space.shape[0]
         
@@ -183,24 +185,26 @@ class FastTD3(TD3):
             action_shape=action_shape
         )
         
-        # Configurar outros componentes
         self.custom_logger = custom_logger
         self.phase_manager = PhaseManager()
 
     def _store_transition(self, replay_buffer, action, new_obs, reward, done, infos):
-        """Armazena transição - compatível com Stable Baselines3"""
-        # Verificar se temos informações de distância
-        distance = 0
-        if infos is not None and len(infos) > 0:
-            info = infos[0] if isinstance(infos, (list, tuple)) else infos
-            if hasattr(info, 'get'):
-                distance = info.get('distance', 0)
-            elif hasattr(info, '__getitem__') and 'distance' in info:
-                distance = info['distance']
+        """Armazena transição"""
+        obs = self._last_obs
+        if hasattr(obs, 'flatten'):
+            obs = obs.flatten()
+        if hasattr(new_obs, 'flatten'):
+            new_obs = new_obs.flatten()
+        if hasattr(action, 'flatten'):
+            action = action.flatten()
+            
+        success = self.replay_buffer.add(obs, new_obs, action, reward, done, infos)
         
-        # Só adicionar se a distância for positiva
-        if distance > 0:
-            self.replay_buffer.add(self._last_obs, new_obs, action, reward, done)
+        # Log para debug
+        if hasattr(self, 'custom_logger') and self.custom_logger:
+            if self.num_timesteps == 10000:
+                buffer_size = len(self.replay_buffer)
+                self.custom_logger.info(f"Buffer size: {buffer_size}, Última adição: {'Sucesso' if success else 'Falha'}")
     
     def _polyak_update(self, params, target_params, tau):
         """Implementação manual do polyak update"""
@@ -209,7 +213,7 @@ class FastTD3(TD3):
                 target_param.data.mul_(1 - tau)
                 target_param.data.add_(param.data * tau)
 
-    def train(self, gradient_steps, batch_size=100):
+    def train(self, gradient_steps, batch_size=256):
         """Treinamento usando nosso buffer personalizado"""
         current_phase = self.phase_manager.current_phase
         self.replay_buffer.set_phase(current_phase)

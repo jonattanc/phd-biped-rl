@@ -178,6 +178,10 @@ class Simulation(gym.Env):
         self.wrapped_env = agent.env
 
     def pre_fill_buffer(self):
+        if hasattr(self.agent, 'algorithm') and self.agent.algorithm.upper() == "FASTTD3":
+            self.logger.info("FastTD3: Pré-preenchimento ignorado")
+            return
+    
         obs, _ = self.reset()
 
         self.episode_timeout_s = self.episode_pre_fill_timeout_s
@@ -390,9 +394,6 @@ class Simulation(gym.Env):
         except Exception as e:
             self.logger.exception("Erro ao transmitir dados do episódio")
 
-        if self.episode_count % 100 == 0:
-            self.logger.info(f"Episódio {self.episode_count} concluído")
-
     def apply_action(self, action):
         noise = np.random.normal(0, self.action_noise_std, size=action.shape)
         action = np.clip(action + noise, -1, 1)
@@ -558,6 +559,7 @@ class Simulation(gym.Env):
                     # LOG DETALHADO PARA FastTD3
                     phase_info = self.agent.model.get_phase_info()
                     adjustments = phase_info.get('weight_adjustments', {})
+                    buffer_size = len(self.agent.model.replay_buffer)
                 
                     active_adjustments = {k: f"{v}x" for k, v in adjustments.items() if v != 1.0}
                     adjustments_str = " | ".join([f"{k}: {v}" for k, v in active_adjustments.items()])
@@ -570,6 +572,10 @@ class Simulation(gym.Env):
                     self.logger.info(
                         f"FastTD3 - Episódio {self.episode_count} | "
                         f"Fase {phase_info['phase']}{adjustments_str}"
+                    )
+                    self.logger.info(
+                        f"Buffer: {buffer_size} experiências | "
+                        f"Qualidade mínima: {self.agent.model.replay_buffer.min_quality_for_phase.get(phase_info['phase'], 0.5):.2f}"
                     )
                     self.logger.info(
                         f"Distância: {self.episode_distance:.2f}m | "

@@ -57,7 +57,7 @@
     "y_axis_deviation_square_penalty": {
       "weight": -0.0001,
       "enabled": true,
-      "min_value": -0.01,
+      "min_value": -1,
       "max_value": 0
     },
     "effort_square_penalty": {

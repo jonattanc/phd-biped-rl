@@ -109,23 +109,20 @@ def process_runner(
         else:
             logger.info("Modo de treinamento")
 
+            if algorithm.upper() != "FASTTD3":
+                sim.pre_fill_buffer()
+            else:
+                logger.info("FastTD3: Pulando pré-preenchimento do buffer")
+
             timesteps_completed = 0
             timesteps_batch_size = 1000
 
-            sim.pre_fill_buffer()
-
             while not exit_value.value:
                 timesteps_completed += timesteps_batch_size
-                
+
                 # Treinamento normal do agente
                 agent.model.learn(total_timesteps=timesteps_batch_size, 
                                 reset_num_timesteps=False, callback=callback)
-
-                # Enviar progresso para GUI
-                if timesteps_completed % 10000 == 0:
-                    logger.info(f"Progresso: {timesteps_completed} timesteps com aprendizagem")
-
-            logger.info("Treinamento concluído!")
 
     except Exception as e:
         logger.exception("Erro em process_runner")

@@ -149,7 +149,7 @@ class PhaseManager:
         self.current_phase = 1
         self.phase_history = []
         self.metrics_buffer = []
-        self.buffer_size = 50
+        self.buffer_size = 100
         
         # Critérios de transição
         self.phase1_to_2_threshold = 4.0  # distância média > 4m
@@ -187,7 +187,7 @@ class PhaseManager:
     
     def should_transition_phase(self):
         """Verifica se deve transicionar de fase"""
-        if len(self.metrics_buffer) < 10:
+        if len(self.metrics_buffer) < 20:
             return False
             
         current_metrics = self.get_current_metrics()
