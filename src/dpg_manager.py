@@ -16,7 +16,7 @@ class PhaseManager:
         self.buffer_size = 100
         
         # Critérios de transição
-        self.phase1_to_2_threshold = 4.0  # distância média > 4m
+        self.phase1_to_2_threshold = 3.0  # distância média > 3m
         self.phase2_to_3_threshold = 9.0  # primeiro sucesso de 9m
         self.success_achieved = False
         
@@ -182,3 +182,15 @@ class FastTD3(TD3):
             "phase": self.phase_manager.current_phase,
             "phase_info": self.get_phase_info()
         }
+    
+    def clear_half_buffer(self):
+        """Limpa a metade inicial do buffer de replay"""
+        if hasattr(self.replay_buffer, 'buffer'):
+            buffer_size = len(self.replay_buffer.buffer)
+            half_size = buffer_size // 2
+            
+            # Manter apenas a segunda metade do buffer
+            self.replay_buffer.buffer = deque(list(self.replay_buffer.buffer)[half_size:])
+            
+            if self.custom_logger:
+                self.custom_logger.info(f"🔄 FastTD3 - Buffer reduzido: {buffer_size} → {len(self.replay_buffer.buffer)} transições")

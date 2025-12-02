@@ -629,6 +629,24 @@ class Simulation(gym.Env):
                                    f"DP: {phase_info['current_dps']:.3f}, "
                                    f"Sucesso: {phase_info['current_success']:.1%}")
                     
+                    # Aumentar timeout em 5 segundos
+                    old_timeout = self.episode_training_timeout_s
+                    self.episode_training_timeout_s += 5.0
+                    self.episode_timeout_s = self.episode_training_timeout_s
+
+                    # Atualizar max_steps com novo timeout
+                    self.max_training_steps = int(self.episode_training_timeout_s / self.time_step_s)
+
+                    self.logger.info(f"⏱️  FastTD3 - Timeout aumentado: {old_timeout}s → {self.episode_training_timeout_s}s")
+                    self.logger.info(f"📈 FastTD3 - Max steps: {self.max_training_steps}")
+
+                    # Limpar metade inicial do buffer
+                    try:
+                        if hasattr(self.agent.model, 'clear_half_buffer'):
+                            self.agent.model.clear_half_buffer()
+                    except Exception as e:
+                        self.logger.error(f"Erro ao limpar buffer: {e}")
+                
                     # Enviar notificação para a GUI
                     self.ipc_queue.put({
                         "type": "phase_transition",
