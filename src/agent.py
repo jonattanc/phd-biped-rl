@@ -110,7 +110,7 @@ class Agent:
                 self.env,
                 custom_logger=self.logger,
                 learning_rate=1.0e-4,
-                buffer_size=10000,
+                buffer_size=int(1e6),
                 learning_starts=self.learning_starts,
                 batch_size=256,
                 gamma=0.99,
