@@ -17,64 +17,104 @@ class Experience:
         self.reward = float(reward)
         self.next_state = np.array(next_state, dtype=np.float32)
         self.done = done
-        self.quality = self._calculate_quality(metrics)
+        self.quality = self._calculate_simple_quality(reward, done)
+        self.timestamp = time.time()  
         
-    def _calculate_quality(self, metrics):
-        """Qualidade baseada em recompensa e estabilidade"""
-        reward = self.reward
-        
-        if reward > 0:
-            base_quality = 0.5 + min(0.5, reward / 100.0) 
+    def _calculate_simple_quality(self, reward, done):
+        """Qualidade baseada apenas na recompensa"""
+        if reward > 100:
+            return 0.95
+        elif reward > 60:
+            return 0.85
+        elif reward > 30:
+            return 0.75
+        elif reward > 15:
+            return 0.65
+        elif reward > 5:
+            return 0.55
+        elif reward > 0:
+            return 0.45
+        elif reward > -100:
+            return 0.3
         else:
-            base_quality = max(0.1, 0.3 + (reward / 500.0))  
-
-        distance = metrics.get('distance', 0)
-        if distance > 0:
-            distance_bonus = min(0.3, distance / 30.0) 
-            base_quality += distance_bonus
-
-        # Penalidade por queda rápida
-        steps = metrics.get('steps', 1)
-        if steps < 10 and reward < -100:  
-            base_quality *= 0.5
-
-        return min(1.0, max(0.05, base_quality))
+            return 0.1
 
 
 class SimpleBuffer:
     def __init__(self, capacity=10000):
         self.capacity = capacity
-        self.buffer = deque(maxlen=capacity)
-        self.quality_threshold = 0.1  
-        self.min_quality_for_phase = {}
+        self.buffer = []  
+        self.episodes_since_last_cleanup = 0
+        self.cleanup_frequency = 500  
         
     def add(self, experience):
-        """Adiciona experiência se atender qualidade mínima - MAIS PERMISSIVO"""
-        # Apenas rejeita se a qualidade for muito baixa
-        if experience.quality >= 0.05:  
-            self.buffer.append(experience)
+        """Adiciona experiência diretamente"""
+        if len(self.buffer) >= self.capacity:
+            self.cleanup(phase=1)
+        
+        self.buffer.append(experience)
+        return True
+    
+    def cleanup(self, phase):
+        """Limpeza baseada na fase: mantém X% melhores, remove Y% velhas e Z% piores"""
+        if len(self.buffer) < 1000:  
+            return False, len(self.buffer)
+        
+        phase_settings = {
+            1: (0.4, 0.2, 0.2),   # Fase 1: 40% melhores, remove 20% velhas, 20% piores
+            2: (0.5, 0.15, 0.15), # Fase 2: 50% melhores, remove 15% velhas, 15% piores  
+            3: (0.6, 0.1, 0.1),   # Fase 3: 60% melhores, remove 10% velhas, 10% piores
+        }
+        
+        keep_ratio, remove_old_ratio, remove_worst_ratio = phase_settings.get(phase, (0.4, 0.2, 0.2))
+        old_size = len(self.buffer)
+        
+        sorted_by_quality = sorted(self.buffer, key=lambda x: x.quality, reverse=True)
+        keep_count = int(len(self.buffer) * keep_ratio)
+        best_experiences = sorted_by_quality[:keep_count]
+        sorted_by_time = sorted(self.buffer, key=lambda x: x.timestamp, reverse=True)
+        remove_old_count = int(len(self.buffer) * remove_old_ratio)
+        remove_worst_count = int(len(self.buffer) * remove_worst_ratio)
+        new_buffer = best_experiences[:]
+        
+        # Adicionar experiências recentes que não estão entre as piores
+        for exp in sorted_by_time:
+            if len(new_buffer) >= self.capacity * 0.8:
+                break
+            
+            if exp in best_experiences or exp.quality < 0.2:
+                continue
+                
+            new_buffer.append(exp)
+        
+        # Atualizar buffer
+        self.buffer = new_buffer
+        return True, old_size
+    
+    def should_cleanup(self, episode_count):
+        """Verifica se é hora de limpar"""
+        self.episodes_since_last_cleanup += 1
+        if self.episodes_since_last_cleanup >= self.cleanup_frequency:
+            self.episodes_since_last_cleanup = 0
             return True
         return False
     
     def sample(self, batch_size: int):
-        """Amostragem APENAS das melhores experiências"""
+        """Amostragem das melhores experiências"""
         if len(self.buffer) < batch_size:
             return None
 
-        # Amostrar apenas do top 30% do buffer
-        elite_size = max(batch_size, int(len(self.buffer) * 0.5))
-        elite_pool = sorted(self.buffer, key=lambda x: x.quality, reverse=True)[:elite_size]
-        
-        qualities = [exp.quality for exp in elite_pool]
+        # Usar todas as experiências, mas ponderar pela qualidade
+        qualities = [exp.quality for exp in self.buffer]
         probs = np.array(qualities) / sum(qualities)
 
-        indices = np.random.choice(len(elite_pool), size=batch_size, p=probs, replace=False)
-        selected = [elite_pool[i] for i in indices]
+        indices = np.random.choice(len(self.buffer), size=batch_size, p=probs, replace=False)
+        selected = [self.buffer[i] for i in indices]
 
         return self._convert_to_arrays(selected)
     
     def _convert_to_arrays(self, batch):
-        """Converts batch of experiences to numpy arrays for training"""
+        """Converte batch de experiências para arrays numpy"""
         obs = np.array([exp.state for exp in batch])
         next_obs = np.array([exp.next_state for exp in batch])
         actions = np.array([exp.action for exp in batch])
@@ -236,19 +276,21 @@ class FastTD3(TD3):
         self.episode_count = 0
         self.training_interval = 5
         self.min_buffer_size = 200
+        self.learning_starts = 0
         self.learning_progress = 0.0
         self.performance_history = deque(maxlen=50)
         
         # Histórico para adaptação
         self.recent_success_rate = deque(maxlen=100)
         self.consecutive_failures = 0
-        
-        if custom_logger:
-            custom_logger.info("FastTD3 com DPG integrado inicializado")
 
     def store_experience(self, state, action, reward, next_state, done, episode_results):
         """Armazena experiência no buffer DPG"""
         try:
+            # Garantir que episode_results é um dicionário
+            if not isinstance(episode_results, dict):
+                episode_results = {}
+
             experience = Experience(
                 state=state,
                 action=action,
@@ -258,7 +300,10 @@ class FastTD3(TD3):
                 metrics=episode_results
             )
 
-            return self.replay_buffer.add(experience)
+            # Adicionar ao SimpleBuffer
+            added = self.replay_buffer.add(experience)
+
+            return added
 
         except Exception as e:
             if self.custom_logger:
@@ -268,24 +313,17 @@ class FastTD3(TD3):
     def update_phase_progression(self, episode_results):
         """Atualiza progresso baseado em desempenho recente"""
         self.episode_count += 1
-        
-        # Garantir que a distância não seja negativa
-        distance = max(episode_results.get("distance", 0), 0)
-        
-        # Cálculo de estabilidade
-        roll = abs(episode_results.get("roll", 0))
-        pitch = abs(episode_results.get("pitch", 0))
-        stability = max(0.0, 1.0 - min((roll + pitch) / 1.0, 1.0))
-        
-        # Progresso simples
-        distance_progress = min(distance / 9.0, 1.0) 
-        stability_progress = stability
-        
-        self.learning_progress = max(0.0, (distance_progress * 0.5 + stability_progress * 0.5))
-        
+
         # Atualizar phase manager
         self.phase_manager.update_phase_metrics(episode_results)
-        
+
+        # LIMPEZA SIMPLES
+        current_phase = self.phase_manager.current_phase
+        if len(self.replay_buffer) >= self.replay_buffer.capacity:
+            self.replay_buffer.cleanup(current_phase)
+        elif self.replay_buffer.should_cleanup(self.episode_count):
+            self.replay_buffer.cleanup(current_phase)
+            
         # Verificar transição de fase
         if self.phase_manager.should_transition_phase():
             if self.phase_manager.transition_to_next_phase():
@@ -324,6 +362,7 @@ class FastTD3(TD3):
     def train(self, gradient_steps, batch_size=256):
         """Treinamento usando nosso buffer personalizado"""
         current_phase = self.phase_manager.current_phase
+            
         self.replay_buffer.set_phase(current_phase)
     
         successful_steps = 0
@@ -405,6 +444,12 @@ class FastTD3(TD3):
     
         return successful_steps
 
+    def _on_step(self):
+        """Hook chamado a cada step do SB3 - adicionar nossa lógica DPG"""
+        # Esta função é chamada pelo SB3 durante o learn()
+        # Podemos adicionar lógica personalizada aqui
+        return True
+    
     def update_phase_metrics(self, episode_metrics):
         """Atualiza métricas de fase - interface para simulação"""
         self.update_phase_progression(episode_metrics)

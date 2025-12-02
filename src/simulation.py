@@ -546,8 +546,30 @@ class Simulation(gym.Env):
         is_fast_td3 = (
             hasattr(self, 'agent') and 
             hasattr(self.agent, 'model') and 
-            hasattr(self.agent.model, 'phase_manager')  
+            hasattr(self.agent.model, 'replay_buffer') and
+            hasattr(self.agent.model.replay_buffer, 'add')
         )
+
+        if is_fast_td3 and not evaluation:
+            # Criar métricas do episódio para o FastTD3
+            episode_results = {
+                'reward': reward,
+                'steps': self.episode_steps,
+                'distance': self.episode_distance,
+                'success': self.episode_success,
+                'roll': self.robot_roll,
+                'pitch': self.robot_pitch
+            }
+
+            # Armazenar experiência no SimpleBuffer do FastTD3
+            success = self.agent.model.store_experience(
+                current_obs,  # Estado atual (antes da ação)
+                action,       # Ação tomada
+                reward,       # Recompensa recebida
+                next_obs,     # Próximo estado
+                self.episode_done,  # Se terminou
+                episode_results     # Métricas adicionais
+            )
 
         if self.episode_done and not evaluation:
             episode_duration = self.episode_steps * self.time_step_s
@@ -560,6 +582,15 @@ class Simulation(gym.Env):
                     phase_info = self.agent.model.get_phase_info()
                     adjustments = phase_info.get('weight_adjustments', {})
                     buffer_size = len(self.agent.model.replay_buffer)
+                    capacity = self.agent.model.replay_buffer.capacity
+                    current_phase = phase_info['phase']
+
+                    # Calcular porcentagens da fase
+                    phase_percentages = {
+                        1: "40% melhores",
+                        2: "50% melhores",
+                        3: "60% melhores"
+                    }
                 
                     active_adjustments = {k: f"{v}x" for k, v in adjustments.items() if v != 1.0}
                     adjustments_str = " | ".join([f"{k}: {v}" for k, v in active_adjustments.items()])
@@ -574,8 +605,8 @@ class Simulation(gym.Env):
                         f"Fase {phase_info['phase']}{adjustments_str}"
                     )
                     self.logger.info(
-                        f"Buffer: {buffer_size} experiências | "
-                        f"Qualidade mínima: {self.agent.model.replay_buffer.min_quality_for_phase.get(phase_info['phase'], 0.5):.2f}"
+                        f"Buffer: {buffer_size}/{self.agent.model.replay_buffer.capacity} exp | "
+                        f"Mantém: {phase_percentages.get(current_phase, '40% melhores')}"
                     )
                     self.logger.info(
                         f"Distância: {self.episode_distance:.2f}m | "

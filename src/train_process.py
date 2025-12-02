@@ -109,20 +109,55 @@ def process_runner(
         else:
             logger.info("Modo de treinamento")
 
-            if algorithm.upper() != "FASTTD3":
-                sim.pre_fill_buffer()
+            if algorithm.upper() == "FASTTD3":
+                logger.info("Iniciando treinamento FastTD3 com SimpleBuffer")
+
+                for episode in range(initial_episode, episodes):
+                    if exit_value.value:
+                        break
+
+                    # Coletar um episódio completo
+                    obs, _ = sim.reset()
+                    done = False
+
+                    while not done and not exit_value.value:
+                        # Obter ação do agente
+                        action, _ = agent.model.predict(obs, deterministic=False)
+
+                        # Executar ação no ambiente
+                        next_obs, reward, terminated, truncated, info = sim.step(action)
+                        done = terminated or truncated
+
+                        # Armazenar experiência no SimpleBuffer
+                        if info and isinstance(info, dict):
+                            agent.model._store_transition(
+                                agent.model.replay_buffer,  
+                                action,
+                                next_obs,
+                                reward,
+                                done,
+                                [info]  
+                            )
+
+                        # Treinar se houver experiências suficientes
+                        if len(agent.model.replay_buffer) >= agent.model.min_buffer_size:
+                            agent.model.train(gradient_steps=1, batch_size=256)
+
+                        # Atualizar para próxima iteração
+                        obs = next_obs
+
             else:
-                logger.info("FastTD3: Pulando pré-preenchimento do buffer")
+                sim.pre_fill_buffer()
+                # Treinamento normal para PPO/TD3
+                timesteps_completed = 0
+                timesteps_batch_size = 1000
 
-            timesteps_completed = 0
-            timesteps_batch_size = 1000
+                while not exit_value.value:
+                    timesteps_completed += timesteps_batch_size
 
-            while not exit_value.value:
-                timesteps_completed += timesteps_batch_size
-
-                # Treinamento normal do agente
-                agent.model.learn(total_timesteps=timesteps_batch_size, 
-                                reset_num_timesteps=False, callback=callback)
+                            # Treinamento normal do agente
+                    agent.model.learn(total_timesteps=timesteps_batch_size, 
+                                    reset_num_timesteps=False, callback=callback)
 
     except Exception as e:
         logger.exception("Erro em process_runner")
