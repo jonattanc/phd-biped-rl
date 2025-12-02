@@ -624,10 +624,6 @@ class Simulation(gym.Env):
                 # Verificar transição de fase (sempre logar transições)
                 if transition_occurred:
                     phase_info = self.agent.model.get_phase_info()
-                    self.logger.info(f"🎉 FastTD3 - TRANSIÇÃO PARA FASE {phase_info['phase']}!")
-                    self.logger.info(f"🏆 Metas alcançadas: RP: {phase_info['current_rps']:.3f}, "
-                                   f"DP: {phase_info['current_dps']:.3f}, "
-                                   f"Sucesso: {phase_info['current_success']:.1%}")
                     
                     # Aumentar timeout em 5 segundos
                     old_timeout = self.episode_training_timeout_s
@@ -637,8 +633,8 @@ class Simulation(gym.Env):
                     # Atualizar max_steps com novo timeout
                     self.max_training_steps = int(self.episode_training_timeout_s / self.time_step_s)
 
-                    self.logger.info(f"⏱️  FastTD3 - Timeout aumentado: {old_timeout}s → {self.episode_training_timeout_s}s")
-                    self.logger.info(f"📈 FastTD3 - Max steps: {self.max_training_steps}")
+                    self.logger.info(f"Timeout: {old_timeout}s → {self.episode_training_timeout_s}s | "
+                                f"Max steps: {self.max_training_steps}")
 
                     # Limpar metade inicial do buffer
                     try:

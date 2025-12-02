@@ -135,8 +135,8 @@ class Agent:
             self.env.save(vecnorm_path)
 
             self.logger.info(f"Modelo salvo em: {model_path}")
-            self.logger.info(f"self.env.obs_rms.mean[:5]: {self.env.obs_rms.mean[:5]}")
-            self.logger.info(f"self.env.obs_rms.var[:5]: {self.env.obs_rms.var[:5]}")
+            self.logger.info(f"Mean: {self.env.obs_rms.mean[:5]}")
+            self.logger.info(f"Var: {self.env.obs_rms.var[:5]}")
         else:
             raise ValueError("Nenhum modelo para salvar")
 

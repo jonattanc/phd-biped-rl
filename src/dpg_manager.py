@@ -16,30 +16,74 @@ class PhaseManager:
         self.buffer_size = 100
         
         # Critérios de transição
-        self.phase1_to_2_threshold = 3.0  # distância média > 3m
+        self.phase1_to_2_threshold = 2.5  # distância média > 2.5m
         self.phase2_to_3_threshold = 9.0  # primeiro sucesso de 9m
         self.success_achieved = False
+        
+        # HIPERPARÂMETROS ADAPTATIVOS APENAS PARA FASE 2 e 3
+        # Fase 1: Usa hiperparâmetros padrão do TD3 (definidos no agent.py)
+        self.adaptive_hyperparams = {
+            2: {  # Fase 2: Consolidação com aprendizado mais estável
+                'learning_rate': 1e-4,      
+                'target_noise_clip': 0.3,   # Reduzido para 0.3 (de 0.5)
+                'policy_delay': 2,          # Mais frequente (de 3)
+                'tau': 0.002,              # Atualização mais rápida (de 0.005)
+                'gamma': 0.98,             # Ligeiramente maior (de 0.99)
+            },
+            3: {  # Fase 3: Refinamento com foco em estabilidade
+                'learning_rate': 5e-5,      # Reduzido para refinamento
+                'target_noise_clip': 0.1,   # Mínimo ruído para política estável
+                'policy_delay': 1,          # Atualização mais frequente
+                'tau': 0.001,              # Atualização mais suave
+                'gamma': 0.99,             # Igual ao padrão
+            }
+        }
         
         # AJUSTES de peso por fase (em relação ao default.json)
         self.phase_weight_adjustments = {
             1: {},  # Fase 1: usa 100% dos pesos do default.json
-            2: {    # Fase 2: ajusta componentes de eficiência
-                'efficiency_bonus': 25.0,  # 2500% - Eficiência avançada
-                'progress': 2.0,           # 200% do peso original  
-                'gait_state_change': 1.5,  # 150% do peso original
-                'foot_clearance': 15.0,    # 1500% do peso original
-                'y_axis_deviation_square_penalty': 5.0,  # 500% - Precisão lateral
+            2: {    # Fase 2: Foco em Progresso e Estabilidade
+                'progress': 3.0,           # 300% do peso original 
+                'efficiency_bonus': 15.0,  # 1500% - Foco em eficiência energética
+                'gait_state_change': 1.0,  # 100% - Mantém normal
+                'foot_clearance': 8.0,     # 800% - Garantir elevação adequada dos pés
+                'y_axis_deviation_square_penalty': 8.0,  # 800% - Manter trajetória reta
+                'foot_back_penalty': 2.0,   # 200% - Evitar movimento para trás
+                'stability_roll': 2.0,      # 200% - Manter equilíbrio lateral
+                'stability_pitch': 2.0,     # 200% - Manter inclinação frontal
+                'distance_bonus': 1.5,      # 150% 
+                'success_bonus': 2.0,       # 200% - Premiar sucesso antecipado
             },
-            3: {    # Fase 3: ajusta componentes de performance
-                'efficiency_bonus': 15.0,  # 1500% - Eficiência avançada
-                'progress': 2.5,           # 250% do peso original
-                'gait_state_change': 2.0,  # 200% do peso original 
-                'foot_clearance': 10.0,    # 1000% do peso original 
-                'fall_penalty': 2.0,       # 200% - Penalidade máxima por queda
-                'y_axis_deviation_square_penalty': 15.0, # 1500% - Precisão lateral
+            3: {    # Fase 3: Foco em Sucesso e Velocidade
+                'progress': 4.0,           # 400% do peso original
+                'efficiency_bonus': 10.0,  # 1000% - Eficiência avançada
+                'distance_bonus': 3.0,     # 300% - Distância é crítica
+                'fall_penalty': 3.0,       # 300% - Queda inaceitável
+                'yaw_penalty': 2.0,        # 200% - Desvio fatal
+                'y_axis_deviation_square_penalty': 20.0, # 2000% - Trajetória precisa
+                'gait_pattern_cross': 1.5, # 150% - Padrão cruzado aprimorado
+                'foot_clearance': 5.0,     # 500% - Clearance consistente
+                'alternating_foot_contact': 2.0, # 200% - Alternância perfeita
+                'success_bonus': 5.0,      # 500% - Sucesso vale muito
+                'gait_rhythm': 2.0,        # 200% - Ritmo consistente
+                'effort_square_penalty': 2.0,  # 200% - Movimentos suaves
+                'jerk_penalty': 1.5,       # 150% - Suavidade na transição
             }
         }
+
+        # Armazenar hiperparâmetros originais do TD3
+        self.original_hyperparams = {}
     
+    def store_original_hyperparams(self, model):
+        """Armazena hiperparâmetros originais do TD3"""
+        self.original_hyperparams = {
+            'learning_rate': model.learning_rate,
+            'tau': model.tau,
+            'gamma': model.gamma,
+            'target_noise_clip': model.target_noise_clip,
+            'policy_delay': model.policy_delay,
+        }
+        
     def update_phase_metrics(self, episode_metrics):
         """Atualiza métricas do episódio"""
         self.metrics_buffer.append(episode_metrics)
@@ -57,13 +101,14 @@ class PhaseManager:
         current_metrics = self.get_current_metrics()
         
         if self.current_phase == 1:
-            # Fase 1 -> 2: distância média > 4m
+            # Fase 1 -> 2: distância média
             if current_metrics['avg_distance'] > self.phase1_to_2_threshold:
                 return True
                 
         elif self.current_phase == 2:
             # Fase 2 -> 3: primeiro sucesso de 9m alcançado
-            if self.success_achieved:
+            if (current_metrics['avg_distance'] > self.phase2_to_3_threshold and 
+                current_metrics['success_rate'] > 0.2):
                 return True
                 
         return False
@@ -105,6 +150,14 @@ class PhaseManager:
         """Retorna ajustes de peso para a fase atual"""
         return self.phase_weight_adjustments.get(self.current_phase, {})
     
+    def get_phase_hyperparams(self):
+        """Retorna hiperparâmetros para a fase atual"""
+        return self.adaptive_hyperparams.get(self.current_phase, {})
+    
+    def get_original_hyperparams(self):
+        """Retorna hiperparâmetros originais do TD3"""
+        return self.original_hyperparams
+    
     def transition_to_next_phase(self):
         """Transiciona para próxima fase"""
         if self.current_phase < 3:
@@ -121,7 +174,7 @@ class PhaseManager:
         """Retorna informações detalhadas da fase atual"""
         current_metrics = self.get_current_metrics()
         
-        return {
+        phase_info = {
             'phase': self.current_phase,
             'current_rps': current_metrics['reward_per_step'],
             'current_dps': current_metrics['distance_per_step'], 
@@ -129,8 +182,15 @@ class PhaseManager:
             'avg_distance': current_metrics['avg_distance'],
             'avg_reward': current_metrics['avg_reward'],
             'success_achieved': self.success_achieved,
-            'weight_adjustments': self.get_phase_weight_adjustments()
+            'weight_adjustments': self.get_phase_weight_adjustments(),
         }
+        
+        # Adicionar hiperparâmetros se não for fase 1
+        if self.current_phase > 1:
+            phase_info['hyperparams'] = self.get_phase_hyperparams()
+        
+        return phase_info
+    
 
 
 class FastTD3(TD3):
@@ -140,6 +200,9 @@ class FastTD3(TD3):
         
         self.custom_logger = custom_logger
         self.phase_manager = PhaseManager()
+        
+        # Armazenar hiperparâmetros originais
+        self.phase_manager.store_original_hyperparams(self)
         
         # Controle de episódios para phase manager
         self.episode_count = 0
@@ -155,8 +218,10 @@ class FastTD3(TD3):
         self.episode_count += 1
         self.phase_manager.update_phase_metrics(episode_metrics)
         
+        transition_occurred = False
         if self.phase_manager.should_transition_phase():
             if self.phase_manager.transition_to_next_phase():
+                transition_occurred = True
                 new_phase = self.phase_manager.current_phase
                 if self.custom_logger:
                     self.custom_logger.info(f"🎉 FastTD3 - TRANSIÇÃO PARA FASE {new_phase}!")
@@ -164,9 +229,74 @@ class FastTD3(TD3):
                     self.custom_logger.info(f"🏆 Métricas: Distância média: {current_metrics['avg_distance']:.2f}m, "
                                           f"Recompensa/step: {current_metrics['reward_per_step']:.3f}, "
                                           f"Sucesso: {current_metrics['success_rate']:.1%}")
-                return True
-        return False
+                
+                # APLICAR HIPERPARÂMETROS DA NOVA FASE (apenas fase 2 e 3)
+                if new_phase > 1:
+                    self.apply_phase_hyperparams()
+                
+        return transition_occurred
     
+    def apply_phase_hyperparams(self):
+        """Aplica hiperparâmetros da fase atual ao modelo (apenas fase 2 e 3)"""
+        hyperparams = self.phase_manager.get_phase_hyperparams()
+        
+        if not hyperparams:  # Fase 1 ou sem hiperparâmetros definidos
+            return
+        
+        if self.custom_logger:
+            self.custom_logger.info(f"🔄 FastTD3 - Aplicando hiperparâmetros da Fase {self.phase_manager.current_phase}")
+        
+        # Aplicar learning rate
+        if 'learning_rate' in hyperparams:
+            new_lr = hyperparams['learning_rate']
+            if new_lr != self.learning_rate:
+                self.learning_rate = new_lr
+                # Atualizar otimizadores
+                for param_group in self.actor.optimizer.param_groups:
+                    param_group['lr'] = self.learning_rate
+                for param_group in self.critic.optimizer.param_groups:
+                    param_group['lr'] = self.learning_rate
+                if self.custom_logger:
+                    self.custom_logger.info(f"  Learning rate: {self.learning_rate}")
+        
+        # Aplicar outros hiperparâmetros
+        if 'tau' in hyperparams:
+            self.tau = hyperparams['tau']
+            if self.custom_logger:
+                self.custom_logger.info(f"  Tau: {self.tau}")
+        
+        if 'gamma' in hyperparams:
+            self.gamma = hyperparams['gamma']
+            if self.custom_logger:
+                self.custom_logger.info(f"  Gamma: {self.gamma}")
+        
+        if 'target_noise_clip' in hyperparams:
+            self.target_noise_clip = hyperparams['target_noise_clip']
+            if self.custom_logger:
+                self.custom_logger.info(f"  Target noise clip: {self.target_noise_clip}")
+        
+        if 'policy_delay' in hyperparams:
+            self.policy_delay = hyperparams['policy_delay']
+            if self.custom_logger:
+                self.custom_logger.info(f"  Policy delay: {self.policy_delay}")
+    
+    def restore_original_hyperparams(self):
+        """Restaura hiperparâmetros originais do TD3"""
+        original = self.phase_manager.get_original_hyperparams()
+        
+        if original:
+            self.learning_rate = original['learning_rate']
+            self.tau = original['tau']
+            self.gamma = original['gamma']
+            self.target_noise_clip = original['target_noise_clip']
+            self.policy_delay = original['policy_delay']
+            
+            # Atualizar otimizadores
+            for param_group in self.actor.optimizer.param_groups:
+                param_group['lr'] = self.learning_rate
+            for param_group in self.critic.optimizer.param_groups:
+                param_group['lr'] = self.learning_rate
+                
     def get_phase_info(self):
         return self.phase_manager.get_phase_info()
     
