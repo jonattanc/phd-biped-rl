@@ -121,7 +121,9 @@ class Agent:
                 target_noise_clip=0.5,
                 tensorboard_log="./logs/",
                 device=device,
-            )
+                seed=seed,
+            ) 
+            
         else:
             raise ValueError(f"Algoritmo {algorithm} não suportado. Use 'PPO', 'TD3' ou 'FastTD3'")
 

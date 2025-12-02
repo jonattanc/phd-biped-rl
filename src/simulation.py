@@ -178,10 +178,6 @@ class Simulation(gym.Env):
         self.wrapped_env = agent.env
 
     def pre_fill_buffer(self):
-        if hasattr(self.agent, 'algorithm') and self.agent.algorithm.upper() == "FASTTD3":
-            self.logger.info("FastTD3: Pré-preenchimento ignorado")
-            return
-    
         obs, _ = self.reset()
 
         self.episode_timeout_s = self.episode_pre_fill_timeout_s
@@ -195,11 +191,13 @@ class Simulation(gym.Env):
             done = episode_terminated or episode_truncated
 
             action = np.array(action).flatten()
-            self.agent.model.replay_buffer.add(obs, next_obs, action, reward, done, infos=[info])
+            
+            # Adicionar ao buffer de replay do modelo
+            if hasattr(self.agent.model, 'replay_buffer'):
+                self.agent.model.replay_buffer.add(obs, next_obs, action, reward, done, infos=[info])
 
             if done:
                 obs, _ = self.reset()
-
             else:
                 obs = next_obs
 
@@ -620,23 +618,26 @@ class Simulation(gym.Env):
             }
             
             # Atualizar métricas no phase manager do FastTD3
-            transition_occurred = self.agent.model.update_phase_metrics(episode_metrics)
-            
-            # Verificar transição de fase (sempre logar transições)
-            if transition_occurred:
-                phase_info = self.agent.model.get_phase_info()
-                self.logger.info(f"🎉 FastTD3 - TRANSIÇÃO PARA FASE {phase_info['phase']}!")
-                self.logger.info(f"🏆 Metas alcançadas: RP: {phase_info['current_rps']:.3f}, "
-                               f"DP: {phase_info['current_dps']:.3f}, "
-                               f"Sucesso: {phase_info['current_success']:.1%}")
+            try:
+                transition_occurred = self.agent.model.update_phase_metrics(episode_metrics)
                 
-                # Enviar notificação para a GUI
-                self.ipc_queue.put({
-                    "type": "phase_transition",
-                    "algorithm": "FastTD3",
-                    "new_phase": phase_info['phase'],
-                    "phase_info": phase_info
-                })
+                # Verificar transição de fase (sempre logar transições)
+                if transition_occurred:
+                    phase_info = self.agent.model.get_phase_info()
+                    self.logger.info(f"🎉 FastTD3 - TRANSIÇÃO PARA FASE {phase_info['phase']}!")
+                    self.logger.info(f"🏆 Metas alcançadas: RP: {phase_info['current_rps']:.3f}, "
+                                   f"DP: {phase_info['current_dps']:.3f}, "
+                                   f"Sucesso: {phase_info['current_success']:.1%}")
+                    
+                    # Enviar notificação para a GUI
+                    self.ipc_queue.put({
+                        "type": "phase_transition",
+                        "algorithm": "FastTD3",
+                        "new_phase": phase_info['phase'],
+                        "phase_info": phase_info
+                    })
+            except Exception as e:
+                self.logger.error(f"Erro ao atualizar phase manager: {e}")
 
         if evaluation:
             self.add_episode_metrics("action", action)

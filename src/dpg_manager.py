@@ -145,6 +145,10 @@ class FastTD3(TD3):
         self.episode_count = 0
         self.recent_success_rate = deque(maxlen=100)
         self.consecutive_failures = 0
+    
+    def __len__(self):
+        """Retorna o tamanho atual do replay buffer para compatibilidade"""
+        return self.replay_buffer.size() if hasattr(self.replay_buffer, 'size') else len(self.replay_buffer.buffer) if hasattr(self.replay_buffer, 'buffer') else 0
 
     def update_phase_metrics(self, episode_metrics):
         """Atualiza métricas de fase - interface para simulação"""

@@ -106,34 +106,28 @@ def process_runner(
 
             ipc_queue.put({"type": "evaluation_complete", "metrics_path": metrics_path})
 
-        
-        elif algorithm.upper() == "FASTTD3":
-            logger.info("Iniciando treinamento FastTD3 com buffer padrão")
-            for episode in range(initial_episode, episodes):
-                if exit_value.value:
-                    break
-                # Coletar um episódio completo
-                obs, _ = sim.reset()
-                done = False
-                while not done and not exit_value.value:
-                    # Obter ação do agente
-                    action, _ = agent.model.predict(obs, deterministic=False)
-                    # Executar ação no ambiente
-                    next_obs, reward, terminated, truncated, info = sim.step(action)
-                    done = terminated or truncated
-                    # Atualizar para próxima iteração
-                    obs = next_obs
-        
         else:
+            logger.info("Modo de treinamento")
+            
             sim.pre_fill_buffer()
-            # Treinamento normal para PPO/TD3
-            timesteps_completed = 0
+            
+            timesteps_completed = initial_episode * sim.max_training_steps
             timesteps_batch_size = 1000
+
+            logger.info(f"Treinamento iniciado. Usando buffer padrão de tamanho: {agent.model.buffer_size}")
+            logger.info(f"Learning starts: {agent.model.learning_starts}")
+            logger.info("Treinamento será contínuo até interrupção manual.")
+
+            # Continuar treinando enquanto não houver sinal de saída
             while not exit_value.value:
                 timesteps_completed += timesteps_batch_size
-                        # Treinamento normal do agente
-                agent.model.learn(total_timesteps=timesteps_batch_size, 
-                                reset_num_timesteps=False, callback=callback)
+                
+                # Treinamento normal do agente
+                agent.model.learn(
+                    total_timesteps=timesteps_batch_size, 
+                    reset_num_timesteps=False, 
+                    callback=callback
+                )
 
     except Exception as e:
         logger.exception("Erro em process_runner")
