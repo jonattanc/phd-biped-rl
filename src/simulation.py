@@ -631,10 +631,7 @@ class Simulation(gym.Env):
                     # Limpar metade inicial do buffer COM LOG DETALHADO
                     try:
                         if hasattr(self.agent.model, 'clear_half_buffer'):
-                            buffer_size_before = len(self.agent.model)
                             self.agent.model.clear_half_buffer()
-                            buffer_size_after = len(self.agent.model)
-                            self.logger.info(f"🔄 FastTD3 - Limpeza concluída: {buffer_size_before} → {buffer_size_after} transições")
                     except Exception as e:
                         self.logger.error(f"❌ FastTD3 - Erro ao limpar buffer: {e}")
 
