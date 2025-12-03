@@ -451,9 +451,13 @@ class FastTD3(TD3):
         num_threads = min(4, os.cpu_count() or 2)
         blocks = []
 
+        # Garantir que block_size seja inteiro
+        block_size = int(block_size)
+        buffer_capacity = int(buffer_capacity)
+
         for i in range(0, buffer_capacity, block_size):
-            end = min(i + block_size, buffer_capacity)
-            blocks.append((i, end))
+            end = int(min(i + block_size, buffer_capacity))
+            blocks.append((int(i), end))
 
         results_queue = queue.Queue()
 
@@ -471,7 +475,8 @@ class FastTD3(TD3):
 
         # Processar blocos em paralelo
         threads = []
-        for start, end in blocks[:num_threads * 2]:
+        num_blocks_to_process = int(num_threads * 2)
+        for start, end in blocks[:num_blocks_to_process]:
             thread = threading.Thread(target=process_block, args=(start, end))
             threads.append(thread)
             thread.start()
