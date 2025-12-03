@@ -28,7 +28,7 @@
 
   <!-- Hip properties -->
   <xacro:property name="hip_radius" value="0.05" />
-  <xacro:property name="hip_mass" value="0.5" />
+  <xacro:property name="hip_mass" value="0.0" />
   <xacro:property name="hip_ixx" value="${0.4 * hip_mass * hip_radius * hip_radius}" />
   <xacro:property name="hip_iyy" value="${0.4 * hip_mass * hip_radius * hip_radius}" />
   <xacro:property name="hip_izz" value="${0.4 * hip_mass * hip_radius * hip_radius}" />
@@ -43,7 +43,7 @@
 
   <!-- Knee properties -->
   <xacro:property name="knee_radius" value="0.04" />
-  <xacro:property name="knee_mass" value="0.5" />
+  <xacro:property name="knee_mass" value="0.0" />
   <xacro:property name="knee_ixx" value="${0.4 * knee_mass * knee_radius * knee_radius}" />
   <xacro:property name="knee_iyy" value="${0.4 * knee_mass * knee_radius * knee_radius}" />
   <xacro:property name="knee_izz" value="${0.4 * knee_mass * knee_radius * knee_radius}" />
@@ -58,7 +58,7 @@
 
   <!-- Ankle properties -->
   <xacro:property name="ankle_radius" value="0.03" />
-  <xacro:property name="ankle_mass" value="0.5" />
+  <xacro:property name="ankle_mass" value="0.0" />
   <xacro:property name="ankle_ixx" value="${0.4 * ankle_mass * ankle_radius * ankle_radius}" />
   <xacro:property name="ankle_iyy" value="${0.4 * ankle_mass * ankle_radius * ankle_radius}" />
   <xacro:property name="ankle_izz" value="${0.4 * ankle_mass * ankle_radius * ankle_radius}" />
@@ -75,7 +75,7 @@
 
   <!-- Shoulder properties -->
   <xacro:property name="shoulder_radius" value="0.04" />
-  <xacro:property name="shoulder_mass" value="0.5" />
+  <xacro:property name="shoulder_mass" value="0.0" />
   <xacro:property name="shoulder_ixx" value="${0.4 * shoulder_mass * shoulder_radius * shoulder_radius}" />
   <xacro:property name="shoulder_iyy" value="${0.4 * shoulder_mass * shoulder_radius * shoulder_radius}" />
   <xacro:property name="shoulder_izz" value="${0.4 * shoulder_mass * shoulder_radius * shoulder_radius}" />
