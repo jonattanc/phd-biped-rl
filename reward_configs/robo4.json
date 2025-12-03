@@ -1,166 +1,202 @@
 {
   "components": {
     "gait_state_change": {
-      "weight": 40.0,
+      "weight": 25.0,
       "enabled": true,
       "min_value": 0,
       "max_value": 200
     },
     "progress": {
-      "weight": 8.0,
+      "weight": 5.0,
       "enabled": true,
       "min_value": 0,
       "max_value": 50
     },
     "knee_flexion": {
-      "weight": 0.04,
+      "weight": 0.06,
       "enabled": true,
       "min_value": 0,
       "max_value": 1
     },
     "efficiency_bonus": {
-      "weight": 0.0002,
+      "weight": 0.0001,
       "enabled": true,
       "min_value": 0.0001,
       "max_value": 10
     },
     "foot_clearance": {
-      "weight": 0.0002,
+      "weight": 0.0001,
       "enabled": true,
       "min_value": 0.0001,
       "max_value": 10
     },
     "distance_bonus": {
-      "weight": 0.0002,
+      "weight": 0.0001,
       "enabled": true,
       "min_value": 0,
       "max_value": 50
     },
     "success_bonus": {
-      "weight": 0.0002,
+      "weight": 0.0001,
       "enabled": true,
       "min_value": 0,
       "max_value": 1000
     },
     "gait_pattern_cross": {
-      "weight": 0.0002,
+      "weight": 0.0001,
       "enabled": true,
       "min_value": 0.0,
       "max_value": 5.0
     },
     "gait_rhythm": {
-      "weight": 0.0002,
+      "weight": 0.0001,
       "enabled": true,
       "min_value": 0,
       "max_value": 1
     },
     "alternating_foot_contact": {
-      "weight": 0.0002,
+      "weight": 0.0001,
       "enabled": true,
       "min_value": 0,
       "max_value": 1
     },
     "fall_penalty": {
-      "weight": -300.0,
+      "weight": -350.0,
       "enabled": true,
       "min_value": -1000,
       "max_value": 0
     },
     "yaw_penalty": {
-      "weight": -200.0,
+      "weight": -250.0,
       "enabled": true,
       "min_value": -1000,
       "max_value": 0
     },
     "foot_back_penalty": {
-      "weight": -8.0,
+      "weight": -10.0,
       "enabled": true,
       "min_value": -100,
       "max_value": 0
     },
     "foot_inclination_penalty": {
-      "weight": -0.008,
+      "weight": -0.01,
       "enabled": true,
       "min_value": -1,
       "max_value": 0
     },
     "stability_pitch": {
-      "weight": -0.003,
+      "weight": -0.004,
       "enabled": true,
       "min_value": -1,
       "max_value": 0
     },
     "stability_yaw": {
-      "weight": -0.0015,
+      "weight": -0.002,
       "enabled": true,
       "min_value": -1,
       "max_value": 0
     },
     "stability_roll": {
-      "weight": -0.0008,
+      "weight": -0.001,
       "enabled": true,
       "min_value": -1,
       "max_value": 0
     },
     "effort_square_penalty": {
-      "weight": -0.0008,
+      "weight": -0.001,
       "enabled": true,
       "min_value": -1,
       "max_value": 0
     },
     "y_axis_deviation_square_penalty": {
-      "weight": -0.00008,
+      "weight": -0.0001,
       "enabled": true,
       "min_value": -1,
       "max_value": 0
     },
     "jerk_penalty": {
-      "weight": -0.00008,
+      "weight": -0.0001,
       "enabled": true,
       "min_value": -1,
       "max_value": 0
     },
-    "trunk_stability_bonus": {
-      "weight": 2.5,
-      "enabled": true,
-      "min_value": 0,
-      "max_value": 5.0
-    },
-    "multi_joint_coordination": {
-      "weight": 1.2,
-      "enabled": true,
-      "min_value": 0,
-      "max_value": 3.0
-    },
-    "ankle_stability_bonus": {
-      "weight": 0.8,
-      "enabled": true,
-      "min_value": 0,
-      "max_value": 2.0
-    },
-    "shoulder_arm_coordination": {
-      "weight": 0.6,
-      "enabled": true,
-      "min_value": 0,
-      "max_value": 2.0
-    },
-    "energy_efficiency": {
-      "weight": 0.5,
-      "enabled": true,
-      "min_value": 0,
-      "max_value": 2.0
-    },
-    "joint_smoothness": {
-      "weight": 0.3,
-      "enabled": true,
-      "min_value": 0,
-      "max_value": 1.5
-    },
-    "postural_control": {
+    "pitch_forward_bonus": {
       "weight": 1.0,
-      "enabled": true,
+      "enabled": false,
       "min_value": 0,
-      "max_value": 3.0
+      "max_value": 20.0
+    },
+    "height_deviation_penalty": {
+      "weight": -0.01,
+      "enabled": false,
+      "min_value": -1,
+      "max_value": 0
+    },
+    "height_deviation_square_penalty": {
+      "weight": -0.01,
+      "enabled": false,
+      "min_value": -1,
+      "max_value": 0
+    },
+    "y_axis_deviation_penalty": {
+      "weight": -0.01,
+      "enabled": false,
+      "min_value": -1,
+      "max_value": 0
+    },
+    "direction_change_penalty": {
+      "weight": -0.2,
+      "enabled": false,
+      "min_value": -1,
+      "max_value": 0
+    },
+    "y_axis_deviation_cube_penalty": {
+      "weight": -1e-05,
+      "enabled": false,
+      "min_value": -0.01,
+      "max_value": 0
+    },
+    "effort_penalty": {
+      "weight": -0.001,
+      "enabled": false,
+      "min_value": -1,
+      "max_value": 0
+    },
+    "foot_clearance_original": {
+      "weight": 0.005,
+      "enabled": false,
+      "min_value": 0,
+      "max_value": 1
+    },
+    "hip_extension": {
+      "weight": 0.02,
+      "enabled": false,
+      "min_value": 0,
+      "max_value": 1
+    },
+    "hip_openning": {
+      "weight": -0.02,
+      "enabled": false,
+      "min_value": -1,
+      "max_value": 1
+    },
+    "hip_openning_square": {
+      "weight": -0.02,
+      "enabled": false,
+      "min_value": -1,
+      "max_value": 1
+    },
+    "center_bonus": {
+      "weight": 5.0,
+      "enabled": false,
+      "min_value": 0,
+      "max_value": 50
+    },
+    "warning_penalty": {
+      "weight": -3.0,
+      "enabled": false,
+      "min_value": -10,
+      "max_value": 0
     }
   }
 }

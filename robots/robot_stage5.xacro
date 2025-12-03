@@ -115,11 +115,11 @@
   <xacro:property name="imu_izz" value="${(1.0/12.0) * imu_mass * (imu_length * imu_length + imu_width * imu_width)}" />
 
   <!-- CONTROL PARAMETERS - AJUSTADOS PARA ESTABILIDADE -->
-  <xacro:property name="joint_damping" value="5.0" />  
-  <xacro:property name="joint_friction" value="0.5" />  
-  <xacro:property name="joint_effort" value="3000" />   
+  <xacro:property name="joint_damping" value="10.0" />  
+  <xacro:property name="joint_friction" value="0.1" />  
+  <xacro:property name="joint_effort" value="5000" />   
   <xacro:property name="joint_velocity" value="3.0" />  
-  <xacro:property name="position_gain" value="0.8" />   
+  <xacro:property name="position_gain" value="0.5" />   
   
   <!-- Materials -->
   <material name="robot_material_1">
