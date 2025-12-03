@@ -50,9 +50,10 @@ def process_runner(
         torch.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)
 
-        # Criar componentes
+        is_fast_td3 = algorithm.upper() == "FASTTD3"
+
         robot = Robot(logger, name=selected_robot)
-        environment = Environment(logger, name=selected_environment, robot=robot)
+        environment = Environment(logger, name=selected_environment, robot=robot, is_fast_td3=is_fast_td3)
         sim = Simulation(
             logger,
             robot,
@@ -108,9 +109,9 @@ def process_runner(
 
         else:
             logger.info("Modo de treinamento")
-            
+
             sim.pre_fill_buffer()
-            
+
             timesteps_completed = initial_episode * sim.max_training_steps
             timesteps_batch_size = 1000
 
@@ -121,13 +122,9 @@ def process_runner(
             # Continuar treinando enquanto não houver sinal de saída
             while not exit_value.value:
                 timesteps_completed += timesteps_batch_size
-                
+
                 # Treinamento normal do agente
-                agent.model.learn(
-                    total_timesteps=timesteps_batch_size, 
-                    reset_num_timesteps=False, 
-                    callback=callback
-                )
+                agent.model.learn(total_timesteps=timesteps_batch_size, reset_num_timesteps=False, callback=callback)
 
     except Exception as e:
         logger.exception("Erro em process_runner")

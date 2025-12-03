@@ -191,9 +191,9 @@ class Simulation(gym.Env):
             done = episode_terminated or episode_truncated
 
             action = np.array(action).flatten()
-            
+
             # Adicionar ao buffer de replay do modelo
-            if hasattr(self.agent.model, 'replay_buffer'):
+            if hasattr(self.agent.model, "replay_buffer"):
                 self.agent.model.replay_buffer.add(obs, next_obs, action, reward, done, infos=[info])
 
             if done:
@@ -266,7 +266,6 @@ class Simulation(gym.Env):
         self.robot_x_sum_velocity = 0
         self.robot_y_sum_velocity = 0
         self.robot_z_sum_velocity = 0
-        self.episode_environment = self.environment.env_list[self.environment.selected_env_index] if self.environment.name == "todos_alternados" else self.environment.name
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -371,7 +370,7 @@ class Simulation(gym.Env):
             "roll_vel": self.robot_roll_vel,
             "pitch_vel": self.robot_pitch_vel,
             "yaw_vel": self.robot_yaw_vel,
-            "episode_environment": self.episode_environment,
+            "episode_environments": self.environment.env_list[self.environment.selected_env_index],
         }
 
         if evaluation:
@@ -541,78 +540,41 @@ class Simulation(gym.Env):
         self.should_save_model = self.tracker.update()
 
         # VERIFICAÇÃO FastTD3 para logging
-        is_fast_td3 = (
-            hasattr(self, 'agent') and 
-            hasattr(self.agent, 'model') and 
-            hasattr(self.agent.model, 'phase_manager')
-        )
+        is_fast_td3 = hasattr(self, "agent") and hasattr(self.agent, "model") and hasattr(self.agent.model, "phase_manager")
 
         if is_fast_td3 and not evaluation:
             # Criar métricas do episódio para o FastTD3
-            episode_results = {
-                'reward': reward,
-                'steps': self.episode_steps,
-                'distance': self.episode_distance,
-                'success': self.episode_success,
-                'roll': self.robot_roll,
-                'pitch': self.robot_pitch
-            }
+            episode_results = {"reward": reward, "steps": self.episode_steps, "distance": self.episode_distance, "success": self.episode_success, "roll": self.robot_roll, "pitch": self.robot_pitch}
 
         if self.episode_done and not evaluation:
             episode_duration = self.episode_steps * self.time_step_s
             avg_x_velocity = self.robot_x_sum_velocity / max(self.episode_steps, 1)
-            
+
             # Log a cada 50 episódios para todos
             if self.episode_count % 50 == 0:
                 if is_fast_td3:
                     # LOG DETALHADO PARA FastTD3
                     phase_info = self.agent.model.get_phase_info()
-                    phase_theme = phase_info.get('phase_theme', 'DESCONHECIDA')
-                    self.logger.info("="*60)    
-                    self.logger.info(
-                        f"FastTD3 - Episódio {self.episode_count} | "
-                        f"{phase_theme}"
-                    )
-                    self.logger.info(
-                        f"Distância: {self.episode_distance:.2f}m | "
-                        f"Duração: {episode_duration:.1f}s | "
-                        f"Recompensa: {self.episode_reward:.1f}"
-                    )
-                    self.logger.info(
-                        f"RP: {phase_info['current_rps']:.3f} | "
-                        f"DP: {phase_info['current_dps']:.3f} | "
-                        f"Suc: {phase_info['current_success']:.1%} | "
-                        f"Vel: {avg_x_velocity:.2f}m/s"
-                    )
+                    phase_theme = phase_info.get("phase_theme", "DESCONHECIDA")
+                    self.logger.info("=" * 60)
+                    self.logger.info(f"FastTD3 - Episódio {self.episode_count} | " f"{phase_theme}")
+                    self.logger.info(f"Distância: {self.episode_distance:.2f}m | " f"Duração: {episode_duration:.1f}s | " f"Recompensa: {self.episode_reward:.1f}")
+                    self.logger.info(f"RP: {phase_info['current_rps']:.3f} | " f"DP: {phase_info['current_dps']:.3f} | " f"Suc: {phase_info['current_success']:.1%} | " f"Vel: {avg_x_velocity:.2f}m/s")
 
                 else:
                     # LOG BÁSICO PARA PPO E TD3
                     success_status = "✅" if self.episode_success else "❌"
-                    self.logger.info(
-                        f"{self.agent.algorithm} - Episódio {self.episode_count} | "
-                        f"Distância: {self.episode_distance:.2f}m | "
-                        f"Duração: {episode_duration:.1f}s"
-                    )
-                    self.logger.info(
-                        f"Recompensa: {self.episode_reward:.1f} | "
-                        f"Vel.X: {avg_x_velocity:.2f}m/s | "
-                        f"Sucesso: {success_status} | "
-                        f"Terminação: {self.episode_termination}"
-                    )
+                    self.logger.info(f"{self.agent.algorithm} - Episódio {self.episode_count} | " f"Distância: {self.episode_distance:.2f}m | " f"Duração: {episode_duration:.1f}s")
+                    self.logger.info(f"Recompensa: {self.episode_reward:.1f} | " f"Vel.X: {avg_x_velocity:.2f}m/s | " f"Sucesso: {success_status} | " f"Terminação: {self.episode_termination}")
 
         # ATUALIZAR PHASE MANAGER APENAS PARA FastTD3 NO FINAL DO EPISÓDIO
         if self.episode_done and not evaluation and is_fast_td3:
-            episode_metrics = {
-                'reward': self.episode_reward,
-                'steps': self.episode_steps,
-                'distance': self.episode_distance,
-                'success': self.episode_success
-            }
-            
+            episode_metrics = {"reward": self.episode_reward, "steps": self.episode_steps, "distance": self.episode_distance, "success": self.episode_success}
+
             # Atualizar métricas no phase manager do FastTD3
             try:
                 transition_occurred = self.agent.model.update_phase_metrics(episode_metrics)
-                
+
                 # Verificar transição de fase (sempre logar transições)
                 if transition_occurred:
                     phase_info = self.agent.model.get_phase_info()
@@ -625,23 +587,17 @@ class Simulation(gym.Env):
                     # Atualizar max_steps com novo timeout
                     self.max_training_steps = int(self.episode_training_timeout_s / self.time_step_s)
 
-                    self.logger.info(f"Timeout: {old_timeout}s → {self.episode_training_timeout_s}s | "
-                                f"Max steps: {self.max_training_steps}")
+                    self.logger.info(f"Timeout: {old_timeout}s → {self.episode_training_timeout_s}s | " f"Max steps: {self.max_training_steps}")
 
                     # Limpar metade inicial do buffer COM LOG DETALHADO
                     try:
-                        if hasattr(self.agent.model, 'clear_half_buffer'):
+                        if hasattr(self.agent.model, "clear_half_buffer"):
                             self.agent.model.clear_half_buffer()
                     except Exception as e:
                         self.logger.error(f"❌ FastTD3 - Erro ao limpar buffer: {e}")
 
                     # Enviar notificação para a GUI
-                    self.ipc_queue.put({
-                        "type": "phase_transition",
-                        "algorithm": "FastTD3",
-                        "new_phase": phase_info['phase'],
-                        "phase_info": phase_info
-                    })
+                    self.ipc_queue.put({"type": "phase_transition", "algorithm": "FastTD3", "new_phase": phase_info["phase"], "phase_info": phase_info})
             except Exception as e:
                 self.logger.error(f"Erro ao atualizar phase manager: {e}")
 
