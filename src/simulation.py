@@ -567,19 +567,11 @@ class Simulation(gym.Env):
                 if is_fast_td3:
                     # LOG DETALHADO PARA FastTD3
                     phase_info = self.agent.model.get_phase_info()
-                    adjustments = phase_info.get('weight_adjustments', {})
-                    current_phase = phase_info['phase']
-                    active_adjustments = {k: f"{v}x" for k, v in adjustments.items() if v != 1.0}
-                    adjustments_str = " | ".join([f"{k}: {v}" for k, v in active_adjustments.items()])
-                
-                    if adjustments_str:
-                        adjustments_str = f" | Ajustes: {adjustments_str}"
-                    else:
-                        adjustments_str = " | Ajustes: nenhum"
-                        
+                    phase_theme = phase_info.get('phase_theme', 'DESCONHECIDA')
+                    self.logger.info("="*60)    
                     self.logger.info(
                         f"FastTD3 - Episódio {self.episode_count} | "
-                        f"Fase {phase_info['phase']}{adjustments_str}"
+                        f"{phase_theme}"
                     )
                     self.logger.info(
                         f"Distância: {self.episode_distance:.2f}m | "
@@ -624,7 +616,7 @@ class Simulation(gym.Env):
                 # Verificar transição de fase (sempre logar transições)
                 if transition_occurred:
                     phase_info = self.agent.model.get_phase_info()
-                    
+
                     # Aumentar timeout em 5 segundos
                     old_timeout = self.episode_training_timeout_s
                     self.episode_training_timeout_s += 5.0
@@ -636,13 +628,16 @@ class Simulation(gym.Env):
                     self.logger.info(f"Timeout: {old_timeout}s → {self.episode_training_timeout_s}s | "
                                 f"Max steps: {self.max_training_steps}")
 
-                    # Limpar metade inicial do buffer
+                    # Limpar metade inicial do buffer COM LOG DETALHADO
                     try:
                         if hasattr(self.agent.model, 'clear_half_buffer'):
+                            buffer_size_before = len(self.agent.model)
                             self.agent.model.clear_half_buffer()
+                            buffer_size_after = len(self.agent.model)
+                            self.logger.info(f"🔄 FastTD3 - Limpeza concluída: {buffer_size_before} → {buffer_size_after} transições")
                     except Exception as e:
-                        self.logger.error(f"Erro ao limpar buffer: {e}")
-                
+                        self.logger.error(f"❌ FastTD3 - Erro ao limpar buffer: {e}")
+
                     # Enviar notificação para a GUI
                     self.ipc_queue.put({
                         "type": "phase_transition",

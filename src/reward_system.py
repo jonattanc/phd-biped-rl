@@ -67,7 +67,7 @@ class RewardSystem:
                 'gait_pattern_cross': 1.0,
                 'gait_rhythm': 1.0,
                 'alternating_foot_contact': 1.0,
-                'fall_penalty': 2.0,
+                'fall_penalty': 1.0,
                 'yaw_penalty': 1.0,
                 'y_axis_deviation_square_penalty': 1.0,
                 'stability_pitch': 1.0,
