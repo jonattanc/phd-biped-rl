@@ -498,7 +498,165 @@ class RewardSystem:
 
         return 0.5  # Valor neutro até ter dados suficientes
 
-    def get_configuration_as_dict(self):
+    def _calculate_trunk_stability_bonus(self, sim):
+    """Recompensa por estabilidade do tronco (robô 5 específico)"""
+    # Penalizar inclinações excessivas do tronco
+    trunk_inclination = abs(sim.robot_pitch) + abs(sim.robot_roll)
+    
+    # Recompensa máxima quando tronco está quase vertical
+    if trunk_inclination < math.radians(5):
+        stability = 1.0
+    elif trunk_inclination < math.radians(15):
+        stability = 0.7
+    elif trunk_inclination < math.radians(25):
+        stability = 0.3
+    else:
+        stability = 0.0
+    
+    # Bônus adicional se a velocidade angular do tronco for baixa
+    trunk_angular_velocity = abs(sim.robot_roll_vel) + abs(sim.robot_pitch_vel)
+    if trunk_angular_velocity < 0.1:
+        stability += 0.5
+    
+    return min(2.0, stability)
+
+def _calculate_multi_joint_coordination(self, sim):
+    """Recompensa por coordenação entre múltiplas juntas (robô 5)"""
+    coordination_score = 0.0
+    
+    try:
+        # Coordenação entre joelho e quadril (fase oposta para marcha)
+        right_knee_hip_coord = abs(sim.robot_right_knee_angle + sim.robot_right_hip_frontal_angle * 0.5)
+        left_knee_hip_coord = abs(sim.robot_left_knee_angle + sim.robot_left_hip_frontal_angle * 0.5)
+        
+        # Coordenação ideal: joelho flexionado quando quadril estendido e vice-versa
+        knee_hip_coordination = 1.0 - (right_knee_hip_coord + left_knee_hip_coord) / math.pi
+        
+        # Coordenação entre tornozelos e joelhos
+        ankle_knee_coordination = 0.0
+        if hasattr(sim, 'robot_right_ankle_angle') and hasattr(sim, 'robot_left_ankle_angle'):
+            right_ankle_knee = abs(sim.robot_right_ankle_angle - sim.robot_right_knee_angle * 0.3)
+            left_ankle_knee = abs(sim.robot_left_ankle_angle - sim.robot_left_knee_angle * 0.3)
+            ankle_knee_coordination = 1.0 - (right_ankle_knee + left_ankle_knee) / (math.pi/2)
+        
+        coordination_score = max(0, knee_hip_coordination * 0.6 + ankle_knee_coordination * 0.4)
+        
+    except Exception as e:
+        self.logger.warning(f"Erro cálculo multi-joint coordination: {e}")
+    
+    return coordination_score
+
+def _calculate_ankle_stability_bonus(self, sim):
+    """Recompensa por estabilidade dos tornozelos"""
+    try:
+        # Obter ângulos dos tornozelos (se disponíveis)
+        ankle_stability = 1.0
+        
+        # Penalizar torções excessivas dos tornozelos
+        if hasattr(sim, 'robot_right_ankle_lateral_angle'):
+            right_ankle_twist = abs(getattr(sim, 'robot_right_ankle_lateral_angle', 0))
+            left_ankle_twist = abs(getattr(sim, 'robot_left_ankle_lateral_angle', 0))
+            
+            ankle_twist = (right_ankle_twist + left_ankle_twist) / 2.0
+            
+            if ankle_twist < math.radians(5):
+                ankle_stability = 1.0
+            elif ankle_twist < math.radians(15):
+                ankle_stability = 0.6
+            elif ankle_twist < math.radians(25):
+                ankle_stability = 0.3
+            else:
+                ankle_stability = 0.0
+        
+        return ankle_stability
+    except:
+        return 0.5  # Valor neutro
+
+def _calculate_shoulder_arm_coordination(self, sim):
+    """Recompensa por coordenação braço-perna (marcha cruzada)"""
+    try:
+        # Verificar se o robô tem juntas de ombro
+        right_shoulder_angle = getattr(sim, 'robot_right_shoulder_front_angle', 0)
+        left_shoulder_angle = getattr(sim, 'robot_left_shoulder_front_angle', 0)
+        
+        # Coordenação ideal: braço direito para trás quando perna esquerda avança
+        # e vice-versa (marcha cruzada)
+        coordination = 0.0
+        
+        # Simples: recompensar movimentos opostos de braços
+        if (right_shoulder_angle > 0 and left_shoulder_angle < 0) or \
+           (right_shoulder_angle < 0 and left_shoulder_angle > 0):
+            coordination = 0.5
+        
+        # Bônus adicional por amplitude moderada
+        shoulder_amplitude = abs(right_shoulder_angle) + abs(left_shoulder_angle)
+        if math.radians(10) < shoulder_amplitude < math.radians(60):
+            coordination += 0.3
+        
+        return min(1.0, coordination)
+    except:
+        return 0.0
+
+def _calculate_energy_efficiency(self, sim):
+    """Recompensa por eficiência energética (velocidade vs esforço)"""
+    try:
+        # Velocidade em relação ao esforço
+        speed = abs(sim.robot_x_velocity)
+        effort = sum(v**2 for v in sim.joint_velocities) / len(sim.joint_velocities) if sim.joint_velocities else 0.1
+        
+        # Eficiência = velocidade / (esforço + pequena constante)
+        efficiency = speed / (effort + 0.01)
+        
+        # Normalizar
+        normalized_efficiency = min(efficiency * 2.0, 1.0)
+        
+        return normalized_efficiency
+    except:
+        return 0.3
+
+def _calculate_joint_smoothness(self, sim):
+    """Recompensa por suavidade dos movimentos articulares"""
+    try:
+        if hasattr(sim, 'last_joint_velocities') and sim.last_joint_velocities:
+            # Calcular jerk (derivada da aceleração)
+            jerk_sum = 0.0
+            for v1, v2 in zip(sim.joint_velocities, sim.last_joint_velocities):
+                jerk_sum += abs(v1 - v2)
+            
+            jerk_normalized = jerk_sum / (len(sim.joint_velocities) + 1e-6)
+            
+            # Menor jerk = mais suave
+            smoothness = max(0, 1.0 - jerk_normalized * 10.0)
+            
+            return smoothness
+        else:
+            return 0.5
+    except:
+        return 0.3
+
+def _calculate_postural_control(self, sim):
+    """Recompensa por controle postural geral"""
+    postural_score = 0.0
+    
+    # 1. Estabilidade do tronco
+    trunk_stability = 1.0 - (abs(sim.robot_pitch) + abs(sim.robot_roll)) / math.radians(30)
+    
+    # 2. Altura consistente
+    height_stability = 1.0 - abs(sim.robot_z_position - 0.8) / 0.5
+    
+    # 3. Alinhamento lateral
+    lateral_stability = 1.0 - abs(sim.robot_y_position) / 0.4
+    
+    # Combinação ponderada
+    postural_score = (
+        max(0, trunk_stability) * 0.5 +
+        max(0, height_stability) * 0.3 +
+        max(0, lateral_stability) * 0.2
+    )
+    
+    return postural_score
+
+def get_configuration_as_dict(self):
         """Retorna configuração atual em formato dicionário"""
         config = {}
 
