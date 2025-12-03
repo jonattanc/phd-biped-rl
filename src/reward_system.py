@@ -264,6 +264,48 @@ class RewardSystem:
             adjusted_weight = self.components["jerk_penalty"].weight * weight_multiplier
             total_reward += self.components["jerk_penalty"].value * adjusted_weight
 
+        if self.is_component_enabled("trunk_stability_bonus"):
+            self.components["trunk_stability_bonus"].value = self._calculate_trunk_stability_bonus(sim)
+            weight_multiplier = weight_adjustments.get('trunk_stability_bonus', 1.0)
+            adjusted_weight = self.components["trunk_stability_bonus"].weight * weight_multiplier
+            total_reward += self.components["trunk_stability_bonus"].value * adjusted_weight
+
+        if self.is_component_enabled("multi_joint_coordination"):
+            self.components["multi_joint_coordination"].value = self._calculate_multi_joint_coordination(sim)
+            weight_multiplier = weight_adjustments.get('multi_joint_coordination', 1.0)
+            adjusted_weight = self.components["multi_joint_coordination"].weight * weight_multiplier
+            total_reward += self.components["multi_joint_coordination"].value * adjusted_weight
+
+        if self.is_component_enabled("ankle_stability_bonus"):
+            self.components["ankle_stability_bonus"].value = self._calculate_ankle_stability_bonus(sim)
+            weight_multiplier = weight_adjustments.get('ankle_stability_bonus', 1.0)
+            adjusted_weight = self.components["ankle_stability_bonus"].weight * weight_multiplier
+            total_reward += self.components["ankle_stability_bonus"].value * adjusted_weight
+
+        if self.is_component_enabled("shoulder_arm_coordination"):
+            self.components["shoulder_arm_coordination"].value = self._calculate_shoulder_arm_coordination(sim)
+            weight_multiplier = weight_adjustments.get('shoulder_arm_coordination', 1.0)
+            adjusted_weight = self.components["shoulder_arm_coordination"].weight * weight_multiplier
+            total_reward += self.components["shoulder_arm_coordination"].value * adjusted_weight
+
+        if self.is_component_enabled("energy_efficiency"):
+            self.components["energy_efficiency"].value = self._calculate_energy_efficiency(sim)
+            weight_multiplier = weight_adjustments.get('energy_efficiency', 1.0)
+            adjusted_weight = self.components["energy_efficiency"].weight * weight_multiplier
+            total_reward += self.components["energy_efficiency"].value * adjusted_weight
+
+        if self.is_component_enabled("joint_smoothness"):
+            self.components["joint_smoothness"].value = self._calculate_joint_smoothness(sim)
+            weight_multiplier = weight_adjustments.get('joint_smoothness', 1.0)
+            adjusted_weight = self.components["joint_smoothness"].weight * weight_multiplier
+            total_reward += self.components["joint_smoothness"].value * adjusted_weight
+
+        if self.is_component_enabled("postural_control"):
+            self.components["postural_control"].value = self._calculate_postural_control(sim)
+            weight_multiplier = weight_adjustments.get('postural_control', 1.0)
+            adjusted_weight = self.components["postural_control"].weight * weight_multiplier
+            total_reward += self.components["postural_control"].value * adjusted_weight
+        
         # RECOMPENSAS DINÂMICAS PARA FASE 3 
         if not evaluation and is_fast_td3:
             phase_info = sim.agent.model.get_phase_info()

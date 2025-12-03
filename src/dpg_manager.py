@@ -20,10 +20,13 @@ class PhaseManager:
         
         self.phase1_success_counter = 0  
         self.phase2_success_counter = 0  
-        self.phase1_success_criterio = 2.5  # Distancia fase 1 em metros
-        self.phase2_success_criterio = 8.0  # Distancia fase 2 em metros
+        self.phase3_success_counter = 0  
+        self.phase1_success_criterio = 3.0  # Distancia fase 1 em metros
+        self.phase2_success_criterio = 6.0  # Distancia fase 2 em metros
+        self.phase3_success_criterio = 9.0  # Distancia fase 3 em metros
         self.phase1_success_threshold = 10  # Vezes fase 1 em metros
-        self.phase2_success_threshold = 10  # Vezes fase 2 em metros
+        self.phase2_success_threshold = 15  # Vezes fase 2 em metros
+        self.phase3_success_threshold = 20  # Vezes fase 3 em metros
         
         self.phase_themes = {
             1: "Fase 1 - ESTABILIDADE BÁSICA",
@@ -40,33 +43,42 @@ class PhaseManager:
                 'tau': 0.002,              # (de 0.005)
                 'gamma': 0.98,             # (de 0.99)
             },
-            3: {  # Fase 3: Refinamento com foco em estabilidade
-                'learning_rate': 3e-5,      
+            3: {  # Fase 3: Refinamento com foco em estabilidade     
                 'target_policy_noise': 0.05,
-                'target_noise_clip': 0.05,  
-                'policy_delay': 1,          
-                'tau': 0.0005,              
-                'gamma': 0.995,             
-                'noise_std': 0.05,
+                'target_noise_clip': 0.1,          
+                'tau': 0.001,              
+                'gamma': 0.99,             
+                'noise_std': 0.1,
             }
         }
         
         # AJUSTES de peso por fase (em relação ao default.json)
         self.phase_weight_adjustments = {
             1: {},  # Fase 1: usa 100% dos pesos do default.json
-            2: {    # Fase 2: Foco em Progresso e Estabilidade
+            2: {  # Fase 2: Coordenação básica
+                'multi_joint_coordination': 1.5,
+                'ankle_stability_bonus': 1.5,
+                'hip_extension': 1.2,
+                'knee_flexion': 1.2,
+                'progress': 0.8,
+                'gait_state_change': 0.8
+            },
+            3: {    # Fase 3: Foco em Progresso e Estabilidade
                 'progress': 3.0,           
-                'efficiency_bonus': 15.0,  
+                'efficiency_bonus': 5.0,  
                 'gait_state_change': 1.0,  
-                'foot_clearance': 10.0,   
-                'y_axis_deviation_square_penalty': 10.0,  
+                'foot_clearance': 5.0,   
+                'y_axis_deviation_square_penalty': 5.0,  
                 'foot_back_penalty': 2.0,   
                 'stability_roll': 2.0,      
                 'stability_pitch': 2.0,     
                 'distance_bonus': 5.0,       
-                'success_bonus': 5.0,      
+                'success_bonus': 5.0, 
+                'energy_efficiency': 1.5,
+                'joint_smoothness': 1.5,
+                'shoulder_arm_coordination': 1.2,     
             },
-            3: {    # Fase 3: Foco em Sucesso e Velocidade
+            4: {    # Fase 4: Foco em Sucesso e Velocidade
                 'progress': 4.0,           
                 'efficiency_bonus': 10.0,  
                 'distance_bonus': 10.0,    
@@ -78,7 +90,7 @@ class PhaseManager:
                 'alternating_foot_contact': 2.0, 
                 'success_bonus': 5.0,      
                 'gait_rhythm': 5.0,        
-                'effort_square_penalty': 5.0,  
+                'effort_square_penalty': 0.8,  
                 'jerk_penalty': 5.0,       
             }
         }
@@ -117,7 +129,13 @@ class PhaseManager:
                 self.phase2_success_counter += 1
                 if self.custom_logger:
                     self.custom_logger.info(f"🏆 FASE 2 - EPISÓDIO VÁLIDO {self.phase2_success_counter}/10 (distância: {episode_distance:.2f}m)")
-    
+
+        elif self.current_phase == 3:
+            if episode_distance > self.phase3_success_criterio:
+                self.phase3_success_counter += 1
+                if self.custom_logger:
+                    self.custom_logger.info(f"🏆 FASE 3 - EPISÓDIO VÁLIDO {self.phase3_success_counter}/10 (distância: {episode_distance:.2f}m)")
+
     def should_transition_phase(self):
         """Verifica se deve transicionar de fase"""
         if self.current_phase == 1:
@@ -130,6 +148,12 @@ class PhaseManager:
             if self.phase2_success_counter >= self.phase2_success_threshold:
                 if self.custom_logger:
                     self.custom_logger.info(f"🎯 FASE 2 CONCLUÍDA: {self.phase2_success_counter} episódios > 8m")
+                return True
+                
+        elif self.current_phase == 3:
+            if self.phase3_success_counter >= self.phase3_success_threshold:
+                if self.custom_logger:
+                    self.custom_logger.info(f"🎯 FASE 3 CONCLUÍDA: {self.phase3_success_counter} episódios > 8m")
                 return True
                 
         return False
@@ -254,8 +278,9 @@ class FastTD3(TD3):
         )
 
         # Limpeza de buffer
-        self.corte_antigas = 0.5
-        self.corte_piores = 0.5
+        self.old_remove_ratio = 0.3  # Remove 30% mais antigas
+        self.bad_remove_ratio = 0.2  # Remove 20% piores
+        self.min_buffer_size = 100000  # Mínimo de transições
     
     def __len__(self):
         """Retorna o tamanho atual do replay buffer para compatibilidade"""
@@ -385,206 +410,109 @@ class FastTD3(TD3):
         except Exception as e:
             return {'type': 'error', 'error': str(e)}
 
-    def clear_half_buffer(self, use_threads=True):
-        """Remove as transições mais antigas + as piores recompensas."""
+    def clear_half_buffer(self):
+        """Limpa parte do buffer: transições mais antigas + piores recompensas"""
         replay_buffer = self.replay_buffer
         current_size = replay_buffer.size()
-        buffer_capacity = replay_buffer.buffer_size
-
-        if current_size < 10000:
+        
+        # Não limpar se já estiver no mínimo
+        if current_size <= self.min_buffer_size:
             if self.custom_logger:
-                self.custom_logger.info(f"Buffer muito pequeno ({current_size}), pulando limpeza")
+                self.custom_logger.info(f"Buffer no mínimo ({current_size}), pulando limpeza")
             return
-
+        
         start_time = time.time()
-
+        
         try:
-            # Determinar estratégia com base no tamanho e configuração
-            if current_size < 100000 or not use_threads:
-                keep_indices = self._collect_indices_sequential(replay_buffer, current_size, buffer_capacity)
-            else:
-                keep_indices = self._collect_indices_parallel(replay_buffer, current_size, buffer_capacity)
-
-            # Reconstruir buffer com os índices mantidos
-            self._rebuild_buffer_from_indices(replay_buffer, keep_indices, buffer_capacity)
-
-            total_time = time.time() - start_time
-            new_size = replay_buffer.size()
-
+            # Coletar todas as transições válidas
+            valid_indices, rewards = self._get_valid_transitions(replay_buffer)
+            
+            if len(valid_indices) <= self.min_buffer_size:
+                return
+            
+            # Ordenar por índice (mais antigas primeiro)
+            sorted_by_age = list(zip(valid_indices, rewards))
+            sorted_by_age.sort(key=lambda x: x[0])
+            
+            # Remover porcentagem das mais antigas
+            remove_old = int(len(sorted_by_age) * self.old_remove_ratio)
+            if remove_old > 0:
+                sorted_by_age = sorted_by_age[remove_old:]
+            
+            # Remover porcentagem das piores recompensas
+            remove_bad = int(len(sorted_by_age) * self.bad_remove_ratio)
+            if remove_bad > 0:
+                # Ordenar por recompensa (piores primeiro)
+                sorted_by_age.sort(key=lambda x: x[1])
+                sorted_by_age = sorted_by_age[remove_bad:]
+            
+            # Garantir mínimo de 100.000
+            final_count = len(sorted_by_age)
+            if final_count < self.min_buffer_size:
+                # Manter as melhores até atingir o mínimo
+                sorted_by_age.sort(key=lambda x: x[1], reverse=True)  # Melhores primeiro
+                sorted_by_age = sorted_by_age[:self.min_buffer_size]
+            
+            # Extrair índices finais
+            keep_indices = [idx for idx, _ in sorted_by_age]
+            
+            # Reconstruir buffer
+            self._rebuild_buffer(replay_buffer, keep_indices)
+            
+            elapsed = time.time() - start_time
             if self.custom_logger:
-                self.custom_logger.info(f"Limpeza em {total_time:.2f}s | "
-                    f"   Transições: {current_size} → {new_size}")
-
+                self.custom_logger.info(
+                    f"Buffer limpo: {current_size} → {len(keep_indices)} "
+                    f"(removidas {current_size - len(keep_indices)}) ({elapsed:.2f}s)"
+                )
+                
         except Exception as e:
             if self.custom_logger:
-                self.custom_logger.error(f"❌ Erro na limpeza do buffer: {e}")
-                import traceback
-                self.custom_logger.error(f"Traceback: {traceback.format_exc()[:500]}")
-
-            # Fallback: manter apenas transições recentes
-            self._fallback_keep_recent(replay_buffer, buffer_capacity)
-
-    def _collect_indices_sequential(self, replay_buffer, current_size, buffer_capacity):
-        """Coleta índices a manter usando abordagem sequencial"""
-        all_indices = list(range(buffer_capacity))
+                self.custom_logger.error(f"Erro ao limpar buffer: {e}")
+    
+    def _get_valid_transitions(self, replay_buffer):
+        """Coleta índices válidos e suas recompensas"""
         valid_indices = []
         rewards = []
-
-        # Coletar todas as recompensas válidas
-        for idx in all_indices:
-            try:
-                if np.any(replay_buffer.observations[idx] != 0):
-                    reward = float(replay_buffer.rewards[idx])
-                    valid_indices.append(idx)
-                    rewards.append(reward)
-            except:
-                continue
-            
-        return self._filter_indices_by_strategy(valid_indices, rewards)
-
-    def _collect_indices_parallel(self, replay_buffer, current_size, buffer_capacity):
-        """Coleta índices a manter usando abordagem paralela"""
-        import queue
-
-        # Dividir em blocos para processamento paralelo
-        block_size = 10000
-        num_threads = min(4, os.cpu_count() or 2)
-        blocks = []
-
-        # Garantir que block_size seja inteiro
-        block_size = int(block_size)
-        buffer_capacity = int(buffer_capacity)
-
-        for i in range(0, buffer_capacity, block_size):
-            end = int(min(i + block_size, buffer_capacity))
-            blocks.append((int(i), end))
-
-        results_queue = queue.Queue()
-
-        def process_block(start, end):
-            """Processa um bloco de índices"""
-            block_data = []
-            for idx in range(start, end):
-                try:
-                    if np.any(replay_buffer.observations[idx] != 0):
-                        reward = float(replay_buffer.rewards[idx])
-                        block_data.append((idx, reward))
-                except:
-                    continue
-            results_queue.put(block_data)
-
-        # Processar blocos em paralelo
-        threads = []
-        num_blocks_to_process = int(num_threads * 2)
-        for start, end in blocks[:num_blocks_to_process]:
-            thread = threading.Thread(target=process_block, args=(start, end))
-            threads.append(thread)
-            thread.start()
-
-        # Coletar resultados
-        all_rewards = []
-        for thread in threads:
-            thread.join()
-
-        while not results_queue.empty():
-            all_rewards.extend(results_queue.get())
-
-        # Separar índices e recompensas
-        valid_indices = [idx for idx, _ in all_rewards]
-        rewards = [reward for _, reward in all_rewards]
-
-        return self._filter_indices_by_strategy(valid_indices, rewards)
-
-    def _filter_indices_by_strategy(self, valid_indices, rewards):
-        """Filtra índices baseado na estratégia: mais antigas + piores recompensas"""
-        if len(valid_indices) < 1000:
-            return valid_indices  # Retorna tudo se muito pequeno
-
-        # Combinar e ordenar por índice (proxy para timestamp)
-        indexed_rewards = list(zip(valid_indices, rewards))
-        indexed_rewards.sort(key=lambda x: x[0])
-
-        # Separar mais antigas
-        half_point = len(indexed_rewards) * self.corte_antigas
-
-        # Ordenar as recentes por recompensa
-        recent_rewards = indexed_rewards[half_point:]
-        recent_rewards.sort(key=lambda x: x[1])
-
-        # Remover piores recompensas
-        remove_count = int(len(recent_rewards) * self.corte_piores)
-        keep_rewards = recent_rewards[remove_count:]
-
-        # Coletar índices a manter
-        keep_indices = [idx for idx, _ in keep_rewards]
-
-        return keep_indices
-
-    def _rebuild_buffer_from_indices(self, replay_buffer, keep_indices, buffer_capacity):
-        """Reconstrói buffer a partir dos índices mantidos"""
-        final_count = len(keep_indices)
-
-        if final_count < 1000:
-            self._fallback_keep_recent(replay_buffer, buffer_capacity)
-            return
-
-        # Preparar novos arrays mantendo a capacidade original
+        
+        for idx in range(replay_buffer.buffer_size):
+            # Verificar se transição é válida
+            if np.any(replay_buffer.observations[idx] != 0):
+                valid_indices.append(idx)
+                rewards.append(float(replay_buffer.rewards[idx]))
+        
+        return valid_indices, rewards
+    
+    def _rebuild_buffer(self, replay_buffer, keep_indices):
+        """Reconstrói buffer com transições mantidas"""
+        buffer_capacity = replay_buffer.buffer_size
+        keep_count = len(keep_indices)
+        
+        # Preparar novos arrays
         obs_shape = replay_buffer.observations.shape[1:]
         action_shape = replay_buffer.actions.shape[1:]
-
-        new_observations = np.zeros((buffer_capacity, *obs_shape), dtype=replay_buffer.observations.dtype)
-        new_next_observations = np.zeros((buffer_capacity, *obs_shape), dtype=replay_buffer.next_observations.dtype)
+        
+        new_obs = np.zeros((buffer_capacity, *obs_shape), dtype=replay_buffer.observations.dtype)
+        new_next_obs = np.zeros((buffer_capacity, *obs_shape), dtype=replay_buffer.next_observations.dtype)
         new_actions = np.zeros((buffer_capacity, *action_shape), dtype=replay_buffer.actions.dtype)
         new_rewards = np.zeros((buffer_capacity, 1), dtype=replay_buffer.rewards.dtype)
         new_dones = np.zeros((buffer_capacity, 1), dtype=replay_buffer.dones.dtype)
-
-        # Preencher apenas com as transições mantidas
+        
+        # Copiar transições mantidas
         for i, idx in enumerate(keep_indices):
-            new_observations[i] = replay_buffer.observations[idx]
-            new_next_observations[i] = replay_buffer.next_observations[idx]
+            new_obs[i] = replay_buffer.observations[idx]
+            new_next_obs[i] = replay_buffer.next_observations[idx]
             new_actions[i] = replay_buffer.actions[idx]
             new_rewards[i] = replay_buffer.rewards[idx]
             new_dones[i] = replay_buffer.dones[idx]
-
+        
         # Atualizar buffer
-        replay_buffer.observations = new_observations
-        replay_buffer.next_observations = new_next_observations
+        replay_buffer.observations = new_obs
+        replay_buffer.next_observations = new_next_obs
         replay_buffer.actions = new_actions
         replay_buffer.rewards = new_rewards
         replay_buffer.dones = new_dones
-
-        # Configurar posição e flag de cheio corretamente
-        replay_buffer.pos = min(final_count, buffer_capacity)
-        replay_buffer.full = (final_count >= buffer_capacity)
-
-    def _fallback_keep_recent(self, replay_buffer, buffer_capacity):
-        """Fallback: mantém apenas as transições mais recentes"""
-        current_size = replay_buffer.size()
-        keep_count = min(current_size // 2, buffer_capacity)
-
-        # Coletar índices das transições mais recentes
-        recent_indices = []
-
-        if replay_buffer.full:
-            # Buffer circular
-            start_idx = (replay_buffer.pos - keep_count) % buffer_capacity
-            for i in range(keep_count):
-                idx = (start_idx + i) % buffer_capacity
-                recent_indices.append(idx)
-        else:
-            # Buffer linear
-            recent_indices = list(range(max(0, replay_buffer.pos - keep_count), replay_buffer.pos))
-
-        # Coletar transições válidas
-        valid_indices = []
-        for idx in recent_indices:
-            try:
-                if np.any(replay_buffer.observations[idx] != 0):
-                    valid_indices.append(idx)
-            except:
-                continue
-            
-        # Reconstruir buffer
-        if valid_indices:
-            self._rebuild_buffer_from_indices(replay_buffer, valid_indices, buffer_capacity)
-
+        
+        # Atualizar estado
+        replay_buffer.pos = min(keep_count, buffer_capacity)
+        replay_buffer.full = (keep_count >= buffer_capacity)
