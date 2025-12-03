@@ -109,13 +109,13 @@
       "max_value": 0
     },
     "y_axis_deviation_square_penalty": {
-      "weight": -0.00008,
+      "weight": -8e-05,
       "enabled": true,
       "min_value": -1,
       "max_value": 0
     },
     "jerk_penalty": {
-      "weight": -0.00008,
+      "weight": -8e-05,
       "enabled": true,
       "min_value": -1,
       "max_value": 0
