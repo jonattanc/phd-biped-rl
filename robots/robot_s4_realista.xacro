@@ -55,7 +55,7 @@
   <xacro:property name="foot_length" value="0.25" />
   <xacro:property name="foot_width" value="0.10" />
   <xacro:property name="foot_height" value="0.05" />
-  <xacro:property name="foot_offset_front" value="0.15 />
+  <xacro:property name="foot_offset_front" value="0.15" />
   <xacro:property name="foot_mass" value="2.1" />
   <!-- Inertia for box (length, width, height): Ixx = (1/12)*m*(w^2+h^2); Iyy = (1/12)*m*(l^2+h^2); Izz = (1/12)*m*(l^2+w^2) -->
   <xacro:property name="foot_ixx" value="${(1.0/12.0) * foot_mass * (foot_width * foot_width + foot_height * foot_height)}" />
