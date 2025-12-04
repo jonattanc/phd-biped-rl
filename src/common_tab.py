@@ -46,19 +46,44 @@ class GUITab:
         self.env_combo.grid(row=0, column=column + 1, padx=5)
 
     def create_robot_selector(self, frame, column, enabled=True):
-        xacro_robot_files = self._get_xacro_files(utils.ROBOTS_PATH)
-
-        if not xacro_robot_files:
-            messagebox.showerror("Erro", f"Nenhum arquivo .xacro encontrado em {utils.ROBOTS_PATH}.")
-            return
-
+        """Cria o seletor de robôs dinamicamente baseado nos arquivos .xacro"""
         ttk.Label(frame, text="Robô:").grid(row=0, column=column, sticky=tk.W, padx=1)
-        self.robot_var = tk.StringVar(value=self.gui.settings.get("default_robot", xacro_robot_files[-1]))
-        self.robot_combo = ttk.Combobox(frame, textvariable=self.robot_var, values=xacro_robot_files, width=20)
+        
+        # Buscar todos os arquivos .xacro na pasta robots
+        robots_dir = utils.ROBOTS_PATH
+        robot_files = []
+        
+        if os.path.exists(robots_dir):
+            for file in os.listdir(robots_dir):
+                if file.endswith(".xacro"):
+                    # Remover a extensão .xacro para mostrar apenas o nome
+                    robot_name = file[:-6]  # Remove ".xacro"
+                    robot_files.append(robot_name)
+        
+        # Ordenar alfabeticamente
+        robot_files.sort()
+        
+        # Se não houver robôs, mostrar uma mensagem
+        if not robot_files:
+            robot_files = ["Nenhum robô encontrado"]
+            enabled = False
+        
+        default_robot = self.gui.settings.get("default_robot", robot_files[0] if robot_files else "")
+        self.robot_var = tk.StringVar(value=default_robot)
+        self.robot_combo = ttk.Combobox(
+            frame, 
+            textvariable=self.robot_var, 
+            values=robot_files, 
+            width=20,
+            state="readonly" if enabled else "disabled"
+        )
         self.robot_combo.grid(row=0, column=column + 1, padx=5)
-
+        
+        # Se não estiver habilitado, desativar o combobox
         if not enabled:
             self.robot_combo.config(state=tk.DISABLED)
+        
+        return self.robot_combo
 
     def create_seed_selector(self, frame, column):
         self.seed_var = tk.IntVar(value=42)

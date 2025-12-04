@@ -35,6 +35,11 @@ class Robot:
         if not os.path.exists(self.robots_tmp_dir):
             os.makedirs(self.robots_tmp_dir, exist_ok=True)
 
+        # Verificar se o arquivo .xacro existe
+        xacro_path = os.path.join(self.robots_dir, f"{self.name}.xacro")
+        if not os.path.exists(xacro_path):
+            raise FileNotFoundError(f"Arquivo {self.name}.xacro não encontrado em {self.robots_dir}")
+        
         self.urdf_path = self._generate_urdf()
 
     def update_env(self, env):
