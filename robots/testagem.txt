@@ -56,11 +56,14 @@ d. coxas:
   <xacro:property name="thigh_length" value="0.40" />
   <xacro:property name="thigh_mass" value="18.5" />
 
-Robo 4.08: tentando com os que deram certo + tamanho body_length
-  <xacro:property name="body_length" value="0.5" />
+Robo 4.08: todas as medidas atualizadas com as massas das pernas
 
 Robo 4.09: tentando com os que deram certo + tamanho body_mass
   <xacro:property name="body_mass" value="35.1" />
+
+Robo 4.010: todas as medidas atualizadas sem alteração das massas
+
+
 
 
 depois de dar certo com os primeiros

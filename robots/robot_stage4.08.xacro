@@ -197,8 +197,8 @@
       <!-- Y: body_radius posiciona o centro da esfera/articulacao do quadril na borda do corpo -->
       <!-- Y: hip_radius tira a esfera/articulacao de dentro do corpo, caso contrario metade da esfera/articulacao ficaria dentro do corpo -->
       <origin xyz="0 ${(body_radius + hip_radius) * reflect} ${body_offset - body_length/2}"/>
-      <axis xyz="0 1 0"/> <!-- Movimento frontal -->
-      <limit lower="${-75 * deg_to_rad}" upper="${60 * deg_to_rad}" effort="1000" velocity="5"/>
+      <axis xyz="0 1 0"/>
+      <limit lower="${-45 * deg_to_rad}" upper="${45 * deg_to_rad}" effort="${joint_effort}" velocity="${joint_velocity}"/>
       <dynamics damping="${joint_damping}" friction="${joint_friction}"/>
     </joint>
 
@@ -229,7 +229,7 @@
       <child link="${prefix}_thigh_link"/>
       <origin xyz="0 0 0"/>
       <axis xyz="1 0 0"/> <!-- Movimento lateral -->
-      <limit lower="${-20 * deg_to_rad}" upper="${20 * deg_to_rad}" effort="1000" velocity="5"/>
+      <limit lower="${-25 * deg_to_rad}" upper="${25 * deg_to_rad}" effort="${joint_effort}" velocity="${joint_velocity}"/>
       <dynamics damping="${joint_damping}" friction="${joint_friction}"/>
     </joint>
 
@@ -294,7 +294,7 @@
       <child link="${prefix}_shin_link"/>
       <origin xyz="0 0 0"/>
       <axis xyz="0 1 0"/>
-      <limit lower="${0 * deg_to_rad}" upper="${90 * deg_to_rad}" effort="1000" velocity="5"/>
+      <limit lower="${0 * deg_to_rad}" upper="${90 * deg_to_rad}" effort="${joint_effort}" velocity="${joint_velocity}"/>
       <dynamics damping="${joint_damping}" friction="${joint_friction}"/>
     </joint>
 
@@ -331,7 +331,7 @@
       <!-- Z: Diminuir ankle_radius faz o topo da esfera/articulacao do tornozelo coincidir com a base inferior da canela -->
       <origin xyz="0 0 ${-knee_radius - shin_length - ankle_radius}"/>
       <axis xyz="0 1 0"/> <!-- Movimento frontal -->
-      <limit lower="${-30 * deg_to_rad}" upper="${75 * deg_to_rad}" effort="1000" velocity="5"/>
+      <limit lower="${-20 * deg_to_rad}" upper="${20 * deg_to_rad}" effort="${joint_effort}" velocity="${joint_velocity}"/>
       <dynamics damping="${joint_damping}" friction="${joint_friction}"/>
     </joint>
 
@@ -362,7 +362,7 @@
       <child link="${prefix}_foot_link"/>
       <origin xyz="0 0 0"/>
       <axis xyz="1 0 0"/> <!-- Movimento lateral -->
-      <limit lower="${-30 * deg_to_rad}" upper="${30 * deg_to_rad}" effort="1000" velocity="5"/>
+      <limit lower="${-10 * deg_to_rad}" upper="${10 * deg_to_rad}" effort="${joint_effort}" velocity="${joint_velocity}"/>
       <dynamics damping="${joint_damping}" friction="${joint_friction}"/>
     </joint>
 
