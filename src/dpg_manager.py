@@ -53,8 +53,7 @@ class PhaseManager:
             1: {},  # Fase 1: usa 100% dos pesos do default.json
             2: {    # Fase 2: Foco em Progresso e Estabilidade
                 'progress': 3.0,           
-                'efficiency_bonus': 15.0,  
-                'gait_state_change': 1.0,  
+                'efficiency_bonus': 15.0,   
                 'foot_clearance': 10.0,   
                 'y_axis_deviation_square_penalty': 10.0,  
                 'foot_back_penalty': 2.0,   
@@ -107,13 +106,15 @@ class PhaseManager:
             if episode_distance > self.phase1_success_criterio:
                 self.phase1_success_counter += 1
                 if self.custom_logger:
-                    self.custom_logger.info(f"🏆 FASE 1 - EPISÓDIO VÁLIDO {self.phase1_success_counter}/10 (distância: {episode_distance:.2f}m)")
+                    self.custom_logger.info(f"🏆 FASE 1 - EPISÓDIO VÁLIDO {self.phase1_success_counter}/"
+                                            f"{self.phase1_success_threshold} (distância: {episode_distance:.2f}m)")
         
         elif self.current_phase == 2:
             if episode_distance > self.phase2_success_criterio:
                 self.phase2_success_counter += 1
                 if self.custom_logger:
-                    self.custom_logger.info(f"🏆 FASE 2 - EPISÓDIO VÁLIDO {self.phase2_success_counter}/10 (distância: {episode_distance:.2f}m)")
+                    self.custom_logger.info(f"🏆 FASE 2 - EPISÓDIO VÁLIDO {self.phase2_success_counter}/"
+                                            f"{self.phase2_success_threshold} (distância: {episode_distance:.2f}m)")
     
     def should_transition_phase(self):
         """Verifica se deve transicionar de fase"""

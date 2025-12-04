@@ -60,7 +60,8 @@ d. coxas:
 
 Robo 4.1: todas as medidas atualizadas com as massas das pernas
 
-
+Robo 4.10: adicionei o tamanho do corpo principal: mais dificuldades
+  <xacro:property name="body_mass" value="35.1" />
 
 
 

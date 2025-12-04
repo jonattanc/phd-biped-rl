@@ -129,6 +129,60 @@ class Robot:
         obs += np.random.normal(0, 1e-6, size=obs.shape)
         return obs
 
+    def get_xcom_and_margin(self):
+        """ Calcula XCoM e Margem de Estabilidade usando dados já disponíveis.
+        Retorna: (xcom_ap, xcom_ml, mos_ap, mos_ml)
+        """
+        try:
+            com_pos = self.get_center_of_mass()
+            _, linear_velocity, _, _ = self.get_imu_position_velocity_orientation()
+
+            # Altura do CoM (z)
+            h = com_pos[2]
+
+            # Frequência natural - cálculo simples
+            g = 9.81
+            if h > 0.1:
+                omega0 = math.sqrt(g / h)
+            else:
+                omega0 = 3.13  # sqrt(9.81/1.0) - valor padrão seguro
+
+            # XCoM (apenas x e y)
+            xcom_ap = com_pos[0] + linear_velocity[0] / omega0
+            xcom_ml = com_pos[1] + linear_velocity[1] / omega0
+
+            # Usa posição dos pés já disponível via get_foot_heights()
+            right_foot_contact, left_foot_contact = self.get_foot_contact_states()
+
+            if right_foot_contact or left_foot_contact:
+                foot_length = 0.10
+
+                # Obter posições x dos pés (já calculadas em get_foot_x_velocities)
+                right_foot_state = p.getLinkState(self.id, self.get_link_index("right_foot_link"))
+                left_foot_state = p.getLinkState(self.id, self.get_link_index("left_foot_link"))
+
+                right_foot_x = right_foot_state[0][0]
+                left_foot_x = left_foot_state[0][0]
+
+                # Base de suporte anterior (mais à frente)
+                bos_front = max(right_foot_x, left_foot_x) + foot_length/2
+                bos_rear = min(right_foot_x, left_foot_x) - foot_length/2
+
+                # Margem de Estabilidade AP
+                mos_ap = min(xcom_ap - bos_rear, bos_front - xcom_ap)
+
+                # Valor positivo se XCoM está dentro de ±0.1m do centro
+                mos_ml = max(0.1 - abs(com_pos[1]), 0)
+
+            else:
+                mos_ap, mos_ml = -1.0, -1.0  # Nenhum pé no chão
+
+            return xcom_ap, xcom_ml, mos_ap, mos_ml
+
+        except Exception as e:
+            self.logger.debug(f"Erro em get_xcom_and_margin: {e}")
+            return 0.0, 0.0, 0.0, 0.0
+    
     def update_gait_state(self):
         """Atualiza estado da marcha e retorna se houve transição de estado"""
         right_foot_state = p.getLinkState(self.id, self.get_link_index("right_foot_link"))

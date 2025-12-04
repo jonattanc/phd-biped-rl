@@ -1,4 +1,5 @@
 # reward_system.py
+import math
 import os
 import time
 import numpy as np
@@ -77,6 +78,7 @@ class RewardSystem:
                 'foot_inclination_penalty': 1.0,
                 'effort_square_penalty': 1.0,
                 'jerk_penalty': 1.0,
+                'xcom_stability':1.0
             }
 
         # COMPONENTES PARA MARCHA
@@ -219,7 +221,7 @@ class RewardSystem:
 
             total_reward += self.components["foot_inclination_penalty"].value * adjusted_weight
 
-        # DPG. ESTABILIDADE DA MARCHA (Controle postural)
+        # DPG - 5. ESTABILIDADE DA MARCHA (Controle postural)
         if self.is_component_enabled("stability_pitch"):
             self.components["stability_pitch"].value = (sim.robot_pitch - sim.target_pitch_rad) ** 2
             weight_multiplier = weight_adjustments.get('stability_pitch', 1.0)
@@ -227,12 +229,14 @@ class RewardSystem:
 
             total_reward += self.components["stability_pitch"].value * adjusted_weight
 
+         # DPG - 6. ESTABILIDADE DA MARCHA (Controle postural)
         if self.is_component_enabled("stability_yaw"):
             self.components["stability_yaw"].value = sim.robot_yaw**2
             weight_multiplier = weight_adjustments.get('stability_yaw', 1.0)  
             adjusted_weight = self.components["stability_yaw"].weight * weight_multiplier
             total_reward += self.components["stability_yaw"].value * adjusted_weight
 
+         # DPG - 7. ESTABILIDADE DA MARCHA (Controle postural)
         if self.is_component_enabled("stability_roll"):
             roll_error = sim.robot_roll**2  
             self.components["stability_roll"].value = roll_error
@@ -241,7 +245,7 @@ class RewardSystem:
 
             total_reward += self.components["stability_roll"].value * adjusted_weight
 
-        # 7. EFICIÊNCIA ENERGÉTICA (Movimentos suaves)
+        # DPG - 8. EFICIÊNCIA ENERGÉTICA (Movimentos suaves)
         if self.is_component_enabled("effort_square_penalty"):
             effort = sum(v**2 for v in sim.joint_velocities)
             self.components["effort_square_penalty"].value = effort
@@ -249,7 +253,7 @@ class RewardSystem:
             adjusted_weight = self.components["effort_square_penalty"].weight * weight_multiplier
             total_reward += self.components["effort_square_penalty"].value * adjusted_weight
 
-        # DPG - 3. Se manter na pista
+        # DPG - 9. Se manter na pista
         if self.is_component_enabled("y_axis_deviation_square_penalty"):
             self.components["y_axis_deviation_square_penalty"].value = distance_y_from_center**2
             weight_multiplier = weight_adjustments.get('y_axis_deviation_square_penalty', 1.0)
@@ -257,6 +261,7 @@ class RewardSystem:
 
             total_reward += self.components["y_axis_deviation_square_penalty"].value * adjusted_weight
 
+        #DPG - 10. Jerk
         if self.is_component_enabled("jerk_penalty"):
             jerk = sum(abs(v1 - v2) for v1, v2 in zip(sim.joint_velocities, sim.last_joint_velocities))
             self.components["jerk_penalty"].value = jerk
@@ -264,6 +269,27 @@ class RewardSystem:
             adjusted_weight = self.components["jerk_penalty"].weight * weight_multiplier
             total_reward += self.components["jerk_penalty"].value * adjusted_weight
 
+        #DPG - Novas ideias
+        if self.is_component_enabled("xcom_stability"):
+            # Calcular recompensa baseada na margem de estabilidade
+            if hasattr(sim, 'mos_min') and sim.mos_min > -0.5:  # Evitar valores muito negativos
+                # Recompensa sigmoidal simples: tanh(mos_min * 3)
+                stability_reward = math.tanh(sim.mos_min * 3.0)
+                
+                # Bônus adicional se estiver em zona segura (> 0.05m)
+                if sim.mos_min > 0.05:
+                    stability_reward += 0.3
+                elif sim.mos_min > 0.02:  # Zona aceitável
+                    stability_reward += 0.1
+            else:
+                stability_reward = -0.5  # Penalidade se não houver pé no chão
+            
+            self.components["xcom_stability"].value = stability_reward
+            weight_multiplier = weight_adjustments.get('xcom_stability', 1.0)
+            adjusted_weight = self.components["xcom_stability"].weight * weight_multiplier
+            
+            total_reward += self.components["xcom_stability"].value * adjusted_weight
+        
         # RECOMPENSAS DINÂMICAS PARA FASE 3 
         if not evaluation and is_fast_td3:
             phase_info = sim.agent.model.get_phase_info()
@@ -293,8 +319,9 @@ class RewardSystem:
                     success_bonus_extra = 200.0
                     total_reward += success_bonus_extra
 
+        
+        
         # Componentes não ativos 
-
         if self.is_component_enabled("foot_clearance_original"):
             foot_height = 0
             if not sim.robot_left_foot_contact:
