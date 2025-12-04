@@ -1,4 +1,4 @@
-Robo4.01: adicionei o controle do robo5
+Robo4.01: adicionei o controle do robo5: level 2 - 2650
  <!-- CONTROL PARAMETERS - AJUSTADOS PARA ESTABILIDADE -->
   <xacro:property name="joint_damping" value="10.0" />  
   <xacro:property name="joint_friction" value="0.1" />  
@@ -6,29 +6,61 @@ Robo4.01: adicionei o controle do robo5
   <xacro:property name="joint_velocity" value="3.0" />  
   <xacro:property name="position_gain" value="0.5" />
 
-Robo 4.02: adicionei o tamanho do corpo principal
+Robo 4.02: adicionei o tamanho do corpo principal: mais dificuldades
   <xacro:property name="body_length" value="0.5" />
   <xacro:property name="body_mass" value="35.1" />
 
-Robo 4.03: redesenhei os pes
+Robo 4.03: redesenhei os pes: level 2 - 4250
   <xacro:property name="foot_length" value="0.25" />
   <xacro:property name="foot_width" value="0.10" />
   <xacro:property name="foot_height" value="0.05" />
   <xacro:property name="foot_offset_front" value="0.1" />
   <xacro:property name="foot_mass" value="2.1" />
 
-Robo 4.04: pernas
+Robo 4.04: pernas: level 2 - 2700
   <xacro:property name="shin_radius" value="0.06" />
   <xacro:property name="shin_length" value="0.43" />
   <xacro:property name="shin_mass" value="7.6" />
 
-Robo 4.05: coxas
+Robo 4.05: coxas: level 2 - 2300
   <xacro:property name="thigh_radius" value="0.075" />
   <xacro:property name="thigh_length" value="0.40" />
   <xacro:property name="thigh_mass" value="18.5" />
 
 Robo 4.06: semirealista - alteração da massa (jonc)
 
+    Aumento do torque para 400
+
+Robo 4.07: tentando com os que deram certo
+a. adicionei o controle do robo5
+  <xacro:property name="joint_damping" value="10.0" />  
+  <xacro:property name="joint_friction" value="0.1" />  
+  <xacro:property name="joint_effort" value="5000" />   
+  <xacro:property name="joint_velocity" value="3.0" />  
+  <xacro:property name="position_gain" value="0.5" />
+
+b. redesenhei os pes
+  <xacro:property name="foot_length" value="0.25" />
+  <xacro:property name="foot_width" value="0.10" />
+  <xacro:property name="foot_height" value="0.05" />
+  <xacro:property name="foot_offset_front" value="0.1" />
+  <xacro:property name="foot_mass" value="2.1" />
+
+c. pernas: 
+  <xacro:property name="shin_radius" value="0.06" />
+  <xacro:property name="shin_length" value="0.43" />
+  <xacro:property name="shin_mass" value="7.6" />
+
+d. coxas: 
+  <xacro:property name="thigh_radius" value="0.075" />
+  <xacro:property name="thigh_length" value="0.40" />
+  <xacro:property name="thigh_mass" value="18.5" />
+
+Robo 4.08: tentando com os que deram certo + tamanho body_length
+  <xacro:property name="body_length" value="0.5" />
+
+Robo 4.09: tentando com os que deram certo + tamanho body_mass
+  <xacro:property name="body_mass" value="35.1" />
 
 
 depois de dar certo com os primeiros
