@@ -20,10 +20,10 @@ class PhaseManager:
         
         self.phase1_success_counter = 0  
         self.phase2_success_counter = 0  
-        self.phase1_success_criterio = 1.0  # Distancia fase 1 em metros
+        self.phase1_success_criterio = 2.5  # Distancia fase 1 em metros
         self.phase2_success_criterio = 8.0  # Distancia fase 2 em metros
         self.phase1_success_threshold = 10  # Vezes fase 1 em metros
-        self.phase2_success_threshold = 10  # Vezes fase 2 em metros
+        self.phase2_success_threshold = 20  # Vezes fase 2 em metros
         
         self.phase_themes = {
             1: "Fase 1 - ESTABILIDADE BÁSICA",
@@ -41,9 +41,8 @@ class PhaseManager:
                 'gamma': 0.98,             # (de 0.99)
             },
             3: {  # Fase 3: Refinamento com foco em estabilidade     
-                'target_policy_noise': 0.05,
-                'target_noise_clip': 0.1,          
-                'tau': 0.001,              
+                'target_noise_clip': 0.25,          
+                'tau': 0.003,              
                 'gamma': 0.99,             
                 'noise_std': 0.1,
             }
@@ -254,7 +253,7 @@ class FastTD3(TD3):
         # Limpeza de buffer
         self.old_remove_ratio = 0.3  # Remove 30% mais antigas
         self.bad_remove_ratio = 0.2  # Remove 20% piores
-        self.min_buffer_size = 100000  # Mínimo de transições
+        self.padrao_buffer_size = 100000  # Mínimo de transições
     
     def __len__(self):
         """Retorna o tamanho atual do replay buffer para compatibilidade"""
@@ -390,7 +389,7 @@ class FastTD3(TD3):
         current_size = replay_buffer.size()
         
         # Não limpar se já estiver no mínimo
-        if current_size <= self.min_buffer_size:
+        if current_size <= self.padrao_buffer_size:
             if self.custom_logger:
                 self.custom_logger.info(f"Buffer no mínimo ({current_size}), pulando limpeza")
             return
@@ -401,7 +400,7 @@ class FastTD3(TD3):
             # Coletar todas as transições válidas
             valid_indices, rewards = self._get_valid_transitions(replay_buffer)
             
-            if len(valid_indices) <= self.min_buffer_size:
+            if len(valid_indices) <= self.padrao_buffer_size:
                 return
             
             # Ordenar por índice (mais antigas primeiro)
@@ -422,10 +421,10 @@ class FastTD3(TD3):
             
             # Garantir mínimo de 100.000
             final_count = len(sorted_by_age)
-            if final_count < self.min_buffer_size:
+            if final_count < self.padrao_buffer_size:
                 # Manter as melhores até atingir o mínimo
                 sorted_by_age.sort(key=lambda x: x[1], reverse=True)  # Melhores primeiro
-                sorted_by_age = sorted_by_age[:self.min_buffer_size]
+                sorted_by_age = sorted_by_age[:self.padrao_buffer_size]
             
             # Extrair índices finais
             keep_indices = [idx for idx, _ in sorted_by_age]

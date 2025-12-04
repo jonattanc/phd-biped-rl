@@ -70,7 +70,7 @@ class Simulation(gym.Env):
         self.physics_step_multiplier = 8
         self.time_step_s = self.physics_step_s * self.physics_step_multiplier  # 240/5 = 48 Hz, ~20.83 ms # 240/8 = 30 Hz, ~33.33 ms # 240/10 = 24 Hz, ~41.66 ms
         self.max_motor_velocity = 1.5  # rad/s
-        self.max_motor_torque = 80.0  # Nm
+        self.max_motor_torque = 150.0  # Nm
         self.max_training_steps = int(self.episode_training_timeout_s / self.time_step_s)
         self.max_pre_fill_steps = int(self.episode_pre_fill_timeout_s / self.time_step_s)
         self.max_steps = self.max_training_steps
