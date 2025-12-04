@@ -33,7 +33,7 @@ class TrainingCallback(BaseCallback):
 
 
 class Agent:
-    def __init__(self, logger, env=None, model_path=None, algorithm="PPO", device="cpu", initial_episode=0, seed=42):
+    def __init__(self, logger, env=None, model_path=None, algorithm="PPO", device="cpu", initial_episode=0, seed=42, is_fast_td3=True):
         self.logger = logger
         self.model = None
         self.algorithm = algorithm
@@ -41,7 +41,13 @@ class Agent:
         self.action_dim = env.action_space.shape[0] if env else None
         self.initial_episode = initial_episode
         self.learning_starts = 10e3
-        self.prefill_steps = 10e3
+
+        if is_fast_td3:
+            self.prefill_steps = 10e3
+
+        else:
+            self.prefill_steps = 100e3
+
         self.minimum_steps_to_save = self.learning_starts + self.prefill_steps + 1e6
 
         dummy_env = DummyVecEnv([lambda: env])
@@ -122,8 +128,8 @@ class Agent:
                 tensorboard_log="./logs/",
                 device=device,
                 seed=seed,
-            ) 
-            
+            )
+
         else:
             raise ValueError(f"Algoritmo {algorithm} não suportado. Use 'PPO', 'TD3' ou 'FastTD3'")
 
@@ -163,7 +169,7 @@ class Agent:
                 self.algorithm = "FastTD3"
                 if hasattr(self.model, "action_space") and self.model.action_space is not None:
                     self.action_dim = self.model.action_space.shape[0]
-                if hasattr(self.model, 'custom_logger'):
+                if hasattr(self.model, "custom_logger"):
                     self.model.custom_logger = self.logger
                 self.logger.info(f"Modelo FastTD3 carregado: {model_path}")
 

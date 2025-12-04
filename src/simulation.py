@@ -28,6 +28,7 @@ class Simulation(gym.Env):
         config_changed_value,
         num_episodes=1,
         initial_episode=0,
+        is_fast_td3=True,
     ):
         super(Simulation, self).__init__()
 
@@ -70,13 +71,18 @@ class Simulation(gym.Env):
         self.physics_step_multiplier = 8
         self.time_step_s = self.physics_step_s * self.physics_step_multiplier  # 240/5 = 48 Hz, ~20.83 ms # 240/8 = 30 Hz, ~33.33 ms # 240/10 = 24 Hz, ~41.66 ms
         self.max_motor_velocity = 1.5  # rad/s
-        self.max_motor_torque = 400.0  # Nm
         self.max_training_steps = int(self.episode_training_timeout_s / self.time_step_s)
         self.max_pre_fill_steps = int(self.episode_pre_fill_timeout_s / self.time_step_s)
         self.max_steps = self.max_training_steps
         self.lock_per_second = 0.5  # lock/s
         self.lock_time = 0.5  # s
         self.action_noise_std = 1e-3
+
+        if is_fast_td3:
+            self.max_motor_torque = 400.0  # Nm
+
+        else:
+            self.max_motor_torque = 80.0  # Nm
 
         # Configurar ambiente de simulação PRIMEIRO
         self.setup_sim_env()

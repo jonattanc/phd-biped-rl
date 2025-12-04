@@ -68,9 +68,10 @@ def process_runner(
             camera_selection_value,
             config_changed_value,
             initial_episode=initial_episode,
+            is_fast_td3=is_fast_td3,
         )
 
-        agent = Agent(logger, env=sim, model_path=model_path, algorithm=algorithm, device=device, initial_episode=initial_episode, seed=seed)
+        agent = Agent(logger, env=sim, model_path=model_path, algorithm=algorithm, device=device, initial_episode=initial_episode, seed=seed, is_fast_td3=is_fast_td3)
         sim.set_agent(agent)
 
         callback = TrainingCallback(logger)
