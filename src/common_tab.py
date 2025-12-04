@@ -54,7 +54,7 @@ class GUITab:
 
         ttk.Label(frame, text="Robô:").grid(row=0, column=column, sticky=tk.W, padx=1)
         self.robot_var = tk.StringVar(value=self.gui.settings.get("default_robot", xacro_robot_files[-1]))
-        self.robot_combo = ttk.Combobox(frame, textvariable=self.robot_var, values=xacro_robot_files, width=12)
+        self.robot_combo = ttk.Combobox(frame, textvariable=self.robot_var, values=xacro_robot_files, width=20)
         self.robot_combo.grid(row=0, column=column + 1, padx=5)
 
         if not enabled:
