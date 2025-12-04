@@ -20,13 +20,10 @@ class PhaseManager:
         
         self.phase1_success_counter = 0  
         self.phase2_success_counter = 0  
-        self.phase3_success_counter = 0  
-        self.phase1_success_criterio = 3.0  # Distancia fase 1 em metros
-        self.phase2_success_criterio = 6.0  # Distancia fase 2 em metros
-        self.phase3_success_criterio = 9.0  # Distancia fase 3 em metros
+        self.phase1_success_criterio = 1.0  # Distancia fase 1 em metros
+        self.phase2_success_criterio = 8.0  # Distancia fase 2 em metros
         self.phase1_success_threshold = 10  # Vezes fase 1 em metros
-        self.phase2_success_threshold = 15  # Vezes fase 2 em metros
-        self.phase3_success_threshold = 20  # Vezes fase 3 em metros
+        self.phase2_success_threshold = 10  # Vezes fase 2 em metros
         
         self.phase_themes = {
             1: "Fase 1 - ESTABILIDADE BÁSICA",
@@ -55,30 +52,19 @@ class PhaseManager:
         # AJUSTES de peso por fase (em relação ao default.json)
         self.phase_weight_adjustments = {
             1: {},  # Fase 1: usa 100% dos pesos do default.json
-            2: {  # Fase 2: Coordenação básica
-                'multi_joint_coordination': 1.5,
-                'ankle_stability_bonus': 1.5,
-                'hip_extension': 1.2,
-                'knee_flexion': 1.2,
-                'progress': 0.8,
-                'gait_state_change': 0.8
-            },
-            3: {    # Fase 3: Foco em Progresso e Estabilidade
+            2: {    # Fase 2: Foco em Progresso e Estabilidade
                 'progress': 3.0,           
-                'efficiency_bonus': 5.0,  
+                'efficiency_bonus': 15.0,  
                 'gait_state_change': 1.0,  
-                'foot_clearance': 5.0,   
-                'y_axis_deviation_square_penalty': 5.0,  
+                'foot_clearance': 10.0,   
+                'y_axis_deviation_square_penalty': 10.0,  
                 'foot_back_penalty': 2.0,   
                 'stability_roll': 2.0,      
                 'stability_pitch': 2.0,     
                 'distance_bonus': 5.0,       
-                'success_bonus': 5.0, 
-                'energy_efficiency': 1.5,
-                'joint_smoothness': 1.5,
-                'shoulder_arm_coordination': 1.2,     
+                'success_bonus': 5.0,      
             },
-            4: {    # Fase 4: Foco em Sucesso e Velocidade
+            3: {    # Fase 3: Foco em Sucesso e Velocidade
                 'progress': 4.0,           
                 'efficiency_bonus': 10.0,  
                 'distance_bonus': 10.0,    
@@ -90,7 +76,7 @@ class PhaseManager:
                 'alternating_foot_contact': 2.0, 
                 'success_bonus': 5.0,      
                 'gait_rhythm': 5.0,        
-                'effort_square_penalty': 0.8,  
+                'effort_square_penalty': 5.0,  
                 'jerk_penalty': 5.0,       
             }
         }
@@ -129,13 +115,7 @@ class PhaseManager:
                 self.phase2_success_counter += 1
                 if self.custom_logger:
                     self.custom_logger.info(f"🏆 FASE 2 - EPISÓDIO VÁLIDO {self.phase2_success_counter}/10 (distância: {episode_distance:.2f}m)")
-
-        elif self.current_phase == 3:
-            if episode_distance > self.phase3_success_criterio:
-                self.phase3_success_counter += 1
-                if self.custom_logger:
-                    self.custom_logger.info(f"🏆 FASE 3 - EPISÓDIO VÁLIDO {self.phase3_success_counter}/10 (distância: {episode_distance:.2f}m)")
-
+    
     def should_transition_phase(self):
         """Verifica se deve transicionar de fase"""
         if self.current_phase == 1:
@@ -148,12 +128,6 @@ class PhaseManager:
             if self.phase2_success_counter >= self.phase2_success_threshold:
                 if self.custom_logger:
                     self.custom_logger.info(f"🎯 FASE 2 CONCLUÍDA: {self.phase2_success_counter} episódios > 8m")
-                return True
-                
-        elif self.current_phase == 3:
-            if self.phase3_success_counter >= self.phase3_success_threshold:
-                if self.custom_logger:
-                    self.custom_logger.info(f"🎯 FASE 3 CONCLUÍDA: {self.phase3_success_counter} episódios > 8m")
                 return True
                 
         return False
@@ -516,3 +490,4 @@ class FastTD3(TD3):
         # Atualizar estado
         replay_buffer.pos = min(keep_count, buffer_capacity)
         replay_buffer.full = (keep_count >= buffer_capacity)
+        
