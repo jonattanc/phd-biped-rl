@@ -2,7 +2,7 @@
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="myrobot_st4">
   <!-- Body properties -->
   <xacro:property name="body_radius" value="0.15" />
-  <xacro:property name="body_length" value="0.3" />
+  <xacro:property name="body_length" value="0.5" />
   <xacro:property name="body_mass" value="5.0" />
   <!-- Inertia for solid cylinder (axis z): Ixx = Iyy = (1/12)*m*(3*r^2+h^2); Izz = (1/2)*m*r^2 -->
   <xacro:property name="body_ixx" value="${(1.0/12.0) * body_mass * (3 * body_radius * body_radius + body_length * body_length)}" />
@@ -11,7 +11,7 @@
 
   <!-- Hip properties -->
   <xacro:property name="hip_radius" value="0.05" />
-  <xacro:property name="hip_mass" value="0.5" />
+  <xacro:property name="hip_mass" value="0.0" />
   <!-- Inertia for solid sphere: Ixx = Iyy = Izz = (2/5)*m*r^2 -->
   <xacro:property name="hip_ixx" value="${0.4 * hip_mass * hip_radius * hip_radius}" />
   <xacro:property name="hip_iyy" value="${0.4 * hip_mass * hip_radius * hip_radius}" />
