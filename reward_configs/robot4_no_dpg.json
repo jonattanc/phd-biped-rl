@@ -120,47 +120,83 @@
       "min_value": 0.0001,
       "max_value": 10
     },
-    "energy_efficiency": {
-      "weight": 0.5,
+    "hip_openning_square": {
+      "weight": -0.02,
       "enabled": false,
-      "min_value": 0,
-      "max_value": 2.0
+      "min_value": -1,
+      "max_value": 1
     },
-    "shoulder_arm_coordination": {
-      "weight": 0.6,
+    "hip_openning": {
+      "weight": -0.02,
       "enabled": false,
-      "min_value": 0,
-      "max_value": 2.0
+      "min_value": -1,
+      "max_value": 1
     },
-    "ankle_stability_bonus": {
-      "weight": 0.8,
-      "enabled": false,
-      "min_value": 0,
-      "max_value": 2.0
-    },
-    "trunk_stability_bonus": {
-      "weight": 2.5,
-      "enabled": false,
-      "min_value": 0,
-      "max_value": 5.0
-    },
-    "postural_control": {
+    "pitch_forward_bonus": {
       "weight": 1.0,
       "enabled": false,
       "min_value": 0,
-      "max_value": 3.0
+      "max_value": 20.0
     },
-    "joint_smoothness": {
-      "weight": 0.3,
+    "hip_extension": {
+      "weight": 0.02,
       "enabled": false,
       "min_value": 0,
-      "max_value": 1.5
+      "max_value": 1
     },
-    "multi_joint_coordination": {
-      "weight": 1.2,
+    "direction_change_penalty": {
+      "weight": -0.2,
+      "enabled": false,
+      "min_value": -1,
+      "max_value": 0
+    },
+    "effort_penalty": {
+      "weight": -0.001,
+      "enabled": false,
+      "min_value": -1,
+      "max_value": 0
+    },
+    "y_axis_deviation_penalty": {
+      "weight": -0.01,
+      "enabled": false,
+      "min_value": -1,
+      "max_value": 0
+    },
+    "center_bonus": {
+      "weight": 5.0,
       "enabled": false,
       "min_value": 0,
-      "max_value": 3.0
+      "max_value": 50
+    },
+    "height_deviation_square_penalty": {
+      "weight": -0.01,
+      "enabled": false,
+      "min_value": -1,
+      "max_value": 0
+    },
+    "height_deviation_penalty": {
+      "weight": -0.01,
+      "enabled": false,
+      "min_value": -1,
+      "max_value": 0
+    },
+    "y_axis_deviation_cube_penalty": {
+      "weight": -1e-05,
+      "enabled": false,
+      "min_value": -0.01,
+      "max_value": 0
+    },
+    "warning_penalty": {
+      "weight": -3.0,
+      "enabled": false,
+      "min_value": -10,
+      "max_value": 0
+    },
+    "foot_clearance_original": {
+      "weight": 0.005,
+      "enabled": false,
+      "min_value": 0,
+      "max_value": 1
     }
   }
 }
