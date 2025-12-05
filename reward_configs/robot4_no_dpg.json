@@ -197,6 +197,12 @@
       "enabled": false,
       "min_value": 0,
       "max_value": 1
+    },
+    "xcom_stability": {
+      "weight": 0.01,
+      "enabled": false,
+      "min_value": -1.0,
+      "max_value": 1.0
     }
   }
 }
