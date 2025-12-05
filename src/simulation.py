@@ -79,7 +79,7 @@ class Simulation(gym.Env):
         self.action_noise_std = 1e-3
 
         if is_fast_td3:
-            self.max_motor_torque = 400.0  # Nm
+            self.max_motor_torque = 160.0  # Nm
 
         else:
             self.max_motor_torque = 160.0  # Nm
