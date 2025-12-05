@@ -60,7 +60,8 @@ class PhaseManager:
                 'stability_roll': 2.0,      
                 'stability_pitch': 2.0,     
                 'distance_bonus': 5.0,       
-                'success_bonus': 5.0,      
+                'success_bonus': 5.0,
+                'xcom_stability': 2.5,      
             },
             3: {    # Fase 3: Foco em Sucesso e Velocidade
                 'progress': 4.0,           
@@ -75,7 +76,8 @@ class PhaseManager:
                 'success_bonus': 5.0,      
                 'gait_rhythm': 5.0,        
                 'effort_square_penalty': 5.0,  
-                'jerk_penalty': 5.0,       
+                'jerk_penalty': 5.0,  
+                'xcom_stability': 5.0,     
             }
         }
 
@@ -121,7 +123,7 @@ class PhaseManager:
         if self.current_phase == 1:
             if self.phase1_success_counter >= self.phase1_success_threshold:
                 if self.custom_logger:
-                    self.custom_logger.info(f"🎯 FASE 1 CONCLUÍDA: {self.phase1_success_counter} episódios > 3m")
+                    self.custom_logger.info(f"🎯 FASE 1 CONCLUÍDA: {self.phase1_success_counter} episódios > 2.5m")
                 return True
                 
         elif self.current_phase == 2:
