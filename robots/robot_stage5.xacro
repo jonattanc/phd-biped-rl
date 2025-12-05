@@ -130,7 +130,7 @@
   </material>
 
   <!-- Altura total -->
-  <xacro:property name="leg_total_length" value="${hip_radius + thigh_length + 2 * knee_radius + shin_length + 2 * ankle_radius + foot_height}" />
+  <xacro:property name="leg_total_length" value="${thigh_length + shin_length + foot_height}" />
   <xacro:property name="body_offset" value="${body_length/2 + leg_total_length}" />
   <xacro:property name="deg_to_rad" value="${3.14159 / 180}" />
    
