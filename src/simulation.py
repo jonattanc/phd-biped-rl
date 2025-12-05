@@ -82,7 +82,7 @@ class Simulation(gym.Env):
             self.max_motor_torque = 400.0  # Nm
 
         else:
-            self.max_motor_torque = 80.0  # Nm
+            self.max_motor_torque = 160.0  # Nm
 
         # Configurar ambiente de simulação PRIMEIRO
         self.setup_sim_env()
