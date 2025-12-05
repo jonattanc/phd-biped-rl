@@ -42,13 +42,19 @@ class BestModelTracker:
         else:
             improvement = (normalized_episode_filtered_reward - normalized_best_reward) / abs(normalized_best_reward)
 
-        if improvement >= self.improvement_threshold and self.sim.total_steps >= self.sim.agent.minimum_steps_to_save:
+        if improvement >= self.improvement_threshold:
             self.best_reward = self.sim.episode_filtered_reward
             self.steps_since_improvement = 0
             self.last_improvement_steps = self.sim.total_steps
-            self.auto_save_count += 1
-            return True
+
+            # Apenas conta auto-save se tiver passado do mínimo de steps
+            if self.sim.total_steps >= self.sim.agent.minimum_steps_to_save:
+                self.auto_save_count += 1
+                return True
+            else:
+                return False
         else:
+            # Atualiza steps sem melhoria mesmo quando não há melhoria
             self.steps_since_improvement = self.sim.total_steps - self.last_improvement_steps
             return False
 

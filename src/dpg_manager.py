@@ -1,12 +1,10 @@
 # dpg_manager.py
 import os
-import threading
 import numpy as np
 from collections import deque
 import time
 from dataclasses import dataclass
 from stable_baselines3 import TD3
-import torch
 import torch.nn.functional as F
 
 
@@ -492,4 +490,3 @@ class FastTD3(TD3):
         # Atualizar estado
         replay_buffer.pos = min(keep_count, buffer_capacity)
         replay_buffer.full = (keep_count >= buffer_capacity)
-        
