@@ -120,6 +120,12 @@
       "min_value": -1,
       "max_value": 0
     },
+    "xcom_stability": {
+      "weight": 0.01,
+      "enabled": true,
+      "min_value": -1.0,
+      "max_value": 1.0
+    },
     "pitch_forward_bonus": {
       "weight": 1.0,
       "enabled": false,

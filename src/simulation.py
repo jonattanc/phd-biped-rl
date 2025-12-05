@@ -482,6 +482,8 @@ class Simulation(gym.Env):
         self.robot_right_hip_lateral_angle, self.robot_left_hip_lateral_angle = self.robot.get_hip_lateral_angles()
         self.robot_left_foot_contact, self.robot_right_foot_contact = self.robot.get_foot_contact_states()
         self.robot_left_foot_height, self.robot_right_foot_height = self.robot.get_foot_heights()
+        self.xcom_ap, self.xcom_ml, self.mos_ap, self.mos_ml = self.robot.get_xcom_and_margin()
+        self.mos_min = min(self.mos_ap, self.mos_ml)
         self.robot_right_shoulder_front_angle, self.robot_left_shoulder_front_angle = self.robot.get_shoulder_angles()
         self.robot_left_foot_x_velocity, self.robot_right_foot_x_velocity = self.robot.get_foot_x_velocities()
         self.robot_right_foot_orientation, self.robot_left_foot_orientation = self.robot.get_foot_global_angles()

@@ -53,15 +53,15 @@ class PhaseManager:
             1: {},  # Fase 1: usa 100% dos pesos do default.json
             2: {    # Fase 2: Foco em Progresso e Estabilidade
                 'progress': 3.0,           
-                'efficiency_bonus': 15.0,  
-                'gait_state_change': 1.0,  
+                'efficiency_bonus': 15.0,   
                 'foot_clearance': 10.0,   
                 'y_axis_deviation_square_penalty': 10.0,  
                 'foot_back_penalty': 2.0,   
                 'stability_roll': 2.0,      
                 'stability_pitch': 2.0,     
                 'distance_bonus': 5.0,       
-                'success_bonus': 5.0,      
+                'success_bonus': 5.0,
+                'xcom_stability': 2.5,      
             },
             3: {    # Fase 3: Foco em Sucesso e Velocidade
                 'progress': 4.0,           
@@ -76,7 +76,8 @@ class PhaseManager:
                 'success_bonus': 5.0,      
                 'gait_rhythm': 5.0,        
                 'effort_square_penalty': 5.0,  
-                'jerk_penalty': 5.0,       
+                'jerk_penalty': 5.0,  
+                'xcom_stability': 5.0,     
             }
         }
 
@@ -107,20 +108,22 @@ class PhaseManager:
             if episode_distance > self.phase1_success_criterio:
                 self.phase1_success_counter += 1
                 if self.custom_logger:
-                    self.custom_logger.info(f"🏆 FASE 1 - EPISÓDIO VÁLIDO {self.phase1_success_counter}/10 (distância: {episode_distance:.2f}m)")
+                    self.custom_logger.info(f"🏆 FASE 1 - EPISÓDIO VÁLIDO {self.phase1_success_counter}/"
+                                            f"{self.phase1_success_threshold} (distância: {episode_distance:.2f}m)")
         
         elif self.current_phase == 2:
             if episode_distance > self.phase2_success_criterio:
                 self.phase2_success_counter += 1
                 if self.custom_logger:
-                    self.custom_logger.info(f"🏆 FASE 2 - EPISÓDIO VÁLIDO {self.phase2_success_counter}/10 (distância: {episode_distance:.2f}m)")
+                    self.custom_logger.info(f"🏆 FASE 2 - EPISÓDIO VÁLIDO {self.phase2_success_counter}/"
+                                            f"{self.phase2_success_threshold} (distância: {episode_distance:.2f}m)")
     
     def should_transition_phase(self):
         """Verifica se deve transicionar de fase"""
         if self.current_phase == 1:
             if self.phase1_success_counter >= self.phase1_success_threshold:
                 if self.custom_logger:
-                    self.custom_logger.info(f"🎯 FASE 1 CONCLUÍDA: {self.phase1_success_counter} episódios > 3m")
+                    self.custom_logger.info(f"🎯 FASE 1 CONCLUÍDA: {self.phase1_success_counter} episódios > 2.5m")
                 return True
                 
         elif self.current_phase == 2:
