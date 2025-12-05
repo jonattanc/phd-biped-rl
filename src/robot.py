@@ -641,46 +641,301 @@ class Robot:
 
             action_list = [hip_right_front, hip_right_lateral, knee_right, ankle_right_front, ankle_right_lateral, hip_left_front, hip_left_lateral, knee_left, ankle_left_front, ankle_left_lateral]
 
-        elif num_joints == 14:  # 6 juntas por perna (3 quadril + 1 joelho + 2 tornozelo) × 2 = 12 + 2 ombros = 14
-            # ROBÔ STAGE 5 - Modelo Biomecânico Completo (1.70m, 100kg)
-            # Ações mais conservadoras para evitar overflow
-            f = 0.5  # Frequência reduzida
-            w = 2 * np.pi * f
-            
-            # PERNA DIREITA (6 juntas) - Amplitudes reduzidas
-            hip_right_flexion = -0.2 * np.sin(w * t)  # Flexão/extensão quadril
-            hip_right_abduction = 0.08 * np.sin(w * t + 0.5 * np.pi)  # Abdução/adução
-            hip_right_rotation = 0.03 * np.sin(w * t + 0.25 * np.pi)  # Rotação quadril
-            knee_right = 0.3 * np.sin(w * t + 0.3 * np.pi)  # Flexão joelho
-            ankle_right_flexion = -0.15 * np.sin(w * t + 0.6 * np.pi)  # Dorsiflexão/flexão plantar
-            ankle_right_inversion = 0.04 * np.sin(w * t + 0.8 * np.pi)  # Inversão/eversão
-            
-            # PERNA ESQUERDA (6 juntas) - Fase oposta
-            hip_left_flexion = -0.2 * np.sin(w * t + np.pi)
-            hip_left_abduction = 0.08 * np.sin(w * t + 1.5 * np.pi)
-            hip_left_rotation = 0.03 * np.sin(w * t + 1.25 * np.pi)
-            knee_left = 0.3 * np.sin(w * t + 1.3 * np.pi)
-            ankle_left_flexion = -0.15 * np.sin(w * t + 1.6 * np.pi)
-            ankle_left_inversion = 0.04 * np.sin(w * t + 1.8 * np.pi)
-            
-            # OMBROS (1 junta cada) - Movimento frontal apenas
-            shoulder_right = 0.15 * np.sin(w * t + 0.5 * np.pi)  # Balanço frontal
-            shoulder_left = 0.15 * np.sin(w * t + 1.5 * np.pi)  # Fase oposta
-            
+        elif num_joints == 12:  # 6 juntas por perna (3 quadril + 1 joelho + 2 tornozelo) × 2 = 12
+            t1 = 1.5
+            t2 = t1 + 0.9
+            t3 = t2 + 0.5
+            t4 = t3 + 2.0
+            t5 = t4 + 0.5
+            t6 = t5 + 1.0
+            t7 = t6 + 0.5
+            t8 = t7 + 1.0
+            t9 = t8 + 1.0
+
+            # PERNA DIREITA (6 juntas)
+            hip_right_front = 0       # Flexão/extensão quadril (positivo = para trás)
+            hip_right_lateral = 0     # Abdução/adução quadril (positivo = para dentro)
+            hip_right_rotation = 0    # Rotação interna/externa quadril
+            knee_right = 0            # Flexão/extensão joelho (positivo = dobrar)
+            ankle_right_front = 0     # Dorsiflexão/flexão plantar (positivo = para baixo)
+            ankle_right_lateral = 0   # Inversão/eversão tornozelo (positivo = para dentro)
+
+            # PERNA ESQUERDA (6 juntas)
+            hip_left_front = 0        # Flexão/extensão quadril (positivo = para trás)
+            hip_left_lateral = 0      # Abdução/adução quadril (positivo = para fora)
+            hip_left_rotation = 0     # Rotação interna/externa quadril
+            knee_left = 0             # Flexão/extensão joelho (positivo = dobrar)
+            ankle_left_front = 0      # Dorsiflexão/flexão plantar (positivo = para baixo)
+            ankle_left_lateral = 0    # Inversão/eversão tornozelo (positivo = para fora)
+
+            if t < t1:
+                # Posição inicial: pés afastados, tornozelos neutros
+                lateral_inclination = 0.10
+                hip_right_lateral = -lateral_inclination      # Quadril direito para fora
+                hip_left_lateral = -lateral_inclination       # Quadril esquerdo para fora
+                ankle_right_lateral = lateral_inclination     # Tornozelo direito para dentro
+                ankle_left_lateral = lateral_inclination      # Tornozelo esquerdo para dentro
+
+                # Pequena inclinação frontal para iniciar movimento
+                frontal_inclination = 0.03
+                ankle_right_front = -frontal_inclination
+                ankle_left_front = -frontal_inclination
+
+            elif t < t2:
+                # Início da passada: perna direita avança
+                hip_right_front = -0.4        # Quadril direito para frente
+                hip_right_rotation = 0.05     # Pequena rotação interna
+                knee_right = 0.6              # Joelho direito dobra
+                hip_left_front = -0.1         # Quadril esquerdo ligeiramente para frente
+
+                # Ajuste lateral para equilíbrio
+                lateral_inclination = -0.02
+                hip_left_lateral = -lateral_inclination
+                ankle_left_lateral = lateral_inclination
+
+                # Tornozelo direito prepara para tocar o chão
+                ankle_right_front = 0.08
+
+            elif t < t3:
+                # Pé direito toca o chão, perna esquerda prepara para avançar
+                knee_right = -0.4             # Joelho direito estende
+                ankle_right_front = 0.12      # Tornozelo direito planta o pé
+                ankle_right_lateral = 0.02    # Estabilização lateral
+
+                # Início do balanço da perna esquerda
+                hip_left_front = -0.3         # Quadril esquerdo começa a avançar
+                hip_left_rotation = -0.03     # Pequena rotação externa
+
+            elif t < t4:
+                # Transferência de peso: pé direito suporta, pé esquerdo balança
+                lateral_inclination = -0.05
+                hip_right_lateral = -lateral_inclination
+                hip_left_lateral = -lateral_inclination
+                ankle_right_lateral = lateral_inclination
+                ankle_left_lateral = lateral_inclination
+
+                # Joelho esquerdo dobra para clearance
+                knee_left = 0.5
+                ankle_left_front = -0.05      # Tornozelo esquerdo dorsiflexiona
+
+            elif t < t5:
+                # Perna esquerda avança completamente
+                hip_left_front = -0.5
+                hip_left_rotation = 0.04
+                knee_left = 0.7
+                ankle_left_front = 0.1
+
+                # Perna direita em suporte único
+                hip_right_front = 0.1
+                knee_right = -0.1
+
+            elif t < t6:
+                # Ciclo contínuo: agora perna direita balança
+                hip_right_front = -0.3
+                hip_right_rotation = -0.02
+                knee_right = 0.4
+                ankle_right_front = -0.03
+
+                # Perna esquerda em suporte
+                knee_left = -0.3
+                ankle_left_front = 0.08
+
+            elif t < t7:
+                # Padrão rítmico continuado
+                f = 0.8  # Frequência do movimento
+                phase_offset = 0.5 * math.pi
+
+                # Movimento oscilatório coordenado
+                hip_right_front = -0.2 * math.sin(2 * math.pi * f * t)
+                knee_right = 0.3 * math.sin(2 * math.pi * f * t + phase_offset)
+                ankle_right_front = -0.1 * math.sin(2 * math.pi * f * t + phase_offset * 0.5)
+
+                hip_left_front = -0.2 * math.sin(2 * math.pi * f * t + math.pi)
+                knee_left = 0.3 * math.sin(2 * math.pi * f * t + math.pi + phase_offset)
+                ankle_left_front = -0.1 * math.sin(2 * math.pi * f * t + math.pi + phase_offset * 0.5)
+
+                # Movimentos laterais menores para equilíbrio
+                lateral_oscillation = 0.04 * math.sin(2 * math.pi * f * t * 0.5)
+                hip_right_lateral = -lateral_oscillation
+                hip_left_lateral = -lateral_oscillation
+                ankle_right_lateral = lateral_oscillation
+                ankle_left_lateral = lateral_oscillation
+
             action_list = [
-                # Pernas direita (6 juntas)
-                hip_right_flexion, hip_right_abduction, hip_right_rotation,
-                knee_right, ankle_right_flexion, ankle_right_inversion,
-                # Pernas esquerda (6 juntas)  
-                hip_left_flexion, hip_left_abduction, hip_left_rotation,
-                knee_left, ankle_left_flexion, ankle_left_inversion,
+                # Perna direita (6 juntas)
+                hip_right_front, hip_right_lateral, hip_right_rotation,
+                knee_right, ankle_right_front, ankle_right_lateral,
+                # Perna esquerda (6 juntas)
+                hip_left_front, hip_left_lateral, hip_left_rotation,
+                knee_left, ankle_left_front, ankle_left_lateral
+            ]
+
+        elif num_joints == 14:  # 6 juntas por perna × 2 = 12 + 2 ombros = 14
+            t1 = 1.5
+            t2 = t1 + 0.9
+            t3 = t2 + 0.5
+            t4 = t3 + 2.0
+            t5 = t4 + 0.5
+            t6 = t5 + 1.0
+            t7 = t6 + 0.5
+            t8 = t7 + 1.0
+            t9 = t8 + 1.0
+
+            # PERNA DIREITA (6 juntas)
+            hip_right_front = 0       # Flexão/extensão quadril (positivo = para trás)
+            hip_right_lateral = 0     # Abdução/adução quadril (positivo = para dentro)
+            hip_right_rotation = 0    # Rotação interna/externa quadril
+            knee_right = 0            # Flexão/extensão joelho (positivo = dobrar)
+            ankle_right_front = 0     # Dorsiflexão/flexão plantar (positivo = para baixo)
+            ankle_right_lateral = 0   # Inversão/eversão tornozelo (positivo = para dentro)
+
+            # PERNA ESQUERDA (6 juntas)
+            hip_left_front = 0        # Flexão/extensão quadril (positivo = para trás)
+            hip_left_lateral = 0      # Abdução/adução quadril (positivo = para fora)
+            hip_left_rotation = 0     # Rotação interna/externa quadril
+            knee_left = 0             # Flexão/extensão joelho (positivo = dobrar)
+            ankle_left_front = 0      # Dorsiflexão/flexão plantar (positivo = para baixo)
+            ankle_left_lateral = 0    # Inversão/eversão tornozelo (positivo = para fora)
+
+            # OMBROS (2 juntas)
+            shoulder_right = 0        # Flexão/extensão ombro direito (positivo = para trás)
+            shoulder_left = 0         # Flexão/extensão ombro esquerdo (positivo = para trás)
+
+            if t < t1:
+                # Posição inicial: postura ereta, pés afastados
+                lateral_inclination = 0.10
+                hip_right_lateral = -lateral_inclination      # Quadril direito para fora
+                hip_left_lateral = -lateral_inclination       # Quadril esquerdo para fora
+                ankle_right_lateral = lateral_inclination     # Tornozelo direito para dentro
+                ankle_left_lateral = lateral_inclination      # Tornozelo esquerdo para dentro
+
+                # Pequena inclinação frontal para iniciar movimento
+                frontal_inclination = 0.03
+                ankle_right_front = -frontal_inclination
+                ankle_left_front = -frontal_inclination
+
+                # Ombros neutros
+                shoulder_right = 0.0
+                shoulder_left = 0.0
+
+            elif t < t2:
+                # Início da passada: perna direita avança, braço esquerdo vai para trás
+                hip_right_front = -0.4        # Quadril direito para frente
+                hip_right_rotation = 0.05     # Pequena rotação interna
+                knee_right = 0.6              # Joelho direito dobra
+                hip_left_front = -0.1         # Quadril esquerdo ligeiramente para frente
+
+                # Ajuste lateral para equilíbrio
+                lateral_inclination = -0.02
+                hip_left_lateral = -lateral_inclination
+                ankle_left_lateral = lateral_inclination
+
+                # Tornozelo direito prepara para tocar o chão
+                ankle_right_front = 0.08
+
+                # Coordenação braço-perna contralateral (marcha cruzada)
+                shoulder_left = 0.15          # Braço esquerdo para trás
+                shoulder_right = -0.05        # Braço direito ligeiramente para frente
+
+            elif t < t3:
+                # Pé direito toca o chão, perna esquerda prepara para avançar
+                knee_right = -0.4             # Joelho direito estende
+                ankle_right_front = 0.12      # Tornozelo direito planta o pé
+                ankle_right_lateral = 0.02    # Estabilização lateral
+
+                # Início do balanço da perna esquerda
+                hip_left_front = -0.3         # Quadril esquerdo começa a avançar
+                hip_left_rotation = -0.03     # Pequena rotação externa
+
+                # Transição dos braços
+                shoulder_left = 0.08          # Braço esquerdo ainda para trás
+                shoulder_right = 0.0          # Braço direito neutro
+
+            elif t < t4:
+                # Transferência de peso: pé direito suporta, pé esquerdo balança
+                lateral_inclination = -0.05
+                hip_right_lateral = -lateral_inclination
+                hip_left_lateral = -lateral_inclination
+                ankle_right_lateral = lateral_inclination
+                ankle_left_lateral = lateral_inclination
+
+                # Joelho esquerdo dobra para clearance
+                knee_left = 0.5
+                ankle_left_front = -0.05      # Tornozelo esquerdo dorsiflexiona
+
+                # Braços em posição oposta
+                shoulder_left = 0.0           # Braço esquerdo começa a ir para frente
+                shoulder_right = 0.12         # Braço direito vai para trás
+
+            elif t < t5:
+                # Perna esquerda avança completamente
+                hip_left_front = -0.5
+                hip_left_rotation = 0.04
+                knee_left = 0.7
+                ankle_left_front = 0.1
+
+                # Perna direita em suporte único
+                hip_right_front = 0.1
+                knee_right = -0.1
+
+                # Coordenação braço-perna completa
+                shoulder_right = 0.15         # Braço direito para trás
+                shoulder_left = -0.08         # Braço esquerdo para frente
+
+            elif t < t6:
+                # Ciclo contínuo: agora perna direita balança
+                hip_right_front = -0.3
+                hip_right_rotation = -0.02
+                knee_right = 0.4
+                ankle_right_front = -0.03
+
+                # Perna esquerda em suporte
+                knee_left = -0.3
+                ankle_left_front = 0.08
+
+                # Transição dos braços
+                shoulder_right = 0.05
+                shoulder_left = 0.1
+
+            elif t < t7:
+                # Padrão rítmico continuado com braços
+                f = 0.7  # Frequência do movimento (mais lento para 14 DOF)
+
+                # Movimento oscilatório coordenado das pernas
+                hip_right_front = -0.2 * math.sin(2 * math.pi * f * t)
+                knee_right = 0.3 * math.sin(2 * math.pi * f * t + 0.5*math.pi)
+                ankle_right_front = -0.1 * math.sin(2 * math.pi * f * t + 0.25*math.pi)
+
+                hip_left_front = -0.2 * math.sin(2 * math.pi * f * t + math.pi)
+                knee_left = 0.3 * math.sin(2 * math.pi * f * t + 1.5*math.pi)
+                ankle_left_front = -0.1 * math.sin(2 * math.pi * f * t + 1.25*math.pi)
+
+                # Movimentos laterais menores para equilíbrio
+                lateral_oscillation = 0.04 * math.sin(2 * math.pi * f * t * 0.5)
+                hip_right_lateral = -lateral_oscillation
+                hip_left_lateral = -lateral_oscillation
+                ankle_right_lateral = lateral_oscillation
+                ankle_left_lateral = lateral_oscillation
+
+                # Rotação do quadril sutil
+                rotation_oscillation = 0.02 * math.sin(2 * math.pi * f * t + 0.75*math.pi)
+                hip_right_rotation = rotation_oscillation
+                hip_left_rotation = rotation_oscillation + math.pi
+
+                # Braços com movimento contralateral às pernas
+                shoulder_right = 0.12 * math.sin(2 * math.pi * f * t + 0.5*math.pi)
+                shoulder_left = 0.12 * math.sin(2 * math.pi * f * t + 1.5*math.pi)
+
+            action_list = [
+                # Perna direita (6 juntas)
+                hip_right_front, hip_right_lateral, hip_right_rotation,
+                knee_right, ankle_right_front, ankle_right_lateral,
+                # Perna esquerda (6 juntas)
+                hip_left_front, hip_left_lateral, hip_left_rotation,
+                knee_left, ankle_left_front, ankle_left_lateral,
                 # Ombros (2 juntas)
                 shoulder_right, shoulder_left
             ]
-        
-            # Noise reduzido
-            noise_amplitude = 0.05 
-            action_list = [a + np.random.uniform(-noise_amplitude, noise_amplitude) for a in action_list]
 
         else:
             raise ValueError(f"Número de juntas não suportado para ação de exemplo: {num_joints}")
