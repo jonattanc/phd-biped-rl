@@ -16,7 +16,7 @@ class Robot:
         self.revolute_indices = None
         self.gait_state = 0
 
-        self.gait_step_size = 0.2
+        self.gait_step_size = 0.3
         self.min_knee_angle = math.radians(2)
 
         self.initial_section_length = 1
@@ -39,7 +39,7 @@ class Robot:
         xacro_path = os.path.join(self.robots_dir, f"{self.name}.xacro")
         if not os.path.exists(xacro_path):
             raise FileNotFoundError(f"Arquivo {self.name}.xacro não encontrado em {self.robots_dir}")
-        
+
         self.urdf_path = self._generate_urdf()
 
     def update_env(self, env):
@@ -130,7 +130,7 @@ class Robot:
         return obs
 
     def get_xcom_and_margin(self):
-        """ Calcula XCoM e Margem de Estabilidade usando dados já disponíveis.
+        """Calcula XCoM e Margem de Estabilidade usando dados já disponíveis.
         Retorna: (xcom_ap, xcom_ml, mos_ap, mos_ml)
         """
         try:
@@ -165,8 +165,8 @@ class Robot:
                 left_foot_x = left_foot_state[0][0]
 
                 # Base de suporte anterior (mais à frente)
-                bos_front = max(right_foot_x, left_foot_x) + foot_length/2
-                bos_rear = min(right_foot_x, left_foot_x) - foot_length/2
+                bos_front = max(right_foot_x, left_foot_x) + foot_length / 2
+                bos_rear = min(right_foot_x, left_foot_x) - foot_length / 2
 
                 # Margem de Estabilidade AP
                 mos_ap = min(xcom_ap - bos_rear, bos_front - xcom_ap)
@@ -182,7 +182,7 @@ class Robot:
         except Exception as e:
             self.logger.debug(f"Erro em get_xcom_and_margin: {e}")
             return 0.0, 0.0, 0.0, 0.0
-    
+
     def update_gait_state(self):
         """Atualiza estado da marcha e retorna se houve transição de estado"""
         right_foot_state = p.getLinkState(self.id, self.get_link_index("right_foot_link"))
@@ -653,28 +653,28 @@ class Robot:
             t9 = t8 + 1.0
 
             # PERNA DIREITA (6 juntas)
-            hip_right_front = 0       # Flexão/extensão quadril (positivo = para trás)
-            hip_right_lateral = 0     # Abdução/adução quadril (positivo = para dentro)
-            hip_right_rotation = 0    # Rotação interna/externa quadril
-            knee_right = 0            # Flexão/extensão joelho (positivo = dobrar)
-            ankle_right_front = 0     # Dorsiflexão/flexão plantar (positivo = para baixo)
-            ankle_right_lateral = 0   # Inversão/eversão tornozelo (positivo = para dentro)
+            hip_right_front = 0  # Flexão/extensão quadril (positivo = para trás)
+            hip_right_lateral = 0  # Abdução/adução quadril (positivo = para dentro)
+            hip_right_rotation = 0  # Rotação interna/externa quadril
+            knee_right = 0  # Flexão/extensão joelho (positivo = dobrar)
+            ankle_right_front = 0  # Dorsiflexão/flexão plantar (positivo = para baixo)
+            ankle_right_lateral = 0  # Inversão/eversão tornozelo (positivo = para dentro)
 
             # PERNA ESQUERDA (6 juntas)
-            hip_left_front = 0        # Flexão/extensão quadril (positivo = para trás)
-            hip_left_lateral = 0      # Abdução/adução quadril (positivo = para fora)
-            hip_left_rotation = 0     # Rotação interna/externa quadril
-            knee_left = 0             # Flexão/extensão joelho (positivo = dobrar)
-            ankle_left_front = 0      # Dorsiflexão/flexão plantar (positivo = para baixo)
-            ankle_left_lateral = 0    # Inversão/eversão tornozelo (positivo = para fora)
+            hip_left_front = 0  # Flexão/extensão quadril (positivo = para trás)
+            hip_left_lateral = 0  # Abdução/adução quadril (positivo = para fora)
+            hip_left_rotation = 0  # Rotação interna/externa quadril
+            knee_left = 0  # Flexão/extensão joelho (positivo = dobrar)
+            ankle_left_front = 0  # Dorsiflexão/flexão plantar (positivo = para baixo)
+            ankle_left_lateral = 0  # Inversão/eversão tornozelo (positivo = para fora)
 
             if t < t1:
                 # Posição inicial: pés afastados, tornozelos neutros
                 lateral_inclination = 0.10
-                hip_right_lateral = -lateral_inclination      # Quadril direito para fora
-                hip_left_lateral = -lateral_inclination       # Quadril esquerdo para fora
-                ankle_right_lateral = lateral_inclination     # Tornozelo direito para dentro
-                ankle_left_lateral = lateral_inclination      # Tornozelo esquerdo para dentro
+                hip_right_lateral = -lateral_inclination  # Quadril direito para fora
+                hip_left_lateral = -lateral_inclination  # Quadril esquerdo para fora
+                ankle_right_lateral = lateral_inclination  # Tornozelo direito para dentro
+                ankle_left_lateral = lateral_inclination  # Tornozelo esquerdo para dentro
 
                 # Pequena inclinação frontal para iniciar movimento
                 frontal_inclination = 0.03
@@ -683,10 +683,10 @@ class Robot:
 
             elif t < t2:
                 # Início da passada: perna direita avança
-                hip_right_front = -0.4        # Quadril direito para frente
-                hip_right_rotation = 0.05     # Pequena rotação interna
-                knee_right = 0.6              # Joelho direito dobra
-                hip_left_front = -0.1         # Quadril esquerdo ligeiramente para frente
+                hip_right_front = -0.4  # Quadril direito para frente
+                hip_right_rotation = 0.05  # Pequena rotação interna
+                knee_right = 0.6  # Joelho direito dobra
+                hip_left_front = -0.1  # Quadril esquerdo ligeiramente para frente
 
                 # Ajuste lateral para equilíbrio
                 lateral_inclination = -0.02
@@ -698,13 +698,13 @@ class Robot:
 
             elif t < t3:
                 # Pé direito toca o chão, perna esquerda prepara para avançar
-                knee_right = -0.4             # Joelho direito estende
-                ankle_right_front = 0.12      # Tornozelo direito planta o pé
-                ankle_right_lateral = 0.02    # Estabilização lateral
+                knee_right = -0.4  # Joelho direito estende
+                ankle_right_front = 0.12  # Tornozelo direito planta o pé
+                ankle_right_lateral = 0.02  # Estabilização lateral
 
                 # Início do balanço da perna esquerda
-                hip_left_front = -0.3         # Quadril esquerdo começa a avançar
-                hip_left_rotation = -0.03     # Pequena rotação externa
+                hip_left_front = -0.3  # Quadril esquerdo começa a avançar
+                hip_left_rotation = -0.03  # Pequena rotação externa
 
             elif t < t4:
                 # Transferência de peso: pé direito suporta, pé esquerdo balança
@@ -716,7 +716,7 @@ class Robot:
 
                 # Joelho esquerdo dobra para clearance
                 knee_left = 0.5
-                ankle_left_front = -0.05      # Tornozelo esquerdo dorsiflexiona
+                ankle_left_front = -0.05  # Tornozelo esquerdo dorsiflexiona
 
             elif t < t5:
                 # Perna esquerda avança completamente
@@ -763,11 +763,19 @@ class Robot:
 
             action_list = [
                 # Perna direita (6 juntas)
-                hip_right_front, hip_right_lateral, hip_right_rotation,
-                knee_right, ankle_right_front, ankle_right_lateral,
+                hip_right_front,
+                hip_right_lateral,
+                hip_right_rotation,
+                knee_right,
+                ankle_right_front,
+                ankle_right_lateral,
                 # Perna esquerda (6 juntas)
-                hip_left_front, hip_left_lateral, hip_left_rotation,
-                knee_left, ankle_left_front, ankle_left_lateral
+                hip_left_front,
+                hip_left_lateral,
+                hip_left_rotation,
+                knee_left,
+                ankle_left_front,
+                ankle_left_lateral,
             ]
 
         elif num_joints == 14:  # 6 juntas por perna × 2 = 12 + 2 ombros = 14
@@ -782,32 +790,32 @@ class Robot:
             t9 = t8 + 1.0
 
             # PERNA DIREITA (6 juntas)
-            hip_right_front = 0       # Flexão/extensão quadril (positivo = para trás)
-            hip_right_lateral = 0     # Abdução/adução quadril (positivo = para dentro)
-            hip_right_rotation = 0    # Rotação interna/externa quadril
-            knee_right = 0            # Flexão/extensão joelho (positivo = dobrar)
-            ankle_right_front = 0     # Dorsiflexão/flexão plantar (positivo = para baixo)
-            ankle_right_lateral = 0   # Inversão/eversão tornozelo (positivo = para dentro)
+            hip_right_front = 0  # Flexão/extensão quadril (positivo = para trás)
+            hip_right_lateral = 0  # Abdução/adução quadril (positivo = para dentro)
+            hip_right_rotation = 0  # Rotação interna/externa quadril
+            knee_right = 0  # Flexão/extensão joelho (positivo = dobrar)
+            ankle_right_front = 0  # Dorsiflexão/flexão plantar (positivo = para baixo)
+            ankle_right_lateral = 0  # Inversão/eversão tornozelo (positivo = para dentro)
 
             # PERNA ESQUERDA (6 juntas)
-            hip_left_front = 0        # Flexão/extensão quadril (positivo = para trás)
-            hip_left_lateral = 0      # Abdução/adução quadril (positivo = para fora)
-            hip_left_rotation = 0     # Rotação interna/externa quadril
-            knee_left = 0             # Flexão/extensão joelho (positivo = dobrar)
-            ankle_left_front = 0      # Dorsiflexão/flexão plantar (positivo = para baixo)
-            ankle_left_lateral = 0    # Inversão/eversão tornozelo (positivo = para fora)
+            hip_left_front = 0  # Flexão/extensão quadril (positivo = para trás)
+            hip_left_lateral = 0  # Abdução/adução quadril (positivo = para fora)
+            hip_left_rotation = 0  # Rotação interna/externa quadril
+            knee_left = 0  # Flexão/extensão joelho (positivo = dobrar)
+            ankle_left_front = 0  # Dorsiflexão/flexão plantar (positivo = para baixo)
+            ankle_left_lateral = 0  # Inversão/eversão tornozelo (positivo = para fora)
 
             # OMBROS (2 juntas)
-            shoulder_right = 0        # Flexão/extensão ombro direito (positivo = para trás)
-            shoulder_left = 0         # Flexão/extensão ombro esquerdo (positivo = para trás)
+            shoulder_right = 0  # Flexão/extensão ombro direito (positivo = para trás)
+            shoulder_left = 0  # Flexão/extensão ombro esquerdo (positivo = para trás)
 
             if t < t1:
                 # Posição inicial: postura ereta, pés afastados
                 lateral_inclination = 0.10
-                hip_right_lateral = -lateral_inclination      # Quadril direito para fora
-                hip_left_lateral = -lateral_inclination       # Quadril esquerdo para fora
-                ankle_right_lateral = lateral_inclination     # Tornozelo direito para dentro
-                ankle_left_lateral = lateral_inclination      # Tornozelo esquerdo para dentro
+                hip_right_lateral = -lateral_inclination  # Quadril direito para fora
+                hip_left_lateral = -lateral_inclination  # Quadril esquerdo para fora
+                ankle_right_lateral = lateral_inclination  # Tornozelo direito para dentro
+                ankle_left_lateral = lateral_inclination  # Tornozelo esquerdo para dentro
 
                 # Pequena inclinação frontal para iniciar movimento
                 frontal_inclination = 0.03
@@ -820,10 +828,10 @@ class Robot:
 
             elif t < t2:
                 # Início da passada: perna direita avança, braço esquerdo vai para trás
-                hip_right_front = -0.4        # Quadril direito para frente
-                hip_right_rotation = 0.05     # Pequena rotação interna
-                knee_right = 0.6              # Joelho direito dobra
-                hip_left_front = -0.1         # Quadril esquerdo ligeiramente para frente
+                hip_right_front = -0.4  # Quadril direito para frente
+                hip_right_rotation = 0.05  # Pequena rotação interna
+                knee_right = 0.6  # Joelho direito dobra
+                hip_left_front = -0.1  # Quadril esquerdo ligeiramente para frente
 
                 # Ajuste lateral para equilíbrio
                 lateral_inclination = -0.02
@@ -834,22 +842,22 @@ class Robot:
                 ankle_right_front = 0.08
 
                 # Coordenação braço-perna contralateral (marcha cruzada)
-                shoulder_left = 0.15          # Braço esquerdo para trás
-                shoulder_right = -0.05        # Braço direito ligeiramente para frente
+                shoulder_left = 0.15  # Braço esquerdo para trás
+                shoulder_right = -0.05  # Braço direito ligeiramente para frente
 
             elif t < t3:
                 # Pé direito toca o chão, perna esquerda prepara para avançar
-                knee_right = -0.4             # Joelho direito estende
-                ankle_right_front = 0.12      # Tornozelo direito planta o pé
-                ankle_right_lateral = 0.02    # Estabilização lateral
+                knee_right = -0.4  # Joelho direito estende
+                ankle_right_front = 0.12  # Tornozelo direito planta o pé
+                ankle_right_lateral = 0.02  # Estabilização lateral
 
                 # Início do balanço da perna esquerda
-                hip_left_front = -0.3         # Quadril esquerdo começa a avançar
-                hip_left_rotation = -0.03     # Pequena rotação externa
+                hip_left_front = -0.3  # Quadril esquerdo começa a avançar
+                hip_left_rotation = -0.03  # Pequena rotação externa
 
                 # Transição dos braços
-                shoulder_left = 0.08          # Braço esquerdo ainda para trás
-                shoulder_right = 0.0          # Braço direito neutro
+                shoulder_left = 0.08  # Braço esquerdo ainda para trás
+                shoulder_right = 0.0  # Braço direito neutro
 
             elif t < t4:
                 # Transferência de peso: pé direito suporta, pé esquerdo balança
@@ -861,11 +869,11 @@ class Robot:
 
                 # Joelho esquerdo dobra para clearance
                 knee_left = 0.5
-                ankle_left_front = -0.05      # Tornozelo esquerdo dorsiflexiona
+                ankle_left_front = -0.05  # Tornozelo esquerdo dorsiflexiona
 
                 # Braços em posição oposta
-                shoulder_left = 0.0           # Braço esquerdo começa a ir para frente
-                shoulder_right = 0.12         # Braço direito vai para trás
+                shoulder_left = 0.0  # Braço esquerdo começa a ir para frente
+                shoulder_right = 0.12  # Braço direito vai para trás
 
             elif t < t5:
                 # Perna esquerda avança completamente
@@ -879,8 +887,8 @@ class Robot:
                 knee_right = -0.1
 
                 # Coordenação braço-perna completa
-                shoulder_right = 0.15         # Braço direito para trás
-                shoulder_left = -0.08         # Braço esquerdo para frente
+                shoulder_right = 0.15  # Braço direito para trás
+                shoulder_left = -0.08  # Braço esquerdo para frente
 
             elif t < t6:
                 # Ciclo contínuo: agora perna direita balança
@@ -903,12 +911,12 @@ class Robot:
 
                 # Movimento oscilatório coordenado das pernas
                 hip_right_front = -0.2 * math.sin(2 * math.pi * f * t)
-                knee_right = 0.3 * math.sin(2 * math.pi * f * t + 0.5*math.pi)
-                ankle_right_front = -0.1 * math.sin(2 * math.pi * f * t + 0.25*math.pi)
+                knee_right = 0.3 * math.sin(2 * math.pi * f * t + 0.5 * math.pi)
+                ankle_right_front = -0.1 * math.sin(2 * math.pi * f * t + 0.25 * math.pi)
 
                 hip_left_front = -0.2 * math.sin(2 * math.pi * f * t + math.pi)
-                knee_left = 0.3 * math.sin(2 * math.pi * f * t + 1.5*math.pi)
-                ankle_left_front = -0.1 * math.sin(2 * math.pi * f * t + 1.25*math.pi)
+                knee_left = 0.3 * math.sin(2 * math.pi * f * t + 1.5 * math.pi)
+                ankle_left_front = -0.1 * math.sin(2 * math.pi * f * t + 1.25 * math.pi)
 
                 # Movimentos laterais menores para equilíbrio
                 lateral_oscillation = 0.04 * math.sin(2 * math.pi * f * t * 0.5)
@@ -918,23 +926,32 @@ class Robot:
                 ankle_left_lateral = lateral_oscillation
 
                 # Rotação do quadril sutil
-                rotation_oscillation = 0.02 * math.sin(2 * math.pi * f * t + 0.75*math.pi)
+                rotation_oscillation = 0.02 * math.sin(2 * math.pi * f * t + 0.75 * math.pi)
                 hip_right_rotation = rotation_oscillation
                 hip_left_rotation = rotation_oscillation + math.pi
 
                 # Braços com movimento contralateral às pernas
-                shoulder_right = 0.12 * math.sin(2 * math.pi * f * t + 0.5*math.pi)
-                shoulder_left = 0.12 * math.sin(2 * math.pi * f * t + 1.5*math.pi)
+                shoulder_right = 0.12 * math.sin(2 * math.pi * f * t + 0.5 * math.pi)
+                shoulder_left = 0.12 * math.sin(2 * math.pi * f * t + 1.5 * math.pi)
 
             action_list = [
                 # Perna direita (6 juntas)
-                hip_right_front, hip_right_lateral, hip_right_rotation,
-                knee_right, ankle_right_front, ankle_right_lateral,
+                hip_right_front,
+                hip_right_lateral,
+                hip_right_rotation,
+                knee_right,
+                ankle_right_front,
+                ankle_right_lateral,
                 # Perna esquerda (6 juntas)
-                hip_left_front, hip_left_lateral, hip_left_rotation,
-                knee_left, ankle_left_front, ankle_left_lateral,
+                hip_left_front,
+                hip_left_lateral,
+                hip_left_rotation,
+                knee_left,
+                ankle_left_front,
+                ankle_left_lateral,
                 # Ombros (2 juntas)
-                shoulder_right, shoulder_left
+                shoulder_right,
+                shoulder_left,
             ]
 
         else:
