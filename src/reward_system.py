@@ -78,7 +78,8 @@ class RewardSystem:
                 'foot_inclination_penalty': 1.0,
                 'effort_square_penalty': 1.0,
                 'jerk_penalty': 1.0,
-                'xcom_stability':1.0
+                'xcom_stability':1.0,
+                'simple_stability':1.0
             }
 
         # COMPONENTES PARA MARCHA
@@ -289,6 +290,33 @@ class RewardSystem:
             adjusted_weight = self.components["xcom_stability"].weight * weight_multiplier
             
             total_reward += self.components["xcom_stability"].value * adjusted_weight
+        
+        # DPG - Evitar escorregar
+        if self.is_component_enabled("simple_stability"):
+            # Apenas 2 métricas + 1 cálculo simples
+            stability_bonus = 0.0
+
+            # 1. Alternância de pés (marcha natural)
+            if sim.robot_left_foot_contact != sim.robot_right_foot_contact:
+                stability_bonus += 0.1
+
+            # 2. Pé fixo quando em contato (evita escorregões)
+            if sim.robot_left_foot_contact and abs(sim.robot_left_foot_x_velocity) < 0.05:
+                stability_bonus += 0.05
+            if sim.robot_right_foot_contact and abs(sim.robot_right_foot_x_velocity) < 0.05:
+                stability_bonus += 0.05
+
+            # 3. Pé levantado quando não em contato (evita arrastar)
+            if not sim.robot_left_foot_contact and sim.robot_left_foot_height > 0.02:
+                stability_bonus += 0.02
+            if not sim.robot_right_foot_contact and sim.robot_right_foot_height > 0.02:
+                stability_bonus += 0.02
+
+            self.components["simple_stability"].value = stability_bonus
+            weight_multiplier = weight_adjustments.get('simple_stability', 1.0)
+            adjusted_weight = self.components["simple_stability"].weight * weight_multiplier
+
+            total_reward += self.components["simple_stability"].value * adjusted_weight
         
         # RECOMPENSAS DINÂMICAS PARA FASE 3 
         if not evaluation and is_fast_td3:

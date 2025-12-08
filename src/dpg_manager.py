@@ -59,7 +59,8 @@ class PhaseManager:
                 'stability_pitch': 2.0,     
                 'distance_bonus': 5.0,       
                 'success_bonus': 5.0,
-                'xcom_stability': 2.5,      
+                'xcom_stability': 2.5, 
+                'simple_stability': 0.8,     
             },
             3: {    # Fase 3: Foco em Sucesso e Velocidade
                 'progress': 4.0,           
@@ -75,7 +76,8 @@ class PhaseManager:
                 'gait_rhythm': 5.0,        
                 'effort_square_penalty': 5.0,  
                 'jerk_penalty': 5.0,  
-                'xcom_stability': 5.0,     
+                'xcom_stability': 5.0,  
+                'simple_stability': 0.6,   
             }
         }
 
@@ -253,7 +255,7 @@ class FastTD3(TD3):
 
         # Limpeza de buffer
         self.old_remove_ratio = 0.2  # Remove 20% mais antigas
-        self.bad_remove_ratio = 0.1  # Remove 10% piores
+        self.bad_remove_ratio = 0.2  # Remove 20% piores
         self.padrao_buffer_size = 100000  # Mínimo de transições
     
     def __len__(self):
