@@ -60,7 +60,7 @@ class PhaseManager:
                 'distance_bonus': 5.0,       
                 'success_bonus': 5.0,
                 'xcom_stability': 2.5, 
-                'simple_stability': 0.8,     
+                'simple_stability': 1.5,     
             },
             3: {    # Fase 3: Foco em Sucesso e Velocidade
                 'progress': 4.0,           
@@ -77,7 +77,7 @@ class PhaseManager:
                 'effort_square_penalty': 5.0,  
                 'jerk_penalty': 5.0,  
                 'xcom_stability': 5.0,  
-                'simple_stability': 0.6,   
+                'simple_stability': 2.0,   
             }
         }
 
