@@ -12,6 +12,18 @@
       "min_value": 0,
       "max_value": 50
     },
+    "simple_stability": {
+      "weight": 0.5,
+      "enabled": true,
+      "min_value": 0,
+      "max_value": 1.0
+    },
+    "xcom_stability": {
+      "weight": 0.1,
+      "enabled": true,
+      "min_value": -1.0,
+      "max_value": 1.0
+    },
     "knee_flexion": {
       "weight": 0.06,
       "enabled": true,
@@ -78,12 +90,6 @@
       "min_value": -100,
       "max_value": 0
     },
-    "foot_inclination_penalty": {
-      "weight": -0.01,
-      "enabled": true,
-      "min_value": -1,
-      "max_value": 0
-    },
     "stability_pitch": {
       "weight": -0.004,
       "enabled": true,
@@ -92,6 +98,12 @@
     },
     "stability_yaw": {
       "weight": -0.002,
+      "enabled": true,
+      "min_value": -1,
+      "max_value": 0
+    },
+    "foot_inclination_penalty": {
+      "weight": -0.001,
       "enabled": true,
       "min_value": -1,
       "max_value": 0
@@ -119,18 +131,6 @@
       "enabled": true,
       "min_value": -1,
       "max_value": 0
-    },
-    "xcom_stability": {
-      "weight": 0.01,
-      "enabled": true,
-      "min_value": -1.0,
-      "max_value": 1.0
-    },
-    "simple_stability": {
-      "weight": 1.0,
-      "enabled": true,
-      "min_value": 0,
-      "max_value": 1.0
     },
     "pitch_forward_bonus": {
       "weight": 1.0,
