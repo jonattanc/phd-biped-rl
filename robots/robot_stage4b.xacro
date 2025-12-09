@@ -63,8 +63,8 @@
   <xacro:property name="foot_izz" value="${(1.0/12.0) * foot_mass * (foot_length * foot_length + foot_width * foot_width)}" />
 
   <!-- Head properties -->
-  <xacro:property name="head_radius" value="0.1" />
-  <xacro:property name="head_mass" value="1.0" />
+  <xacro:property name="head_radius" value="0.09" />
+  <xacro:property name="head_mass" value="4.5" />
   <!-- Inertia for solid sphere: Ixx = Iyy = Izz = (2/5)*m*r^2 -->
   <xacro:property name="head_ixx" value="${0.4 * head_mass * head_radius * head_radius}" />
   <xacro:property name="head_iyy" value="${0.4 * head_mass * head_radius * head_radius}" />
