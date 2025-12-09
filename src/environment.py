@@ -135,7 +135,7 @@ class Environment:
                 "spinning_friction": environment_settings["default"]["spinning_friction"],
                 "rolling_friction": environment_settings["default"]["rolling_friction"],
                 "restitution": environment_settings["default"]["restitution"],
-                "contactStiffness": 1000,
+                "contactStiffness": 1.5e4,
                 "contactDamping": 500,
             }
         elif env == "PRA" or env == "PRD":
