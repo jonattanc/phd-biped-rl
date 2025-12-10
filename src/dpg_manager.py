@@ -254,8 +254,8 @@ class FastTD3(TD3):
         )
 
         # Limpeza de buffer
-        self.old_remove_ratio = 0.2  # Remove 20% mais antigas
-        self.bad_remove_ratio = 0.2  # Remove 20% piores
+        self.old_remove_ratio = 0.3  # Remove 30% mais antigas
+        self.bad_remove_ratio = 0.0  # Remove 0% piores
         self.padrao_buffer_size = 100000  # Mínimo de transições
     
     def __len__(self):
