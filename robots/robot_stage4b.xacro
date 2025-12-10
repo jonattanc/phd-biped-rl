@@ -9,6 +9,14 @@
   <xacro:property name="body_iyy" value="${(1.0/12.0) * body_mass * (3 * body_radius * body_radius + body_length * body_length)}" />
   <xacro:property name="body_izz" value="${0.5 * body_mass * body_radius * body_radius}" />
 
+  <!-- Neck properties -->
+  <xacro:property name="neck_radius" value="0.06" />
+  <xacro:property name="neck_length" value="0.10" />
+  <xacro:property name="neck_mass" value="1.0" />
+  <xacro:property name="neck_ixx" value="${(1.0/12.0) * neck_mass * (3 * neck_radius * neck_radius + neck_length * neck_length)}" />
+  <xacro:property name="neck_iyy" value="${(1.0/12.0) * neck_mass * (3 * neck_radius * neck_radius + neck_length * neck_length)}" />
+  <xacro:property name="neck_izz" value="${0.5 * neck_mass * neck_radius * neck_radius}" />
+
   <!-- Hip properties -->
   <xacro:property name="hip_radius" value="0.05" />
   <xacro:property name="hip_mass" value="0.0" />
@@ -150,6 +158,34 @@
     <!-- Z: body_length/4 move a IMU um pouco para baixo, como se estivesse posicionado ela na cintura -->
     <origin xyz="${body_radius} 0 ${body_offset - body_length/4}" rpy="0 0 0"/>
   </joint>
+
+  <!-- Neck -->
+  <link name="neck_link">
+    <visual>
+      <origin xyz="0 0 ${neck_length/2}" rpy="0 0 0"/>
+      <geometry>
+        <cylinder length="${neck_length}" radius="${neck_radius}"/>
+      </geometry>
+      <material name="robot_material_2"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 ${neck_length/2}" rpy="0 0 0"/>
+      <geometry>
+        <cylinder length="${neck_length}" radius="${neck_radius}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="${neck_mass}"/>
+      <inertia ixx="${neck_ixx}" ixy="0.0" ixz="0.0" iyy="${neck_iyy}" iyz="0.0" izz="${neck_izz}"/>
+    </inertial>
+  </link>
+
+  <!-- Neck joint: body to neck -->
+  <joint name="base_to_neck" type="fixed">
+    <parent link="base_link"/>
+    <child link="neck_link"/>
+    <origin xyz="0 0 ${body_offset + body_length/2}"/>
+  </joint>
   
   <!-- Head (sphere) -->
   <link name="head_link">
@@ -174,13 +210,13 @@
     </inertial>
   </link>
 
-  <!-- Head joint: body to head -->
-  <joint name="base_to_head" type="fixed">
-    <parent link="base_link"/>
+  <!-- Head joint: neck to head -->
+  <joint name="neck_to_head" type="fixed">
+    <parent link="neck_link"/>
     <child link="head_link"/>
     <!-- Z: Como o corpo principal e posicionado em 0 0 0, body_offset move a joint para o centro do corpo -->
     <!-- Z: body_length/2 move a joint para o topo do corpo -->
-	  <origin xyz="0 0 ${body_offset + body_length/2}"/>
+	  <origin xyz="0 0 ${neck_length}"/>
   </joint>
 
   <!-- Leg macro (creates left/right leg: thigh, shin, foot) -->
