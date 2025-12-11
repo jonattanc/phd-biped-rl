@@ -13,13 +13,13 @@
       "max_value": 50
     },
     "simple_stability": {
-      "weight": 0.5,
+      "weight": 0.6,
       "enabled": true,
       "min_value": 0,
       "max_value": 1.0
     },
     "xcom_stability": {
-      "weight": 0.1,
+      "weight": 1.0,
       "enabled": true,
       "min_value": -1.0,
       "max_value": 1.0
@@ -121,7 +121,7 @@
       "max_value": 0
     },
     "y_axis_deviation_square_penalty": {
-      "weight": -0.0001,
+      "weight": -0.001,
       "enabled": true,
       "min_value": -1,
       "max_value": 0
