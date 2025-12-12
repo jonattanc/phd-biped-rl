@@ -12,16 +12,16 @@
       "min_value": 0,
       "max_value": 50
     },
+    "xcom_stability": {
+      "weight": 0.8,
+      "enabled": true,
+      "min_value": -1.0,
+      "max_value": 1.0
+    },
     "simple_stability": {
       "weight": 0.6,
       "enabled": true,
       "min_value": 0,
-      "max_value": 1.0
-    },
-    "xcom_stability": {
-      "weight": 1.0,
-      "enabled": true,
-      "min_value": -1.0,
       "max_value": 1.0
     },
     "knee_flexion": {

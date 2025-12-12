@@ -4,7 +4,7 @@
   <!-- Body properties - Valores exatos da tese -->
   <xacro:property name="body_radius" value="0.15" />
   <xacro:property name="body_length" value="0.50" />
-  <xacro:property name="body_mass" value="35.1" />
+  <xacro:property name="body_mass" value="35.7" />
   
   <!-- Inertia for solid cylinder (axis z): Ixx = Iyy = (1/12)*m*(3*r^2+h^2); Izz = (1/2)*m*r^2 -->
   <xacro:property name="body_ixx" value="${(1.0/12.0) * body_mass * (3 * body_radius * body_radius + body_length * body_length)}" />
@@ -28,7 +28,7 @@
 
   <!-- Hip properties -->
   <xacro:property name="hip_radius" value="0.05" />
-  <xacro:property name="hip_mass" value="0.0" />
+  <xacro:property name="hip_mass" value="0.8" />
   <xacro:property name="hip_ixx" value="${0.4 * hip_mass * hip_radius * hip_radius}" />
   <xacro:property name="hip_iyy" value="${0.4 * hip_mass * hip_radius * hip_radius}" />
   <xacro:property name="hip_izz" value="${0.4 * hip_mass * hip_radius * hip_radius}" />
@@ -36,14 +36,14 @@
   <!-- Thigh properties -->
   <xacro:property name="thigh_radius" value="0.075" />
   <xacro:property name="thigh_length" value="0.40" />
-  <xacro:property name="thigh_mass" value="18.5" />
+  <xacro:property name="thigh_mass" value="19.0" />
   <xacro:property name="thigh_ixx" value="${(1.0/12.0) * thigh_mass * (3 * thigh_radius * thigh_radius + thigh_length * thigh_length)}" />
   <xacro:property name="thigh_iyy" value="${(1.0/12.0) * thigh_mass * (3 * thigh_radius * thigh_radius + thigh_length * thigh_length)}" />
   <xacro:property name="thigh_izz" value="${0.5 * thigh_mass * thigh_radius * thigh_radius}" />
 
   <!-- Knee properties -->
   <xacro:property name="knee_radius" value="0.04" />
-  <xacro:property name="knee_mass" value="0.0" />
+  <xacro:property name="knee_mass" value="0.4" />
   <xacro:property name="knee_ixx" value="${0.4 * knee_mass * knee_radius * knee_radius}" />
   <xacro:property name="knee_iyy" value="${0.4 * knee_mass * knee_radius * knee_radius}" />
   <xacro:property name="knee_izz" value="${0.4 * knee_mass * knee_radius * knee_radius}" />
@@ -51,14 +51,14 @@
   <!-- Shin properties -->
   <xacro:property name="shin_radius" value="0.06" />
   <xacro:property name="shin_length" value="0.43" />
-  <xacro:property name="shin_mass" value="7.6" />
+  <xacro:property name="shin_mass" value="8.09" />
   <xacro:property name="shin_ixx" value="${(1.0/12.0) * shin_mass * (3 * shin_radius * shin_radius + shin_length * shin_length)}" />
   <xacro:property name="shin_iyy" value="${(1.0/12.0) * shin_mass * (3 * shin_radius * shin_radius + shin_length * shin_length)}" />
   <xacro:property name="shin_izz" value="${0.5 * shin_mass * shin_radius * shin_radius}" />
 
   <!-- Ankle properties -->
   <xacro:property name="ankle_radius" value="0.03" />
-  <xacro:property name="ankle_mass" value="0.0" />
+  <xacro:property name="ankle_mass" value="0.3" />
   <xacro:property name="ankle_ixx" value="${0.4 * ankle_mass * ankle_radius * ankle_radius}" />
   <xacro:property name="ankle_iyy" value="${0.4 * ankle_mass * ankle_radius * ankle_radius}" />
   <xacro:property name="ankle_izz" value="${0.4 * ankle_mass * ankle_radius * ankle_radius}" />
@@ -75,7 +75,7 @@
 
   <!-- Shoulder properties -->
   <xacro:property name="shoulder_radius" value="0.04" />
-  <xacro:property name="shoulder_mass" value="0.0" />
+  <xacro:property name="shoulder_mass" value="0.5" />
   <xacro:property name="shoulder_ixx" value="${0.4 * shoulder_mass * shoulder_radius * shoulder_radius}" />
   <xacro:property name="shoulder_iyy" value="${0.4 * shoulder_mass * shoulder_radius * shoulder_radius}" />
   <xacro:property name="shoulder_izz" value="${0.4 * shoulder_mass * shoulder_radius * shoulder_radius}" />
@@ -578,20 +578,20 @@
     <!-- Hand -->
     <link name="${prefix}_hand_link">
       <visual>
-        <origin rpy="0 0 0" xyz="0 0 ${-hand_height/2}"/>
+        <origin rpy="${90 * deg_to_rad} 0 0" xyz="${hand_length/2} 0 0"/>
         <geometry>
           <box size="${hand_length} ${hand_width} ${hand_height}"/>
         </geometry>
         <material name="robot_material_2"/>
       </visual>
       <collision>
-        <origin rpy="0 0 0" xyz="0 0 ${-hand_height/2}"/>
+        <origin rpy="${90 * deg_to_rad} 0 0" xyz="${hand_length/2} 0 0"/>
         <geometry>
           <box size="${hand_length} ${hand_width} ${hand_height}"/>
         </geometry>
       </collision>
       <inertial>
-        <origin rpy="0 0 0" xyz="0 0 ${-hand_height/2}"/>
+        <origin rpy="${90 * deg_to_rad} 0 0" xyz="${hand_length/2} 0 0"/>
         <mass value="${hand_mass}"/>
         <inertia ixx="${hand_ixx}" ixy="0.0" ixz="0.0" iyy="${hand_iyy}" iyz="0.0" izz="${hand_izz}"/>
       </inertial>
