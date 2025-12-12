@@ -138,7 +138,7 @@ class Simulation(gym.Env):
         else:
             self.physics_client = p.connect(p.DIRECT)
 
-        p.configureDebugVisualizer(p.COV_ENABLE_SHADOWS, 1)
+        p.configureDebugVisualizer(p.COV_ENABLE_SHADOWS, 0)
         p.configureDebugVisualizer(p.COV_ENABLE_DEPTH_BUFFER_PREVIEW, 0)
         p.configureDebugVisualizer(p.COV_ENABLE_SEGMENTATION_MARK_PREVIEW, 0)
         p.configureDebugVisualizer(p.COV_ENABLE_VR_RENDER_CONTROLLERS, 0)
