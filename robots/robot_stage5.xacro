@@ -578,20 +578,20 @@
     <!-- Hand -->
     <link name="${prefix}_hand_link">
       <visual>
-        <origin rpy="${90 * deg_to_rad} 0 0" xyz="${hand_length/2} 0 0"/>
+        <origin rpy="0 0 0" xyz="0 0 ${-hand_length/4}"/>
         <geometry>
-          <box size="${hand_length} ${hand_width} ${hand_height}"/>
+          <box size="${hand_width} ${hand_height} ${hand_length}"/>
         </geometry>
         <material name="robot_material_2"/>
       </visual>
       <collision>
-        <origin rpy="${90 * deg_to_rad} 0 0" xyz="${hand_length/2} 0 0"/>
+        <origin rpy="0 0 0" xyz="0 0 ${-hand_length/4}"/>
         <geometry>
-          <box size="${hand_length} ${hand_width} ${hand_height}"/>
+          <box size="${hand_width} ${hand_height} ${hand_length}"/>
         </geometry>
       </collision>
       <inertial>
-        <origin rpy="${90 * deg_to_rad} 0 0" xyz="${hand_length/2} 0 0"/>
+        <origin rpy="0 0 0" xyz="0 0 ${-hand_length/4}"/>
         <mass value="${hand_mass}"/>
         <inertia ixx="${hand_ixx}" ixy="0.0" ixz="0.0" iyy="${hand_iyy}" iyz="0.0" izz="${hand_izz}"/>
       </inertial>
