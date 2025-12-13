@@ -138,6 +138,13 @@ class Simulation(gym.Env):
         else:
             self.physics_client = p.connect(p.DIRECT)
 
+        p.configureDebugVisualizer(p.COV_ENABLE_SHADOWS, 0)
+        p.configureDebugVisualizer(p.COV_ENABLE_DEPTH_BUFFER_PREVIEW, 0)
+        p.configureDebugVisualizer(p.COV_ENABLE_SEGMENTATION_MARK_PREVIEW, 0)
+        p.configureDebugVisualizer(p.COV_ENABLE_VR_RENDER_CONTROLLERS, 0)
+        p.configureDebugVisualizer(p.COV_ENABLE_TINY_RENDERER, 0)
+        p.configureDebugVisualizer(p.COV_ENABLE_WIREFRAME, 0)
+
         self.last_selected_camera = self.camera_selection_value.value
 
         if self.last_selected_camera == 1:  # Ambiente geral
