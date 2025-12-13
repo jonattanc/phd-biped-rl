@@ -3,8 +3,8 @@
 
 class BestModelTracker:
     def __init__(self, sim):
-        self.improvement_threshold = 0.05
-        self.patience_steps = 2.5e6
+        self.improvement_threshold = 0.01
+        self.patience_steps = 0.5e6
         self.original_patience = self.patience_steps
 
         self.sim = sim
@@ -47,12 +47,14 @@ class BestModelTracker:
             self.steps_since_improvement = 0
             self.last_improvement_steps = self.sim.total_steps
 
-            # Apenas conta auto-save se tiver passado do mínimo de steps
-            if self.sim.total_steps >= self.sim.agent.minimum_steps_to_save:
+            # Apenas conta auto-save se tiver passado do mínimo de steps e distância
+            if self.sim.total_steps >= self.sim.agent.minimum_steps_to_save and self.sim.episode_distance >= self.sim.agent.minimum_distance_to_save:
                 self.auto_save_count += 1
                 return True
+
             else:
                 return False
+
         else:
             # Atualiza steps sem melhoria mesmo quando não há melhoria
             self.steps_since_improvement = self.sim.total_steps - self.last_improvement_steps

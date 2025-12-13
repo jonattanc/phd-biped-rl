@@ -48,7 +48,8 @@ class Agent:
         else:
             self.prefill_steps = 100e3
 
-        self.minimum_steps_to_save = self.learning_starts + self.prefill_steps + 1e6
+        self.minimum_steps_to_save = self.learning_starts + self.prefill_steps + 0.7e6
+        self.minimum_distance_to_save = 7.0
 
         dummy_env = DummyVecEnv([lambda: env])
 
