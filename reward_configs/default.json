@@ -90,6 +90,12 @@
       "min_value": -100,
       "max_value": 0
     },
+    "foot_inclination_penalty": {
+      "weight": -0.01,
+      "enabled": true,
+      "min_value": -1,
+      "max_value": 0
+    },
     "stability_pitch": {
       "weight": -0.004,
       "enabled": true,
@@ -98,12 +104,6 @@
     },
     "stability_yaw": {
       "weight": -0.002,
-      "enabled": true,
-      "min_value": -1,
-      "max_value": 0
-    },
-    "foot_inclination_penalty": {
-      "weight": -0.001,
       "enabled": true,
       "min_value": -1,
       "max_value": 0
