@@ -40,6 +40,7 @@ class Agent:
         self.env = env
         self.action_dim = env.action_space.shape[0] if env else None
         self.initial_episode = initial_episode
+        self.is_fast_td3 = is_fast_td3
         self.learning_starts = 10e3
 
         if is_fast_td3:
@@ -148,31 +149,22 @@ class Agent:
             raise ValueError("Nenhum modelo para salvar")
 
     def _load_model(self, model_path):
-        # Carrega modelo treinado detectando automaticamente o tipo
-        try:
-            # Tentar carregar como PPO primeiro
-            self.model = PPO.load(model_path)
-            self.algorithm = "PPO"
+        if self.is_fast_td3:
+            self.model = FastTD3.load(model_path)
+            self.algorithm = "FastTD3"
             if hasattr(self.model, "action_space") and self.model.action_space is not None:
                 self.action_dim = self.model.action_space.shape[0]
-            self.logger.info(f"Modelo PPO carregado: {model_path}")
-        except Exception as e:
-            try:
-                self.model = TD3.load(model_path)
-                self.algorithm = "TD3"
-                if hasattr(self.model, "action_space") and self.model.action_space is not None:
-                    self.action_dim = self.model.action_space.shape[0]
-                self.logger.info(f"Modelo TD3 carregado: {model_path}")
-                self.logger.info(f"self.model.action_space.shape[0]: {self.model.action_space.shape[0]}")
-            except Exception as e:
-                # Tentar carregar como FastTD3
-                self.model = FastTD3.load(model_path)
-                self.algorithm = "FastTD3"
-                if hasattr(self.model, "action_space") and self.model.action_space is not None:
-                    self.action_dim = self.model.action_space.shape[0]
-                if hasattr(self.model, "custom_logger"):
-                    self.model.custom_logger = self.logger
-                self.logger.info(f"Modelo FastTD3 carregado: {model_path}")
+            if hasattr(self.model, "custom_logger"):
+                self.model.custom_logger = self.logger
+            self.logger.info(f"Modelo FastTD3 carregado: {model_path}")
+
+        else:
+            self.model = TD3.load(model_path)
+            self.algorithm = "TD3"
+            if hasattr(self.model, "action_space") and self.model.action_space is not None:
+                self.action_dim = self.model.action_space.shape[0]
+            self.logger.info(f"Modelo TD3 carregado: {model_path}")
+            self.logger.info(f"self.model.action_space.shape[0]: {self.model.action_space.shape[0]}")
 
     def set_agent(self, agent):
         """Configura o agente no ambiente"""

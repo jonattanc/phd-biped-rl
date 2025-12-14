@@ -47,6 +47,7 @@ class Simulation(gym.Env):
         self.config_changed_value = config_changed_value
         self.num_episodes = num_episodes
         self.episode_count = initial_episode
+        self.is_fast_td3 = is_fast_td3
         self.total_steps = 0
 
         self.logger = logger
@@ -554,10 +555,7 @@ class Simulation(gym.Env):
 
         self.should_save_model = self.tracker.update()
 
-        # VERIFICAÇÃO FastTD3 para logging
-        is_fast_td3 = hasattr(self, "agent") and hasattr(self.agent, "model") and hasattr(self.agent.model, "phase_manager")
-
-        if is_fast_td3 and not evaluation:
+        if self.is_fast_td3 and not evaluation:
             # Criar métricas do episódio para o FastTD3
             episode_results = {"reward": reward, "steps": self.episode_steps, "distance": self.episode_distance, "success": self.episode_success, "roll": self.robot_roll, "pitch": self.robot_pitch}
 
@@ -567,7 +565,7 @@ class Simulation(gym.Env):
 
             # Log a cada 50 episódios para todos
             if self.episode_count % 50 == 0:
-                if is_fast_td3:
+                if self.is_fast_td3:
                     # LOG DETALHADO PARA FastTD3
                     phase_info = self.agent.model.get_phase_info()
                     phase_theme = phase_info.get("phase_theme", "DESCONHECIDA")
@@ -583,7 +581,7 @@ class Simulation(gym.Env):
                     self.logger.info(f"Recompensa: {self.episode_reward:.1f} | " f"Vel.X: {avg_x_velocity:.2f}m/s | " f"Sucesso: {success_status} | " f"Terminação: {self.episode_termination}")
 
         # ATUALIZAR PHASE MANAGER APENAS PARA FastTD3 NO FINAL DO EPISÓDIO
-        if self.episode_done and not evaluation and is_fast_td3:
+        if self.episode_done and not evaluation and self.is_fast_td3:
             episode_metrics = {"reward": self.episode_reward, "steps": self.episode_steps, "distance": self.episode_distance, "success": self.episode_success}
 
             # Atualizar métricas no phase manager do FastTD3

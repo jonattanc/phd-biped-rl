@@ -17,6 +17,7 @@ from dataclasses import asdict
 def process_runner(
     selected_environment,
     selected_robot,
+    is_fast_td3,
     algorithm,
     ipc_queue,
     ipc_queue_main_to_process,
@@ -31,7 +32,6 @@ def process_runner(
     device="cpu",
     initial_episode=0,
     model_path=None,
-    enable_dpg=True,
     episodes=1000,
     deterministic=False,
 ):
@@ -42,7 +42,7 @@ def process_runner(
     logger.info(f"Câmera: {camera_selection_value.value}")
     logger.info(f"Episódio inicial: {initial_episode}")
     logger.info(f"Modelo carregado: {model_path}")
-    logger.info(f"Dynamic Policy Gradient: {enable_dpg}")
+    logger.info(f"Fast TD3: {is_fast_td3}")
 
     try:
         np.random.seed(seed)
@@ -50,7 +50,7 @@ def process_runner(
         torch.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)
 
-        is_fast_td3 = algorithm.upper() == "FASTTD3"
+        reward_system.set_is_fast_td3(is_fast_td3)
 
         robot = Robot(logger, name=selected_robot)
         environment = Environment(logger, name=selected_environment, robot=robot, is_fast_td3=is_fast_td3)

@@ -376,12 +376,14 @@ class TrainingTab(common_tab.GUITab):
 
             initial_episode = 0
             model_path = None
+            is_fast_td3 = "FASTTD3" in self.current_algorithm.upper()
 
             p = multiprocessing.Process(
                 target=train_process.process_runner,
                 args=(
                     self.current_env,
                     self.current_robot,
+                    is_fast_td3,
                     self.current_algorithm,
                     self.ipc_queue,
                     self.ipc_queue_main_to_process,
