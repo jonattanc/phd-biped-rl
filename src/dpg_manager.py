@@ -17,9 +17,10 @@ class PhaseManager:
         self.custom_logger = custom_logger
         
         self.phase1_success_counter = 0  
-        self.phase2_success_counter = 0  
+        self.phase2_success_counter = 0 
+        self.phase3_success_counter = 0 
         self.phase1_success_criterio = 2.5  # Distancia fase 1 em metros
-        self.phase2_success_criterio = 7.5  # Distancia fase 2 em metros
+        self.phase2_success_criterio = 7.0  # Distancia fase 2 em metros
         self.phase3_success_criterio = 9.0  # Distancia fase 3 em metros
         self.phase1_success_threshold = 10  # Vezes fase 1 em metros
         self.phase2_success_threshold = 20  # Vezes fase 2 em metros
@@ -258,6 +259,7 @@ class PhaseManager:
             'avg_reward': current_metrics['avg_reward'],
             'phase1_counter': self.phase1_success_counter,
             'phase2_counter': self.phase2_success_counter,
+            'phase3_counter': self.phase3_success_counter,
             'weight_adjustments': weight_adjustments,
         }
         
