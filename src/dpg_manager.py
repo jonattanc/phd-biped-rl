@@ -17,23 +17,19 @@ class PhaseManager:
         self.custom_logger = custom_logger
         
         self.phase1_success_counter = 0  
-        self.phase2_success_counter = 0 
-        self.phase3_success_counter = 0 
+        self.phase2_success_counter = 0  
         self.phase1_success_criterio = 2.5  # Distancia fase 1 em metros
         self.phase2_success_criterio = 7.0  # Distancia fase 2 em metros
-        self.phase3_success_criterio = 9.0  # Distancia fase 3 em metros
         self.phase1_success_threshold = 10  # Vezes fase 1 em metros
         self.phase2_success_threshold = 20  # Vezes fase 2 em metros
-        self.phase3_success_threshold = 10  # Vezes fase 3 em metros
         
         self.phase_themes = {
             1: "Fase 1 - ESTABILIDADE BÁSICA",
             2: "Fase 2 - PROGRESSO CONSISTENTE", 
-            3: "Fase 3 - SUCESSO FINAL",
-            4: "Fase 4 - SUCESSO CONTINUADO"
+            3: "Fase 3 - SUCESSO FINAL"
         }
         
-        # HIPERPARÂMETROS ADAPTATIVOS APENAS PARA FASE 2 a 4
+        # HIPERPARÂMETROS ADAPTATIVOS APENAS PARA FASE 2 e 3
         self.adaptive_hyperparams = {
             2: {  # Fase 2: Consolidação com aprendizado mais estável
                 'learning_rate': 1e-4,      
@@ -47,11 +43,6 @@ class PhaseManager:
                 'tau': 0.003,              
                 'gamma': 0.99,             
                 'noise_std': 0.1,
-            },
-            4: {  # Fase 4: Manutenção     
-                'learning_rate': 5e-5,  # Reduzir learning rate
-                'target_noise_clip': 0.1,  # Reduzir ruído
-                'noise_std': 0.05, 
             }
         }
         
@@ -87,23 +78,6 @@ class PhaseManager:
                 'jerk_penalty': 5.0,  
                 'xcom_stability': 5.0,  
                 'simple_stability': 3.0,   
-            },
-            4: {    # Fase 4: Foco em manter Sucesso
-                'progress': 5.0,           
-                'efficiency_bonus': 11.0,  
-                'distance_bonus': 11.0,    
-                'fall_penalty': 4.0,       
-                'yaw_penalty': 3.0,        
-                'y_axis_deviation_square_penalty': 25.0, 
-                'gait_pattern_cross': 2.0, 
-                'foot_clearance': 6.0,     
-                'alternating_foot_contact': 3.0, 
-                'success_bonus': 10.0,      
-                'gait_rhythm': 6.0,        
-                'effort_square_penalty': 5.0,  
-                'jerk_penalty': 5.0,  
-                'xcom_stability': 6.0,  
-                'simple_stability': 4.0,   
             }
         }
 
@@ -143,13 +117,6 @@ class PhaseManager:
                 if self.custom_logger:
                     self.custom_logger.info(f"🏆 FASE 2 - EPISÓDIO VÁLIDO {self.phase2_success_counter}/"
                                             f"{self.phase2_success_threshold} (distância: {episode_distance:.2f}m)")
-        
-        elif self.current_phase == 3:
-            if episode_distance > self.phase3_success_criterio:
-                self.phase3_success_counter += 1
-                if self.custom_logger:
-                    self.custom_logger.info(f"🏆 FASE 3 - EPISÓDIO VÁLIDO {self.phase3_success_counter}/"
-                                            f"{self.phase3_success_threshold} (distância: {episode_distance:.2f}m)")
     
     def should_transition_phase(self):
         """Verifica se deve transicionar de fase"""
@@ -162,13 +129,7 @@ class PhaseManager:
         elif self.current_phase == 2:
             if self.phase2_success_counter >= self.phase2_success_threshold:
                 if self.custom_logger:
-                    self.custom_logger.info(f"🎯 FASE 2 CONCLUÍDA: {self.phase2_success_counter} episódios > 7.5m")
-                return True
-        
-        elif self.current_phase == 3:
-            if self.phase3_success_counter >= self.phase3_success_threshold:
-                if self.custom_logger:
-                    self.custom_logger.info(f"🎯 FASE 3 CONCLUÍDA: {self.phase3_success_counter} episódios > 9m")
+                    self.custom_logger.info(f"🎯 FASE 2 CONCLUÍDA: {self.phase2_success_counter} episódios > 8m")
                 return True
                 
         return False
@@ -220,7 +181,7 @@ class PhaseManager:
     
     def transition_to_next_phase(self):
         """Transiciona para próxima fase"""
-        if self.current_phase < 4:
+        if self.current_phase < 3:
             self.current_phase += 1
             
             # Reiniciar contadores ao mudar de fase
@@ -228,8 +189,6 @@ class PhaseManager:
                 self.phase1_success_counter = 0
             elif self.current_phase == 3:
                 self.phase2_success_counter = 0
-            elif self.current_phase == 4:
-                self.phase3_success_counter = 0
                 
             self.phase_history.append({
                 'phase': self.current_phase,
@@ -259,7 +218,6 @@ class PhaseManager:
             'avg_reward': current_metrics['avg_reward'],
             'phase1_counter': self.phase1_success_counter,
             'phase2_counter': self.phase2_success_counter,
-            'phase3_counter': self.phase3_success_counter,
             'weight_adjustments': weight_adjustments,
         }
         
@@ -297,7 +255,6 @@ class FastTD3(TD3):
 
         # Limpeza de buffer
         self.old_remove_ratio = 0.3  # Remove 30% mais antigas
-        self.bad_remove_ratio = 0.0  # Remove 0% piores
         self.padrao_buffer_size = 100000  # Mínimo de transições
     
     def __len__(self):
@@ -327,14 +284,14 @@ class FastTD3(TD3):
                 if self.custom_logger:
                     self.custom_logger.info(f"🎉 FastTD3 - TRANSIÇÃO PARA {phase_theme} (FASE {new_phase})!")
                 
-                # APLICAR HIPERPARÂMETROS DA NOVA FASE (apenas fase 2 a 4)
+                # APLICAR HIPERPARÂMETROS DA NOVA FASE (apenas fase 2 e 3)
                 if new_phase > 1:
                     self.apply_phase_hyperparams()
                 
         return transition_occurred
     
     def apply_phase_hyperparams(self):
-        """Aplica hiperparâmetros da fase atual ao modelo (apenas fase 2 a 4)"""
+        """Aplica hiperparâmetros da fase atual ao modelo (apenas fase 2 e 3)"""
         hyperparams = self.phase_manager.get_phase_hyperparams()
         
         if not hyperparams:  # Fase 1 ou sem hiperparâmetros definidos
@@ -456,14 +413,6 @@ class FastTD3(TD3):
             remove_old = int(len(sorted_by_age) * self.old_remove_ratio)
             if remove_old > 0:
                 sorted_by_age = sorted_by_age[remove_old:]
-            
-            # Ativar remoção de piores buffers na Fase 4
-            if self.phase_manager.current_phase == 4:
-                remove_bad = int(len(sorted_by_age) * self.bad_remove_ratio)
-                if remove_bad > 0:
-                    # Ordenar por recompensa (piores primeiro)
-                    sorted_by_age.sort(key=lambda x: x[1])
-                    sorted_by_age = sorted_by_age[remove_bad:]
             
             # Garantir mínimo de 100.000
             final_count = len(sorted_by_age)
