@@ -5,8 +5,8 @@ import os
 
 def separar_cc_por_pista(df_cc):
     """Separa o arquivo CC.csv por pista baseado na ordem alternada"""
-    # Ordem das pistas: PBA, PG, PRA, PRB, PRD, PR
-    pistas = ['PBA', 'PG', 'PRA', 'PRB', 'PRD', 'PR']
+    # Ordem das pistas: PR, PBA, PG, PRA, PRB, PRD 
+    pistas = ['PR', 'PBA', 'PG', 'PRA', 'PRB', 'PRD']
     
     # Criar DataFrames separados para cada pista
     dados_por_pista = {}
