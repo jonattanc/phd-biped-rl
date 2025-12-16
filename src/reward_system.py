@@ -432,23 +432,29 @@ class RewardSystem:
         except:
             return 0.0
 
-        cross_gait_score = 0.0
+        # Adicionar apenas 1 contador para alternância
+        if not hasattr(self, '_last_good_foot'):
+            self._last_foot_air = None
 
+        cross_gait_score = 0.0
+ 
         # Perna direita no ar + braço esquerdo para trás
-        if not right_foot_contact and left_arm_angle > 0:
+        if not right_foot_contact and left_arm_angle > 0 and self._last_good_foot != 'right':
             cross_gait_score += 0.5
+            self._last_good_foot = 'right'  
 
         # Perna esquerda no ar + braço direito para trás
-        if not left_foot_contact and right_arm_angle > 0:
+        elif not left_foot_contact and right_arm_angle > 0 and self._last_good_foot != 'left':
             cross_gait_score += 0.5
+            self._last_good_foot = 'left'  
 
         # Perna direita no ar + braço direito para trás (errado)
         if not right_foot_contact and right_arm_angle > 0:
-            cross_gait_score -= 0.3
+            cross_gait_score -= 0.5
 
         # Perna esquerda no ar + braço esquerdo para trás (errado)
         if not left_foot_contact and left_arm_angle > 0:
-            cross_gait_score -= 0.3
+            cross_gait_score -= 0.5
 
         return max(0.0, cross_gait_score)
 
