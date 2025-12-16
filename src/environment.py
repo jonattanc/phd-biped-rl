@@ -124,8 +124,8 @@ class Environment:
         environment_settings = {"default": {"lateral_friction": 2.0, "spinning_friction": 1.0, "rolling_friction": 0.001, "restitution": 0.0}}
         if env == "PBA":
             environment_settings["middle_link"] = {
-                "lateral_friction": 0.6,
-                "spinning_friction": 0.3,
+                "lateral_friction": 0.85,
+                "spinning_friction": 0.425,
                 "rolling_friction": environment_settings["default"]["rolling_friction"],
                 "restitution": environment_settings["default"]["restitution"],
             }
