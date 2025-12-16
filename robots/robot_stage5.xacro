@@ -434,7 +434,7 @@
       <child link="${prefix}_ankle_ball_link"/>
       <origin xyz="0 0 ${-shin_length}"/>
       <axis xyz="0 1 0"/>
-      <limit lower="${-20 * deg_to_rad}" upper="${20 * deg_to_rad}" effort="${joint_effort}" velocity="${joint_velocity}"/>
+      <limit lower="${-25 * deg_to_rad}" upper="${25 * deg_to_rad}" effort="${joint_effort}" velocity="${joint_velocity}"/>
       <dynamics damping="${joint_damping}" friction="${joint_friction}"/>
     </joint>
 
@@ -465,7 +465,7 @@
       <child link="${prefix}_foot_link"/>
       <origin xyz="0 0 0"/>
       <axis xyz="1 0 0"/>
-      <limit lower="${-10 * deg_to_rad}" upper="${10 * deg_to_rad}" effort="${joint_effort}" velocity="${joint_velocity}"/>
+      <limit lower="${-15 * deg_to_rad}" upper="${15 * deg_to_rad}" effort="${joint_effort}" velocity="${joint_velocity}"/>
       <dynamics damping="${joint_damping}" friction="${joint_friction}"/>
     </joint>
 

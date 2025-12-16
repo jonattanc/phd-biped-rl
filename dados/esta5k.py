@@ -103,7 +103,7 @@ def analisar_dados_gerais(df_completo):
     """Analisa dados considerando CC como método geral"""
     
     # Lista de categorias para análise (métodos gerais)
-    categorias_gerais = ['PR', 'PBA', 'PG', 'PRB', 'PRD', 'PRA', 'CC']
+    categorias_gerais = ['PG', 'PRB', 'PRD', 'PRA', 'CC', 'PR', 'PBA']
     
     # Dicionário para armazenar resultados
     resultados_gerais = {}

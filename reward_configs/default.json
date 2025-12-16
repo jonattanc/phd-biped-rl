@@ -13,7 +13,7 @@
       "max_value": 50
     },
     "xcom_stability": {
-      "weight": 0.8,
+      "weight": 1.0,
       "enabled": true,
       "min_value": -1.0,
       "max_value": 1.0
@@ -23,6 +23,12 @@
       "enabled": true,
       "min_value": 0,
       "max_value": 1.0
+    },
+    "pitch_forward_bonus": {
+      "weight": 0.5,
+      "enabled": true,
+      "min_value": 0,
+      "max_value": 20.0
     },
     "knee_flexion": {
       "weight": 0.06,
@@ -36,13 +42,19 @@
       "min_value": 0.0,
       "max_value": 5.0
     },
-    "efficiency_bonus": {
-      "weight": 0.0002,
+    "foot_clearance": {
+      "weight": 0.001,
       "enabled": true,
       "min_value": 0.0001,
       "max_value": 10
     },
-    "foot_clearance": {
+    "hip_extension": {
+      "weight": 0.0002,
+      "enabled": true,
+      "min_value": 0,
+      "max_value": 1
+    },
+    "efficiency_bonus": {
       "weight": 0.0002,
       "enabled": true,
       "min_value": 0.0001,
@@ -132,12 +144,6 @@
       "min_value": -1,
       "max_value": 0
     },
-    "pitch_forward_bonus": {
-      "weight": 1.0,
-      "enabled": false,
-      "min_value": 0,
-      "max_value": 20.0
-    },
     "height_deviation_penalty": {
       "weight": -0.01,
       "enabled": false,
@@ -176,12 +182,6 @@
     },
     "foot_clearance_original": {
       "weight": 0.005,
-      "enabled": false,
-      "min_value": 0,
-      "max_value": 1
-    },
-    "hip_extension": {
-      "weight": 0.02,
       "enabled": false,
       "min_value": 0,
       "max_value": 1

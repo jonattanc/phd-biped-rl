@@ -78,6 +78,8 @@ class RewardSystem:
                 "jerk_penalty": 1.0,
                 "xcom_stability": 1.0,
                 "simple_stability": 1.0,
+                "pitch_forward_bonus": 1.0,
+                "hip_extension": 1.0,
             }
 
         # COMPONENTES PARA MARCHA
@@ -316,6 +318,23 @@ class RewardSystem:
 
             total_reward += self.components["simple_stability"].value * adjusted_weight
 
+        if self.is_component_enabled("pitch_forward_bonus"):
+            target_forward_pitch = 0.05
+            pitch_error = abs(sim.robot_pitch - target_forward_pitch)
+            pitch_bonus = max(0, 0.1 - pitch_error)
+            self.components["pitch_forward_bonus"].value = pitch_bonus
+            weight_multiplier = weight_adjustments.get("pitch_forward_bonus", 1.0)
+            adjusted_weight = self.components["pitch_forward_bonus"].weight * weight_multiplier
+
+            total_reward += self.components["pitch_forward_bonus"].value * adjusted_weight
+
+        if self.is_component_enabled("hip_extension"):
+            self.components["hip_extension"].value = abs(sim.robot_right_hip_frontal_angle) + abs(sim.robot_left_hip_frontal_angle)
+            weight_multiplier = weight_adjustments.get("hip_extension", 1.0)
+            adjusted_weight = self.components["hip_extension"].weight * weight_multiplier
+
+            total_reward += self.components["hip_extension"].value * adjusted_weight
+
         # RECOMPENSAS DINÂMICAS PARA FASE 3
         if not evaluation and self.is_fast_td3:
             phase_info = sim.agent.model.get_phase_info()
@@ -361,13 +380,6 @@ class RewardSystem:
             self.components["height_deviation_square_penalty"].value = height_error
             total_reward += height_error * self.components["height_deviation_square_penalty"].weight
 
-        if self.is_component_enabled("pitch_forward_bonus"):
-            target_forward_pitch = 0.05
-            pitch_error = abs(sim.robot_pitch - target_forward_pitch)
-            pitch_bonus = max(0, 0.1 - pitch_error)
-            self.components["pitch_forward_bonus"].value = pitch_bonus
-            total_reward += pitch_bonus * self.components["pitch_forward_bonus"].weight
-
         if self.is_component_enabled("height_deviation_penalty"):
             self.components["height_deviation_penalty"].value = abs(sim.robot_y_position - sim.episode_robot_y_initial_position)
             total_reward += self.components["height_deviation_penalty"].value * self.components["height_deviation_penalty"].weight
@@ -382,10 +394,6 @@ class RewardSystem:
             direction_changes = np.sum(action_products < 0)
             self.components["direction_change_penalty"].value = direction_changes
             total_reward += direction_changes * self.components["direction_change_penalty"].weight
-
-        if self.is_component_enabled("hip_extension"):
-            self.components["hip_extension"].value = abs(sim.robot_right_hip_frontal_angle) + abs(sim.robot_left_hip_frontal_angle)
-            total_reward += self.components["hip_extension"].value * self.components["hip_extension"].weight
 
         if self.is_component_enabled("hip_openning"):
             self.components["hip_openning"].value = abs(sim.robot_right_hip_lateral_angle) + abs(sim.robot_left_hip_lateral_angle)
