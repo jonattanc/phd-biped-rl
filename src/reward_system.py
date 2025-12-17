@@ -319,9 +319,15 @@ class RewardSystem:
             total_reward += self.components["simple_stability"].value * adjusted_weight
 
         if self.is_component_enabled("pitch_forward_bonus"):
-            target_forward_pitch = 0.05
-            pitch_error = abs(sim.robot_pitch - target_forward_pitch)
-            pitch_bonus = max(0, 0.1 - pitch_error)
+            current_pitch = sim.robot_pitch
+            if current_pitch > 0:
+                if current_pitch <= 0.349:
+                    normalized = current_pitch / 0.349
+                    pitch_bonus = 4.0 * normalized * (1.0 - normalized) 
+                else:
+                    pitch_bonus = 0
+            else:
+                pitch_bonus = 0
             self.components["pitch_forward_bonus"].value = pitch_bonus
             weight_multiplier = weight_adjustments.get("pitch_forward_bonus", 1.0)
             adjusted_weight = self.components["pitch_forward_bonus"].weight * weight_multiplier
