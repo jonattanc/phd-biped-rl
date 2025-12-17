@@ -4,7 +4,7 @@
   <!-- Body properties - Valores exatos da tese -->
   <xacro:property name="body_radius" value="0.15" />
   <xacro:property name="body_length" value="0.50" />
-  <xacro:property name="body_mass" value="37.69" />
+  <xacro:property name="body_mass" value="34.49" />
   
   <!-- Inertia for solid cylinder (axis z): Ixx = Iyy = (1/12)*m*(3*r^2+h^2); Izz = (1/2)*m*r^2 -->
   <xacro:property name="body_ixx" value="${(1.0/12.0) * body_mass * (3 * body_radius * body_radius + body_length * body_length)}" />
@@ -14,21 +14,21 @@
   <!-- Neck properties -->
   <xacro:property name="neck_radius" value="0.06" />
   <xacro:property name="neck_length" value="0.10" />
-  <xacro:property name="neck_mass" value="1.0" />
+  <xacro:property name="neck_mass" value="0.9" />
   <xacro:property name="neck_ixx" value="${(1.0/12.0) * neck_mass * (3 * neck_radius * neck_radius + neck_length * neck_length)}" />
   <xacro:property name="neck_iyy" value="${(1.0/12.0) * neck_mass * (3 * neck_radius * neck_radius + neck_length * neck_length)}" />
   <xacro:property name="neck_izz" value="${0.5 * neck_mass * neck_radius * neck_radius}" />
 
   <!-- Head properties -->
   <xacro:property name="head_radius" value="0.09" />
-  <xacro:property name="head_mass" value="4.5" />
+  <xacro:property name="head_mass" value="4.1" />
   <xacro:property name="head_ixx" value="${0.4 * head_mass * head_radius * head_radius}" />
   <xacro:property name="head_iyy" value="${0.4 * head_mass * head_radius * head_radius}" />
   <xacro:property name="head_izz" value="${0.4 * head_mass * head_radius * head_radius}" />
 
   <!-- Hip properties -->
   <xacro:property name="hip_radius" value="0.05" />
-  <xacro:property name="hip_mass" value="0.8" />
+  <xacro:property name="hip_mass" value="0.7" />
   <xacro:property name="hip_ixx" value="${0.4 * hip_mass * hip_radius * hip_radius}" />
   <xacro:property name="hip_iyy" value="${0.4 * hip_mass * hip_radius * hip_radius}" />
   <xacro:property name="hip_izz" value="${0.4 * hip_mass * hip_radius * hip_radius}" />
@@ -36,14 +36,14 @@
   <!-- Thigh properties -->
   <xacro:property name="thigh_radius" value="0.075" />
   <xacro:property name="thigh_length" value="0.40" />
-  <xacro:property name="thigh_mass" value="18.0" />
+  <xacro:property name="thigh_mass" value="16.0" />
   <xacro:property name="thigh_ixx" value="${(1.0/12.0) * thigh_mass * (3 * thigh_radius * thigh_radius + thigh_length * thigh_length)}" />
   <xacro:property name="thigh_iyy" value="${(1.0/12.0) * thigh_mass * (3 * thigh_radius * thigh_radius + thigh_length * thigh_length)}" />
   <xacro:property name="thigh_izz" value="${0.5 * thigh_mass * thigh_radius * thigh_radius}" />
 
   <!-- Knee properties -->
   <xacro:property name="knee_radius" value="0.04" />
-  <xacro:property name="knee_mass" value="0.4" />
+  <xacro:property name="knee_mass" value="0.35" />
   <xacro:property name="knee_ixx" value="${0.4 * knee_mass * knee_radius * knee_radius}" />
   <xacro:property name="knee_iyy" value="${0.4 * knee_mass * knee_radius * knee_radius}" />
   <xacro:property name="knee_izz" value="${0.4 * knee_mass * knee_radius * knee_radius}" />
@@ -51,7 +51,7 @@
   <!-- Shin properties -->
   <xacro:property name="shin_radius" value="0.06" />
   <xacro:property name="shin_length" value="0.43" />
-  <xacro:property name="shin_mass" value="8.1" />
+  <xacro:property name="shin_mass" value="7.3" />
   <xacro:property name="shin_ixx" value="${(1.0/12.0) * shin_mass * (3 * shin_radius * shin_radius + shin_length * shin_length)}" />
   <xacro:property name="shin_iyy" value="${(1.0/12.0) * shin_mass * (3 * shin_radius * shin_radius + shin_length * shin_length)}" />
   <xacro:property name="shin_izz" value="${0.5 * shin_mass * shin_radius * shin_radius}" />
@@ -68,7 +68,7 @@
   <xacro:property name="foot_width" value="0.11" />
   <xacro:property name="foot_height" value="0.05" />
   <xacro:property name="foot_offset_front" value="0.05" />
-  <xacro:property name="foot_mass" value="2.1" />
+  <xacro:property name="foot_mass" value="2.0" />
   <xacro:property name="foot_ixx" value="${(1.0/12.0) * foot_mass * (foot_width * foot_width + foot_height * foot_height)}" />
   <xacro:property name="foot_iyy" value="${(1.0/12.0) * foot_mass * (foot_length * foot_length + foot_height * foot_height)}" />
   <xacro:property name="foot_izz" value="${(1.0/12.0) * foot_mass * (foot_length * foot_length + foot_width * foot_width)}" />
@@ -83,7 +83,7 @@
   <!-- Arm properties -->
   <xacro:property name="arm_radius" value="0.045" />
   <xacro:property name="arm_length" value="0.30" />
-  <xacro:property name="arm_mass" value="1.6" />
+  <xacro:property name="arm_mass" value="1.5" />
   <xacro:property name="arm_ixx" value="${(1.0/12.0) * arm_mass * (3 * arm_radius * arm_radius + arm_length * arm_length)}" />
   <xacro:property name="arm_iyy" value="${(1.0/12.0) * arm_mass * (3 * arm_radius * arm_radius + arm_length * arm_length)}" />
   <xacro:property name="arm_izz" value="${0.5 * arm_mass * arm_radius * arm_radius}" />
@@ -91,7 +91,7 @@
   <!-- Forearm properties -->
   <xacro:property name="forearm_radius" value="0.04" />
   <xacro:property name="forearm_length" value="0.26" />
-  <xacro:property name="forearm_mass" value="1.0" />
+  <xacro:property name="forearm_mass" value="0.9" />
   <xacro:property name="forearm_ixx" value="${(1.0/12.0) * forearm_mass * (3 * forearm_radius * forearm_radius + forearm_length * forearm_length)}" />
   <xacro:property name="forearm_iyy" value="${(1.0/12.0) * forearm_mass * (3 * forearm_radius * forearm_radius + forearm_length * forearm_length)}" />
   <xacro:property name="forearm_izz" value="${0.5 * forearm_mass * forearm_radius * forearm_radius}" />
@@ -100,7 +100,7 @@
   <xacro:property name="hand_length" value="0.18" />
   <xacro:property name="hand_width" value="0.09" />
   <xacro:property name="hand_height" value="0.03" />
-  <xacro:property name="hand_mass" value="0.6" />
+  <xacro:property name="hand_mass" value="0.5" />
   <xacro:property name="hand_ixx" value="${(1.0/12.0) * hand_mass * (hand_width * hand_width + hand_height * hand_height)}" />
   <xacro:property name="hand_iyy" value="${(1.0/12.0) * hand_mass * (hand_length * hand_length + hand_height * hand_height)}" />
   <xacro:property name="hand_izz" value="${(1.0/12.0) * hand_mass * (hand_length * hand_length + hand_width * hand_width)}" />
