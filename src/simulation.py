@@ -78,7 +78,7 @@ class Simulation(gym.Env):
         self.lock_per_second = 0.5  # lock/s
         self.lock_time = 0.5  # s
         self.action_noise_std = 1e-3
-        self.max_motor_torque = 500.0  # Nm
+        self.max_motor_torque = 250.0  # Nm
 
         # Configurar ambiente de simulação PRIMEIRO
         self.setup_sim_env()
@@ -408,9 +408,12 @@ class Simulation(gym.Env):
 
         robot_position, _, _, _ = self.robot.get_imu_position_velocity_orientation()
         is_in_ramp, ramp_type = self.robot.is_in_ramp(robot_position[0])
+        current_torque = self.max_motor_torque
 
         if is_in_ramp:
             max_motor_velocity = self.max_motor_velocity * 0.6
+            if ramp_type == "asc":
+                current_torque = self.max_motor_torque * 2
         else:
             max_motor_velocity = self.max_motor_velocity
 
@@ -428,7 +431,7 @@ class Simulation(gym.Env):
                 if self.joint_lock_timers[i] > 0:
                     self.target_positions[i] = joint_positions[i]
 
-        forces = [self.max_motor_torque] * self.action_dim
+        forces = [current_torque] * self.action_dim
 
         p.setJointMotorControlArray(
             bodyIndex=self.robot.id,
