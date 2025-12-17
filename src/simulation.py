@@ -78,7 +78,7 @@ class Simulation(gym.Env):
         self.lock_per_second = 0.5  # lock/s
         self.lock_time = 0.5  # s
         self.action_noise_std = 1e-3
-        self.max_motor_torque = 250.0  # Nm
+        self.max_motor_torque = 350.0  # Nm
 
         # Configurar ambiente de simulação PRIMEIRO
         self.setup_sim_env()
