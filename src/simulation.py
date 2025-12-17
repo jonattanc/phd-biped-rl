@@ -78,7 +78,7 @@ class Simulation(gym.Env):
         self.lock_per_second = 0.5  # lock/s
         self.lock_time = 0.5  # s
         self.action_noise_std = 1e-3
-        self.max_motor_torque = 350.0  # Nm
+        self.max_motor_torque = 500.0  # Nm
 
         # Configurar ambiente de simulação PRIMEIRO
         self.setup_sim_env()
@@ -406,7 +406,12 @@ class Simulation(gym.Env):
 
         joint_positions, joint_velocities = self.robot.get_joint_states()
 
-        max_step_size = self.max_motor_velocity * self.time_step_s
+        if self.is_in_ramp:
+            max_motor_velocity = self.max_motor_velocity * 0.6
+        else:
+            max_motor_velocity = self.max_motor_velocity
+
+        max_step_size = max_motor_velocity * self.time_step_s
         self.target_positions = [current_angle + action_value * max_step_size for current_angle, action_value in zip(joint_positions, action)]
 
         if self.environment.name == "PRB":
@@ -494,7 +499,7 @@ class Simulation(gym.Env):
         self.robot_left_foot_roll = self.robot_left_foot_orientation[0]
         self.robot_right_foot_pitch = self.robot_right_foot_orientation[1]
         self.robot_left_foot_pitch = self.robot_left_foot_orientation[1]
-        self.is_in_ramp = self.robot.is_in_ramp(self.robot_x_position)
+        self.is_in_ramp, self.ramp_type = self.robot.is_in_ramp(self.robot_x_position)
 
         self.last_joint_velocities = self.joint_velocities
         self.joint_positions, self.joint_velocities = self.robot.get_joint_states()

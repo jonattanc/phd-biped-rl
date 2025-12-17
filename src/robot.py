@@ -305,10 +305,13 @@ class Robot:
         right_foot_x = right_foot_state[0][0]
         left_foot_x = left_foot_state[0][0]
 
-        if self.is_in_ramp(right_foot_x):
+        right_in_ramp, right_ramp_type = self.is_in_ramp(right_foot_x)
+        left_in_ramp, left_ramp_type = self.is_in_ramp(left_foot_x)
+        
+        if right_in_ramp:
             right_foot_orientation[1] -= self.ramp_signal * self.ramp_angle_rad
-
-        if self.is_in_ramp(left_foot_x):
+        
+        if left_in_ramp:
             left_foot_orientation[1] -= self.ramp_signal * self.ramp_angle_rad
 
         return right_foot_orientation, left_foot_orientation
@@ -482,17 +485,16 @@ class Robot:
 
     def get_fixed_height(self, z, x):
         if self.env_name == "PRA" or self.env_name == "PRD":
-            if x < self.ramp_start:
-                ramp_height = 0
-
-            elif x < self.ramp_end:
+            is_ramp, ramp_type = self.is_in_ramp(x)
+            if not is_ramp:
+                if x < self.ramp_start:
+                    ramp_height = 0
+                else:  
+                    ramp_height = -self.ramp_signal * self.ramp_height
+            else:
                 ramp_height = -self.ramp_signal * (x - self.ramp_start) * math.tan(self.ramp_angle_rad)
 
-            else:
-                ramp_height = -self.ramp_signal * self.ramp_height
-
             return z + ramp_height
-
         else:
             return z
 
@@ -502,7 +504,8 @@ class Robot:
                 return False
 
             elif x < self.ramp_end:
-                return True
+                ramp_type = "asc" if self.env_name == "PRA" else "desc"
+                return True, ramp_type
 
             else:
                 return False
