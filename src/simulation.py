@@ -406,7 +406,10 @@ class Simulation(gym.Env):
 
         joint_positions, joint_velocities = self.robot.get_joint_states()
 
-        if self.is_in_ramp:
+        robot_position, _, _, _ = self.robot.get_imu_position_velocity_orientation()
+        is_in_ramp, ramp_type = self.robot.is_in_ramp(robot_position[0])
+
+        if is_in_ramp:
             max_motor_velocity = self.max_motor_velocity * 0.6
         else:
             max_motor_velocity = self.max_motor_velocity
@@ -512,7 +515,11 @@ class Simulation(gym.Env):
         self.episode_termination = "none"
 
         # Queda
-        if self.robot_z_ramp_position < self.fall_threshold:
+        fall_height = self.fall_threshold
+        is_in_ramp, ramp_type = self.robot.is_in_ramp(self.robot_x_position)
+        if is_in_ramp and ramp_type == "asc":
+            fall_height = self.fall_threshold * 1.2
+        if self.robot_z_ramp_position < fall_height:
             self.episode_terminated = True
             self.episode_termination = "fell"
 

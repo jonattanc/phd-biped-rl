@@ -307,10 +307,10 @@ class Robot:
 
         right_in_ramp, right_ramp_type = self.is_in_ramp(right_foot_x)
         left_in_ramp, left_ramp_type = self.is_in_ramp(left_foot_x)
-        
+
         if right_in_ramp:
             right_foot_orientation[1] -= self.ramp_signal * self.ramp_angle_rad
-        
+
         if left_in_ramp:
             left_foot_orientation[1] -= self.ramp_signal * self.ramp_angle_rad
 
@@ -501,17 +501,17 @@ class Robot:
     def is_in_ramp(self, x):
         if self.env_name == "PRA" or self.env_name == "PRD":
             if x < self.ramp_start:
-                return False
+                return False, "none"
 
             elif x < self.ramp_end:
                 ramp_type = "asc" if self.env_name == "PRA" else "desc"
                 return True, ramp_type
 
             else:
-                return False
+                return False, "none"
 
         else:
-            return False
+            return False, "none"
 
     def get_example_action(self, t):
         """Gera uma ação de exemplo baseada no tempo"""
