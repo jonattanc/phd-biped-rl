@@ -52,7 +52,7 @@ def process_runner(
 
         reward_system.set_is_fast_td3(is_fast_td3)
 
-        robot = Robot(logger, name=selected_robot, is_fast_td3=is_fast_td3)
+        robot = Robot(logger, name=selected_robot)
         environment = Environment(logger, name=selected_environment, robot=robot, is_fast_td3=is_fast_td3)
         sim = Simulation(
             logger,

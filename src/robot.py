@@ -8,10 +8,9 @@ import math
 
 
 class Robot:
-    def __init__(self, logger, name, is_fast_td3=False):
+    def __init__(self, logger, name):
         self.logger = logger
         self.name = name
-        self.is_fast_td3 = is_fast_td3
 
         self.id = None
         self.revolute_indices = None
