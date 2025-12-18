@@ -18,12 +18,6 @@
       "min_value": -1.0,
       "max_value": 1.0
     },
-    "center_bonus": {
-      "weight": 1.0,
-      "enabled": true,
-      "min_value": 0,
-      "max_value": 50
-    },
     "pitch_forward_bonus": {
       "weight": 1.0,
       "enabled": true,
@@ -35,6 +29,12 @@
       "enabled": true,
       "min_value": 0,
       "max_value": 1.0
+    },
+    "center_bonus": {
+      "weight": 0.1,
+      "enabled": true,
+      "min_value": 0,
+      "max_value": 50
     },
     "knee_flexion": {
       "weight": 0.06,
@@ -147,12 +147,6 @@
     "stability_pitch": {
       "weight": -0.0001,
       "enabled": true,
-      "min_value": -1,
-      "max_value": 0
-    },
-    "stability_original_pitch": {
-      "weight": -0.0001,
-      "enabled": false,
       "min_value": -1,
       "max_value": 0
     },

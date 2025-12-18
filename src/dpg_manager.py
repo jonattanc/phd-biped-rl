@@ -51,7 +51,6 @@ class PhaseManager:
             1: {},  # Fase 1: usa 100% dos pesos do default.json
             2: {    # Fase 2: Foco em Progresso e Estabilidade
                 'progress': 4.0,  
-                'center_bonus': 4.0,
                 'xcom_stability': 4.0, 
                 'simple_stability': 3.0, 
                 'pitch_forward_bonus': 3.0,   
@@ -67,8 +66,7 @@ class PhaseManager:
                 'y_axis_deviation_square_penalty': 10.0, 
             },
             3: {    # Fase 3: Foco em Sucesso e Velocidade
-                'progress': 5.0, 
-                'center_bonus': 5.0,          
+                'progress': 5.0,          
                 'xcom_stability': 6.0,  
                 'simple_stability': 5.0, 
                 'pitch_forward_bonus': 4.0,  

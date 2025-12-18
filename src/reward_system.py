@@ -233,24 +233,11 @@ class RewardSystem:
 
         # DPG - 5. ESTABILIDADE DA MARCHA (Controle postural)
         if self.is_component_enabled("stability_pitch"):
-            is_on_ramp = sim.robot.is_in_ramp(sim.robot_x_position)
-            # Na rampa, permitir pitch maior
-            if is_on_ramp:
-                target_pitch = math.radians(4)  
-            else:
-                target_pitch = sim.target_pitch_rad
-            self.components["stability_pitch"].value = (sim.robot_pitch - target_pitch) ** 2
+            self.components["stability_pitch"].value = (sim.robot_pitch - sim.target_pitch_rad) ** 2
             weight_multiplier = weight_adjustments.get("stability_pitch", 1.0)
             adjusted_weight = self.components["stability_pitch"].weight * weight_multiplier
 
             total_reward += self.components["stability_pitch"].value * adjusted_weight
-
-        if self.is_component_enabled("stability_original_pitch"):
-            self.components["stability_original_pitch"].value = (sim.robot_pitch - sim.target_pitch_rad) ** 2
-            weight_multiplier = weight_adjustments.get("stability_original_pitch", 1.0)
-            adjusted_weight = self.components["stability_original_pitch"].weight * weight_multiplier
-
-            total_reward += self.components["stability_original_pitch"].value * adjusted_weight
 
         # DPG - 6. ESTABILIDADE DA MARCHA (Controle postural)
         if self.is_component_enabled("stability_yaw"):
