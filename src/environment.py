@@ -185,47 +185,25 @@ class Environment:
         self.robot.update_env(env_name)
 
     def get_environment_dict_settings(self, env):
-        if self.is_fast_td3:
-            environment_settings = {"default": {"lateral_friction": 2.0, "spinning_friction": 1.0, "rolling_friction": 0.001, "restitution": 0.0}}
-            if env == "PBA":
-                environment_settings["middle_link"] = {
-                    "lateral_friction": 0.4,
-                    "spinning_friction": 0.2,
-                    "rolling_friction": environment_settings["default"]["rolling_friction"],
-                    "restitution": environment_settings["default"]["restitution"],
-                }
-            elif env == "PG":
-                environment_settings["middle_link"] = {
-                    "lateral_friction": 1.5,
-                    "spinning_friction": 0.75,
-                    "rolling_friction": environment_settings["default"]["rolling_friction"],
-                    "restitution": environment_settings["default"]["restitution"],
-                    "contactStiffness": 5e4,
-                    "contactDamping": 500,
-                }
-            elif env == "PRA" or env == "PRA1" or env == "PRD" or env == "PRD1":
-                environment_settings["middle_link"] = {"lateral_friction": 2.0, "spinning_friction": 2.0, "rolling_friction": 0.01, "restitution": 0.0}
-
-        else:
-            environment_settings = {"default": {"lateral_friction": 2.0, "spinning_friction": 1.0, "rolling_friction": 0.001, "restitution": 0.0}}
-            if env == "PBA":
-                environment_settings["middle_link"] = {
-                    "lateral_friction": 0.85,
-                    "spinning_friction": 0.425,
-                    "rolling_friction": environment_settings["default"]["rolling_friction"],
-                    "restitution": environment_settings["default"]["restitution"],
-                }
-            elif env == "PG":
-                environment_settings["middle_link"] = {
-                    "lateral_friction": environment_settings["default"]["lateral_friction"],
-                    "spinning_friction": environment_settings["default"]["spinning_friction"],
-                    "rolling_friction": environment_settings["default"]["rolling_friction"],
-                    "restitution": environment_settings["default"]["restitution"],
-                    "contactStiffness": 5e4,
-                    "contactDamping": 500,
-                }
-            elif env == "PRA" or env == "PRD":
-                environment_settings["middle_link"] = {"lateral_friction": 10.0, "spinning_friction": 2.0, "rolling_friction": 0.01, "restitution": 0.0}
+        environment_settings = {"default": {"lateral_friction": 2.0, "spinning_friction": 1.0, "rolling_friction": 0.001, "restitution": 0.0}}
+        if env == "PBA":
+            environment_settings["middle_link"] = {
+                "lateral_friction": 0.85,
+                "spinning_friction": 0.425,
+                "rolling_friction": environment_settings["default"]["rolling_friction"],
+                "restitution": environment_settings["default"]["restitution"],
+            }
+        elif env == "PG":
+            environment_settings["middle_link"] = {
+                "lateral_friction": environment_settings["default"]["lateral_friction"],
+                "spinning_friction": environment_settings["default"]["spinning_friction"],
+                "rolling_friction": environment_settings["default"]["rolling_friction"],
+                "restitution": environment_settings["default"]["restitution"],
+                "contactStiffness": 5e4,
+                "contactDamping": 500,
+            }
+        elif env == "PRA" or env == "PRA1" or env == "PRD" or env == "PRD1":
+            environment_settings["middle_link"] = {"lateral_friction": 10.0, "spinning_friction": 2.0, "rolling_friction": 0.01, "restitution": 0.0}
 
         self.logger.info(f"{env} environment_settings: {environment_settings}")
         return environment_settings

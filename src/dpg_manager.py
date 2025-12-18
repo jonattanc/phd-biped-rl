@@ -18,7 +18,7 @@ class PhaseManager:
         
         self.phase1_success_counter = 0  
         self.phase2_success_counter = 0  
-        self.phase1_success_criterio = 2.5  # Distancia fase 1 em metros
+        self.phase1_success_criterio = 2.0  # Distancia fase 1 em metros
         self.phase2_success_criterio = 7.0  # Distancia fase 2 em metros
         self.phase1_success_threshold = 10  # Vezes fase 1 em metros
         self.phase2_success_threshold = 20  # Vezes fase 2 em metros
