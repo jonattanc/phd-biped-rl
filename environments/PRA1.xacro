@@ -1,0 +1,107 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="piso_rampa_ascendente_inicial">
+  <!-- Plane properties -->
+  <xacro:property name="initial_section_length" value="1.0" />
+  <xacro:property name="middle_section_length" value="7.977656" /> <!-- cos(4.16 deg) -->
+  <xacro:property name="final_section_length" value="1.0" />
+  <xacro:property name="plane_width" value="2.5" />
+  <xacro:property name="plane_height" value="0.1" />
+  <xacro:property name="ramp_height" value="0.580397" /> <!-- sin(4.16 deg) -->
+  <xacro:property name="ramp_hypotenuse" value="8.0" />
+  <xacro:property name="ramp_angle_deg" value="4.16" />
+  <xacro:property name="section_mass" value="10000" />
+  <xacro:property name="section_ixx" value="1000" />
+  <xacro:property name="section_iyy" value="1000" />
+  <xacro:property name="section_izz" value="1000" />
+
+  <!-- Materials -->
+  <material name="initial_section_material">
+    <color rgba="0.8 0.8 0.8 1"/>
+  </material>
+  <material name="middle_section_material">
+    <color rgba="0.6 0.6 0.6 1"/>
+  </material>
+  <material name="final_section_material">
+    <color rgba="0.8 0.8 0.8 1"/>
+  </material>
+  
+  <!-- Base Link - Initial Section -->
+  <link name="initial_link">
+    <inertial>
+      <origin xyz="0 0 -${plane_height/2}"/>
+      <mass value="${section_mass}"/>
+      <inertia ixx="${section_ixx}" ixy="0" ixz="0" iyy="${section_iyy}" iyz="0" izz="${section_izz}"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 -${plane_height/2}"/>
+      <geometry>
+        <box size="${initial_section_length} ${plane_width} ${plane_height}"/>
+      </geometry>
+      <material name="initial_section_material"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 -${plane_height/2}"/>
+      <geometry>
+        <box size="${initial_section_length} ${plane_width} ${plane_height}"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- Middle Section -->
+  <link name="middle_link">
+    <inertial>
+      <origin xyz="0 0 0"/>
+      <mass value="${section_mass}"/>
+      <inertia ixx="${section_ixx}" ixy="0" ixz="0" iyy="${section_iyy}" iyz="0" izz="${section_izz}"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="ramp_up_p1.stl" scale="1 1 1"/>
+      </geometry>
+      <material name="middle_section_material"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="ramp_up_p1.stl" scale="1 1 1"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- Final Section -->
+  <link name="final_link">
+    <inertial>
+      <origin xyz="0 0 -${plane_height/2}"/>
+      <mass value="${section_mass}"/>
+      <inertia ixx="${section_ixx}" ixy="0" ixz="0" iyy="${section_iyy}" iyz="0" izz="${section_izz}"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 -${plane_height/2}"/>
+      <geometry>
+        <box size="${final_section_length} ${plane_width} ${plane_height}"/>
+      </geometry>
+      <material name="final_section_material"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 -${plane_height/2}"/>
+      <geometry>
+        <box size="${final_section_length} ${plane_width} ${plane_height}"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- Joints to connect all sections -->
+  <joint name="initial_to_middle_joint" type="fixed">
+    <parent link="initial_link"/>
+    <child link="middle_link"/>
+    <origin xyz="${initial_section_length/2} ${-plane_width/2} 0" rpy="0 0 0"/>
+  </joint>
+
+  <joint name="middle_to_final_joint" type="fixed">
+    <parent link="middle_link"/>
+    <child link="final_link"/>
+    <origin xyz="${middle_section_length + final_section_length/2} ${plane_width/2} ${ramp_height}" rpy="0 0 0"/>
+  </joint>
+
+</robot>

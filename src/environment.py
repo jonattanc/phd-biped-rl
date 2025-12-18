@@ -70,15 +70,11 @@ class Environment:
         self.name = name
         self.robot = robot
         self.is_fast_td3 = is_fast_td3
+        self.current_phase = 1
 
         self.id = None
         self.selected_env_index = -1
-
-        if self.name == "CC":
-            self.env_list = ["PR", "PBA", "PG", "PRA", "PRB", "PRD"]
-
-        else:
-            self.env_list = [self.name]
+        self.urdf_path = None
 
         self.environment_dir = os.path.join(utils.PROJECT_ROOT, "environments")
         self.environment_tmp_dir = os.path.join(utils.TMP_PATH, "environments")
@@ -86,15 +82,75 @@ class Environment:
         if not os.path.exists(self.environment_tmp_dir):
             os.makedirs(self.environment_tmp_dir, exist_ok=True)
 
-        self.environment_dict_settings = []
+        create_ramp_stl("PRA1.xacro", "ramp_up_p1.stl", ascending=True)
+        create_ramp_stl("PRA.xacro", "ramp_up.stl", ascending=True)
+        
+        self._init_env_list()
 
+        # Gerar URDF e configurações para cada ambiente na lista
+        self.environment_dict_settings = []
         for env_name in self.env_list:
-            self.urdf_path = self._generate_urdf(env_name)
+            urdf_path = self._generate_urdf(env_name)
             self.robot.update_env(env_name)
             self.environment_dict_settings.append(self.get_environment_dict_settings(env_name))
 
+            # Definir o primeiro URDF como caminho padrão
+            if self.urdf_path is None:
+                self.urdf_path = urdf_path
+
         self.environment_settings = self.environment_dict_settings[0]
 
+    def _init_env_list(self):
+        """Atualiza a lista de ambientes com base na fase atual (apenas para FastTD3)"""
+        if self.is_fast_td3 and self.current_phase in [1, 2]:
+            if self.name == "CC":
+                self.env_list = ["PR", "PBA", "PG", "PRA1", "PRB", "PRD"]
+            else:
+                self.env_list = [self.name]
+        else:
+            if self.name == "CC":
+                self.env_list = ["PR", "PBA", "PG", "PRA", "PRB", "PRD"]
+            else:     
+                self.env_list = [self.name]
+       
+    def _update_env_list(self):
+        """Atualiza a lista de ambientes (apenas para FastTD3 ao mudar de fase)"""
+        if not self.is_fast_td3:
+            return  # Não precisa atualizar para não-FastTD3
+
+        # Salvar a lista anterior para comparação
+        old_env_list = self.env_list.copy() if hasattr(self, 'env_list') else []
+
+        # Definir nova lista
+        self._init_env_list()
+
+        # Verificar se a lista mudou
+        if old_env_list != self.env_list:
+            self.logger.info(f"🔄 Lista de ambientes atualizada: {self.env_list}")
+
+            # Regenerar URDFs e configurações apenas se a lista mudou
+            self.environment_dict_settings = []
+            for env_name in self.env_list:
+                self._generate_urdf(env_name)
+                self.robot.update_env(env_name)
+                self.environment_dict_settings.append(self.get_environment_dict_settings(env_name))
+
+            # Ajustar índice se necessário (não resetar para -1!)
+            if self.selected_env_index >= len(self.env_list):
+                self.selected_env_index = len(self.env_list) - 1
+
+            # Atualizar ambiente atual com o novo índice
+            env_name = self.env_list[self.selected_env_index]
+            self.urdf_path = os.path.join(self.environment_tmp_dir, f"{env_name}.urdf")
+            self.environment_settings = self.environment_dict_settings[self.selected_env_index]
+            self.robot.update_env(env_name)
+
+    def set_phase(self, phase):
+        """Apenas para FastTD3: atualiza a fase atual das rampas"""
+        if self.is_fast_td3:
+            self.current_phase = phase
+            self._update_env_list()
+            
     def _generate_urdf(self, env_name):
         xacro_path = os.path.join(self.environment_dir, f"{env_name}.xacro")
         urdf_path = os.path.join(self.environment_tmp_dir, f"{env_name}.urdf")
@@ -108,16 +164,22 @@ class Environment:
         if self.name != "CC":
             return
 
+        # Incrementar índice
         self.selected_env_index += 1
 
+        # Verificar se ultrapassou o final da lista
         if self.selected_env_index >= len(self.env_list):
-            self.selected_env_index = 0
+            self.selected_env_index = 0  # Reiniciar do primeiro ambiente
 
         env_name = self.env_list[self.selected_env_index]
+
+        # Atualizar caminho do URDF
         self.urdf_path = os.path.join(self.environment_tmp_dir, f"{env_name}.urdf")
 
+        # Atualizar configurações do ambiente
         self.environment_settings = self.environment_dict_settings[self.selected_env_index]
 
+        # Atualizar o robô para o novo ambiente
         self.robot.update_env(env_name)
 
     def get_environment_dict_settings(self, env):

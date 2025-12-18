@@ -80,7 +80,7 @@ class Simulation(gym.Env):
         self.action_noise_std = 1e-3
 
         if self.is_fast_td3:
-            self.max_motor_torque = 350.0  # Nm
+            self.max_motor_torque = 500.0  # Nm
         else:
             self.max_motor_torque = 250.0  # Nm
 
@@ -296,6 +296,9 @@ class Simulation(gym.Env):
             self.setup_sim_env()
 
         else:
+            if self.is_fast_td3 and hasattr(self, 'agent') and self.agent:
+                current_phase = self.agent.model.phase_manager.current_phase
+                self.environment.set_phase(current_phase)
             self.soft_env_reset()
 
         # Obter posição inicial
@@ -586,7 +589,7 @@ class Simulation(gym.Env):
                 # Verificar transição de fase (sempre logar transições)
                 if transition_occurred:
                     phase_info = self.agent.model.get_phase_info()
-
+        
                     # Aumentar timeout em 5 segundos
                     old_timeout = self.episode_training_timeout_s
                     self.episode_training_timeout_s += 5.0

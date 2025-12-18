@@ -18,6 +18,12 @@
       "min_value": -1.0,
       "max_value": 1.0
     },
+    "center_bonus": {
+      "weight": 1.0,
+      "enabled": true,
+      "min_value": 0,
+      "max_value": 50
+    },
     "pitch_forward_bonus": {
       "weight": 1.0,
       "enabled": true,
@@ -203,12 +209,6 @@
       "enabled": false,
       "min_value": -1,
       "max_value": 1
-    },
-    "center_bonus": {
-      "weight": 5.0,
-      "enabled": false,
-      "min_value": 0,
-      "max_value": 50
     },
     "warning_penalty": {
       "weight": -3.0,

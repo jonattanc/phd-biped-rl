@@ -58,6 +58,7 @@ class RewardSystem:
             weight_adjustments = {
                 "gait_state_change": 1.0,
                 "progress": 1.0,
+                "center_bonus": 1.0,
                 "knee_flexion": 1.0,
                 "efficiency_bonus": 1.0,
                 "foot_clearance": 1.0,
@@ -102,6 +103,14 @@ class RewardSystem:
             adjusted_weight = self.components["progress"].weight * weight_multiplier
 
             total_reward += self.components["progress"].value * adjusted_weight
+
+        if self.is_component_enabled("center_bonus"):
+            if distance_y_from_center <= self.safe_zone:
+                safe_factor = 1.0 - (distance_y_from_center / self.safe_zone)
+                weight_multiplier = weight_adjustments.get("center_bonus", 1.0)
+                adjusted_weight = self.components["center_bonus"].weight * weight_multiplier
+
+                total_reward += self.components["center_bonus"].value * adjusted_weight
 
         # DPG - 3. Flexão dos joelhos
         if self.is_component_enabled("knee_flexion"):
@@ -224,7 +233,13 @@ class RewardSystem:
 
         # DPG - 5. ESTABILIDADE DA MARCHA (Controle postural)
         if self.is_component_enabled("stability_pitch"):
-            self.components["stability_pitch"].value = (sim.robot_pitch - sim.target_pitch_rad) ** 2
+            is_on_ramp = sim.robot.is_in_ramp(sim.robot_x_position)
+            # Na rampa, permitir pitch maior
+            if is_on_ramp:
+                target_pitch = math.radians(4)  
+            else:
+                target_pitch = sim.target_pitch_rad
+            self.components["stability_pitch"].value = (sim.robot_pitch - target_pitch) ** 2
             weight_multiplier = weight_adjustments.get("stability_pitch", 1.0)
             adjusted_weight = self.components["stability_pitch"].weight * weight_multiplier
 
@@ -425,12 +440,6 @@ class RewardSystem:
             penalty = distance_y_from_center**3
             self.components["y_axis_deviation_cube_penalty"].value = penalty
             total_reward += penalty * self.components["y_axis_deviation_cube_penalty"].weight
-
-        if self.is_component_enabled("center_bonus"):
-            if distance_y_from_center <= self.safe_zone:
-                safe_factor = 1.0 - (distance_y_from_center / self.safe_zone)
-                self.components["center_bonus"].value = safe_factor
-                total_reward += safe_factor * self.components["center_bonus"].weight
 
         if self.is_component_enabled("warning_penalty"):
             if distance_y_from_center > self.safe_zone and distance_y_from_center <= self.warning_zone:
