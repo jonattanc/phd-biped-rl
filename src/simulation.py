@@ -406,32 +406,50 @@ class Simulation(gym.Env):
 
         joint_positions, joint_velocities = self.robot.get_joint_states()
 
-        robot_position, _, _, _ = self.robot.get_imu_position_velocity_orientation()
-        is_in_ramp, ramp_type = self.robot.is_in_ramp(robot_position[0])
-        current_torque = self.max_motor_torque
+        if self.is_fast_td3:
+            robot_position, _, _, _ = self.robot.get_imu_position_velocity_orientation()
+            is_in_ramp, ramp_type = self.robot.is_in_ramp(robot_position[0])
+            current_torque = self.max_motor_torque
 
-        if is_in_ramp:
-            max_motor_velocity = self.max_motor_velocity * 0.6
-            if ramp_type == "asc":
-                current_torque = self.max_motor_torque * 2
+            if is_in_ramp:
+                max_motor_velocity = self.max_motor_velocity * 0.6
+                if ramp_type == "asc":
+                    current_torque = self.max_motor_torque * 2
+            else:
+                max_motor_velocity = self.max_motor_velocity
+
+            max_step_size = max_motor_velocity * self.time_step_s
+            self.target_positions = [current_angle + action_value * max_step_size for current_angle, action_value in zip(joint_positions, action)]
+
+            if self.environment.name == "PRB":
+                for i in range(self.action_dim):
+                    if self.joint_lock_timers[i] > 0:
+                        self.joint_lock_timers[i] -= 1
+
+                    if np.random.rand() < self.lock_probability:
+                        self.joint_lock_timers[i] = self.lock_duration_steps
+
+                    if self.joint_lock_timers[i] > 0:
+                        self.target_positions[i] = joint_positions[i]
+
+            forces = [current_torque] * self.action_dim
+
         else:
-            max_motor_velocity = self.max_motor_velocity
+            max_step_size = self.max_motor_velocity * self.time_step_s
+            self.target_positions = [current_angle + action_value * max_step_size for current_angle, action_value in zip(joint_positions, action)]
 
-        max_step_size = max_motor_velocity * self.time_step_s
-        self.target_positions = [current_angle + action_value * max_step_size for current_angle, action_value in zip(joint_positions, action)]
+            if self.environment.name == "PRB":
+                for i in range(self.action_dim):
+                    if self.joint_lock_timers[i] > 0:
+                        self.joint_lock_timers[i] -= 1
 
-        if self.environment.name == "PRB":
-            for i in range(self.action_dim):
-                if self.joint_lock_timers[i] > 0:
-                    self.joint_lock_timers[i] -= 1
+                    if np.random.rand() < self.lock_probability:
+                        self.joint_lock_timers[i] = self.lock_duration_steps
 
-                if np.random.rand() < self.lock_probability:
-                    self.joint_lock_timers[i] = self.lock_duration_steps
+                    if self.joint_lock_timers[i] > 0:
+                        self.target_positions[i] = joint_positions[i]
 
-                if self.joint_lock_timers[i] > 0:
-                    self.target_positions[i] = joint_positions[i]
-
-        forces = [current_torque] * self.action_dim
+            forces = [self.max_motor_torque] * self.action_dim
 
         p.setJointMotorControlArray(
             bodyIndex=self.robot.id,
@@ -505,7 +523,10 @@ class Simulation(gym.Env):
         self.robot_left_foot_roll = self.robot_left_foot_orientation[0]
         self.robot_right_foot_pitch = self.robot_right_foot_orientation[1]
         self.robot_left_foot_pitch = self.robot_left_foot_orientation[1]
-        self.is_in_ramp, self.ramp_type = self.robot.is_in_ramp(self.robot_x_position)
+        if self.is_fast_td3:
+            self.is_in_ramp, self.ramp_type = self.robot.is_in_ramp(self.robot_x_position)
+        else:
+            self.is_in_ramp = self.robot.is_in_ramp(self.robot_x_position)
 
         self.last_joint_velocities = self.joint_velocities
         self.joint_positions, self.joint_velocities = self.robot.get_joint_states()
@@ -518,13 +539,18 @@ class Simulation(gym.Env):
         self.episode_termination = "none"
 
         # Queda
-        fall_height = self.fall_threshold
-        is_in_ramp, ramp_type = self.robot.is_in_ramp(self.robot_x_position)
-        if is_in_ramp and ramp_type == "asc":
-            fall_height = self.fall_threshold * 1.2
-        if self.robot_z_ramp_position < fall_height:
-            self.episode_terminated = True
-            self.episode_termination = "fell"
+        if self.is_fast_td3:
+            fall_height = self.fall_threshold
+            is_in_ramp, ramp_type = self.robot.is_in_ramp(self.robot_x_position)
+            if is_in_ramp and ramp_type == "asc":
+                fall_height = self.fall_threshold * 1.2
+            if self.robot_z_ramp_position < fall_height:
+                self.episode_terminated = True
+                self.episode_termination = "fell"
+        else:
+            if self.robot_z_ramp_position < self.fall_threshold:
+                self.episode_terminated = True
+                self.episode_termination = "fell"
 
         # Desvio do caminho
         if abs(self.robot_yaw) >= self.yaw_threshold:

@@ -8,9 +8,10 @@ import math
 
 
 class Robot:
-    def __init__(self, logger, name):
+    def __init__(self, logger, name, is_fast_td3=False):
         self.logger = logger
         self.name = name
+        self.is_fast_td3 = is_fast_td3
 
         self.id = None
         self.revolute_indices = None
@@ -305,14 +306,22 @@ class Robot:
         right_foot_x = right_foot_state[0][0]
         left_foot_x = left_foot_state[0][0]
 
-        right_in_ramp, right_ramp_type = self.is_in_ramp(right_foot_x)
-        left_in_ramp, left_ramp_type = self.is_in_ramp(left_foot_x)
+        if self.is_fast_td3:
+            right_in_ramp, right_ramp_type = self.is_in_ramp(right_foot_x)
+            left_in_ramp, left_ramp_type = self.is_in_ramp(left_foot_x)
 
-        if right_in_ramp:
-            right_foot_orientation[1] -= self.ramp_signal * self.ramp_angle_rad
+            if right_in_ramp:
+                right_foot_orientation[1] -= self.ramp_signal * self.ramp_angle_rad
 
-        if left_in_ramp:
-            left_foot_orientation[1] -= self.ramp_signal * self.ramp_angle_rad
+            if left_in_ramp:
+                left_foot_orientation[1] -= self.ramp_signal * self.ramp_angle_rad
+
+        else:
+            if self.is_in_ramp(right_foot_x):
+                right_foot_orientation[1] -= self.ramp_signal * self.ramp_angle_rad
+
+            if self.is_in_ramp(left_foot_x):
+                left_foot_orientation[1] -= self.ramp_signal * self.ramp_angle_rad
 
         return right_foot_orientation, left_foot_orientation
 
@@ -484,34 +493,66 @@ class Robot:
             return 0.3
 
     def get_fixed_height(self, z, x):
-        if self.env_name == "PRA" or self.env_name == "PRD":
-            is_ramp, ramp_type = self.is_in_ramp(x)
-            if not is_ramp:
+        if self.is_fast_td3:
+            if self.env_name == "PRA" or self.env_name == "PRD":
+                is_ramp, ramp_type = self.is_in_ramp(x)
+                if not is_ramp:
+                    if x < self.ramp_start:
+                        ramp_height = 0
+                    else:
+                        ramp_height = -self.ramp_signal * self.ramp_height
+                else:
+                    ramp_height = -self.ramp_signal * (x - self.ramp_start) * math.tan(self.ramp_angle_rad)
+
+                return z + ramp_height
+            else:
+                return z
+
+        else:
+            if self.env_name == "PRA" or self.env_name == "PRD":
                 if x < self.ramp_start:
                     ramp_height = 0
-                else:  
-                    ramp_height = -self.ramp_signal * self.ramp_height
-            else:
-                ramp_height = -self.ramp_signal * (x - self.ramp_start) * math.tan(self.ramp_angle_rad)
 
-            return z + ramp_height
-        else:
-            return z
+                elif x < self.ramp_end:
+                    ramp_height = -self.ramp_signal * (x - self.ramp_start) * math.tan(self.ramp_angle_rad)
+
+                else:
+                    ramp_height = -self.ramp_signal * self.ramp_height
+
+                return z + ramp_height
+
+            else:
+                return z
 
     def is_in_ramp(self, x):
-        if self.env_name == "PRA" or self.env_name == "PRD":
-            if x < self.ramp_start:
-                return False, "none"
+        if self.is_fast_td3:
+            if self.env_name == "PRA" or self.env_name == "PRD":
+                if x < self.ramp_start:
+                    return False, "none"
 
-            elif x < self.ramp_end:
-                ramp_type = "asc" if self.env_name == "PRA" else "desc"
-                return True, ramp_type
+                elif x < self.ramp_end:
+                    ramp_type = "asc" if self.env_name == "PRA" else "desc"
+                    return True, ramp_type
+
+                else:
+                    return False, "none"
 
             else:
                 return False, "none"
 
         else:
-            return False, "none"
+            if self.env_name == "PRA" or self.env_name == "PRD":
+                if x < self.ramp_start:
+                    return False
+
+                elif x < self.ramp_end:
+                    return True
+
+                else:
+                    return False
+
+            else:
+                return False
 
     def get_example_action(self, t):
         """Gera uma ação de exemplo baseada no tempo"""

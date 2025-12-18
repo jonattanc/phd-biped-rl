@@ -240,6 +240,13 @@ class RewardSystem:
 
             total_reward += self.components["stability_pitch"].value * adjusted_weight
 
+        if self.is_component_enabled("stability_original_pitch"):
+            self.components["stability_original_pitch"].value = (sim.robot_pitch - sim.target_pitch_rad) ** 2
+            weight_multiplier = weight_adjustments.get("stability_original_pitch", 1.0)
+            adjusted_weight = self.components["stability_original_pitch"].weight * weight_multiplier
+
+            total_reward += self.components["stability_original_pitch"].value * adjusted_weight
+
         # DPG - 6. ESTABILIDADE DA MARCHA (Controle postural)
         if self.is_component_enabled("stability_yaw"):
             self.components["stability_yaw"].value = sim.robot_yaw**2
@@ -333,7 +340,7 @@ class RewardSystem:
             if current_pitch > 0:
                 if current_pitch <= 0.349:
                     normalized = current_pitch / 0.349
-                    pitch_bonus = 4.0 * normalized * (1.0 - normalized) 
+                    pitch_bonus = 4.0 * normalized * (1.0 - normalized)
                 else:
                     pitch_bonus = 0
             else:
@@ -457,20 +464,20 @@ class RewardSystem:
             return 0.0
 
         # Adicionar apenas 1 contador para alternância
-        if not hasattr(self, '_last_good_foot'):
+        if not hasattr(self, "_last_good_foot"):
             self._last_foot_air = None
 
         cross_gait_score = 0.0
- 
+
         # Perna direita no ar + braço esquerdo para trás
-        if not right_foot_contact and left_arm_angle > 0 and self._last_good_foot != 'right':
+        if not right_foot_contact and left_arm_angle > 0 and self._last_good_foot != "right":
             cross_gait_score += 0.5
-            self._last_good_foot = 'right'  
+            self._last_good_foot = "right"
 
         # Perna esquerda no ar + braço direito para trás
-        elif not left_foot_contact and right_arm_angle > 0 and self._last_good_foot != 'left':
+        elif not left_foot_contact and right_arm_angle > 0 and self._last_good_foot != "left":
             cross_gait_score += 0.5
-            self._last_good_foot = 'left'  
+            self._last_good_foot = "left"
 
         # Perna direita no ar + braço direito para trás (errado)
         if not right_foot_contact and right_arm_angle > 0:

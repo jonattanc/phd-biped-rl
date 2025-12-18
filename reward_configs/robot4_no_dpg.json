@@ -31,6 +31,12 @@
       "max_value": 0
     },
     "stability_pitch": {
+      "weight": -0.0001,
+      "enabled": false,
+      "min_value": -1,
+      "max_value": 0
+    },
+    "stability_original_pitch": {
       "weight": -0.004,
       "enabled": true,
       "min_value": -1,
