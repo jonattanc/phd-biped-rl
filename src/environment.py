@@ -84,6 +84,8 @@ class Environment:
 
         create_ramp_stl("PRA1.xacro", "ramp_up_p1.stl", ascending=True)
         create_ramp_stl("PRA.xacro", "ramp_up.stl", ascending=True)
+        create_ramp_stl("PRD1.xacro", "ramp_down_p1.stl", ascending=False)
+        create_ramp_stl("PRD.xacro", "ramp_down.stl", ascending=False)
         
         self._init_env_list()
 
@@ -104,7 +106,7 @@ class Environment:
         """Atualiza a lista de ambientes com base na fase atual (apenas para FastTD3)"""
         if self.is_fast_td3 and self.current_phase in [1, 2]:
             if self.name == "CC":
-                self.env_list = ["PR", "PBA", "PG", "PRA1", "PRB", "PRD"]
+                self.env_list = ["PR", "PBA", "PG", "PRA1", "PRB", "PRD1"]
             else:
                 self.env_list = [self.name]
         else:
@@ -201,7 +203,7 @@ class Environment:
                     "contactStiffness": 5e4,
                     "contactDamping": 500,
                 }
-            elif env == "PRA" or env == "PRD":
+            elif env == "PRA" or env == "PRA1" or env == "PRD" or env == "PRD1":
                 environment_settings["middle_link"] = {"lateral_friction": 2.0, "spinning_friction": 2.0, "rolling_friction": 0.01, "restitution": 0.0}
 
         else:
