@@ -139,7 +139,7 @@ class Environment:
                 "contactDamping": 500,
             }
         elif env == "PRA" or env == "PRD":
-            environment_settings["middle_link"] = {"lateral_friction": 10.0, "spinning_friction": 2.0, "rolling_friction": 0.01, "restitution": 0.0}
+            environment_settings["middle_link"] = {"lateral_friction": 4.0, "spinning_friction": 2.0, "rolling_friction": 0.01, "restitution": 0.0}
 
         self.logger.info(f"{env} environment_settings: {environment_settings}")
         return environment_settings

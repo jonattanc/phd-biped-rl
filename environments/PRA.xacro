@@ -2,13 +2,13 @@
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="piso_rampa_ascendente">
   <!-- Plane properties -->
   <xacro:property name="initial_section_length" value="1.0" />
-  <xacro:property name="middle_section_length" value="7.977656" /> <!-- cos(4.16 deg) -->
+  <xacro:property name="middle_section_length" value="7.972" /> <!-- cos(4.76 deg) -->
   <xacro:property name="final_section_length" value="1.0" />
   <xacro:property name="plane_width" value="2.5" />
   <xacro:property name="plane_height" value="0.1" />
-  <xacro:property name="ramp_height" value="0.580397" /> <!-- sin(4.16 deg) -->
+  <xacro:property name="ramp_height" value="0.664" /> <!-- sin(4.76 deg) -->
   <xacro:property name="ramp_hypotenuse" value="8.0" />
-  <xacro:property name="ramp_angle_deg" value="4.16" />
+  <xacro:property name="ramp_angle_deg" value="4.76" />
   <xacro:property name="section_mass" value="10000" />
   <xacro:property name="section_ixx" value="1000" />
   <xacro:property name="section_iyy" value="1000" />
