@@ -294,11 +294,7 @@ class Simulation(gym.Env):
             self.is_visualization_enabled = self.enable_visualization_value.value
             self.is_real_time_enabled = self.enable_real_time_value.value
             self.setup_sim_env()
-
         else:
-            if self.is_fast_td3 and hasattr(self, 'agent') and self.agent:
-                current_phase = self.agent.model.phase_manager.current_phase
-                self.environment.set_phase(current_phase)
             self.soft_env_reset()
 
         # Obter posição inicial
