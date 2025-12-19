@@ -114,6 +114,12 @@
       "min_value": -1,
       "max_value": 0
     },
+    "stability_pitch": {
+      "weight": -0.004,
+      "enabled": true,
+      "min_value": -1,
+      "max_value": 0
+    },
     "stability_yaw": {
       "weight": -0.002,
       "enabled": true,
@@ -140,12 +146,6 @@
     },
     "jerk_penalty": {
       "weight": -0.001,
-      "enabled": true,
-      "min_value": -1,
-      "max_value": 0
-    },
-    "stability_pitch": {
-      "weight": -0.0001,
       "enabled": true,
       "min_value": -1,
       "max_value": 0
