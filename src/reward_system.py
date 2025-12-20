@@ -89,7 +89,7 @@ class RewardSystem:
 
         # Bonus ativos
 
-        # DPG - 1. Transições de estado
+        # DPG - 1. Transições de estado - 20
         if self.is_component_enabled("gait_state_change"):
             self.components["gait_state_change"].value = sim.has_gait_state_changed
             weight_multiplier = weight_adjustments.get("gait_state_change", 1.0)
@@ -97,7 +97,46 @@ class RewardSystem:
 
             total_reward += self.components["gait_state_change"].value * adjusted_weight
 
-        # DPG - 2. PROGRESSO E VELOCIDADE
+        # DPG - 2. PROGRESSO E VELOCIDADE - 4
+        if self.is_component_enabled("progress"):
+            self.components["progress"].value = sim.target_x_velocity - abs(sim.target_x_velocity - sim.robot_x_velocity)
+            weight_multiplier = weight_adjustments.get("progress", 1.0)
+            adjusted_weight = self.components["progress"].weight * weight_multiplier
+
+            total_reward += self.components["progress"].value * adjusted_weight
+        
+        # DPG - 3. Estabilidade do xcom - 3
+        if self.is_component_enabled("xcom_stability"):
+            if hasattr(sim, "mos_min") and sim.mos_min > -0.5:
+                optimal_margin = 0.1
+                margin_error = abs(sim.mos_min - optimal_margin)
+                stability_reward = max(0, 1.0 - margin_error * 5.0)
+                if sim.mos_min > 0.05 and abs(sim.robot_x_velocity) > 0.1:
+                    stability_reward += 0.3
+            else:
+                stability_reward = -0.3
+
+            self.components["xcom_stability"].value = stability_reward
+            total_reward += stability_reward * self.components["xcom_stability"].weight
+
+        # DPG - 4. Evitar escorregar - 2
+        if self.is_component_enabled("simple_stability"):
+            stability_bonus = 0.0
+            if sim.robot_left_foot_contact and sim.robot_right_foot_contact:
+                stability_bonus += 0.2  
+            if sim.robot_left_foot_contact and abs(sim.robot_left_foot_x_velocity) < 0.02:
+                stability_bonus += 0.1
+            if sim.robot_right_foot_contact and abs(sim.robot_right_foot_x_velocity) < 0.02:
+                stability_bonus += 0.1
+            if not sim.robot_left_foot_contact and sim.robot_left_foot_height > 0.01:
+                stability_bonus += 0.05
+            if not sim.robot_right_foot_contact and sim.robot_right_foot_height > 0.01:
+                stability_bonus += 0.05
+
+            self.components["simple_stability"].value = stability_bonus
+            total_reward += stability_bonus * self.components["simple_stability"].weight
+            
+        # DPG - 5. Progresso de acordo com o pitch - 1
         if self.is_component_enabled("effort_progress"):
             dynamic_target = sim.target_x_velocity * (1.0 - abs(sim.robot_pitch) * 0.5)
             velocity_error = abs(dynamic_target - sim.robot_x_velocity)
@@ -113,257 +152,7 @@ class RewardSystem:
 
             total_reward += self.components["effort_progress"].value * adjusted_weight
 
-        if self.is_component_enabled("progress"):
-            self.components["progress"].value = sim.target_x_velocity - abs(sim.target_x_velocity - sim.robot_x_velocity)
-            weight_multiplier = weight_adjustments.get("progress", 1.0)
-            adjusted_weight = self.components["progress"].weight * weight_multiplier
-
-            total_reward += self.components["progress"].value * adjusted_weight
-            
-        if self.is_component_enabled("center_bonus"):
-            if distance_y_from_center <= self.safe_zone:
-                safe_factor = 1.0 - (distance_y_from_center / self.safe_zone)
-                weight_multiplier = weight_adjustments.get("center_bonus", 1.0)
-                adjusted_weight = self.components["center_bonus"].weight * weight_multiplier
-
-                total_reward += self.components["center_bonus"].value * adjusted_weight
-
-        # DPG - 3. Flexão dos joelhos
-        if self.is_component_enabled("knee_flexion"):
-            self.components["knee_flexion"].value = abs(sim.robot_right_knee_angle) + abs(sim.robot_left_knee_angle)
-            weight_multiplier = weight_adjustments.get("knee_flexion", 1.0)
-            adjusted_weight = self.components["knee_flexion"].weight * weight_multiplier
-
-            total_reward += self.components["knee_flexion"].value * adjusted_weight
-
-        # DPG - 4. EFICIÊNCIA
-        if self.is_component_enabled("efficiency_bonus"):
-            steps = max(sim.episode_steps, 1)
-            reward_per_step = sim.episode_reward / steps
-            distance_per_step = sim.episode_distance / steps
-            efficiency_score = reward_per_step * 0.6 + distance_per_step * 50 * 0.4
-            self.components["efficiency_bonus"].value = max(0, efficiency_score * 2.0)
-            weight_multiplier = weight_adjustments.get("efficiency_bonus", 1.0)
-            adjusted_weight = self.components["efficiency_bonus"].weight * weight_multiplier
-
-            total_reward += self.components["efficiency_bonus"].value * adjusted_weight
-
-        # DPG - 5. Clearance
-        if self.is_component_enabled("foot_clearance"):
-            self.components["foot_clearance"].value = self._calculate_foot_clearance_optimized(sim)
-            weight_multiplier = weight_adjustments.get("foot_clearance", 1.0)
-            adjusted_weight = self.components["foot_clearance"].weight * weight_multiplier
-
-            total_reward += self.components["foot_clearance"].value * adjusted_weight
-
-        # DPG - 6. Bonus de distância
-        if self.is_component_enabled("distance_bonus"):
-            self.components["distance_bonus"].value = sim.episode_distance
-            weight_multiplier = weight_adjustments.get("distance_bonus", 1.0)
-            adjusted_weight = self.components["distance_bonus"].weight * weight_multiplier
-
-            total_reward += self.components["distance_bonus"].value * adjusted_weight
-
-        # DPG - 7. Bonus de sucesso
-        if self.is_component_enabled("success_bonus"):
-            if sim.episode_termination == "success":
-                self.components["success_bonus"].value = 1
-            else:
-                self.components["success_bonus"].value = 0
-            weight_multiplier = weight_adjustments.get("success_bonus", 1.0)
-            adjusted_weight = self.components["success_bonus"].weight * weight_multiplier
-
-            total_reward += self.components["success_bonus"].value * adjusted_weight
-
-        # DPG - 8. PADRÃO DE MARCHA CRUZADA (Coordenação braço-perna)
-        if self.is_component_enabled("gait_pattern_cross"):
-            self.components["gait_pattern_cross"].value = self._calculate_cross_gait_pattern(sim)
-            weight_multiplier = weight_adjustments.get("gait_pattern_cross", 1.0)
-            adjusted_weight = self.components["gait_pattern_cross"].weight * weight_multiplier
-
-            total_reward += self.components["gait_pattern_cross"].value * adjusted_weight
-
-        # DPG - 9. PADRÃO RÍTMICO (Regularidade da marcha)
-        if self.is_component_enabled("gait_rhythm"):
-            self.components["gait_rhythm"].value = self._calculate_gait_rhythm(sim)
-            weight_multiplier = weight_adjustments.get("gait_rhythm", 1.0)
-            adjusted_weight = self.components["gait_rhythm"].weight * weight_multiplier
-
-            total_reward += self.components["gait_rhythm"].value * adjusted_weight
-
-        # DPG - 10. ALTERNÂNCIA DE PASSOS (Critério fundamental da marcha)
-        if self.is_component_enabled("alternating_foot_contact"):
-            self.components["alternating_foot_contact"].value = sim.robot_left_foot_contact != sim.robot_right_foot_contact
-            weight_multiplier = weight_adjustments.get("alternating_foot_contact", 1.0)
-            adjusted_weight = self.components["alternating_foot_contact"].weight * weight_multiplier
-
-            total_reward += self.components["alternating_foot_contact"].value * adjusted_weight
-
-        # Penalidades ativas
-
-        # DPG - 1. PENALIDADES POR QUEDA
-        if self.is_component_enabled("fall_penalty"):
-            if sim.episode_termination == "fell":
-                self.components["fall_penalty"].value = 1
-            else:
-                self.components["fall_penalty"].value = 0
-            weight_multiplier = weight_adjustments.get("fall_penalty", 1.0)
-            adjusted_weight = self.components["fall_penalty"].weight * weight_multiplier
-
-            total_reward += self.components["fall_penalty"].value * adjusted_weight
-            
-        # DPG - 2. CONTROLE DE TRAJETÓRIA (Manter direção)
-        if self.is_component_enabled("yaw_penalty"):
-            if sim.episode_termination == "yaw_deviated":
-                self.components["yaw_penalty"].value = 1
-            else:
-                self.components["yaw_penalty"].value = 0
-            weight_multiplier = weight_adjustments.get("yaw_penalty", 1.0)
-            adjusted_weight = self.components["yaw_penalty"].weight * weight_multiplier
-
-            total_reward += self.components["yaw_penalty"].value * adjusted_weight
-
-        # DPG - 3. Ir pra frente
-        if self.is_component_enabled("foot_back_penalty"):
-            backwards_velocity = 0
-            if sim.robot_left_foot_x_velocity < 0:
-                backwards_velocity += abs(sim.robot_left_foot_x_velocity)
-            if sim.robot_right_foot_x_velocity < 0:
-                backwards_velocity += abs(sim.robot_right_foot_x_velocity)
-
-            self.components["foot_back_penalty"].value = backwards_velocity
-            weight_multiplier = weight_adjustments.get("foot_back_penalty", 1.0)
-            adjusted_weight = self.components["foot_back_penalty"].weight * weight_multiplier
-
-            total_reward += self.components["foot_back_penalty"].value * adjusted_weight
-
-        # DPG - 4. Inclinar os pés
-        if self.is_component_enabled("foot_inclination_penalty"):
-            right_foot_inclination = abs(sim.robot_right_foot_roll) + abs(sim.robot_right_foot_pitch)
-            left_foot_inclination = abs(sim.robot_left_foot_roll) + abs(sim.robot_left_foot_pitch)
-            self.components["foot_inclination_penalty"].value = right_foot_inclination + left_foot_inclination
-            weight_multiplier = weight_adjustments.get("foot_inclination_penalty", 1.0)
-            adjusted_weight = self.components["foot_inclination_penalty"].weight * weight_multiplier
-
-            total_reward += self.components["foot_inclination_penalty"].value * adjusted_weight
-
-        # DPG - 5. ESTABILIDADE DA MARCHA (Controle postural)
-        if self.is_component_enabled("stability_pitch"):
-            self.components["stability_pitch"].value = (sim.robot_pitch - sim.target_pitch_rad) ** 2
-            weight_multiplier = weight_adjustments.get("stability_pitch", 1.0)
-            adjusted_weight = self.components["stability_pitch"].weight * weight_multiplier
-
-            total_reward += self.components["stability_pitch"].value * adjusted_weight
-
-        # DPG - 6. ESTABILIDADE DA MARCHA (Controle postural)
-        if self.is_component_enabled("stability_yaw"):
-            self.components["stability_yaw"].value = sim.robot_yaw**2
-            weight_multiplier = weight_adjustments.get("stability_yaw", 1.0)
-            adjusted_weight = self.components["stability_yaw"].weight * weight_multiplier
-            total_reward += self.components["stability_yaw"].value * adjusted_weight
-
-        # DPG - 7. ESTABILIDADE DA MARCHA (Controle postural)
-        if self.is_component_enabled("stability_roll"):
-            roll_error = sim.robot_roll**2
-            self.components["stability_roll"].value = roll_error
-            weight_multiplier = weight_adjustments.get("stability_roll", 1.0)
-            adjusted_weight = self.components["stability_roll"].weight * weight_multiplier
-
-            total_reward += self.components["stability_roll"].value * adjusted_weight
-
-        # DPG - 8. EFICIÊNCIA ENERGÉTICA (Movimentos suaves)
-        if self.is_component_enabled("effort_square_penalty"):
-            effort = sum(v**2 for v in sim.joint_velocities)
-            self.components["effort_square_penalty"].value = effort
-            weight_multiplier = weight_adjustments.get("effort_square_penalty", 1.0)
-            adjusted_weight = self.components["effort_square_penalty"].weight * weight_multiplier
-            total_reward += self.components["effort_square_penalty"].value * adjusted_weight
-
-        # DPG - 9. Se manter na pista
-        if self.is_component_enabled("y_axis_deviation_square_penalty"):
-            self.components["y_axis_deviation_square_penalty"].value = distance_y_from_center**2
-            weight_multiplier = weight_adjustments.get("y_axis_deviation_square_penalty", 1.0)
-            adjusted_weight = self.components["y_axis_deviation_square_penalty"].weight * weight_multiplier
-
-            total_reward += self.components["y_axis_deviation_square_penalty"].value * adjusted_weight
-
-        # DPG - 10. Jerk
-        if self.is_component_enabled("jerk_penalty"):
-            jerk = sum(abs(v1 - v2) for v1, v2 in zip(sim.joint_velocities, sim.last_joint_velocities))
-            self.components["jerk_penalty"].value = jerk
-            weight_multiplier = weight_adjustments.get("jerk_penalty", 1.0)
-            adjusted_weight = self.components["jerk_penalty"].weight * weight_multiplier
-            total_reward += self.components["jerk_penalty"].value * adjusted_weight
-
-        # DPG - Novas ideias
-        if self.is_component_enabled("xcom_stability"):
-            if hasattr(sim, "mos_min") and sim.mos_min > -0.5:
-                optimal_margin = 0.1
-                margin_error = abs(sim.mos_min - optimal_margin)
-                stability_reward = max(0, 1.0 - margin_error * 5.0)
-                if sim.mos_min > 0.05 and abs(sim.robot_x_velocity) > 0.1:
-                    stability_reward += 0.3
-            else:
-                stability_reward = -0.3
-
-            self.components["xcom_stability"].value = stability_reward
-            total_reward += stability_reward * self.components["xcom_stability"].weight
-
-        # DPG - Evitar escorregar
-        if self.is_component_enabled("simple_stability"):
-            stability_bonus = 0.0
-
-             # 1. PÉS NO CHÃO = ESTABILIDADE
-            if sim.robot_left_foot_contact and sim.robot_right_foot_contact:
-                stability_bonus += 0.2  
-
-            # 2. PÉS PARADOS (sem escorregar)
-            if sim.robot_left_foot_contact and abs(sim.robot_left_foot_x_velocity) < 0.02:
-                stability_bonus += 0.1
-            if sim.robot_right_foot_contact and abs(sim.robot_right_foot_x_velocity) < 0.02:
-                stability_bonus += 0.1
-
-            # 3. ALTURA MÍNIMA DOS PÉS (evitar arrastar)
-            if not sim.robot_left_foot_contact and sim.robot_left_foot_height > 0.01:
-                stability_bonus += 0.05
-            if not sim.robot_right_foot_contact and sim.robot_right_foot_height > 0.01:
-                stability_bonus += 0.05
-
-            self.components["simple_stability"].value = stability_bonus
-            total_reward += stability_bonus * self.components["simple_stability"].weight
-
-        # DPG - Recompensa por adaptação suave às condições
-        if self.is_component_enabled("adaptability_bonus"):
-            adaptability_score = 0.0
-
-            # 1. Variação suave de ângulos articulares
-            if hasattr(sim, 'last_joint_positions'):
-                joint_variation = sum(abs(np.array(sim.joint_positions) - np.array(sim.last_joint_positions)))
-                smoothness = max(0, 0.5 - joint_variation * 2.0)
-                adaptability_score += smoothness
-
-            # 2. Coordenação entre joelho e quadril
-            right_coordination = abs(sim.robot_right_knee_angle + sim.robot_right_hip_frontal_angle * 0.7)
-            left_coordination = abs(sim.robot_left_knee_angle + sim.robot_left_hip_frontal_angle * 0.7)
-            coordination_bonus = max(0, 1.0 - (right_coordination + left_coordination) * 0.3)
-            adaptability_score += coordination_bonus * 0.5
-
-            self.components["adaptability_bonus"].value = adaptability_score
-            total_reward += adaptability_score * self.components["adaptability_bonus"].weight
-
-        if self.is_component_enabled("propulsion_efficiency"):
-            speed = abs(sim.robot_x_velocity)
-            energy = sum(abs(v) for v in sim.joint_velocities) 
-            if energy > 0:
-                propulsion_efficiency = speed / (energy + 0.1)  
-            else:
-                propulsion_efficiency = speed
-            
-            self.components["propulsion_efficiency"].value = propulsion_efficiency
-            weight_multiplier = weight_adjustments.get("propulsion_efficiency", 1.0)
-            adjusted_weight = self.components["propulsion_efficiency"].weight * weight_multiplier
-            total_reward += self.components["propulsion_efficiency"].value * adjusted_weight
-
+        # DPG - 6. Pitch na posição esperada - 1
         if self.is_component_enabled("pitch_forward_bonus"):
             current_pitch = sim.robot_pitch
             if current_pitch > 0:
@@ -379,13 +168,213 @@ class RewardSystem:
             adjusted_weight = self.components["pitch_forward_bonus"].weight * weight_multiplier
 
             total_reward += self.components["pitch_forward_bonus"].value * adjusted_weight
+        
+        # DPG - 7. Estar no centro da pista - 0.5
+        if self.is_component_enabled("center_bonus"):
+            if distance_y_from_center <= self.safe_zone:
+                safe_factor = 1.0 - (distance_y_from_center / self.safe_zone)
+                weight_multiplier = weight_adjustments.get("center_bonus", 1.0)
+                adjusted_weight = self.components["center_bonus"].weight * weight_multiplier
+
+                total_reward += self.components["center_bonus"].value * adjusted_weight
+
+        # DPG - 8. Eficiencia na propulsão - 0.5
+        if self.is_component_enabled("propulsion_efficiency"):
+            speed = abs(sim.robot_x_velocity)
+            energy = sum(abs(v) for v in sim.joint_velocities) 
+            if energy > 0:
+                propulsion_efficiency = speed / (energy + 0.1)  
+            else:
+                propulsion_efficiency = speed
             
+            self.components["propulsion_efficiency"].value = propulsion_efficiency
+            weight_multiplier = weight_adjustments.get("propulsion_efficiency", 1.0)
+            adjusted_weight = self.components["propulsion_efficiency"].weight * weight_multiplier
+            total_reward += self.components["propulsion_efficiency"].value * adjusted_weight
+
+        # DPG - 9. Flexão dos joelhos 0.06
+        if self.is_component_enabled("knee_flexion"):
+            self.components["knee_flexion"].value = abs(sim.robot_right_knee_angle) + abs(sim.robot_left_knee_angle)
+            weight_multiplier = weight_adjustments.get("knee_flexion", 1.0)
+            adjusted_weight = self.components["knee_flexion"].weight * weight_multiplier
+
+            total_reward += self.components["knee_flexion"].value * adjusted_weight
+
+        # DPG - 10. Extensão do hip - 0.005
         if self.is_component_enabled("hip_extension"):
             self.components["hip_extension"].value = abs(sim.robot_right_hip_frontal_angle) + abs(sim.robot_left_hip_frontal_angle)
             weight_multiplier = weight_adjustments.get("hip_extension", 1.0)
             adjusted_weight = self.components["hip_extension"].weight * weight_multiplier
 
             total_reward += self.components["hip_extension"].value * adjusted_weight
+            
+        # DPG - 11. Clearance - 0.005
+        if self.is_component_enabled("foot_clearance"):
+            self.components["foot_clearance"].value = self._calculate_foot_clearance_optimized(sim)
+            weight_multiplier = weight_adjustments.get("foot_clearance", 1.0)
+            adjusted_weight = self.components["foot_clearance"].weight * weight_multiplier
+
+            total_reward += self.components["foot_clearance"].value * adjusted_weight
+
+        # DPG - 12. Afaptação suave - 0.002
+        if self.is_component_enabled("adaptability_bonus"):
+            adaptability_score = 0.0
+            if hasattr(sim, 'last_joint_positions'):
+                joint_variation = sum(abs(np.array(sim.joint_positions) - np.array(sim.last_joint_positions)))
+                smoothness = max(0, 0.5 - joint_variation * 2.0)
+                adaptability_score += smoothness
+            right_coordination = abs(sim.robot_right_knee_angle + sim.robot_right_hip_frontal_angle * 0.7)
+            left_coordination = abs(sim.robot_left_knee_angle + sim.robot_left_hip_frontal_angle * 0.7)
+            coordination_bonus = max(0, 1.0 - (right_coordination + left_coordination) * 0.3)
+            adaptability_score += coordination_bonus * 0.5
+            self.components["adaptability_bonus"].value = adaptability_score
+            weight_multiplier = weight_adjustments.get("adaptability_bonus", 1.0)
+            adjusted_weight = self.components["adaptability_bonus"].weight * weight_multiplier
+
+            total_reward += self.components["adaptability_bonus"].value * adaptability_score
+
+        # DPG - 13. PADRÃO DE MARCHA CRUZADA (Coordenação braço-perna) - 0.001
+        if self.is_component_enabled("gait_pattern_cross"):
+            self.components["gait_pattern_cross"].value = self._calculate_cross_gait_pattern(sim)
+            weight_multiplier = weight_adjustments.get("gait_pattern_cross", 1.0)
+            adjusted_weight = self.components["gait_pattern_cross"].weight * weight_multiplier
+
+            total_reward += self.components["gait_pattern_cross"].value * adjusted_weight
+
+        # DPG - 14. EFICIÊNCIA - 0.001
+        if self.is_component_enabled("efficiency_bonus"):
+            steps = max(sim.episode_steps, 1)
+            reward_per_step = sim.episode_reward / steps
+            distance_per_step = sim.episode_distance / steps
+            efficiency_score = reward_per_step * 0.6 + distance_per_step * 50 * 0.4
+            self.components["efficiency_bonus"].value = max(0, efficiency_score * 2.0)
+            weight_multiplier = weight_adjustments.get("efficiency_bonus", 1.0)
+            adjusted_weight = self.components["efficiency_bonus"].weight * weight_multiplier
+
+            total_reward += self.components["efficiency_bonus"].value * adjusted_weight
+
+        # DPG - 15. Bonus de distância - 0.0002
+        if self.is_component_enabled("distance_bonus"):
+            self.components["distance_bonus"].value = sim.episode_distance
+            weight_multiplier = weight_adjustments.get("distance_bonus", 1.0)
+            adjusted_weight = self.components["distance_bonus"].weight * weight_multiplier
+
+            total_reward += self.components["distance_bonus"].value * adjusted_weight
+
+        # DPG - 15. ALTERNÂNCIA DE PASSOS (Critério fundamental da marcha) - 0.0002
+        if self.is_component_enabled("alternating_foot_contact"):
+            self.components["alternating_foot_contact"].value = sim.robot_left_foot_contact != sim.robot_right_foot_contact
+            weight_multiplier = weight_adjustments.get("alternating_foot_contact", 1.0)
+            adjusted_weight = self.components["alternating_foot_contact"].weight * weight_multiplier
+
+            total_reward += self.components["alternating_foot_contact"].value * adjusted_weight
+
+        # DPG - 16. PADRÃO RÍTMICO (Regularidade da marcha) - 0.0002
+        if self.is_component_enabled("gait_rhythm"):
+            self.components["gait_rhythm"].value = self._calculate_gait_rhythm(sim)
+            weight_multiplier = weight_adjustments.get("gait_rhythm", 1.0)
+            adjusted_weight = self.components["gait_rhythm"].weight * weight_multiplier
+
+            total_reward += self.components["gait_rhythm"].value * adjusted_weight
+
+        # DPG - 17. Bonus de sucesso - 0.0002
+        if self.is_component_enabled("success_bonus"):
+            if sim.episode_termination == "success":
+                self.components["success_bonus"].value = 1
+            else:
+                self.components["success_bonus"].value = 0
+            weight_multiplier = weight_adjustments.get("success_bonus", 1.0)
+            adjusted_weight = self.components["success_bonus"].weight * weight_multiplier
+
+            total_reward += self.components["success_bonus"].value * adjusted_weight
+
+        # Penalidades ativas
+
+        # DPG - 1. PENALIDADES POR QUEDA - -350
+        if self.is_component_enabled("fall_penalty"):
+            if sim.episode_termination == "fell":
+                self.components["fall_penalty"].value = 1
+            else:
+                self.components["fall_penalty"].value = 0
+            weight_multiplier = weight_adjustments.get("fall_penalty", 1.0)
+            adjusted_weight = self.components["fall_penalty"].weight * weight_multiplier
+
+            total_reward += self.components["fall_penalty"].value * adjusted_weight
+            
+        # DPG - 2. CONTROLE DE TRAJETÓRIA (Manter direção) - -250
+        if self.is_component_enabled("yaw_penalty"):
+            if sim.episode_termination == "yaw_deviated":
+                self.components["yaw_penalty"].value = 1
+            else:
+                self.components["yaw_penalty"].value = 0
+            weight_multiplier = weight_adjustments.get("yaw_penalty", 1.0)
+            adjusted_weight = self.components["yaw_penalty"].weight * weight_multiplier
+
+            total_reward += self.components["yaw_penalty"].value * adjusted_weight
+
+        # DPG - 3. Ir pra frente - -10
+        if self.is_component_enabled("foot_back_penalty"):
+            backwards_velocity = 0
+            if sim.robot_left_foot_x_velocity < 0:
+                backwards_velocity += abs(sim.robot_left_foot_x_velocity)
+            if sim.robot_right_foot_x_velocity < 0:
+                backwards_velocity += abs(sim.robot_right_foot_x_velocity)
+
+            self.components["foot_back_penalty"].value = backwards_velocity
+            weight_multiplier = weight_adjustments.get("foot_back_penalty", 1.0)
+            adjusted_weight = self.components["foot_back_penalty"].weight * weight_multiplier
+
+            total_reward += self.components["foot_back_penalty"].value * adjusted_weight
+
+        # DPG - 4. Se manter na pista - -0.1
+        if self.is_component_enabled("y_axis_deviation_square_penalty"):
+            self.components["y_axis_deviation_square_penalty"].value = distance_y_from_center**2
+            weight_multiplier = weight_adjustments.get("y_axis_deviation_square_penalty", 1.0)
+            adjusted_weight = self.components["y_axis_deviation_square_penalty"].weight * weight_multiplier
+
+            total_reward += self.components["y_axis_deviation_square_penalty"].value * adjusted_weight
+
+        # DPG - 5. Inclinar os pés - -0.01
+        if self.is_component_enabled("foot_inclination_penalty"):
+            right_foot_inclination = abs(sim.robot_right_foot_roll) + abs(sim.robot_right_foot_pitch)
+            left_foot_inclination = abs(sim.robot_left_foot_roll) + abs(sim.robot_left_foot_pitch)
+            self.components["foot_inclination_penalty"].value = right_foot_inclination + left_foot_inclination
+            weight_multiplier = weight_adjustments.get("foot_inclination_penalty", 1.0)
+            adjusted_weight = self.components["foot_inclination_penalty"].weight * weight_multiplier
+
+            total_reward += self.components["foot_inclination_penalty"].value * adjusted_weight
+
+        # DPG - 6. ESTABILIDADE DA MARCHA (Controle postural) - -0.006
+        if self.is_component_enabled("stability_yaw"):
+            self.components["stability_yaw"].value = sim.robot_yaw**2
+            weight_multiplier = weight_adjustments.get("stability_yaw", 1.0)
+            adjusted_weight = self.components["stability_yaw"].weight * weight_multiplier
+            total_reward += self.components["stability_yaw"].value * adjusted_weight
+
+        # DPG - 7. ESTABILIDADE DA MARCHA (Controle postural) - -0.004
+        if self.is_component_enabled("stability_roll"):
+            roll_error = sim.robot_roll**2
+            self.components["stability_roll"].value = roll_error
+            weight_multiplier = weight_adjustments.get("stability_roll", 1.0)
+            adjusted_weight = self.components["stability_roll"].weight * weight_multiplier
+
+            total_reward += self.components["stability_roll"].value * adjusted_weight
+
+        # DPG - 8. EFICIÊNCIA ENERGÉTICA (Movimentos suaves) - -0.001
+        if self.is_component_enabled("effort_square_penalty"):
+            effort = sum(v**2 for v in sim.joint_velocities)
+            self.components["effort_square_penalty"].value = effort
+            weight_multiplier = weight_adjustments.get("effort_square_penalty", 1.0)
+            adjusted_weight = self.components["effort_square_penalty"].weight * weight_multiplier
+            total_reward += self.components["effort_square_penalty"].value * adjusted_weight
+
+        # DPG - 9. ESTABILIDADE DA MARCHA (Controle postural) - -0.001
+        if self.is_component_enabled("stability_pitch"):
+            self.components["stability_pitch"].value = (sim.robot_pitch - sim.target_pitch_rad) ** 2
+            weight_multiplier = weight_adjustments.get("stability_pitch", 1.0)
+            adjusted_weight = self.components["stability_pitch"].weight * weight_multiplier
+
+            total_reward += self.components["stability_pitch"].value * adjusted_weight
 
         # RECOMPENSAS DINÂMICAS PARA FASE 3
         if not evaluation and self.is_fast_td3:
@@ -417,21 +406,37 @@ class RewardSystem:
                     total_reward += success_bonus_extra
 
         # Componentes não ativos
+        if self.is_component_enabled("jerk_penalty"):
+            jerk = sum(abs(v1 - v2) for v1, v2 in zip(sim.joint_velocities, sim.last_joint_velocities))
+            self.components["jerk_penalty"].value = jerk
+            weight_multiplier = weight_adjustments.get("jerk_penalty", 1.0)
+            adjusted_weight = self.components["jerk_penalty"].weight * weight_multiplier
+            total_reward += self.components["jerk_penalty"].value * adjusted_weight
+
+        if self.is_component_enabled("height_deviation_penalty"):
+            self.components["height_deviation_penalty"].value = abs(sim.robot_y_position - sim.episode_robot_y_initial_position)
+            total_reward += self.components["height_deviation_penalty"].value * self.components["height_deviation_penalty"].weight
 
         if self.is_component_enabled("height_deviation_square_penalty"):
             height_error = (sim.robot_z_position - 0.8) ** 2
             self.components["height_deviation_square_penalty"].value = height_error
             total_reward += height_error * self.components["height_deviation_square_penalty"].weight
 
-        if self.is_component_enabled("height_deviation_penalty"):
-            self.components["height_deviation_penalty"].value = abs(sim.robot_y_position - sim.episode_robot_y_initial_position)
-            total_reward += self.components["height_deviation_penalty"].value * self.components["height_deviation_penalty"].weight
+        if self.is_component_enabled("y_axis_deviation_penalty"):
+            penalty = distance_y_from_center
+            self.components["y_axis_deviation_penalty"].value = penalty
+            total_reward += penalty * self.components["y_axis_deviation_penalty"].weight
 
         if self.is_component_enabled("direction_change_penalty"):
             action_products = action * sim.episode_last_action
             direction_changes = np.sum(action_products < 0)
             self.components["direction_change_penalty"].value = direction_changes
             total_reward += direction_changes * self.components["direction_change_penalty"].weight
+
+        if self.is_component_enabled("y_axis_deviation_cube_penalty"):
+            penalty = distance_y_from_center**3
+            self.components["y_axis_deviation_cube_penalty"].value = penalty
+            total_reward += penalty * self.components["y_axis_deviation_cube_penalty"].weight
 
         if self.is_component_enabled("hip_openning"):
             self.components["hip_openning"].value = abs(sim.robot_right_hip_lateral_angle) + abs(sim.robot_left_hip_lateral_angle)
@@ -440,16 +445,6 @@ class RewardSystem:
         if self.is_component_enabled("hip_openning_square"):
             self.components["hip_openning_square"].value = sim.robot_right_hip_lateral_angle**2 + sim.robot_left_hip_lateral_angle**2
             total_reward += self.components["hip_openning_square"].value * self.components["hip_openning_square"].weight
-
-        if self.is_component_enabled("y_axis_deviation_penalty"):
-            penalty = distance_y_from_center
-            self.components["y_axis_deviation_penalty"].value = penalty
-            total_reward += penalty * self.components["y_axis_deviation_penalty"].weight
-
-        if self.is_component_enabled("y_axis_deviation_cube_penalty"):
-            penalty = distance_y_from_center**3
-            self.components["y_axis_deviation_cube_penalty"].value = penalty
-            total_reward += penalty * self.components["y_axis_deviation_cube_penalty"].weight
 
         if self.is_component_enabled("warning_penalty"):
             if distance_y_from_center > self.safe_zone and distance_y_from_center <= self.warning_zone:
