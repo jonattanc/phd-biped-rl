@@ -12,18 +12,6 @@
       "min_value": 0,
       "max_value": 50
     },
-    "xcom_stability": {
-      "weight": 3.0,
-      "enabled": true,
-      "min_value": -1.0,
-      "max_value": 1.0
-    },
-    "simple_stability": {
-      "weight": 2.0,
-      "enabled": true,
-      "min_value": 0,
-      "max_value": 1.0
-    },
     "effort_progress": {
       "weight": 1.0,
       "enabled": true,
@@ -36,23 +24,29 @@
       "min_value": 0, 
       "max_value": 20.0
     },
-    "center_bonus": {
-      "weight": 0.5,
+    "xcom_stability": {
+      "weight": 1.0,
       "enabled": true,
-      "min_value": 0,
-      "max_value": 50
+      "min_value": -1.0,
+      "max_value": 1.0
     },
-    "propulsion_efficiency": {
-      "weight": 0.5,
+    "simple_stability": {
+      "weight": 0.8,
       "enabled": true,
       "min_value": 0,
-      "max_value": 1
+      "max_value": 1.0
     },
     "knee_flexion": {
       "weight": 0.06,
       "enabled": true,
       "min_value": 0,
       "max_value": 1
+    },
+    "center_bonus": {
+      "weight": 0.01,
+      "enabled": true,
+      "min_value": 0,
+      "max_value": 50
     },
     "hip_extension": {
       "weight": 0.005,
@@ -66,23 +60,17 @@
       "min_value": 0.0001,
       "max_value": 10
     },
-    "adaptability_bonus": {
-      "weight": 0.002,
-      "enabled": true,
-      "min_value": 0,
-      "max_value": 5
-    },
     "gait_pattern_cross": {
       "weight": 0.001,
       "enabled": true,
       "min_value": 0.0,
       "max_value": 5.0
     },
-    "efficiency_bonus": {
+    "propulsion_efficiency": {
       "weight": 0.001,
       "enabled": true,
-      "min_value": 0.0001,
-      "max_value": 10
+      "min_value": 0,
+      "max_value": 1
     },
     "distance_bonus": {
       "weight": 0.0002,
@@ -95,6 +83,18 @@
       "enabled": true,
       "min_value": 0,
       "max_value": 1
+    },
+    "efficiency_bonus": {
+      "weight": 0.0002,
+      "enabled": true,
+      "min_value": 0.0001,
+      "max_value": 10
+    },
+    "adaptability_bonus": {
+      "weight": 0.0002,
+      "enabled": true,
+      "min_value": 0,
+      "max_value": 5
     },
     "gait_rhythm": {
       "weight": 0.0002,
