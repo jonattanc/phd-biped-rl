@@ -49,9 +49,8 @@ class PhaseManager:
         # AJUSTES de peso por fase (em relação ao default.json)
         self.phase_weight_adjustments = {
             1: {# Fase 1: usa os pesos do default.json
-                'gait_state_change': 0.02,
-                'progress': 0.2,   
-                'fall_penalty': 2.0,       
+                'gait_state_change': 0.2,
+                'progress': 0.2,          
                 },  
             2: {    # Fase 2: Foco em Progresso e Estabilidade
                 'progress': 3.0,  
@@ -67,6 +66,7 @@ class PhaseManager:
                 'distance_bonus': 8.0,       
                 'alternating_foot_contact': 4.0,
                 'gait_rhythm': 2.0,
+                'fall_penalty': 2.0,
                 'foot_back_penalty': 2.0, 
                 'y_axis_deviation_square_penalty': 20.0, 
                 'stability_roll': 6.0, 
