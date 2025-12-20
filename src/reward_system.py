@@ -58,29 +58,27 @@ class RewardSystem:
             weight_adjustments = {
                 "gait_state_change": 1.0,
                 "progress": 1.0,
-                "center_bonus": 1.0,
-                "knee_flexion": 1.0,
-                "efficiency_bonus": 1.0,
-                "foot_clearance": 1.0,
-                "distance_bonus": 1.0,
-                "success_bonus": 1.0,
-                "gait_pattern_cross": 1.0,
-                "gait_rhythm": 1.0,
-                "alternating_foot_contact": 1.0,
-                "fall_penalty": 1.0,
-                "yaw_penalty": 1.0,
-                "y_axis_deviation_square_penalty": 1.0,
-                "stability_pitch": 1.0,
-                "stability_roll": 1.0,
-                "stability_yaw": 1.0,
-                "foot_back_penalty": 1.0,
-                "foot_inclination_penalty": 1.0,
-                "effort_square_penalty": 1.0,
-                "jerk_penalty": 1.0,
                 "xcom_stability": 1.0,
                 "simple_stability": 1.0,
                 "pitch_forward_bonus": 1.0,
+                "knee_flexion": 1.0,
                 "hip_extension": 1.0,
+                "foot_clearance": 1.0,
+                "adaptability_bonus": 1.0,
+                "gait_pattern_cross": 1.0,
+                "efficiency_bonus": 1.0,
+                "propulsion_efficiency": 1.0,
+                "distance_bonus": 1.0,
+                "alternating_foot_contact": 1.0,
+                "gait_rhythm": 1.0,
+                "success_bonus": 1.0,
+                "center_bonus": 1.0,
+                "fall_penalty": 1.0,
+                "yaw_penalty": 1.0,
+                "foot_back_penalty": 1.0,
+                "y_axis_deviation_square_penalty": 1.0,
+                "stability_roll": 1.0,
+                "stability_yaw": 1.0,
             }
 
         # COMPONENTES PARA MARCHA
@@ -344,6 +342,19 @@ class RewardSystem:
             self.components["adaptability_bonus"].value = adaptability_score
             total_reward += adaptability_score * self.components["adaptability_bonus"].weight
 
+        if self.is_component_enabled("propulsion_efficiency"):
+            speed = abs(sim.robot_x_velocity)
+            energy = sum(abs(v) for v in sim.joint_velocities) 
+            if energy > 0:
+                propulsion_efficiency = speed / (energy + 0.1)  
+            else:
+                propulsion_efficiency = speed
+            
+            self.components["propulsion_efficiency"].value = propulsion_efficiency
+            weight_multiplier = weight_adjustments.get("propulsion_efficiency", 1.0)
+            adjusted_weight = self.components["propulsion_efficiency"].weight * weight_multiplier
+            total_reward += self.components["propulsion_efficiency"].value * adjusted_weight
+        
         if self.is_component_enabled("pitch_forward_bonus"):
             current_pitch = sim.robot_pitch
             optimal_pitch = 0.15 * (1.0 - min(1.0, abs(sim.robot_x_velocity)))
@@ -395,15 +406,6 @@ class RewardSystem:
                     total_reward += success_bonus_extra
 
         # Componentes não ativos
-        if self.is_component_enabled("foot_clearance_original"):
-            foot_height = 0
-            if not sim.robot_left_foot_contact:
-                foot_height += sim.robot_left_foot_height
-            if not sim.robot_right_foot_contact:
-                foot_height += sim.robot_right_foot_height
-
-            self.components["foot_clearance_original"].value = foot_height
-            total_reward += self.components["foot_clearance_original"].value * self.components["foot_clearance_original"].weight
 
         if self.is_component_enabled("height_deviation_square_penalty"):
             height_error = (sim.robot_z_position - 0.8) ** 2

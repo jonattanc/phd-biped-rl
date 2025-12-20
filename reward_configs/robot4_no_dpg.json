@@ -198,7 +198,7 @@
       "min_value": -10,
       "max_value": 0
     },
-    "foot_clearance_original": {
+    "propulsion_efficiency": {
       "weight": 0.005,
       "enabled": false,
       "min_value": 0,
