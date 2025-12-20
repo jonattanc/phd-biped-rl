@@ -1,7 +1,7 @@
 {
   "components": {
     "gait_state_change": {
-      "weight": 25.0,
+      "weight": 20.0,
       "enabled": true,
       "min_value": 0,
       "max_value": 200
@@ -13,21 +13,21 @@
       "max_value": 50
     },
     "xcom_stability": {
-      "weight": 4.0,
+      "weight": 3.0,
       "enabled": true,
       "min_value": -1.0,
       "max_value": 1.0
     },
     "simple_stability": {
-      "weight": 3.0,
+      "weight": 2.0,
       "enabled": true,
       "min_value": 0,
       "max_value": 1.0
     },
     "pitch_forward_bonus": {
-      "weight": 2.0,
+      "weight": 1.0,
       "enabled": true,
-      "min_value": 0,
+      "min_value": 0, 
       "max_value": 20.0
     },
     "center_bonus": {
@@ -121,13 +121,13 @@
       "max_value": 0
     },
     "y_axis_deviation_square_penalty": {
-      "weight": -0.01,
+      "weight": -0.1,
       "enabled": true,
       "min_value": -1,
       "max_value": 0
     },
-    "stability_roll": {
-      "weight": -0.004,
+    "foot_inclination_penalty": {
+      "weight": -0.01,
       "enabled": true,
       "min_value": -1,
       "max_value": 0
@@ -138,8 +138,8 @@
       "min_value": -1,
       "max_value": 0
     },
-    "foot_inclination_penalty": {
-      "weight": -0.001,
+    "stability_roll": {
+      "weight": -0.004,
       "enabled": true,
       "min_value": -1,
       "max_value": 0
@@ -152,7 +152,7 @@
     },
     "stability_pitch": {
       "weight": -0.001,
-      "enabled": false,
+      "enabled": true,
       "min_value": -1,
       "max_value": 0
     },

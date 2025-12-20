@@ -77,6 +77,7 @@ class RewardSystem:
                 "yaw_penalty": 1.0,
                 "foot_back_penalty": 1.0,
                 "y_axis_deviation_square_penalty": 1.0,
+                "foot_inclination_penalty": 1.0,
                 "stability_roll": 1.0,
                 "stability_yaw": 1.0,
             }
