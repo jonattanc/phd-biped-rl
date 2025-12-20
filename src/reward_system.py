@@ -57,9 +57,11 @@ class RewardSystem:
         else:
             weight_adjustments = {
                 "gait_state_change": 1.0,
+                "effort_progress": 1.0,
                 "progress": 1.0,
                 "xcom_stability": 1.0,
                 "simple_stability": 1.0,
+                "progress": 1.0,
                 "pitch_forward_bonus": 1.0,
                 "knee_flexion": 1.0,
                 "hip_extension": 1.0,
@@ -96,7 +98,7 @@ class RewardSystem:
             total_reward += self.components["gait_state_change"].value * adjusted_weight
 
         # DPG - 2. PROGRESSO E VELOCIDADE
-        if self.is_component_enabled("progress"):
+        if self.is_component_enabled("effort_progress"):
             dynamic_target = sim.target_x_velocity * (1.0 - abs(sim.robot_pitch) * 0.5)
             velocity_error = abs(dynamic_target - sim.robot_x_velocity)
             if hasattr(sim, 'last_robot_x_velocity'):
@@ -105,12 +107,19 @@ class RewardSystem:
             else:
                 consistency_bonus = 0
 
-            self.components["progress"].value = (dynamic_target - velocity_error) * 0.7 + consistency_bonus * 0.3
+            self.components["effort_progress"].value = (dynamic_target - velocity_error) * 0.7 + consistency_bonus * 0.3
+            weight_multiplier = weight_adjustments.get("effort_progress", 1.0)
+            adjusted_weight = self.components["effort_progress"].weight * weight_multiplier
+
+            total_reward += self.components["effort_progress"].value * adjusted_weight
+
+        if self.is_component_enabled("progress"):
+            self.components["progress"].value = sim.target_x_velocity - abs(sim.target_x_velocity - sim.robot_x_velocity)
             weight_multiplier = weight_adjustments.get("progress", 1.0)
             adjusted_weight = self.components["progress"].weight * weight_multiplier
 
             total_reward += self.components["progress"].value * adjusted_weight
-
+            
         if self.is_component_enabled("center_bonus"):
             if distance_y_from_center <= self.safe_zone:
                 safe_factor = 1.0 - (distance_y_from_center / self.safe_zone)
@@ -195,15 +204,14 @@ class RewardSystem:
         # DPG - 1. PENALIDADES POR QUEDA
         if self.is_component_enabled("fall_penalty"):
             if sim.episode_termination == "fell":
-                fall_severity = max(0, 0.8 - sim.robot_z_ramp_position)
-                self.components["fall_penalty"].value = 1 + fall_severity * 2.0
+                self.components["fall_penalty"].value = 1
             else:
                 self.components["fall_penalty"].value = 0
             weight_multiplier = weight_adjustments.get("fall_penalty", 1.0)
             adjusted_weight = self.components["fall_penalty"].weight * weight_multiplier
 
             total_reward += self.components["fall_penalty"].value * adjusted_weight
-
+            
         # DPG - 2. CONTROLE DE TRAJETÓRIA (Manter direção)
         if self.is_component_enabled("yaw_penalty"):
             if sim.episode_termination == "yaw_deviated":
@@ -355,21 +363,23 @@ class RewardSystem:
             weight_multiplier = weight_adjustments.get("propulsion_efficiency", 1.0)
             adjusted_weight = self.components["propulsion_efficiency"].weight * weight_multiplier
             total_reward += self.components["propulsion_efficiency"].value * adjusted_weight
-        
+
         if self.is_component_enabled("pitch_forward_bonus"):
             current_pitch = sim.robot_pitch
-            optimal_pitch = 0.15 * (1.0 - min(1.0, abs(sim.robot_x_velocity)))
-            pitch_error = abs(current_pitch - optimal_pitch)
-            pitch_bonus = max(0, 1.0 - pitch_error * 3.0) * 2.0
-            if current_pitch * sim.robot_x_velocity > 0:
-                pitch_bonus *= 1.5
-
+            if current_pitch > 0:
+                if current_pitch <= 0.349:
+                    normalized = current_pitch / 0.349
+                    pitch_bonus = 4.0 * normalized * (1.0 - normalized)
+                else:
+                    pitch_bonus = 0
+            else:
+                pitch_bonus = 0
             self.components["pitch_forward_bonus"].value = pitch_bonus
             weight_multiplier = weight_adjustments.get("pitch_forward_bonus", 1.0)
             adjusted_weight = self.components["pitch_forward_bonus"].weight * weight_multiplier
 
             total_reward += self.components["pitch_forward_bonus"].value * adjusted_weight
-
+            
         if self.is_component_enabled("hip_extension"):
             self.components["hip_extension"].value = abs(sim.robot_right_hip_frontal_angle) + abs(sim.robot_left_hip_frontal_angle)
             weight_multiplier = weight_adjustments.get("hip_extension", 1.0)
@@ -416,11 +426,6 @@ class RewardSystem:
         if self.is_component_enabled("height_deviation_penalty"):
             self.components["height_deviation_penalty"].value = abs(sim.robot_y_position - sim.episode_robot_y_initial_position)
             total_reward += self.components["height_deviation_penalty"].value * self.components["height_deviation_penalty"].weight
-
-        if self.is_component_enabled("effort_penalty"):
-            effort = sum(abs(v) for v in sim.joint_velocities)
-            self.components["effort_penalty"].value = effort
-            total_reward += effort * self.components["effort_penalty"].weight
 
         if self.is_component_enabled("direction_change_penalty"):
             action_products = action * sim.episode_last_action

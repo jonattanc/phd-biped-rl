@@ -156,11 +156,11 @@
       "min_value": -1,
       "max_value": 0
     },
-    "effort_penalty": {
-      "weight": -0.001,
+    "effort_progress": {
+      "weight": 5.0,
       "enabled": false,
-      "min_value": -1,
-      "max_value": 0
+      "min_value": 0,
+      "max_value": 10
     },
     "y_axis_deviation_penalty": {
       "weight": -0.01,

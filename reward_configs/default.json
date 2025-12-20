@@ -7,7 +7,7 @@
       "max_value": 200
     },
     "progress": {
-      "weight": 5.0,
+      "weight": 4.0,
       "enabled": true,
       "min_value": 0,
       "max_value": 50
@@ -23,6 +23,12 @@
       "enabled": true,
       "min_value": 0,
       "max_value": 1.0
+    },
+    "effort_progress": {
+      "weight": 1.0,
+      "enabled": true,
+      "min_value": 0,
+      "max_value": 10
     },
     "pitch_forward_bonus": {
       "weight": 1.0,
@@ -190,12 +196,6 @@
       "weight": -1e-05,
       "enabled": false,
       "min_value": -0.01,
-      "max_value": 0
-    },
-    "effort_penalty": {
-      "weight": -0.001,
-      "enabled": false,
-      "min_value": -1,
       "max_value": 0
     },
     "hip_openning": {
