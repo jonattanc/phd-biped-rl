@@ -98,7 +98,7 @@ class RewardSystem:
 
         # DPG - 2. PROGRESSO E VELOCIDADE
         if self.is_component_enabled("progress"):
-            dynamic_target = self.target_x_velocity * (1.0 - abs(sim.robot_pitch) * 0.5)
+            dynamic_target = sim.target_x_velocity * (1.0 - abs(sim.robot_pitch) * 0.5)
             velocity_error = abs(dynamic_target - sim.robot_x_velocity)
             if hasattr(sim, 'last_robot_x_velocity'):
                 velocity_change = abs(sim.robot_x_velocity - sim.last_robot_x_velocity)
