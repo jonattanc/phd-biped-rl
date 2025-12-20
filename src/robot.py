@@ -21,7 +21,7 @@ class Robot:
 
         self.initial_section_length = 1
         self.ramp_hypotenuse = 8
-        self.ramp_angle_deg = 8.33
+        self.ramp_angle_deg = 4.76
 
         self.ramp_angle_rad = math.radians(self.ramp_angle_deg)
         self.ramp_start = self.initial_section_length / 2

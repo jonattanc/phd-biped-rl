@@ -24,6 +24,12 @@
       "min_value": 0.0,
       "max_value": 5.0
     },
+    "adaptability_bonus": {
+      "weight": 0.002,
+      "enabled": false,
+      "min_value": 0,
+      "max_value": 5
+    },
     "stability_roll": {
       "weight": -0.001,
       "enabled": true,

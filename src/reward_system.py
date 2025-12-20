@@ -98,7 +98,15 @@ class RewardSystem:
 
         # DPG - 2. PROGRESSO E VELOCIDADE
         if self.is_component_enabled("progress"):
-            self.components["progress"].value = sim.target_x_velocity - abs(sim.target_x_velocity - sim.robot_x_velocity)
+            dynamic_target = self.target_x_velocity * (1.0 - abs(sim.robot_pitch) * 0.5)
+            velocity_error = abs(dynamic_target - sim.robot_x_velocity)
+            if hasattr(sim, 'last_robot_x_velocity'):
+                velocity_change = abs(sim.robot_x_velocity - sim.last_robot_x_velocity)
+                consistency_bonus = max(0, 0.5 - velocity_change * 2.0)
+            else:
+                consistency_bonus = 0
+
+            self.components["progress"].value = (dynamic_target - velocity_error) * 0.7 + consistency_bonus * 0.3
             weight_multiplier = weight_adjustments.get("progress", 1.0)
             adjusted_weight = self.components["progress"].weight * weight_multiplier
 
@@ -188,7 +196,8 @@ class RewardSystem:
         # DPG - 1. PENALIDADES POR QUEDA
         if self.is_component_enabled("fall_penalty"):
             if sim.episode_termination == "fell":
-                self.components["fall_penalty"].value = 1
+                fall_severity = max(0, 0.8 - sim.robot_z_ramp_position)
+                self.components["fall_penalty"].value = 1 + fall_severity * 2.0
             else:
                 self.components["fall_penalty"].value = 0
             weight_multiplier = weight_adjustments.get("fall_penalty", 1.0)
@@ -281,62 +290,68 @@ class RewardSystem:
 
         # DPG - Novas ideias
         if self.is_component_enabled("xcom_stability"):
-            # Calcular recompensa baseada na margem de estabilidade
-            if hasattr(sim, "mos_min") and sim.mos_min > -0.5:  # Evitar valores muito negativos
-                # Recompensa sigmoidal simples: tanh(mos_min * 3)
-                stability_reward = math.tanh(sim.mos_min * 3.0)
-
-                # Bônus adicional se estiver em zona segura (> 0.05m)
-                if sim.mos_min > 0.05:
+            if hasattr(sim, "mos_min") and sim.mos_min > -0.5:
+                optimal_margin = 0.1
+                margin_error = abs(sim.mos_min - optimal_margin)
+                stability_reward = max(0, 1.0 - margin_error * 5.0)
+                if sim.mos_min > 0.05 and abs(sim.robot_x_velocity) > 0.1:
                     stability_reward += 0.3
-                elif sim.mos_min > 0.02:  # Zona aceitável
-                    stability_reward += 0.1
             else:
-                stability_reward = -0.5  # Penalidade se não houver pé no chão
+                stability_reward = -0.3
 
             self.components["xcom_stability"].value = stability_reward
-            weight_multiplier = weight_adjustments.get("xcom_stability", 1.0)
-            adjusted_weight = self.components["xcom_stability"].weight * weight_multiplier
-
-            total_reward += self.components["xcom_stability"].value * adjusted_weight
+            total_reward += stability_reward * self.components["xcom_stability"].weight
 
         # DPG - Evitar escorregar
         if self.is_component_enabled("simple_stability"):
-            # Apenas 2 métricas + 1 cálculo simples
             stability_bonus = 0.0
 
-            # 1. Alternância de pés (marcha natural)
-            if sim.robot_left_foot_contact != sim.robot_right_foot_contact:
+             # 1. PÉS NO CHÃO = ESTABILIDADE
+            if sim.robot_left_foot_contact and sim.robot_right_foot_contact:
+                stability_bonus += 0.2  
+
+            # 2. PÉS PARADOS (sem escorregar)
+            if sim.robot_left_foot_contact and abs(sim.robot_left_foot_x_velocity) < 0.02:
+                stability_bonus += 0.1
+            if sim.robot_right_foot_contact and abs(sim.robot_right_foot_x_velocity) < 0.02:
                 stability_bonus += 0.1
 
-            # 2. Pé fixo quando em contato (evita escorregões)
-            if sim.robot_left_foot_contact and abs(sim.robot_left_foot_x_velocity) < 0.05:
+            # 3. ALTURA MÍNIMA DOS PÉS (evitar arrastar)
+            if not sim.robot_left_foot_contact and sim.robot_left_foot_height > 0.01:
                 stability_bonus += 0.05
-            if sim.robot_right_foot_contact and abs(sim.robot_right_foot_x_velocity) < 0.05:
+            if not sim.robot_right_foot_contact and sim.robot_right_foot_height > 0.01:
                 stability_bonus += 0.05
-
-            # 3. Pé levantado quando não em contato (evita arrastar)
-            if not sim.robot_left_foot_contact and sim.robot_left_foot_height > 0.02:
-                stability_bonus += 0.02
-            if not sim.robot_right_foot_contact and sim.robot_right_foot_height > 0.02:
-                stability_bonus += 0.02
 
             self.components["simple_stability"].value = stability_bonus
-            weight_multiplier = weight_adjustments.get("simple_stability", 1.0)
-            adjusted_weight = self.components["simple_stability"].weight * weight_multiplier
+            total_reward += stability_bonus * self.components["simple_stability"].weight
 
-            total_reward += self.components["simple_stability"].value * adjusted_weight
+        # DPG - Recompensa por adaptação suave às condições
+        if self.is_component_enabled("adaptability_bonus"):
+            adaptability_score = 0.0
+
+            # 1. Variação suave de ângulos articulares
+            if hasattr(sim, 'last_joint_positions'):
+                joint_variation = sum(abs(np.array(sim.joint_positions) - np.array(sim.last_joint_positions)))
+                smoothness = max(0, 0.5 - joint_variation * 2.0)
+                adaptability_score += smoothness
+
+            # 2. Coordenação entre joelho e quadril
+            right_coordination = abs(sim.robot_right_knee_angle + sim.robot_right_hip_frontal_angle * 0.7)
+            left_coordination = abs(sim.robot_left_knee_angle + sim.robot_left_hip_frontal_angle * 0.7)
+            coordination_bonus = max(0, 1.0 - (right_coordination + left_coordination) * 0.3)
+            adaptability_score += coordination_bonus * 0.5
+
+            self.components["adaptability_bonus"].value = adaptability_score
+            total_reward += adaptability_score * self.components["adaptability_bonus"].weight
 
         if self.is_component_enabled("pitch_forward_bonus"):
             current_pitch = sim.robot_pitch
-            if current_pitch > 0:
-                if current_pitch <= 0.349:
-                    normalized = current_pitch / 0.349
-                    pitch_bonus = 4.0 * normalized * (1.0 - normalized)
-                else:
-                    pitch_bonus = 0
-            else:
-                pitch_bonus = 0
+            optimal_pitch = 0.15 * (1.0 - min(1.0, abs(sim.robot_x_velocity)))
+            pitch_error = abs(current_pitch - optimal_pitch)
+            pitch_bonus = max(0, 1.0 - pitch_error * 3.0) * 2.0
+            if current_pitch * sim.robot_x_velocity > 0:
+                pitch_bonus *= 1.5
+
             self.components["pitch_forward_bonus"].value = pitch_bonus
             weight_multiplier = weight_adjustments.get("pitch_forward_bonus", 1.0)
             adjusted_weight = self.components["pitch_forward_bonus"].weight * weight_multiplier
