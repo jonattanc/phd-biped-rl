@@ -1,22 +1,16 @@
 {
   "components": {
     "gait_state_change": {
-      "weight": 20.0,
+      "weight": 25.0,
       "enabled": true,
       "min_value": 0,
       "max_value": 200
     },
     "progress": {
-      "weight": 4.0,
+      "weight": 5.0,
       "enabled": true,
       "min_value": 0,
       "max_value": 50
-    },
-    "effort_progress": {
-      "weight": 1.0,
-      "enabled": true,
-      "min_value": 0,
-      "max_value": 10
     },
     "pitch_forward_bonus": {
       "weight": 1.0,
@@ -31,7 +25,7 @@
       "max_value": 1.0
     },
     "simple_stability": {
-      "weight": 0.8,
+      "weight": 0.6,
       "enabled": true,
       "min_value": 0,
       "max_value": 1.0
@@ -42,14 +36,38 @@
       "min_value": 0,
       "max_value": 1
     },
+    "gait_pattern_cross": {
+      "weight": 0.001,
+      "enabled": true,
+      "min_value": 0.0,
+      "max_value": 5.0
+    },
     "foot_clearance": {
-      "weight": 0.005,
+      "weight": 0.001,
       "enabled": true,
       "min_value": 0.0001,
       "max_value": 10
     },
-    "propulsion_efficiency": {
-      "weight": 0.001,
+    "hip_extension": {
+      "weight": 0.0002,
+      "enabled": true,
+      "min_value": 0,
+      "max_value": 1
+    },
+    "efficiency_bonus": {
+      "weight": 0.0002,
+      "enabled": true,
+      "min_value": 0.0001,
+      "max_value": 10
+    },
+    "distance_bonus": {
+      "weight": 0.0002,
+      "enabled": true,
+      "min_value": 0,
+      "max_value": 50
+    },
+    "gait_rhythm": {
+      "weight": 0.0002,
       "enabled": true,
       "min_value": 0,
       "max_value": 1
@@ -60,17 +78,29 @@
       "min_value": 0,
       "max_value": 1
     },
-    "adaptability_bonus": {
-      "weight": 0.0002,
-      "enabled": true,
-      "min_value": 0,
-      "max_value": 5
-    },
     "success_bonus": {
       "weight": 100.0,
       "enabled": true,
       "min_value": 0,
       "max_value": 1000
+    },
+    "effort_progress": {
+      "weight": 1.0,
+      "enabled": false,
+      "min_value": 0,
+      "max_value": 10
+    },
+    "propulsion_efficiency": {
+      "weight": 0.0002,
+      "enabled": false,
+      "min_value": 0,
+      "max_value": 1
+    },
+    "adaptability_bonus": {
+      "weight": 0.0002,
+      "enabled": false,
+      "min_value": 0,
+      "max_value": 5
     },
     "fall_penalty": {
       "weight": -350.0,
@@ -90,26 +120,32 @@
       "min_value": -100,
       "max_value": 0
     },
-    "y_axis_deviation_square_penalty": {
-      "weight": -0.01,
-      "enabled": true,
-      "min_value": -1,
-      "max_value": 0
-    },
     "foot_inclination_penalty": {
       "weight": -0.01,
       "enabled": true,
       "min_value": -1,
       "max_value": 0
     },
+    "stability_pitch": {
+      "weight": -0.004,
+      "enabled": true,
+      "min_value": -1,
+      "max_value": 0
+    },
     "stability_yaw": {
-      "weight": -0.006,
+      "weight": -0.002,
       "enabled": true,
       "min_value": -1,
       "max_value": 0
     },
     "stability_roll": {
-      "weight": -0.004,
+      "weight": -0.001,
+      "enabled": true,
+      "min_value": -1,
+      "max_value": 0
+    },
+    "y_axis_deviation_square_penalty": {
+      "weight": -0.001,
       "enabled": true,
       "min_value": -1,
       "max_value": 0
@@ -120,53 +156,17 @@
       "min_value": -1,
       "max_value": 0
     },
-    "stability_pitch": {
+    "jerk_penalty": {
       "weight": -0.001,
       "enabled": true,
       "min_value": -1,
       "max_value": 0
-    },
-    "gait_rhythm": {
-      "weight": 0.0002,
-      "enabled": false,
-      "min_value": 0,
-      "max_value": 1
-    },
-    "efficiency_bonus": {
-      "weight": 0.0002,
-      "enabled": false,
-      "min_value": 0.0001,
-      "max_value": 10
-    },
-    "hip_extension": {
-      "weight": 0.005,
-      "enabled": false,
-      "min_value": 0,
-      "max_value": 1
     },
     "center_bonus": {
       "weight": 0.01,
       "enabled": false,
       "min_value": 0,
       "max_value": 50
-    },
-    "gait_pattern_cross": {
-      "weight": 0.001,
-      "enabled": false,
-      "min_value": 0.0,
-      "max_value": 5.0
-    },
-    "distance_bonus": {
-      "weight": 0.0002,
-      "enabled": false,
-      "min_value": 0,
-      "max_value": 50
-    },
-    "jerk_penalty": {
-      "weight": -0.001,
-      "enabled": false,
-      "min_value": -1,
-      "max_value": 0
     },
     "height_deviation_penalty": {
       "weight": -0.01,

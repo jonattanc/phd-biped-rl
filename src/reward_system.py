@@ -122,19 +122,22 @@ class RewardSystem:
         # DPG - 4. Evitar escorregar - 2
         if self.is_component_enabled("simple_stability"):
             stability_bonus = 0.0
-            if sim.robot_left_foot_contact and sim.robot_right_foot_contact:
-                stability_bonus += 0.2  
-            if sim.robot_left_foot_contact and abs(sim.robot_left_foot_x_velocity) < 0.02:
+            if sim.robot_left_foot_contact != sim.robot_right_foot_contact:
                 stability_bonus += 0.1
-            if sim.robot_right_foot_contact and abs(sim.robot_right_foot_x_velocity) < 0.02:
-                stability_bonus += 0.1
-            if not sim.robot_left_foot_contact and sim.robot_left_foot_height > 0.01:
+            if sim.robot_left_foot_contact and abs(sim.robot_left_foot_x_velocity) < 0.05:
                 stability_bonus += 0.05
-            if not sim.robot_right_foot_contact and sim.robot_right_foot_height > 0.01:
+            if sim.robot_right_foot_contact and abs(sim.robot_right_foot_x_velocity) < 0.05:
                 stability_bonus += 0.05
+            if not sim.robot_left_foot_contact and sim.robot_left_foot_height > 0.02:
+                stability_bonus += 0.02
+            if not sim.robot_right_foot_contact and sim.robot_right_foot_height > 0.02:
+                stability_bonus += 0.02
 
             self.components["simple_stability"].value = stability_bonus
-            total_reward += stability_bonus * self.components["simple_stability"].weight
+            weight_multiplier = weight_adjustments.get("simple_stability", 1.0)
+            adjusted_weight = self.components["simple_stability"].weight * weight_multiplier
+
+            total_reward += self.components["simple_stability"].value * adjusted_weight
             
         # DPG - 5. Progresso de acordo com o pitch - 1
         if self.is_component_enabled("effort_progress"):
