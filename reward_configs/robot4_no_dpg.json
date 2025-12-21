@@ -24,12 +24,6 @@
       "min_value": 0.0,
       "max_value": 5.0
     },
-    "adaptability_bonus": {
-      "weight": 0.002,
-      "enabled": false,
-      "min_value": 0,
-      "max_value": 5
-    },
     "stability_roll": {
       "weight": -0.001,
       "enabled": true,
@@ -37,6 +31,12 @@
       "max_value": 0
     },
     "stability_pitch": {
+      "weight": -0.0001,
+      "enabled": false,
+      "min_value": -1,
+      "max_value": 0
+    },
+    "stability_original_pitch": {
       "weight": -0.004,
       "enabled": true,
       "min_value": -1,
@@ -156,11 +156,11 @@
       "min_value": -1,
       "max_value": 0
     },
-    "effort_progress": {
-      "weight": 5.0,
+    "effort_penalty": {
+      "weight": -0.001,
       "enabled": false,
-      "min_value": 0,
-      "max_value": 10
+      "min_value": -1,
+      "max_value": 0
     },
     "y_axis_deviation_penalty": {
       "weight": -0.01,
@@ -198,7 +198,7 @@
       "min_value": -10,
       "max_value": 0
     },
-    "propulsion_efficiency": {
+    "foot_clearance_original": {
       "weight": 0.005,
       "enabled": false,
       "min_value": 0,
