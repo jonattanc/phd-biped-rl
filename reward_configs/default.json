@@ -26,7 +26,7 @@
     },
     "pitch_forward_bonus": {
       "weight": 0.1,
-      "enabled": false,
+      "enabled": true,
       "min_value": 0,
       "max_value": 20.0
     },
@@ -74,7 +74,7 @@
     },
     "hip_extension": {
       "weight": 0.0002,
-      "enabled": false,
+      "enabled": true,
       "min_value": 0,
       "max_value": 1
     },
@@ -114,8 +114,8 @@
       "min_value": -100,
       "max_value": 0
     },
-    "foot_inclination_penalty": {
-      "weight": -0.001,
+    "stability_pitch": {
+      "weight": -0.004,
       "enabled": true,
       "min_value": -1,
       "max_value": 0
@@ -127,6 +127,12 @@
       "max_value": 0
     },
     "stability_roll": {
+      "weight": -0.001,
+      "enabled": true,
+      "min_value": -1,
+      "max_value": 0
+    },
+    "foot_inclination_penalty": {
       "weight": -0.001,
       "enabled": true,
       "min_value": -1,
@@ -146,12 +152,6 @@
     },
     "jerk_penalty": {
       "weight": -0.001,
-      "enabled": true,
-      "min_value": -1,
-      "max_value": 0
-    },
-    "stability_pitch": {
-      "weight": -0.004,
       "enabled": true,
       "min_value": -1,
       "max_value": 0
