@@ -60,7 +60,8 @@ class PhaseManager:
                 'efficiency_bonus': 10.0,   
                 'foot_clearance': 10.0,  
                 'hip_extension': 5.0, 
-                'distance_bonus': 5.0,       
+                'distance_bonus': 5.0,   
+                'gait_rhythm': 2.0,    
                 'alternating_foot_contact': 2.0,
                 'foot_back_penalty': 2.0,    
                 'stability_roll': 3.0,      
@@ -133,13 +134,13 @@ class PhaseManager:
         if self.current_phase == 1:
             if self.phase1_success_counter >= self.phase1_success_threshold:
                 if self.custom_logger:
-                    self.custom_logger.info(f"🎯 FASE 1 CONCLUÍDA: {self.phase1_success_counter} episódios > 2.5m")
+                    self.custom_logger.info(f"🎯 FASE 1 CONCLUÍDA: {self.phase1_success_counter} episódios > {self.phase1_success_criterio}m")
                 return True
                 
         elif self.current_phase == 2:
             if self.phase2_success_counter >= self.phase2_success_threshold:
                 if self.custom_logger:
-                    self.custom_logger.info(f"🎯 FASE 2 CONCLUÍDA: {self.phase2_success_counter} episódios > 8m")
+                    self.custom_logger.info(f"🎯 FASE 2 CONCLUÍDA: {self.phase2_success_counter} episódios > {self.phase2_success_criterio}m")
                 return True
                 
         return False
