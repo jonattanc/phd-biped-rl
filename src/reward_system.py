@@ -467,7 +467,10 @@ class RewardSystem:
         return total_reward
 
     def _calculate_cross_gait_pattern(self, sim):
-        """Recompensa por alternância dinâmica braço-perna"""
+        """Calcula recompensa por padrão de marcha cruzada (contralateral)"""
+
+        left_foot_contact = sim.robot_left_foot_contact
+        right_foot_contact = sim.robot_right_foot_contact
 
         try:
             right_arm_angle = getattr(sim, "robot_right_shoulder_front_angle", 0)
@@ -475,33 +478,64 @@ class RewardSystem:
         except:
             return 0.0
 
-        if not hasattr(self, '_arm_history'):
-            self._arm_history = []
-        arm_moving = abs(right_arm_angle) > 0.05 or abs(left_arm_angle) > 0.05
-        if arm_moving:
-            current_state = f"R{right_arm_angle:.2f}_L{left_arm_angle:.2f}"
-            self._arm_history.append(current_state)
-            if len(self._arm_history) > 10:
-                self._arm_history.pop(0)
-        score = 0.0
+        # Adicionar apenas 1 contador para alternância
+        if not hasattr(self, "_last_good_foot"):
+            self._last_good_foot = None
+
+        cross_gait_score = 0.0
+
+        # Perna direita no ar + braço esquerdo para trás
+        if not right_foot_contact and left_arm_angle > 0 and self._last_good_foot != "right":
+            cross_gait_score += 0.5
+            self._last_good_foot = "right"
+
+        # Perna esquerda no ar + braço direito para trás
+        elif not left_foot_contact and right_arm_angle > 0 and self._last_good_foot != "left":
+            cross_gait_score += 0.5
+            self._last_good_foot = "left"
+
+        # Perna direita no ar + braço direito para trás (errado)
+        if not right_foot_contact and right_arm_angle > 0:
+            cross_gait_score -= 0.5
+
+        # Perna esquerda no ar + braço esquerdo para trás (errado)
+        if not left_foot_contact and left_arm_angle > 0:
+            cross_gait_score -= 0.5
+
+        # BÔNUS POR ALTERNÂNCIA DOS BRAÇOS ***
+        if not hasattr(self, '_last_arm_state'):
+            self._last_arm_state = None
+
+        # Determinar estado atual dos braços
         right_arm_back = right_arm_angle > 0.1
         left_arm_back = left_arm_angle > 0.1
-        if right_arm_back != left_arm_back:
-            score += 0.5  
-            if right_arm_back and not sim.robot_left_foot_contact:
-                score += 1.0  
-            elif left_arm_back and not sim.robot_right_foot_contact:
-                score += 1.0  
-        if right_arm_back and left_arm_back:
-            score -= 0.3
-        if len(set(self._arm_history)) > 5:
-            score += 0.4
 
-        return max(0.0, score)
+        current_arm_state = None
+        if right_arm_back and not left_arm_back:
+            current_arm_state = "right_back"
+        elif left_arm_back and not right_arm_back:
+            current_arm_state = "left_back"
+        elif right_arm_back and left_arm_back:
+            current_arm_state = "both_back"
+        else:
+            current_arm_state = "both_front"
+
+        # Se os braços alternaram (direita→esquerda ou esquerda→direita)
+        if (self._last_arm_state in ["right_back", "left_back"] and 
+            current_arm_state in ["right_back", "left_back"] and
+            self._last_arm_state != current_arm_state):
+
+            # BÔNUS POR ALTERNAR OS BRAÇOS
+            cross_gait_score += 1.0 
+
+        # Atualizar estado
+        self._last_arm_state = current_arm_state
+
+        return max(0.0, cross_gait_score)
 
     def _calculate_foot_clearance_optimized(self, sim):
         """Calcula recompensa por altura adequada dos pés durante o balanço"""
-        optimal_clearance = 0.05  # 5cm ideal durante balanço
+        optimal_clearance = 0.05 
         clearance_score = 0.0
 
         # Pé direito no balanço
