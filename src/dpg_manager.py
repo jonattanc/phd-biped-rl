@@ -51,7 +51,7 @@ class PhaseManager:
             1: {},  # Fase 1: usa os pesos do default.json
             2: {    # Fase 2: Foco em Progresso e Estabilidade
                 'gait_state_change': 1.5,
-                'progress': 3.0,           
+                'progress': 4.0,           
                 'xcom_stability': 3.0, 
                 'simple_stability': 2.5, 
                 'pitch_forward_bonus': 2.0,   
@@ -74,8 +74,8 @@ class PhaseManager:
                 'simple_stability': 5.0, 
                 'pitch_forward_bonus': 5.0,
                 'knee_flexion': 3.0,  
-                'gait_pattern_cross': 10.0, 
-                'efficiency_bonus': 10.0,  
+                'gait_pattern_cross': 50.0, 
+                'efficiency_bonus': 15.0,  
                 'foot_clearance': 5.0,    
                 'hip_extension': 5.0,  
                 'distance_bonus': 10.0,          

@@ -37,7 +37,7 @@
       "max_value": 1
     },
     "gait_pattern_cross": {
-      "weight": 0.0002,
+      "weight": 0.0004,
       "enabled": true,
       "min_value": 0.0,
       "max_value": 5.0
