@@ -467,71 +467,82 @@ class RewardSystem:
         return total_reward
 
     def _calculate_cross_gait_pattern(self, sim):
-        """Calcula recompensa por padrão de marcha cruzada (contralateral)"""
-
+        """Calcula recompensa por padrão de marcha cruzada (contralateral) apenas se houver alternância."""
+        
         left_foot_contact = sim.robot_left_foot_contact
         right_foot_contact = sim.robot_right_foot_contact
-
+        
         try:
             right_arm_angle = getattr(sim, "robot_right_shoulder_front_angle", 0)
             left_arm_angle = getattr(sim, "robot_left_shoulder_front_angle", 0)
         except:
             return 0.0
-
-        # Adicionar apenas 1 contador para alternância
-        if not hasattr(self, "_last_good_foot"):
-            self._last_good_foot = None
-
-        cross_gait_score = 0.0
-
-        # Perna direita no ar + braço esquerdo para trás
-        if not right_foot_contact and left_arm_angle > 0 and self._last_good_foot != "right":
-            cross_gait_score += 0.5
-            self._last_good_foot = "right"
-
-        # Perna esquerda no ar + braço direito para trás
-        elif not left_foot_contact and right_arm_angle > 0 and self._last_good_foot != "left":
-            cross_gait_score += 0.5
-            self._last_good_foot = "left"
-
-        # Perna direita no ar + braço direito para trás (errado)
-        if not right_foot_contact and right_arm_angle > 0:
-            cross_gait_score -= 0.5
-
-        # Perna esquerda no ar + braço esquerdo para trás (errado)
-        if not left_foot_contact and left_arm_angle > 0:
-            cross_gait_score -= 0.5
-
-        # BÔNUS POR ALTERNÂNCIA DOS BRAÇOS ***
-        if not hasattr(self, '_last_arm_state'):
-            self._last_arm_state = None
-
-        # Determinar estado atual dos braços
-        right_arm_back = right_arm_angle > 0.1
-        left_arm_back = left_arm_angle > 0.1
-
-        current_arm_state = None
-        if right_arm_back and not left_arm_back:
-            current_arm_state = "right_back"
-        elif left_arm_back and not right_arm_back:
-            current_arm_state = "left_back"
-        elif right_arm_back and left_arm_back:
-            current_arm_state = "both_back"
+        
+        # Determinar qual pé está no ar (balanço)
+        foot_in_air = None
+        if not left_foot_contact and right_foot_contact:
+            foot_in_air = "left"
+        elif not right_foot_contact and left_foot_contact:
+            foot_in_air = "right"
         else:
-            current_arm_state = "both_front"
-
-        # Se os braços alternaram (direita→esquerda ou esquerda→direita)
-        if (self._last_arm_state in ["right_back", "left_back"] and 
-            current_arm_state in ["right_back", "left_back"] and
-            self._last_arm_state != current_arm_state):
-
-            # BÔNUS POR ALTERNAR OS BRAÇOS
-            cross_gait_score += 1.0 
-
-        # Atualizar estado
-        self._last_arm_state = current_arm_state
-
-        return max(0.0, cross_gait_score)
+            # Ambos os pés no chão ou no ar - não é um passo claro
+            return 0.0
+        
+        # Determinar qual braço está para trás (ângulo positivo)
+        arm_back = None
+        if left_arm_angle > 0.1 and right_arm_angle <= 0.1:
+            arm_back = "left"
+        elif right_arm_angle > 0.1 and left_arm_angle <= 0.1:
+            arm_back = "right"
+        # Se ambos para frente/trás ou nenhum claro, não pontuar
+        
+        # Verificar se é contralateral (braço oposto ao pé no ar)
+        is_contralateral = False
+        if foot_in_air == "left" and arm_back == "right":
+            is_contralateral = True
+        elif foot_in_air == "right" and arm_back == "left":
+            is_contralateral = True
+        
+        # Inicializar histórico se não existir
+        if not hasattr(self, '_last_gait_pattern'):
+            self._last_gait_pattern = {
+                'foot_in_air': None,
+                'arm_back': None,
+                'was_contralateral': False
+            }
+        
+        # Verificar alternância em relação ao passo anterior
+        alternation_bonus = 0.0
+        
+        # Apenas recompensar se:
+        # 1. É contralateral atual
+        # 2. Houve alternância do pé no ar (não pode ser o mesmo pé duas vezes seguidas)
+        if is_contralateral:
+            if self._last_gait_pattern['foot_in_air'] is not None:
+                # Recompensar alternância do pé no ar
+                if foot_in_air != self._last_gait_pattern['foot_in_air']:
+                    alternation_bonus = 1.0
+                else:
+                    # Mesmo pé no ar duas vezes seguidas - penalizar
+                    alternation_bonus = -0.5
+            else:
+                # Primeiro passo válido - recompensa menor
+                alternation_bonus = 0.5
+        
+        # Penalizar se foi contralateral no passo anterior mas agora não é
+        if (self._last_gait_pattern['was_contralateral'] and 
+            not is_contralateral and
+            foot_in_air is not None):
+            alternation_bonus = -0.3
+        
+        # Atualizar histórico
+        self._last_gait_pattern = {
+            'foot_in_air': foot_in_air,
+            'arm_back': arm_back,
+            'was_contralateral': is_contralateral
+        }
+        
+        return max(-1.0, min(1.0, alternation_bonus))  # Limitar entre -1 e 1
 
     def _calculate_foot_clearance_optimized(self, sim):
         """Calcula recompensa por altura adequada dos pés durante o balanço"""
