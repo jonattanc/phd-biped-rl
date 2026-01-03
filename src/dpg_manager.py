@@ -51,7 +51,7 @@ class PhaseManager:
             1: {},  # Fase 1: usa os pesos do default.json
             2: {    # Fase 2: Foco em Progresso e Estabilidade
                 'gait_state_change': 1.5,
-                'progress': 4.0,           
+                'progress': 3.0,           
                 'xcom_stability': 3.0, 
                 'simple_stability': 2.0, 
                 'knee_flexion': 3.0,
@@ -68,24 +68,24 @@ class PhaseManager:
             },
             3: {    # Fase 3: Foco em Sucesso e Velocidade
                 'gait_state_change': 2.0,
-                'progress': 6.0,           
+                'progress': 4.0,           
                 'xcom_stability': 6.0,  
                 'simple_stability': 3.0, 
-                'knee_flexion': 6.0,  
+                'knee_flexion': 10.0,  
                 'gait_pattern_cross': 20.0, 
                 'efficiency_bonus': 15.0,  
                 'foot_clearance': 5.0,    
                 'hip_extension': 5.0,  
                 'distance_bonus': 10.0,          
                 'gait_rhythm': 5.0,        
-                'alternating_foot_contact': 3.0, 
+                'alternating_foot_contact': 5.0, 
                 'fall_penalty': 3.0,       
                 'yaw_penalty': 2.0,    
                 'foot_back_penalty': 3.0,    
                 'stability_roll': 4.0,
                 'foot_inclination_penalty': 3.0,
                 'effort_square_penalty': 5.0,  
-                'y_axis_deviation_square_penalty': 20.0, 
+                'y_axis_deviation_square_penalty': 50.0, 
                 'jerk_penalty': 5.0,  
             }
         }

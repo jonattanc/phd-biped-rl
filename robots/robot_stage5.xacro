@@ -35,7 +35,7 @@
 
   <!-- Thigh properties -->
   <xacro:property name="thigh_radius" value="0.075" />
-  <xacro:property name="thigh_length" value="0.40" />
+  <xacro:property name="thigh_length" value="0.43" />
   <xacro:property name="thigh_mass" value="16.0" />
   <xacro:property name="thigh_ixx" value="${(1.0/12.0) * thigh_mass * (3 * thigh_radius * thigh_radius + thigh_length * thigh_length)}" />
   <xacro:property name="thigh_iyy" value="${(1.0/12.0) * thigh_mass * (3 * thigh_radius * thigh_radius + thigh_length * thigh_length)}" />
@@ -50,7 +50,7 @@
 
   <!-- Shin properties -->
   <xacro:property name="shin_radius" value="0.06" />
-  <xacro:property name="shin_length" value="0.43" />
+  <xacro:property name="shin_length" value="0.40" />
   <xacro:property name="shin_mass" value="7.3" />
   <xacro:property name="shin_ixx" value="${(1.0/12.0) * shin_mass * (3 * shin_radius * shin_radius + shin_length * shin_length)}" />
   <xacro:property name="shin_iyy" value="${(1.0/12.0) * shin_mass * (3 * shin_radius * shin_radius + shin_length * shin_length)}" />
