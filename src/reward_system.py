@@ -69,6 +69,7 @@ class RewardSystem:
                 "gait_pattern_cross": 1.0,
                 "gait_rhythm": 1.0,
                 "alternating_foot_contact": 1.0,
+                "arm_alternation": 1.0,
                 "success_bonus": 1.0,
                 "adaptability_bonus": 1.0,
                 "propulsion_efficiency": 1.0,
@@ -224,6 +225,13 @@ class RewardSystem:
             adjusted_weight = self.components["alternating_foot_contact"].weight * weight_multiplier
 
             total_reward += self.components["alternating_foot_contact"].value * adjusted_weight
+
+        # DPG - Alternância de Braços (Arm Swing Coordination)
+        if self.is_component_enabled("arm_alternation"):
+            self.components["arm_alternation"].value = self._calculate_arm_alternation_simple(sim)
+            weight_multiplier = weight_adjustments.get("arm_alternation", 1.0)
+            adjusted_weight = self.components["arm_alternation"].weight * weight_multiplier
+            total_reward += self.components["arm_alternation"].value * adjusted_weight
 
         # DPG - 14. Bonus de sucesso
         if self.is_component_enabled("success_bonus"):
@@ -465,6 +473,31 @@ class RewardSystem:
                 total_reward += warning_factor * self.components["warning_penalty"].weight
 
         return total_reward
+
+    def _calculate_arm_alternation_simple(self, sim):
+        """Alternância de braços"""
+
+        try:
+            right_shoulder = sim.robot_right_shoulder_front_angle
+            left_shoulder = sim.robot_left_shoulder_front_angle
+        except AttributeError:
+            return 0.0
+
+        right_foot_swing = not sim.robot_right_foot_contact
+        left_foot_swing = not sim.robot_left_foot_contact
+
+        score = 0.0
+
+        if right_foot_swing and left_shoulder > right_shoulder:
+            score += 0.7  
+        if left_foot_swing and right_shoulder > left_shoulder:
+            score += 0.7 
+        if right_foot_swing and right_shoulder > left_shoulder:
+            score -= 0.5  
+        if left_foot_swing and left_shoulder > right_shoulder:
+            score -= 0.5  
+
+        return score
 
     def _calculate_cross_gait_pattern(self, sim):
         """Calcula recompensa por padrão de marcha cruzada (contralateral) apenas se houver alternância."""

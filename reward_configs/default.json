@@ -72,6 +72,12 @@
       "min_value": 0,
       "max_value": 1
     },
+    "arm_alternation": {
+      "weight": 0.0002,
+      "enabled": true,
+      "min_value": 0,
+      "max_value": 1
+    },
     "hip_extension": {
       "weight": 0.0002,
       "enabled": true,
