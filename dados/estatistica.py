@@ -103,8 +103,8 @@ def calcular_metricas_arquivo(df, nome_categoria):
     else:
         passos_ate_9m = total_passos
     
-    # 5. Total de Passos Até Parar de Evoluir (2500000)
-    passos_ate_estabilizar = min(total_passos, 2500000)
+    # 5. Total de Passos Até Parar de Evoluir (500000)
+    passos_ate_estabilizar = min(total_passos, 500000)
     
     # 6. Passos de Aprendizagem Após 1° 9m
     if primeiro_episodio_9m is not None:
