@@ -69,7 +69,7 @@ class PhaseManager:
             },
             3: {    # Fase 3: Foco em Sucesso e Velocidade
                 'gait_state_change': 2.0,
-                'progress': 4.0,           
+                'progress': 6.0,           
                 'xcom_stability': 6.0,  
                 'simple_stability': 3.0, 
                 'pitch_forward_bonus': 3.0,
