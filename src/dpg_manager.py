@@ -72,7 +72,7 @@ class PhaseManager:
                 'progress': 6.0,           
                 'xcom_stability': 6.0,  
                 'simple_stability': 3.0, 
-                'pitch_forward_bonus': 3.0,
+                'pitch_forward_bonus': 5.0,
                 'knee_flexion': 8.0,  
                 'gait_pattern_cross': 30.0, 
                 'efficiency_bonus': 15.0,  
