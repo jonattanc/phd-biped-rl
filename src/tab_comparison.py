@@ -115,22 +115,22 @@ class ComparisonTab:
         """Inicializa os gráficos para avaliação cruzada"""
         try:
             # Gráfico de ranking de complexidade
-            self.axs_cross[0, 0].set_title("Ranking de Complexidade (RF-08)")
+            self.axs_cross[0, 0].set_title("Ranking de Complexidade")
             self.axs_cross[0, 0].set_ylabel("Tempo Médio (s)")
             self.axs_cross[0, 0].grid(True, alpha=0.3)
 
             # Gráfico de generalização
-            self.axs_cross[0, 1].set_title("Performance de Generalização (RF-09)")
+            self.axs_cross[0, 1].set_title("Performance de Generalização")
             self.axs_cross[0, 1].set_ylabel("Taxa de Sucesso (%)")
             self.axs_cross[0, 1].grid(True, alpha=0.3)
 
             # Gráfico de transferências direcionais
-            self.axs_cross[1, 0].set_title("Transferências Direcionais (RF-11)")
+            self.axs_cross[1, 0].set_title("Transferências Direcionais")
             self.axs_cross[1, 0].set_ylabel("Quantidade")
             self.axs_cross[1, 0].grid(True, alpha=0.3)
 
             # Gráfico de gaps de especificidade
-            self.axs_cross[1, 1].set_title("Gaps de Especificidade (RF-10)")
+            self.axs_cross[1, 1].set_title("Gaps de Especificidade")
             self.axs_cross[1, 1].set_ylabel("ΔTm (s)")
             self.axs_cross[1, 1].grid(True, alpha=0.3)
 
@@ -234,7 +234,10 @@ class ComparisonTab:
                 origin_time = report["best_specialists"][origin]["avg_time"]
                 results_text += f"\n{origin} (Tm={origin_time:.2f}s) → \n"
                 for target, metrics in targets.items():
-                    delta = (metrics["avg_time"] - origin_time) / origin_time * 100
+                    if origin_time == 0:
+                        delta = 0.0
+                    else:
+                        delta = (metrics["avg_time"] - origin_time) / origin_time * 100
                     results_text += f"  • {target}: {metrics['avg_time']:.2f}s "
                     results_text += f"({metrics['success_rate']*100:.1f}%, Δ={delta:+.1f}%)\n"
 

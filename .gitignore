@@ -27,8 +27,4 @@ Thumbs.db
 
 # Others
 tmp/
-
-# Dados de treinamento
 training_data/
-
-default_settings.json
