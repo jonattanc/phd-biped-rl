@@ -875,7 +875,7 @@ class TrainingTab(common_tab.GUITab):
         messagebox.showinfo(
             "Treinamento Pausado Automaticamente",
             f"O treinamento foi pausado automaticamente após {tracker_status["patience_steps"]:,} steps sem melhoria significativa.\n\n"
-            f"• Melhor recompensa: {tracker_status["best_reward"]:.2f}\n"
+            f"• Melhor valor monitorado: {tracker_status["best_tracked_value"]:.2f}\n"
             f"• Melhor distância: {tracker_status["best_distance"]:.2f}m\n"
             f"• Steps totais: {self.total_steps:,}\n"
             f"• Steps sem melhoria: {tracker_status["steps_since_improvement"]:,}\n\n"
@@ -892,7 +892,7 @@ class TrainingTab(common_tab.GUITab):
 
             # Criar texto de status com emojis para melhor visualização
             status_parts = []
-            status_parts.append(f"Melhor: {status['best_reward']:.2f}")
+            status_parts.append(f"Melhor valor monitorado: {status['best_tracked_value']:.2f}")
             status_parts.append(f"Distância: {status['best_distance']:.2f}m")
             status_parts.append(f"Sem melhoria: {status['steps_since_improvement']:,}")
 

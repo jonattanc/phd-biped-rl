@@ -57,8 +57,6 @@ class Simulation(gym.Env):
         self.reward_system = reward_system
         self.should_save_model = False
 
-        self.tracker = best_model_tracker.BestModelTracker(self)
-
         # Configurações de simulação
         self.target_pitch_rad = math.radians(1)  # rad
         self.target_x_velocity = 1.0  # m/s
@@ -68,6 +66,7 @@ class Simulation(gym.Env):
         self.episode_training_timeout_s = 15  # s
         self.episode_pre_fill_timeout_s = 10  # s
         self.episode_timeout_s = self.episode_training_timeout_s
+        self.episode_init_success_time = self.episode_timeout_s * 10  # s
         self.physics_step_s = 1 / 240.0  # 240 Hz, ~4.16 ms
         self.physics_step_multiplier = 8
         self.time_step_s = self.physics_step_s * self.physics_step_multiplier  # 240/5 = 48 Hz, ~20.83 ms # 240/8 = 30 Hz, ~33.33 ms # 240/10 = 24 Hz, ~41.66 ms
@@ -78,10 +77,13 @@ class Simulation(gym.Env):
         self.lock_per_second = 0.5  # lock/s
         self.lock_time = 0.5  # s
         self.action_noise_std = 1e-3
+
         if self.is_fast_td3:
             self.max_motor_torque = 350.0
         else:
             self.max_motor_torque = 250.0  # Nm
+
+        self.tracker = best_model_tracker.BestModelTracker(self)
 
         # Configurar ambiente de simulação PRIMEIRO
         self.setup_sim_env()
@@ -261,6 +263,8 @@ class Simulation(gym.Env):
         self.episode_reward = 0.0
         self.episode_filtered_reward = 0.0
         self.episode_start_time = time.time()
+        self.episode_success_time = self.episode_init_success_time
+        self.episode_filtered_success_time = self.episode_init_success_time
         self.episode_robot_x_initial_position = 0.0
         self.episode_robot_y_initial_position = 0.0
         self.episode_distance = 0.0
@@ -361,6 +365,8 @@ class Simulation(gym.Env):
             "episodes": self.episode_count,
             "rewards": self.episode_reward,
             "rewards_filtered": self.episode_filtered_reward,
+            "episode_success_time": self.episode_success_time,
+            "episode_filtered_success_time": self.episode_filtered_success_time,
             "times": self.episode_steps * self.time_step_s,
             "steps": self.episode_steps,
             "total_steps": self.total_steps,
@@ -503,6 +509,7 @@ class Simulation(gym.Env):
 
         # Condições de Termino
         self.episode_termination = "none"
+        self.episode_success_time = self.episode_init_success_time
 
         # Queda
         if self.robot_z_ramp_position < self.fall_threshold:
@@ -510,7 +517,7 @@ class Simulation(gym.Env):
             self.episode_termination = "fell"
 
         # Desvio do caminho
-        if abs(self.robot_yaw) >= self.yaw_threshold:
+        elif abs(self.robot_yaw) >= self.yaw_threshold:
             self.episode_terminated = True
             self.episode_termination = "yaw_deviated"
 
@@ -519,6 +526,7 @@ class Simulation(gym.Env):
             self.episode_terminated = True
             self.episode_success = True
             self.episode_termination = "success"
+            self.episode_success_time = self.episode_steps * self.time_step_s
 
         # Timeout
         elif self.episode_steps * self.time_step_s >= self.episode_timeout_s:
@@ -531,6 +539,7 @@ class Simulation(gym.Env):
         reward = self.reward_system.calculate_reward(self, action)
         self.episode_reward += reward
         self.episode_filtered_reward = 0.1 * self.episode_reward + 0.9 * self.episode_filtered_reward
+        self.episode_filtered_success_time = 0.1 * self.episode_success_time + 0.9 * self.episode_filtered_success_time
 
         if self.config_changed_value.value:  # Se houve mudança de configuração
             if self.pause_value.value:
@@ -584,7 +593,7 @@ class Simulation(gym.Env):
                 # Verificar transição de fase (sempre logar transições)
                 if transition_occurred:
                     phase_info = self.agent.model.get_phase_info()
-        
+
                     # Aumentar timeout em 5 segundos
                     old_timeout = self.episode_training_timeout_s
                     self.episode_training_timeout_s += 5.0
