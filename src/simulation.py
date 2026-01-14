@@ -218,26 +218,35 @@ class Simulation(gym.Env):
 
         self.logger.info("Pré-preenchimento do buffer de replay concluído.")
 
-    def evaluate(self, episodes, deterministic):
+    def evaluate(self, episodes, deterministic, evaluation=True):
+        """Executa avaliação até alcançar o número desejado de episódios"""
         self.metrics = {}
         obs, _ = self.reset()
         self.metrics[str(self.episode_count + 1)] = {"step_data": {}}  # Criar espaço para primeiro episódio
-
-        while self.episode_count < episodes and not self.exit_value.value:
+    
+        success_count = 0
+        max_successes = 100  # Executar até alcançar 100 sucessos
+        
+        while self.episode_count < episodes and success_count < max_successes and not self.exit_value.value:
             obs = self.wrapped_env.normalize_obs(obs)
             action, _ = self.agent.model.predict(obs, deterministic=deterministic)
-
+    
             next_obs, reward, episode_terminated, episode_truncated, info = self.step(action, evaluation=True)
             done = episode_terminated or episode_truncated
-
+    
             if done:
+                # Verificar se foi um sucesso
+                if episode_terminated and self.episode_success:
+                    success_count += 1
+                    self.logger.info(f"Sucesso #{success_count} alcançado no episódio {self.episode_count}")
+                
                 obs, _ = self.reset()
-
             else:
                 obs = next_obs
-
+    
         self.metrics.pop(str(self.episode_count + 1))  # Remover espaço para próximo episódio, pois a avaliação terminou
-
+        self.logger.info(f"Avaliação concluída: {success_count} sucessos em {self.episode_count} episódios")
+    
         return {"episodes": self.metrics}
 
     def soft_env_reset(self):

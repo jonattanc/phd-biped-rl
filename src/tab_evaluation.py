@@ -61,10 +61,9 @@ class EvaluationTab(common_tab.GUITab):
 
         self.create_robot_selector(row2_frame, column=2, enabled=False)
 
-        ttk.Label(row2_frame, text="Episódios:").grid(row=0, column=4, sticky=tk.W, padx=5)
-        self.eval_episodes_var = tk.StringVar(value="5")
-        self.episodes_spinbox = ttk.Spinbox(row2_frame, from_=0, to=1e7, textvariable=self.eval_episodes_var, width=8)
-        self.episodes_spinbox.grid(row=0, column=5, padx=5)
+        ttk.Label(row2_frame, text="Executar até:").grid(row=0, column=4, sticky=tk.W, padx=5)
+        self.eval_episodes_var = tk.StringVar(value="100 sucessos")
+        ttk.Label(row2_frame, textvariable=self.eval_episodes_var, width=15).grid(row=0, column=5, padx=5)
 
         self.create_pause_btn(row2_frame, 6)
         self.create_stop_btn(row2_frame, 7)
@@ -238,6 +237,7 @@ class EvaluationTab(common_tab.GUITab):
         self.save_results_btn.config(state=tk.DISABLED)
         self.export_plot_btn.config(state=tk.DISABLED)
         self.episode_count = self.update_episode_count(0)
+        self.desired_successes = 100
         self._run_evaluation(agent_model_path)
 
     def _run_evaluation(self, agent_model_path):
@@ -246,7 +246,7 @@ class EvaluationTab(common_tab.GUITab):
             self.current_env = self.env_var.get()
             self.current_robot = self.robot_var.get()
 
-            episodes = int(self.eval_episodes_var.get())
+            episodes = 10000
             deterministic = self.eval_deterministic_var.get()
 
             shutil.rmtree(utils.TEMP_EVALUATION_SAVE_PATH)
@@ -306,7 +306,7 @@ class EvaluationTab(common_tab.GUITab):
             self.unlock_gui()
 
     def _display_evaluation_results(self):
-        """Exibe os resultados da avaliação na interface"""
+        """Exibe os resultados da avaliação na interface e cria tabelas"""
         try:
             metrics = self.metrics_data["extra_metrics"]
 
@@ -322,12 +322,52 @@ class EvaluationTab(common_tab.GUITab):
             total_rewards = metrics.get("total_rewards", [])
             total_times = metrics.get("total_times", [])
             total_distances = []
+            all_episodes_data = []
 
-            # Coletar distâncias dos episódios
-            for episode_num, episode_data in self.metrics_data["episodes"].items():
-                if "episode_data" in episode_data:
-                    distance = episode_data["episode_data"].get("distances", 0)
-                    total_distances.append(distance)
+            # Coletar dados de todos os episódios
+            for episode_num in range(1, num_episodes + 1):
+                episode_key = str(episode_num)
+                if episode_key in self.metrics_data["episodes"]:
+                    episode_data = self.metrics_data["episodes"][episode_key]
+
+                    if "episode_data" in episode_data:
+                        distance = episode_data["episode_data"].get("distances", 0)
+                        time_val = episode_data["episode_data"].get("times", 0)
+                        success = False
+
+                        if "episode_extra_data" in episode_data:
+                            success = episode_data["episode_extra_data"].get("episode_success", False)
+                        elif "episode_data" in episode_data:
+                            success = episode_data["episode_data"].get("success", False)
+
+                        total_distances.append(distance)
+
+                        # Armazenar dados para tabelas
+                        velocity = distance / time_val if time_val > 0 else 0
+                        all_episodes_data.append({
+                            "episode": episode_num,
+                            "success": success,
+                            "distance": distance,
+                            "time": time_val,
+                            "velocity": velocity
+                        })
+
+            # Criar tabela com os 100 primeiros sucessos
+            first_100_successes = []
+            for episode in all_episodes_data:
+                if episode["success"] and len(first_100_successes) < 100:
+                    first_100_successes.append(episode)
+
+            # Criar tabela com todos os episódios (até alcançar 100 sucessos)
+            # Para isso, vamos pegar todos os episódios até o episódio onde alcançamos 100 sucessos
+            episodes_until_100_successes = []
+            success_counter = 0
+            for episode in all_episodes_data:
+                episodes_until_100_successes.append(episode)
+                if episode["success"]:
+                    success_counter += 1
+                    if success_counter >= 100:
+                        break
 
             results_text = (
                 "=== RESULTADOS DA AVALIAÇÃO ===\n\n"
@@ -336,6 +376,7 @@ class EvaluationTab(common_tab.GUITab):
                 f"• Ambiente: {self.env_var.get()}\n"
                 f"• Robô: {self.robot_var.get()}\n"
                 f"• Episódios executados: {num_episodes}\n"
+                f"• Sucessos alcançados: {success_count}\n"
                 f"• Modo: {'Determinístico' if self.eval_deterministic_var.get() else 'Estocástico'}\n\n"
                 f"Métricas de Performance:\n"
                 f"• Taxa de sucesso: {success_rate:.1f}% ({success_count}/{num_episodes})\n"
@@ -343,30 +384,49 @@ class EvaluationTab(common_tab.GUITab):
                 f"• Melhor tempo: {min(total_times) if total_times else 0:.2f}s\n"
                 f"• Pior tempo: {max(total_times) if total_times else 0:.2f}s\n"
                 f"• Recompensa média: {sum(total_rewards)/len(total_rewards) if total_rewards else 0:.2f}\n\n"
-                f"Distribuição de Tempos:\n"
             )
 
-            # Listar cada episódio com ✓ apenas nos bem-sucedidos
-            for i in range(1, num_episodes + 1):
-                episode_key = str(i)
-                if episode_key in self.metrics_data["episodes"]:
-                    episode_data = self.metrics_data["episodes"][episode_key]
+            # Adicionar tabela dos 100 primeiros sucessos
+            if first_100_successes:
+                results_text += "=== TABELA DOS 100 PRIMEIROS SUCESSOS ===\n"
+                results_text += "Episódio | Distância (m) | Tempo (s) | Velocidade (m/s)\n"
+                results_text += "-" * 60 + "\n"
 
-                    # Obter dados do episódio
-                    time_val = total_times[i - 1] if i - 1 < len(total_times) else 0
-                    reward_val = total_rewards[i - 1] if i - 1 < len(total_rewards) else 0
-                    distance_val = total_distances[i - 1] if i - 1 < len(total_distances) else 0
+                for episode_data in first_100_successes:
+                    results_text += f"{episode_data['episode']:8d} | {episode_data['distance']:12.2f} | {episode_data['time']:10.2f} | {episode_data['velocity']:15.2f}\n"
 
-                    # Verificar se foi bem-sucedido
-                    is_success = False
-                    if "episode_extra_data" in episode_data:
-                        is_success = episode_data["episode_extra_data"].get("episode_success", False)
-                    elif "episode_data" in episode_data:
-                        is_success = episode_data["episode_data"].get("success", False)
+                # Calcular médias para os 100 primeiros sucessos
+                avg_distance = sum(ep["distance"] for ep in first_100_successes) / len(first_100_successes)
+                avg_time_100 = sum(ep["time"] for ep in first_100_successes) / len(first_100_successes)
+                avg_velocity = sum(ep["velocity"] for ep in first_100_successes) / len(first_100_successes)
 
-                    success_symbol = "✓" if is_success else ""
+                results_text += "-" * 60 + "\n"
+                results_text += f"MÉDIA     | {avg_distance:12.2f} | {avg_time_100:10.2f} | {avg_velocity:15.2f}\n\n"
 
-                    results_text += f"• Episódio {i}: {time_val:.1f}s - {reward_val:.1f} pontos - {distance_val:.1f}m {success_symbol}\n"
+            # Adicionar tabela com todos os episódios até alcançar 100 sucessos
+            if episodes_until_100_successes:
+                results_text += "=== TABELA DE TODOS OS EPISÓDIOS (ATÉ 100 SUCESSOS) ===\n"
+                results_text += "Episódio | Sucesso | Distância (m) | Tempo (s) | Velocidade (m/s)\n"
+                results_text += "-" * 80 + "\n"
+
+                for episode_data in episodes_until_100_successes:
+                    success_symbol = "✓" if episode_data["success"] else "✗"
+                    results_text += f"{episode_data['episode']:8d} | {success_symbol:8s} | {episode_data['distance']:12.2f} | {episode_data['time']:10.2f} | {episode_data['velocity']:15.2f}\n"
+
+                # Calcular estatísticas
+                successful_episodes = [ep for ep in episodes_until_100_successes if ep["success"]]
+                failed_episodes = [ep for ep in episodes_until_100_successes if not ep["success"]]
+
+                if successful_episodes:
+                    avg_success_distance = sum(ep["distance"] for ep in successful_episodes) / len(successful_episodes)
+                    avg_success_time = sum(ep["time"] for ep in successful_episodes) / len(successful_episodes)
+                    avg_success_velocity = sum(ep["velocity"] for ep in successful_episodes) / len(successful_episodes)
+
+                results_text += "-" * 80 + "\n"
+                results_text += f"Total de episódios: {len(episodes_until_100_successes)}\n"
+                results_text += f"Sucessos: {len(successful_episodes)} | Falhas: {len(failed_episodes)}\n"
+                if successful_episodes:
+                    results_text += f"Média dos sucessos - Distância: {avg_success_distance:.2f}m, Tempo: {avg_success_time:.2f}s, Velocidade: {avg_success_velocity:.2f}m/s\n\n"
 
             # Análise de performance
             results_text += (
@@ -387,9 +447,48 @@ class EvaluationTab(common_tab.GUITab):
             # Atualizar gráficos
             self._update_evaluation_plots(metrics)
 
+            # Salvar as tabelas em arquivos separados
+            self._save_tables_to_files(first_100_successes, episodes_until_100_successes)
+
         except Exception as e:
             self.logger.exception("Erro ao exibir resultados")
             messagebox.showerror("Erro", f"Erro ao exibir resultados: {e}")
+
+    def _save_tables_to_files(self, first_100_successes, all_episodes):
+        """Salva as tabelas em arquivos CSV para referência futura"""
+        try:
+            import csv
+            from datetime import datetime
+
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            utils.ensure_directory(utils.ESPECIALISTA_DATA_PATH)
+            current_env = self.env_var.get()
+
+            # Salvar tabela dos 100 primeiros sucessos
+            if first_100_successes:
+                csv_filename_100 = f"{current_env}_100_sucessos_{timestamp}.csv"
+                csv_path_100 = os.path.join(utils.ESPECIALISTA_DATA_PATH, csv_filename_100)
+                with open(csv_path_100, 'w', newline='', encoding='utf-8') as csvfile:
+                    writer = csv.writer(csvfile)
+                    writer.writerow(['Episódio', 'Distância (m)', 'Tempo (s)', 'Velocidade (m/s)'])
+                    for ep in first_100_successes:
+                        writer.writerow([ep['episode'], f"{ep['distance']:.2f}", f"{ep['time']:.2f}", f"{ep['velocity']:.2f}"])
+                self.logger.info(f"Tabela dos 100 primeiros sucessos salva em: {csv_path_100}")
+
+            # Salvar tabela de todos os episódios
+            if all_episodes:
+                csv_filename_all = f"{current_env}_todos_episodios_{timestamp}.csv"
+                csv_path_all = os.path.join(utils.ESPECIALISTA_DATA_PATH, csv_filename_all)
+                with open(csv_path_all, 'w', newline='', encoding='utf-8') as csvfile:
+                    writer = csv.writer(csvfile)
+                    writer.writerow(['Episódio', 'Sucesso', 'Distância (m)', 'Tempo (s)', 'Velocidade (m/s)'])
+                    for ep in all_episodes:
+                        success_str = "Sim" if ep['success'] else "Não"
+                        writer.writerow([ep['episode'], success_str, f"{ep['distance']:.2f}", f"{ep['time']:.2f}", f"{ep['velocity']:.2f}"])
+                self.logger.info(f"Tabela de todos os episódios salva em: {csv_path_all}")
+
+        except Exception as e:
+            self.logger.error(f"Erro ao salvar tabelas: {e}")
 
     def _update_evaluation_plots(self, metrics):
         """Atualiza os gráficos de avaliação com novos dados"""
