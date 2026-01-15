@@ -10,6 +10,8 @@ import json
 from datetime import datetime
 import sys
 
+import numpy as np
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import utils
@@ -56,7 +58,7 @@ class ComparisonTab:
 
         # Parâmetros de avaliação
         ttk.Label(settings_frame, text="Episódios por avaliação:").grid(row=1, column=0, sticky=tk.W, padx=5)
-        self.cross_episodes_var = tk.StringVar(value="2")
+        self.cross_episodes_var = tk.StringVar(value="100")
         ttk.Entry(settings_frame, textvariable=self.cross_episodes_var, width=8).grid(row=1, column=1, padx=5, sticky=tk.W)
 
         self.cross_deterministic_var = tk.BooleanVar(value=True)
@@ -114,28 +116,27 @@ class ComparisonTab:
     def _initialize_cross_plots(self):
         """Inicializa os gráficos para avaliação cruzada"""
         try:
-            # Gráfico de ranking de complexidade
-            self.axs_cross[0, 0].set_title("Ranking de Complexidade")
+            # Gráfico de tempo por transferência
+            self.axs_cross[0, 0].set_title("Tempo por Transferência (RF-09)")
             self.axs_cross[0, 0].set_ylabel("Tempo Médio (s)")
             self.axs_cross[0, 0].grid(True, alpha=0.3)
-
-            # Gráfico de generalização
-            self.axs_cross[0, 1].set_title("Performance de Generalização")
-            self.axs_cross[0, 1].set_ylabel("Taxa de Sucesso (%)")
-            self.axs_cross[0, 1].grid(True, alpha=0.3)
-
+    
+            # Heatmap de sucesso
+            self.axs_cross[0, 1].set_title("Matriz de Sucesso (RF-09)")
+            self.axs_cross[0, 1].grid(False)
+    
             # Gráfico de transferências direcionais
-            self.axs_cross[1, 0].set_title("Transferências Direcionais")
+            self.axs_cross[1, 0].set_title("Transferências Direcionais (RF-11)")
             self.axs_cross[1, 0].set_ylabel("Quantidade")
             self.axs_cross[1, 0].grid(True, alpha=0.3)
-
-            # Gráfico de gaps de especificidade
-            self.axs_cross[1, 1].set_title("Gaps de Especificidade")
-            self.axs_cross[1, 1].set_ylabel("ΔTm (s)")
+    
+            # Gráfico de sucesso por direção
+            self.axs_cross[1, 1].set_title("Sucesso por Direção (RF-11)")
+            self.axs_cross[1, 1].set_ylabel("Taxa de Sucesso (%)")
             self.axs_cross[1, 1].grid(True, alpha=0.3)
-
+    
             self.canvas_cross.draw_idle()
-
+    
         except Exception as e:
             self.logger.exception("Erro ao inicializar gráficos de avaliação cruzada")
 
@@ -204,62 +205,79 @@ class ComparisonTab:
             self.root.after(0, lambda: messagebox.showerror("Erro", f"Erro na avaliação cruzada: {error_msg}"))
 
     def _display_cross_evaluation_results(self, report, report_path):
-        """Exibe resultados da avaliação cruzada"""
+        """Exibe resultados da avaliação cruzada - VERSÃO SIMPLIFICADA"""
         try:
             self.cross_evaluation_results = report
 
             self.results_text.config(state=tk.NORMAL)
             self.results_text.delete(1.0, tk.END)
 
-            results_text = "=== AVALIAÇÃO CRUZADA COMPLETA ===\n\n"
+            results_text = "=== AVALIAÇÃO CRUZADA - GENERALIZAÇÃO ===\n\n"
             results_text += f"Data: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n"
-            results_text += f"Total de avaliações: {report['metadata']['total_evaluations']}\n"
-            results_text += f"Episódios por avaliação: {report['metadata']['num_episodes']}\n\n"
+            results_text += f"Total de transferências: {report['metadata']['total_transfers']}\n"
+            results_text += f"Episódios por avaliação: {report['metadata']['num_episodes']}\n"
+            results_text += f"Ordem de complexidade: {', '.join(report['metadata']['circuits_order'])}\n\n"
 
-            # 1. Ranking de Complexidade (RF-08)
-            results_text += "1. RANKING DE COMPLEXIDADE (RF-08)\n"
-            results_text += "=" * 50 + "\n"
-            for i, circuit in enumerate(report["complexity_ranking"], 1):
-                specialist = report["best_specialists"][circuit["circuit"]]
-                results_text += f"{i}º - {circuit['circuit']}: {circuit['avg_time']:.2f}s "
-                results_text += f"({specialist['success_rate']*100:.1f}% sucesso)\n"
+            # Análise de Generalização (RF-09)
+            results_text += "1. ANÁLISE DE GENERALIZAÇÃO (RF-09)\n"
+            results_text += "=" * 50 + "\n\n"
 
-            # 2. Análise de Generalização (RF-09)
-            results_text += "\n2. ANÁLISE DE GENERALIZAÇÃO (RF-09)\n"
-            results_text += "=" * 50 + "\n"
+            # Agrupar por modelo origem para melhor visualização
+            from collections import defaultdict
+            by_origin = defaultdict(list)
 
-            gen_patterns = report["generalization_analysis"]
-            for origin, targets in gen_patterns.items():
-                origin_time = report["best_specialists"][origin]["avg_time"]
-                results_text += f"\n{origin} (Tm={origin_time:.2f}s) → \n"
-                for target, metrics in targets.items():
-                    if origin_time == 0:
-                        delta = 0.0
-                    else:
-                        delta = (metrics["avg_time"] - origin_time) / origin_time * 100
-                    results_text += f"  • {target}: {metrics['avg_time']:.2f}s "
-                    results_text += f"({metrics['success_rate']*100:.1f}%, Δ={delta:+.1f}%)\n"
+            for transfer in report["generalization_results"]:
+                by_origin[transfer["origin_circuit"]].append(transfer)
 
-            # 3. Transferências Direcionais (RF-11)
-            results_text += "\n3. TRANSFERÊNCIAS DIRECIONAIS (RF-11)\n"
-            results_text += "=" * 50 + "\n"
-            directional = report["directional_insights"]
-            results_text += f"• Transferências Ascendentes: {directional['ascendente_count']}\n"
-            results_text += f"• Transferências Descendentes: {directional['descendente_count']}\n"
-            results_text += f"• Sucesso Médio Ascendente: {directional['ascendente_avg_success']*100:.1f}%\n"
-            results_text += f"• Sucesso Médio Descendente: {directional['descendente_avg_success']*100:.1f}%\n"
+            for origin, transfers in by_origin.items():
+                results_text += f"Modelo {origin} →\n"
+                for transfer in transfers:
+                    target = transfer["target_circuit"]
+                    time = transfer["avg_time_target"]
+                    success = transfer["success_rate_target"] * 100
+                    distance = transfer["avg_distance_target"]
+                    velocity = transfer["avg_velocity_target"]
 
-            # 4. Gaps de Especificidade (RF-10)
-            results_text += "\n4. GAPS DE ESPECIFICIDADE (RF-10)\n"
-            results_text += "=" * 50 + "\n"
-            gaps = report["specificity_gaps"]
-            for circuit, gap_stats in gaps.items():
-                ae_time = report["best_specialists"][circuit]["avg_time"]
-                results_text += f"• {circuit} (AE: {ae_time:.2f}s): "
-                results_text += f"ΔTm = {gap_stats['mean_gap']:+.2f}s "
-                results_text += f"(±{gap_stats['std_gap']:.2f}s)\n"
+                    results_text += f"  • {target}: {time:.2f}s, {success:.1f}% sucesso, "
+                    results_text += f"{distance:.1f}m, {velocity:.2f}m/s\n"
+                results_text += "\n"
 
-            results_text += f"\nRelatório completo salvo em:\n{report_path}"
+            # Transferências Direcionais (RF-11)
+            results_text += "2. TRANSFERÊNCIAS DIRECIONAIS (RF-11)\n"
+            results_text += "=" * 50 + "\n\n"
+
+            ascendente = report["summary"]["ascendente_count"]
+            descendente = report["summary"]["descendente_count"]
+            total = ascendente + descendente
+
+            results_text += f"• Transferências Ascendentes (→ mais complexo): {ascendente}\n"
+            results_text += f"• Transferências Descendentes (→ menos complexo): {descendente}\n"
+            results_text += f"• Total: {total}\n"
+            results_text += f"• Proporção Ascendente/Descendente: {ascendente/descendente:.2f} (se >1, mais ascendentes)\n\n"
+
+            # Análise por direção
+            results_text += "Resumo por direção:\n"
+            direction_data = {"ascendente": [], "descendente": []}
+
+            for transfer in report["directional_analysis"]:
+                direction = transfer["direction"]
+                direction_data[direction].append({
+                    "success": transfer["success_rate_target"],
+                    "time": transfer["avg_time_target"]
+                })
+
+            for direction, data in direction_data.items():
+                if data:
+                    avg_success = sum(d["success"] for d in data) / len(data) * 100
+                    avg_time = sum(d["time"] for d in data) / len(data)
+                    results_text += f"  • {direction.capitalize()}: {avg_success:.1f}% sucesso médio, {avg_time:.2f}s tempo médio\n"
+
+            # Caminhos dos arquivos
+            results_text += f"\nArquivos gerados:\n"
+            results_text += f"• Generalização: {report_path['generalization_csv']}\n"
+            results_text += f"• Direcionalidade: {report_path['directionality_csv']}\n"
+            results_text += f"• JSON resumo: {report_path['json_path']}\n"
+            results_text += f"• Diretório: {report_path['output_dir']}\n"
 
             self.results_text.insert(1.0, results_text)
             self.results_text.config(state=tk.DISABLED)
@@ -272,12 +290,11 @@ class ComparisonTab:
 
             messagebox.showinfo(
                 "Avaliação Cruzada Concluída",
-                f"Todos os requisitos atendidos:\n"
-                f"• RF-08 (Complexidade): ✓\n"
+                f"Análise de generalização concluída:\n"
                 f"• RF-09 (Generalização): ✓\n"
-                f"• RF-10 (Especificidade): ✓\n"
                 f"• RF-11 (Direcionalidade): ✓\n\n"
-                f"Total: {report['metadata']['total_evaluations']} avaliações",
+                f"Total de transferências: {report['metadata']['total_transfers']}\n"
+                f"Arquivos CSV salvos em: {report_path['output_dir']}",
             )
 
         except Exception as e:
@@ -285,56 +302,69 @@ class ComparisonTab:
             messagebox.showerror("Erro", f"Erro ao exibir resultados: {e}")
 
     def _update_cross_plots(self, report):
-        """Atualiza os gráficos com os resultados da avaliação cruzada"""
+        """Atualiza os gráficos com os resultados da avaliação cruzada SIMPLIFICADA"""
         try:
             # Limpar gráficos
             for ax in self.axs_cross.flat:
                 ax.clear()
 
-            # 1. Ranking de Complexidade
-            circuits = [item["circuit"] for item in report["complexity_ranking"]]
-            times = [item["avg_time"] for item in report["complexity_ranking"]]
+            # 1. Gráfico de tempo médio por transferência
+            origins = []
+            targets = []
+            times = []
+            successes = []
 
-            bars = self.axs_cross[0, 0].bar(circuits, times, color="skyblue", alpha=0.7)
-            self.axs_cross[0, 0].set_title("Ranking de Complexidade (RF-08)")
+            for transfer in report["generalization_results"]:
+                origins.append(transfer["origin_circuit"])
+                targets.append(transfer["target_circuit"])
+                times.append(transfer["avg_time_target"])
+                successes.append(transfer["success_rate_target"] * 100)
+
+            # Criar labels únicos para cada transferência
+            transfer_labels = [f"{o}→{t}" for o, t in zip(origins, targets)]
+
+            bars = self.axs_cross[0, 0].bar(transfer_labels, times, color="skyblue", alpha=0.7)
+            self.axs_cross[0, 0].set_title("Tempo Médio por Transferência (RF-09)")
             self.axs_cross[0, 0].set_ylabel("Tempo Médio (s)")
-            self.axs_cross[0, 0].tick_params(axis="x", rotation=45)
+            self.axs_cross[0, 0].tick_params(axis="x", rotation=45, labelsize=8)
 
-            # Adicionar valores nas barras
-            for bar, time_val in zip(bars, times):
-                height = bar.get_height()
-                self.axs_cross[0, 0].text(bar.get_x() + bar.get_width() / 2.0, height, f"{time_val:.2f}s", ha="center", va="bottom")
+            # 2. Heatmap de sucesso por origem→destino
+            circuits = report["metadata"]["circuits_order"]
+            success_matrix = np.zeros((len(circuits), len(circuits)))
 
-            # 2. Performance de Generalização (heatmap simplificado)
-            gen_data = report["generalization_analysis"]
-            circuits_ordered = [item["circuit"] for item in report["complexity_ranking"]]
-            success_rates = []
+            for transfer in report["generalization_results"]:
+                i = circuits.index(transfer["origin_circuit"])
+                j = circuits.index(transfer["target_circuit"])
+                success_matrix[i, j] = transfer["success_rate_target"] * 100
 
-            for origin in circuits_ordered:
-                row = []
-                for target in circuits_ordered:
-                    if origin == target:
-                        row.append(report["best_specialists"][origin]["success_rate"] * 100)
-                    else:
-                        row.append(gen_data.get(origin, {}).get(target, {}).get("success_rate", 0) * 100)
-                success_rates.append(row)
-
-            im = self.axs_cross[0, 1].imshow(success_rates, cmap="RdYlGn", aspect="auto", vmin=0, vmax=100)
-            self.axs_cross[0, 1].set_title("Taxa de Sucesso por Transferência (RF-09)")
-            self.axs_cross[0, 1].set_xticks(range(len(circuits_ordered)))
-            self.axs_cross[0, 1].set_yticks(range(len(circuits_ordered)))
-            self.axs_cross[0, 1].set_xticklabels(circuits_ordered, rotation=45)
-            self.axs_cross[0, 1].set_yticklabels(circuits_ordered)
-            self.axs_cross[0, 1].set_xlabel("Circuito Alvo")
+            im = self.axs_cross[0, 1].imshow(success_matrix, cmap="RdYlGn", aspect="auto", vmin=0, vmax=100)
+            self.axs_cross[0, 1].set_title("Taxa de Sucesso - Matriz (RF-09)")
+            self.axs_cross[0, 1].set_xticks(range(len(circuits)))
+            self.axs_cross[0, 1].set_yticks(range(len(circuits)))
+            self.axs_cross[0, 1].set_xticklabels(circuits)
+            self.axs_cross[0, 1].set_yticklabels(circuits)
+            self.axs_cross[0, 1].set_xlabel("Circuito Destino")
             self.axs_cross[0, 1].set_ylabel("Circuito Origem")
 
-            # Adicionar barra de cores
+            # Adicionar valores na matriz
+            for i in range(len(circuits)):
+                for j in range(len(circuits)):
+                    if i != j:  # Não mostrar auto-transferências
+                        value = success_matrix[i, j]
+                        if value > 0:
+                            self.axs_cross[0, 1].text(j, i, f"{value:.1f}%", 
+                                                     ha="center", va="center", 
+                                                     color="black" if value < 50 else "white",
+                                                     fontsize=8)
+
             plt.colorbar(im, ax=self.axs_cross[0, 1], label="Taxa de Sucesso (%)")
 
-            # 3. Transferências Direcionais
-            directional = report["directional_insights"]
+            # 3. Gráfico de transferências direcionais
             directions = ["Ascendente", "Descendente"]
-            counts = [directional["ascendente_count"], directional["descendente_count"]]
+            counts = [
+                report["summary"]["ascendente_count"],
+                report["summary"]["descendente_count"]
+            ]
             colors = ["lightcoral", "lightblue"]
 
             bars = self.axs_cross[1, 0].bar(directions, counts, color=colors, alpha=0.7)
@@ -343,23 +373,36 @@ class ComparisonTab:
 
             for bar, count in zip(bars, counts):
                 height = bar.get_height()
-                self.axs_cross[1, 0].text(bar.get_x() + bar.get_width() / 2.0, height, f"{count}", ha="center", va="bottom")
+                self.axs_cross[1, 0].text(bar.get_x() + bar.get_width()/2, height, 
+                                         f"{count}", ha="center", va="bottom")
 
-            # 4. Gaps de Especificidade
-            gaps = report["specificity_gaps"]
-            circuits_gap = list(gaps.keys())
-            mean_gaps = [gaps[circuit]["mean_gap"] for circuit in circuits_gap]
+            # 4. Comparação de sucesso por direção
+            direction_data = {"Ascendente": [], "Descendente": []}
 
-            colors_gap = ["red" if gap > 0 else "green" for gap in mean_gaps]
-            bars = self.axs_cross[1, 1].bar(circuits_gap, mean_gaps, color=colors_gap, alpha=0.7)
-            self.axs_cross[1, 1].set_title("Gaps de Especificidade (RF-10)")
-            self.axs_cross[1, 1].set_ylabel("ΔTm (s)")
-            self.axs_cross[1, 1].axhline(y=0, color="black", linestyle="-", alpha=0.3)
-            self.axs_cross[1, 1].tick_params(axis="x", rotation=45)
+            for transfer in report["directional_analysis"]:
+                direction = "Ascendente" if transfer["direction"] == "ascendente" else "Descendente"
+                direction_data[direction].append(transfer["success_rate_target"] * 100)
 
-            for bar, gap in zip(bars, mean_gaps):
-                height = bar.get_height()
-                self.axs_cross[1, 1].text(bar.get_x() + bar.get_width() / 2.0, height, f"{gap:+.2f}s", ha="center", va="bottom" if gap >= 0 else "top")
+            direction_names = []
+            avg_success = []
+
+            for direction, values in direction_data.items():
+                if values:
+                    direction_names.append(direction)
+                    avg_success.append(np.mean(values))
+
+            if direction_names:
+                bars = self.axs_cross[1, 1].bar(direction_names, avg_success, 
+                                              color=["lightcoral", "lightblue"], alpha=0.7)
+                self.axs_cross[1, 1].set_title("Sucesso por Direção (RF-11)")
+                self.axs_cross[1, 1].set_ylabel("Taxa de Sucesso Média (%)")
+                self.axs_cross[1, 1].axhline(y=50, color="red", linestyle="--", alpha=0.5, label="50%")
+                self.axs_cross[1, 1].legend()
+
+                for bar, success in zip(bars, avg_success):
+                    height = bar.get_height()
+                    self.axs_cross[1, 1].text(bar.get_x() + bar.get_width()/2, height, 
+                                             f"{success:.1f}%", ha="center", va="bottom")
 
             self.fig_cross.tight_layout()
             self.canvas_cross.draw_idle()

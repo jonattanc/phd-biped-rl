@@ -1,5 +1,4 @@
 # cross_evaluation.py
-from email import utils
 import multiprocessing
 import os
 import json
@@ -7,7 +6,6 @@ import time
 import pandas as pd
 from datetime import datetime
 import numpy as np
-import shutil
 import utils
 
 
@@ -21,143 +19,82 @@ class CrossEvaluation:
         os.makedirs(utils.TEMP_EVALUATION_SAVE_PATH, exist_ok=True)
 
     def run_complete_evaluation(self, num_episodes=100, deterministic=True):
-        """Executa toda a avaliação cruzada automaticamente"""
-        self.logger.info("=" * 60)
-        self.logger.info("INICIANDO AVALIAÇÃO CRUZADA COMPLETA")
-        self.logger.info(f"Episódios por avaliação: {num_episodes}")
-        self.logger.info(f"Modo determinístico: {deterministic}")
-        self.logger.info("=" * 60)
+        """Executa avaliação cruzada focando em generalização e direcionalidade"""
+        self.logger.info("=" * 50)
+        self.logger.info("AVALIAÇÃO CRUZADA - GENERALIZAÇÃO")
 
         start_time = time.time()
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-        # 1. Avaliação de Complexidade (RF-08)
-        self.logger.info("\n[RF-08] Avaliação de Complexidade...")
-        complexity_results = self._run_complexity_analysis(num_episodes, deterministic)
+        all_generalization_results = []
 
-        # 2. Avaliação de Generalização (RF-09)
-        self.logger.info("\n[RF-09] Avaliação de Generalização...")
-        generalization_results = self._run_generalization_analysis(num_episodes, deterministic)
-
-        # 3. Avaliação de Especificidade (RF-10)
-        self.logger.info("\n[RF-10] Avaliação de Especificidade...")
-        specificity_results = self._run_specificity_analysis(num_episodes, deterministic)
-
-        # 4. Classificação Direcional (RF-11)
-        self.logger.info("\n[RF-11] Classificação Direcional...")
-        directional_analysis = self._classify_directional_transfers(generalization_results)
-
-        # 5. Gerar relatório completo
-        self.logger.info("\nGerando relatório consolidado...")
-        comprehensive_report = self._generate_comprehensive_report(
-            complexity_results, generalization_results, 
-            specificity_results, directional_analysis, num_episodes
-        )
-
-        # 6. Exportar relatório para CRUZADA_DATA_PATH
-        self.logger.info("\nExportando resultados para CRUZADA_DATA_PATH...")
-        export_info = self.export_report(comprehensive_report)
-
-        elapsed_time = time.time() - start_time
-        self.logger.info("=" * 60)
-        self.logger.info("AVALIAÇÃO CRUZADA CONCLUÍDA!")
-        self.logger.info(f"Tempo total: {elapsed_time:.1f}s")
-        self.logger.info(f"Resultados salvos em: {export_info['output_dir']}")
-        self.logger.info("=" * 60)
-
-        return comprehensive_report
-
-    def _run_complexity_analysis(self, num_episodes, deterministic):
-        """RF-08: Avaliação de Complexidade - 6 circuitos × 100 repetições"""
-        complexity_results = []
-
-        for circuit in self.complexity_order:
-            model_path = self._find_specialist_model(circuit)
-            if not model_path:
-                self.logger.warning(f"Modelo especialista não encontrado para {circuit}")
-                continue
-
-            self.logger.info(f"Avaliando complexidade: {circuit}")
-
-            # Executar avaliação (integrar com evaluate_model existente)
-            metrics = self._evaluate_for_cross_analysis(model_path, circuit, "robot_stage5", num_episodes, deterministic)
-
-            complexity_results.append(
-                {"circuit": circuit, "model_path": model_path, "metrics": metrics, "avg_time": metrics["avg_time"], "std_time": metrics["std_time"], "success_rate": metrics["success_rate"]}
-            )
-
-        return complexity_results
-
-    def _run_generalization_analysis(self, num_episodes, deterministic):
-        """RF-09: Avaliação de Generalização - 6×5×100 execuções"""
-        generalization_results = []
-
+        # Para cada modelo de origem
         for origin_circuit in self.complexity_order:
-            origin_model = self._find_specialist_model(origin_circuit)
-            if not origin_model:
+            self.logger.info(f"MODELO ORIGEM: {origin_circuit}")
+
+            # Dados deste modelo
+            model_data = {
+                "model_name": origin_circuit,
+                "transfer_data": {}
+            }
+
+            # Encontrar modelo
+            model_path = self._find_specialist_model(origin_circuit)
+            if not model_path:
+                self.logger.warning(f"Modelo {origin_circuit} não encontrado")
                 continue
 
+            # Avaliar em TODOS os outros circuitos
             for target_circuit in self.complexity_order:
-                if origin_circuit == target_circuit:
+                if target_circuit == origin_circuit:
                     continue  # Pular auto-avaliação
 
-                self.logger.info(f"Generalização: {origin_circuit} → {target_circuit}")
+                self.logger.info(f"  → {target_circuit}")
 
-                # Avaliar modelo origem no circuito destino
-                metrics = self._evaluate_for_cross_analysis(origin_model, target_circuit, "robot_stage5", num_episodes, deterministic)
-
-                generalization_results.append(
-                    {
-                        "origin_circuit": origin_circuit,
-                        "target_circuit": target_circuit,
-                        "model_path": origin_model,
-                        "metrics": metrics,
-                        "avg_time_target": metrics["avg_time"],
-                        "success_rate_target": metrics["success_rate"],
-                    }
+                # Avaliar transferência
+                transfer_metrics = self._evaluate_for_cross_analysis(
+                    model_path, target_circuit, "robot_stage5", num_episodes, deterministic
                 )
 
-        return generalization_results
+                # Armazenar dados
+                model_data["transfer_data"][target_circuit] = {
+                    "metrics": transfer_metrics,
+                    "temp_data_path": transfer_metrics.get("temp_data_path")
+                }
 
-    def _run_specificity_analysis(self, num_episodes, deterministic):
-        """RF-10: Avaliação de Especificidade - 6×6×100 execuções"""
-        specificity_results = []
+                # Adicionar aos resultados
+                all_generalization_results.append({
+                    "origin_circuit": origin_circuit,
+                    "target_circuit": target_circuit,
+                    "model_path": model_path,
+                    "avg_time_target": transfer_metrics["avg_time"],
+                    "success_rate_target": transfer_metrics["success_rate"],
+                    "avg_distance_target": transfer_metrics["avg_distance"],
+                    "avg_velocity_target": transfer_metrics["avg_velocity"]
+                })
 
-        for target_circuit in self.complexity_order:
-            # Encontrar AE (especialista) deste circuito
-            ae_model = self._find_specialist_model(target_circuit)
-            if not ae_model:
-                continue
+            # Gerar matrizes para este modelo IMEDIATAMENTE
+            self.logger.info(f"\nGerando matrizes para {origin_circuit}...")
+            self._generate_generalization_matrices(model_data, timestamp)
 
-            # Avaliar o AE em seu próprio circuito
-            ae_metrics = self._evaluate_for_cross_analysis(ae_model, target_circuit, "robot_stage5", num_episodes, deterministic)
+        # Classificação Direcional (RF-11)
+        self.logger.info("\nClassificando direcionalidade das transferências...")
+        directional_results = self._classify_directional_transfers(all_generalization_results)
 
-            # Avaliar todos os AGs (generalistas) neste circuito
-            for origin_circuit in self.complexity_order:
-                if origin_circuit == target_circuit:
-                    continue  # AE já avaliado
+        # Gerar relatório simplificado
+        self.logger.info("\nGerando relatório consolidado...")
+        report = self._generate_simplified_report(all_generalization_results, directional_results, num_episodes)
 
-                ag_model = self._find_specialist_model(origin_circuit)
-                if not ag_model:
-                    continue
+        # Exportar relatórios essenciais
+        self._export_essential_reports(report)
 
-                ag_metrics = self._evaluate_for_cross_analysis(ag_model, target_circuit, "robot_stage5", num_episodes, deterministic)
+        elapsed_time = time.time() - start_time
+        self.logger.info("AVALIAÇÃO DE GENERALIZAÇÃO CONCLUÍDA!")
+        self.logger.info(f"Tempo total: {elapsed_time:.1f}s")
+        self.logger.info(f"Total de transferências avaliadas: {len(all_generalization_results)}")
+        self.logger.info("=" * 60)
 
-                # Calcular ΔTm_espec
-                delta_tm = ag_metrics["avg_time"] - ae_metrics["avg_time"]
-
-                specificity_results.append(
-                    {
-                        "target_circuit": target_circuit,
-                        "origin_circuit": origin_circuit,
-                        "ae_avg_time": ae_metrics["avg_time"],
-                        "ag_avg_time": ag_metrics["avg_time"],
-                        "delta_tm": delta_tm,
-                        "ae_success_rate": ae_metrics["success_rate"],
-                        "ag_success_rate": ag_metrics["success_rate"],
-                    }
-                )
-
-        return specificity_results
+        return report
 
     def _classify_directional_transfers(self, generalization_results):
         """RF-11: Classifica transferências como ascendentes/descendentes"""
@@ -180,6 +117,41 @@ class CrossEvaluation:
 
         return directional_results
 
+    def _generate_simplified_report(self, generalization_results, directional_results, num_episodes):
+        """Gera relatório focado apenas em generalização e direcionalidade"""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        return {
+            "metadata": {
+                "timestamp": timestamp,
+                "num_episodes": num_episodes,
+                "total_transfers": len(generalization_results),
+                "circuits_order": self.complexity_order
+            },
+            "generalization_results": generalization_results,
+            "directional_analysis": directional_results,
+            "summary": {
+                "ascendente_count": sum(1 for r in directional_results if r.get("direction") == "ascendente"),
+                "descendente_count": sum(1 for r in directional_results if r.get("direction") == "descendente")
+            }
+        }
+
+    def _export_essential_reports(self, report):
+        """Exporta apenas os relatórios essenciais"""
+        timestamp = report["metadata"]["timestamp"]
+        
+        # CSV de todas as transferências (generalização)
+        df_all = pd.DataFrame(report["generalization_results"])
+        all_path = os.path.join(self.session_output_dir, f"generalizacao_{timestamp}.csv")
+        df_all.to_csv(all_path, index=False, encoding='utf-8-sig')
+        
+        # CSV de direcionalidade
+        df_dir = pd.DataFrame(report["directional_analysis"])
+        dir_path = os.path.join(self.session_output_dir, f"direcionalidade_{timestamp}.csv")
+        df_dir.to_csv(dir_path, index=False, encoding='utf-8-sig')
+        
+        self.logger.info(f"Relatórios exportados: {all_path}, {dir_path}")
+    
     def _find_specialist_model(self, circuit_name):
         """Encontra modelo especialista para um circuito"""
         # Padrão de nome esperado: PR_model.zip, etc.
@@ -349,123 +321,89 @@ class CrossEvaluation:
         """Métricas padrão em caso de erro"""
         return {"avg_time": 0, "std_time": 0, "success_rate": 0, "success_count": 0, "avg_distance": 0, "avg_velocity": 0,"num_episodes": 0, "total_times": [], "temp_data_path": None }
 
-    def _generate_comprehensive_report(self, complexity, generalization, specificity, directional, num_episodes):
-        """Gera relatório completo da avaliação cruzada"""
+    def _generate_generalization_matrices(self, model_data, timestamp):
+        """Gera matrizes de Tempo, Distância e Velocidade para um modelo"""
+        try:
+            model_name = model_data["model_name"]
+            transfer_data = model_data["transfer_data"]
 
-        # Calcular ranking de complexidade
-        complexity_ranking = self._rank_circuit_complexity(complexity)
+            # Coletar episódios de cada circuito alvo
+            episodes_by_target = {}
 
-        report = {
-            "metadata": {
-                "timestamp": datetime.now().isoformat(),
-                "total_evaluations": len(complexity) + len(generalization) + len(specificity),
-                "circuits_tested": self.complexity_order,
-                "num_episodes": num_episodes,
-            },
-            "complexity_ranking": complexity_ranking,
-            "best_specialists": self._identify_best_specialists(complexity),
-            "generalization_analysis": self._analyze_generalization_patterns(generalization),
-            "directional_insights": self._extract_directional_insights(directional),
-            "specificity_gaps": self._calculate_specificity_gaps(specificity),
-            "raw_data": {"complexity": complexity, "generalization": generalization, "specificity": specificity, "directional": directional},
-        }
+            for target_circuit, data in transfer_data.items():
+                temp_path = data.get("temp_data_path")
+                if temp_path and os.path.exists(temp_path):
+                    episodes = self._extract_episodes_for_matrix(temp_path, target_circuit)
+                    episodes_by_target[target_circuit] = episodes
 
-        return report
+            if not episodes_by_target:
+                self.logger.warning(f"Nenhum dado para matrizes do modelo {model_name}")
+                return
 
-    def _rank_circuit_complexity(self, complexity_results):
-        """Ranking de complexidade baseado no tempo médio dos AEs"""
-        ranked = sorted(complexity_results, key=lambda x: x["avg_time"])
-        return [{"circuit": item["circuit"], "avg_time": item["avg_time"]} for item in ranked]
+            # Circuitos alvo na ordem de complexidade
+            targets_ordered = [c for c in self.complexity_order if c != model_name and c in episodes_by_target]
 
-    def _identify_best_specialists(self, complexity_results):
-        """Identifica os melhores especialistas por circuito"""
-        best_specialists = {}
-        for result in complexity_results:
-            circuit = result["circuit"]
-            best_specialists[circuit] = {"avg_time": result["avg_time"], "success_rate": result["success_rate"], "model_path": result["model_path"]}
-        return best_specialists
+            # Número máximo de episódios
+            max_episodes = max(len(eps) for eps in episodes_by_target.values())
 
-    def _analyze_generalization_patterns(self, generalization_results):
-        """Analisa padrões de generalização"""
-        patterns = {}
-        for result in generalization_results:
-            origin = result["origin_circuit"]
-            target = result["target_circuit"]
+            # Construir matrizes
+            tempo_matrix = []
+            distancia_matrix = []
+            velocidade_matrix = []
 
-            if origin not in patterns:
-                patterns[origin] = {}
+            for ep_idx in range(max_episodes):
+                tempo_row = []
+                distancia_row = []
+                velocidade_row = []
 
-            patterns[origin][target] = {"avg_time": result["avg_time_target"], "success_rate": result["success_rate_target"]}
+                for target in targets_ordered:
+                    episodes = episodes_by_target[target]
 
-        return patterns
+                    if ep_idx < len(episodes):
+                        ep = episodes[ep_idx]
+                        tempo_row.append(ep["Tempo_s"])
+                        distancia_row.append(ep["Distância_m"])
+                        velocidade_row.append(ep["Velocidade_ms"])
+                    else:
+                        tempo_row.append(np.nan)
+                        distancia_row.append(np.nan)
+                        velocidade_row.append(np.nan)
 
-    def _extract_directional_insights(self, directional_results):
-        """Extrai insights das transferências direcionais"""
-        ascendente_stats = [r for r in directional_results if r["direction"] == "ascendente"]
-        descendente_stats = [r for r in directional_results if r["direction"] == "descendente"]
+                tempo_matrix.append(tempo_row)
+                distancia_matrix.append(distancia_row)
+                velocidade_matrix.append(velocidade_row)
 
-        return {
-            "ascendente_count": len(ascendente_stats),
-            "descendente_count": len(descendente_stats),
-            "ascendente_avg_success": np.mean([r["success_rate_target"] for r in ascendente_stats]) if ascendente_stats else 0,
-            "descendente_avg_success": np.mean([r["success_rate_target"] for r in descendente_stats]) if descendente_stats else 0,
-        }
+            # Criar DataFrames
+            df_tempo = pd.DataFrame(tempo_matrix, columns=targets_ordered)
+            df_distancia = pd.DataFrame(distancia_matrix, columns=targets_ordered)
+            df_velocidade = pd.DataFrame(velocidade_matrix, columns=targets_ordered)
 
-    def _calculate_specificity_gaps(self, specificity_results):
-        """Calcula gaps de especificidade"""
-        gaps = {}
-        for result in specificity_results:
-            target = result["target_circuit"]
-            if target not in gaps:
-                gaps[target] = []
+            # Adicionar coluna de episódio
+            df_tempo.insert(0, "Episódio", range(1, len(df_tempo) + 1))
+            df_distancia.insert(0, "Episódio", range(1, len(df_distancia) + 1))
+            df_velocidade.insert(0, "Episódio", range(1, len(df_velocidade) + 1))
 
-            gaps[target].append(result["delta_tm"])
+            # Salvar
+            model_dir = os.path.join(self.session_output_dir, model_name)
+            os.makedirs(model_dir, exist_ok=True)
 
-        # Calcular estatísticas por circuito
-        gap_stats = {}
-        for circuit, gap_list in gaps.items():
-            gap_stats[circuit] = {"mean_gap": np.mean(gap_list), "std_gap": np.std(gap_list) if len(gap_list) > 1 else 0, "max_gap": max(gap_list), "min_gap": min(gap_list)}
+            # Nomes descritivos
+            tempo_path = os.path.join(model_dir, f"Tempo_{model_name}_{timestamp}.csv")
+            distancia_path = os.path.join(model_dir, f"Distancia_{model_name}_{timestamp}.csv")
+            velocidade_path = os.path.join(model_dir, f"Velocidade_{model_name}_{timestamp}.csv")
 
-        return gap_stats
+            df_tempo.to_csv(tempo_path, index=False, encoding='utf-8-sig', na_rep='-')
+            df_distancia.to_csv(distancia_path, index=False, encoding='utf-8-sig', na_rep='-')
+            df_velocidade.to_csv(velocidade_path, index=False, encoding='utf-8-sig', na_rep='-')
 
-    def _export_episodes_csv(self, report, output_dir, timestamp):
-        """Exporta apenas os dados dos episódios em formato simplificado"""
+            self.logger.info(f"  ✓ Matrizes salvas em: {model_dir}")
 
-        all_episode_data = []
+        except Exception as e:
+            self.logger.error(f"Erro ao gerar matrizes para {model_name}: {e}")
 
-        # Processar dados de complexidade
-        for item in report.get("raw_data", {}).get("complexity", []):
-            if "temp_data_path" in item and item["temp_data_path"] and os.path.exists(item["temp_data_path"]):
-                episode_data = self._extract_episode_data_from_file(item["temp_data_path"], item.get("circuit", ""))
-                all_episode_data.extend(episode_data)
-
-        # Processar dados de generalização
-        for item in report.get("raw_data", {}).get("generalization", []):
-            if "temp_data_path" in item and item["temp_data_path"] and os.path.exists(item["temp_data_path"]):
-                origin = item.get("origin_circuit", "")
-                target = item.get("target_circuit", "")
-                circuit_label = f"{origin}_para_{target}"
-                episode_data = self._extract_episode_data_from_file(item["temp_data_path"], circuit_label)
-                all_episode_data.extend(episode_data)
-
-        if all_episode_data:
-            # Ordenar por circuito e episódio
-            all_episode_data.sort(key=lambda x: (x["Circuito"], int(x["Episódio"])))
-
-            df_episodes = pd.DataFrame(all_episode_data)
-            episodes_path = os.path.join(output_dir, f"episodios_detalhados_{timestamp}.csv")
-            df_episodes.to_csv(episodes_path, index=False, encoding='utf-8-sig')
-
-            self.logger.info(f"CSV de episódios detalhados salvo: {episodes_path}")
-            self.logger.info(f"Total de episódios registrados: {len(all_episode_data)}")
-
-        else:
-            self.logger.warning("Nenhum dado de episódio encontrado para exportar")
-    
-    def _extract_episode_data_from_file(self, file_path, circuito_label):
-        """Extrai dados simplificados de um arquivo JSON"""
-        episode_data = []
-
+    def _extract_episodes_for_matrix(self, file_path, target_circuit):
+        """Extrai episódios de um arquivo para a matriz"""
+        episodes = []
         try:
             with open(file_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -474,128 +412,48 @@ class CrossEvaluation:
                 for ep_num, ep_info in data["episodes"].items():
                     if "episode_data" in ep_info:
                         ep_data = ep_info["episode_data"]
-
-                        # Extrair dados (com fallback para nomes antigos)
                         tempo = ep_data.get("time", ep_data.get("times", 0))
                         distancia = ep_data.get("distance", ep_data.get("distances", 0))
-                        sucesso = ep_data.get("success", False)
 
                         if tempo > 0:  # Só processar episódios válidos
                             velocidade = distancia / tempo if tempo > 0 else 0
-
-                            episode_data.append({
-                                "Episódio": int(ep_num),
-                                "Circuito": circuito_label,
-                                "Sucesso": "Sim" if sucesso else "Não",
-                                "Distância_m": round(distancia, 2),
+                            episodes.append({
                                 "Tempo_s": round(tempo, 2),
-                                "Velocidade_ms": round(velocidade, 2),
-                                "Recompensa": round(ep_data.get("rewards", 0), 2)
+                                "Distância_m": round(distancia, 2),
+                                "Velocidade_ms": round(velocidade, 2)
                             })
-
         except Exception as e:
-            self.logger.warning(f"Erro ao extrair dados de {file_path}: {e}")
-
-        return episode_data
+            self.logger.warning(f"Erro ao extrair episódios de {file_path}: {e}")
+        
+        return episodes
     
     def export_report(self, report, output_dir=None):
-        """Exporta relatório completo"""
+        """Método de compatibilidade para exportar relatório"""
         if output_dir is None:
             output_dir = self.session_output_dir
 
-        os.makedirs(output_dir, exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = report["metadata"]["timestamp"]
 
-        # 1. Salvar JSON completo (opcional, para referência)
-        json_path = os.path.join(output_dir, f"cross_evaluation_summary_{timestamp}.json")
+        # CSV já foram exportados em _export_essential_reports
+        generalization_csv = os.path.join(output_dir, f"generalizacao_{timestamp}.csv")
+        directionality_csv = os.path.join(output_dir, f"direcionalidade_{timestamp}.csv")
+
+        # Criar um JSON resumido também
+        json_path = os.path.join(output_dir, f"resumo_{timestamp}.json")
         with open(json_path, "w", encoding="utf-8") as f:
-            # Remover dados brutos do relatório para economizar espaço
-            filtered_report = {
+            json.dump({
                 "metadata": report["metadata"],
-                "complexity_ranking": report["complexity_ranking"],
-                "best_specialists": report["best_specialists"],
-                "generalization_analysis": report["generalization_analysis"],
-                "directional_insights": report["directional_insights"],
-                "specificity_gaps": report["specificity_gaps"],
-                "timestamp": timestamp
-            }
-            json.dump(filtered_report, f, indent=2, ensure_ascii=False)
+                "summary": report["summary"],
+                "csv_files": {
+                    "generalization": generalization_csv,
+                    "directionality": directionality_csv
+                }
+            }, f, indent=2, ensure_ascii=False)
 
-        # 2. Salvar CSVs principais
-        self._export_main_csvs(report, output_dir, timestamp)
-
-        # 3. Salvar dados dos episódios em formato CSV simplificado
-        self._export_episodes_csv(report, output_dir, timestamp)
-
-        self.logger.info(f"Relatório exportado para: {output_dir}")
         return {
+            "generalization_csv": generalization_csv,
+            "directionality_csv": directionality_csv,
             "json_path": json_path,
             "output_dir": output_dir,
             "timestamp": timestamp
         }
-
-    def _export_main_csvs(self, report, output_dir, timestamp):
-        """Exporta os CSVs principais (complexity, generalization, specificity)"""
-
-        # 1. CSV de Complexidade (RF-08)
-        if report.get("raw_data", {}).get("complexity"):
-            complexity_data = []
-            for item in report["raw_data"]["complexity"]:
-                complexity_data.append({
-                    "Circuito": item.get("circuit", ""),
-                    "Modelo": os.path.basename(item.get("model_path", "")).replace('.zip', ''),
-                    "Tempo_Medio_s": round(item.get("avg_time", 0), 2),
-                    "Desvio_Tempo_s": round(item.get("std_time", 0), 2),
-                    "Taxa_Sucesso": round(item.get("success_rate", 0) * 100, 1),
-                    "Sucessos": item.get("success_count", 0),
-                    "Episodios_Validados": item.get("num_episodes", 0),
-                    "Episodios_Esperados": item.get("expected_episodes", 0),
-                    "Distancia_Media_m": round(item.get("avg_distance", 0), 2),
-                    "Velocidade_Media_ms": round(item.get("avg_velocity", 0), 2)
-                })
-
-            df_complexity = pd.DataFrame(complexity_data)
-            # Ordenar por tempo médio (complexidade)
-            df_complexity = df_complexity.sort_values("Tempo_Medio_s", ascending=True)
-            complexity_path = os.path.join(output_dir, f"complexidade_{timestamp}.csv")
-            df_complexity.to_csv(complexity_path, index=False, encoding='utf-8-sig')
-            self.logger.info(f"CSV de complexidade salvo: {complexity_path}")
-
-        # 2. CSV de Generalização (RF-09)
-        if report.get("raw_data", {}).get("generalization"):
-            generalization_data = []
-            for item in report["raw_data"]["generalization"]:
-                generalization_data.append({
-                    "Origem": item.get("origin_circuit", ""),
-                    "Destino": item.get("target_circuit", ""),
-                    "Tempo_Medio_Destino_s": round(item.get("avg_time_target", 0), 2),
-                    "Taxa_Sucesso_Destino": round(item.get("success_rate_target", 0) * 100, 1),
-                    "Direcao": item.get("direction", ""),
-                    "Dificuldade": item.get("difficulty", ""),
-                    "Modelo": os.path.basename(item.get("model_path", "")).replace('.zip', '')
-                })
-
-            df_generalization = pd.DataFrame(generalization_data)
-            generalization_path = os.path.join(output_dir, f"generalizacao_{timestamp}.csv")
-            df_generalization.to_csv(generalization_path, index=False, encoding='utf-8-sig')
-            self.logger.info(f"CSV de generalização salvo: {generalization_path}")
-
-        # 3. CSV de Especificidade (RF-10)
-        if report.get("raw_data", {}).get("specificity"):
-            specificity_data = []
-            for item in report["raw_data"]["specificity"]:
-                specificity_data.append({
-                    "Circuito_Alvo": item.get("target_circuit", ""),
-                    "Modelo_Origem": item.get("origin_circuit", ""),
-                    "Tempo_AE_s": round(item.get("ae_avg_time", 0), 2),
-                    "Tempo_AG_s": round(item.get("ag_avg_time", 0), 2),
-                    "Delta_Tm_s": round(item.get("delta_tm", 0), 2),
-                    "Taxa_Sucesso_AE": round(item.get("ae_success_rate", 0) * 100, 1),
-                    "Taxa_Sucesso_AG": round(item.get("ag_success_rate", 0) * 100, 1),
-                    "Penalidade_Especificidade": round(abs(item.get("delta_tm", 0)), 2)
-                })
-
-            df_specificity = pd.DataFrame(specificity_data)
-            specificity_path = os.path.join(output_dir, f"especificidade_{timestamp}.csv")
-            df_specificity.to_csv(specificity_path, index=False, encoding='utf-8-sig')
-            self.logger.info(f"CSV de especificidade salvo: {specificity_path}")

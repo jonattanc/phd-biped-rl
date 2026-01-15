@@ -132,6 +132,52 @@ def formatar_valor(valor, formato='geral'):
     else:
         return str(valor)
 
+def identificar_colunas_numericas(df):
+    """
+    Identifica colunas numéricas e ignora colunas de identificação
+    """
+    # Padrões de colunas para ignorar (identificadores)
+    padroes_ignorar = [
+        'episódio', 'episodio', 'episode',
+        'id', 'codigo', 'código', 'code',
+        'numero', 'número', 'num', 'n°',
+        'paciente', 'patient',
+        'amostra', 'sample',
+        'data', 'date',
+        'hora', 'time',
+        'observacao', 'observação', 'obs',
+        'nota', 'note',
+        'grupo', 'group', 'categoria', 'category',
+        'nome', 'name'
+    ]
+    
+    colunas_numericas = []
+    
+    for coluna in df.columns:
+        # Verificar se o nome da coluna corresponde a um padrão de identificador
+        coluna_lower = str(coluna).strip().lower()
+        ignorar = False
+        
+        for padrao in padroes_ignorar:
+            if padrao in coluna_lower:
+                ignorar = True
+                print(f"  ⚠️  Ignorando coluna identificadora: '{coluna}'")
+                break
+        
+        if ignorar:
+            continue
+        
+        # Tentar converter para numérico para verificar se é numérica
+        try:
+            dados_convertidos = pd.to_numeric(df[coluna].astype(str).str.replace(',', '.'), errors='coerce')
+            # Considerar numérica se pelo menos 50% dos valores forem numéricos
+            if dados_convertidos.notna().sum() / len(dados_convertidos) >= 0.5:
+                colunas_numericas.append(coluna)
+        except:
+            continue
+    
+    return colunas_numericas
+
 def analisar_dataframe_completo(df, nome_arquivo):
     """Analisa um DataFrame e retorna todos os resultados detalhados"""
     resultados_detalhados = []
@@ -141,12 +187,43 @@ def analisar_dataframe_completo(df, nome_arquivo):
     df = df.dropna(axis=1, how='all')
     df.columns = df.columns.str.strip()
     
-    # Converter dados para numérico
-    for coluna in df.columns:
+    print(f"  📋 Colunas originais: {list(df.columns)}")
+    
+    # Identificar colunas numéricas (ignorando identificadores)
+    colunas_numericas = identificar_colunas_numericas(df)
+    
+    if not colunas_numericas:
+        print(f"  ✗ Nenhuma coluna numérica encontrada no arquivo {nome_arquivo}")
+        return {
+            'estatisticas': [],
+            'normalidade': [],
+            'comparacoes': [],
+            'posthoc': [],
+            'correlacoes': [],
+            'testes_t': []
+        }
+    
+    print(f"  ✓ Colunas numéricas identificadas: {colunas_numericas}")
+    
+    # Converter apenas as colunas numéricas
+    for coluna in colunas_numericas:
         df[coluna] = pd.to_numeric(df[coluna].astype(str).str.replace(',', '.'), errors='coerce')
     
-    # Identificar colunas válidas
-    colunas_validas = [col for col in df.columns if len(df[col].dropna()) >= 3]
+    # Identificar colunas válidas (com pelo menos 3 observações)
+    colunas_validas = [col for col in colunas_numericas if len(df[col].dropna()) >= 3]
+    
+    if len(colunas_validas) < 1:
+        print(f"  ✗ Nenhuma coluna com dados suficientes para análise (mínimo 3 observações)")
+        return {
+            'estatisticas': [],
+            'normalidade': [],
+            'comparacoes': [],
+            'posthoc': [],
+            'correlacoes': [],
+            'testes_t': []
+        }
+    
+    print(f"  ✓ Colunas válidas para análise (≥3 obs): {colunas_validas}")
     
     # --- SEÇÃO 1: ESTATÍSTICAS DESCRITIVAS COMPLETAS ---
     estatisticas_detalhadas = []
@@ -525,7 +602,7 @@ def criar_excel_por_arquivo(arquivos_resultados):
         ws.append(["1. ESTATÍSTICAS DESCRITIVAS"])
         ws.append(["Variável", "Média", "DP", "Mediana", 
                   "IC 95% Inferior", "IC 95% Superior", "Mínimo", "Máximo", 
-                  "CV (%)"])
+                  "CV (%)", "N"])
         
         for estat in resultados['estatisticas']:
             ws.append([
@@ -537,7 +614,8 @@ def criar_excel_por_arquivo(arquivos_resultados):
                 estat['IC 95% Superior'],
                 estat['Mínimo'],
                 estat['Máximo'],
-                estat['CV (%)']
+                estat['CV (%)'],
+                estat['N']
             ])
         
         ws.append([])
@@ -686,16 +764,32 @@ def criar_excel_por_arquivo(arquivos_resultados):
             elif any(r['Tipo'] == 'Games-Howell' for r in resultados['posthoc']):
                 teste_posthoc = "Games-Howell"
         
+        # Adicionar ao índice
+        anova_sig = any(comp.get('Resultado') == 'Significativa' for comp in resultados['comparacoes'] 
+                      if comp.get('Teste') in ['ANOVA Clássica', 'ANOVA de Welch'])
+        kw_sig = any(comp.get('Resultado') == 'Significativa' for comp in resultados['comparacoes'] 
+                    if comp.get('Teste') == 'Kruskal-Wallis')
+        
         ws_indice.append([
             nome_arquivo,
             var_count,
             obs_count,
-            teste_variancias,
-            "✓" if any(comp.get('Resultado') == 'Significativa' for comp in resultados['comparacoes'] 
-                      if comp.get('Teste') in ['ANOVA Clássica', 'ANOVA de Welch']) else "✗",
+            "✓" if anova_sig else "✗",
+            "✓" if kw_sig else "✗",
             teste_posthoc,
             nome_aba
         ])
+        
+        # Armazenar para resumo geral
+        resumo_arquivos.append({
+            'arquivo': nome_arquivo,
+            'variaveis': var_count,
+            'observacoes': obs_count,
+            'anova_sig': anova_sig,
+            'kw_sig': kw_sig,
+            'teste_variancias': teste_variancias,
+            'teste_posthoc': teste_posthoc
+        })
     
     # Formatar aba de índice
     formatar_aba_excel(ws_indice)
@@ -740,7 +834,7 @@ def criar_aba_resumo(wb, resumo_arquivos):
     
     # Tabela detalhada
     ws_resumo.append(["DETALHAMENTO POR ARQUIVO"])
-    ws_resumo.append(["Arquivo", "Variáveis", "Observações", "ANOVA Sig.", "K-W Sig."])
+    ws_resumo.append(["Arquivo", "Variáveis", "Observações", "ANOVA Sig.", "K-W Sig.", "Teste Post-Hoc"])
     
     for resumo in resumo_arquivos:
         ws_resumo.append([
@@ -748,7 +842,8 @@ def criar_aba_resumo(wb, resumo_arquivos):
             resumo['variaveis'],
             resumo['observacoes'],
             "✓" if resumo['anova_sig'] else "✗",
-            "✓" if resumo['kw_sig'] else "✗"
+            "✓" if resumo['kw_sig'] else "✗",
+            resumo['teste_posthoc']
         ])
     
     ws_resumo.append([])
@@ -942,10 +1037,13 @@ def processar_todos_csv():
             # Mostrar resumo rápido
             var_count = len(resultados['estatisticas'])
             tukey_count = len([r for r in resultados['posthoc'] if r['Tipo'] == 'Tukey HSD'])
+            gh_count = len([r for r in resultados['posthoc'] if r['Tipo'] == 'Games-Howell'])
             
             print(f"  ✓ Variáveis analisadas: {var_count}")
             if tukey_count > 0:
-                print(f"  ✓ Comparações posthoc: {tukey_count}")
+                print(f"  ✓ Comparações Tukey HSD: {tukey_count}")
+            if gh_count > 0:
+                print(f"  ✓ Comparações Games-Howell: {gh_count}")
             print()
             
         except Exception as e:
@@ -958,12 +1056,19 @@ def processar_todos_csv():
     if arquivos_resultados:
         # Criar Excel com todas as abas
         excel_file, resumo_arquivos = criar_excel_por_arquivo(arquivos_resultados)
+        print(f"\n✅ Análise concluída!")
+        print(f"📁 Arquivo Excel gerado: {excel_file}")
+        print(f"📊 Total de arquivos analisados: {len(resumo_arquivos)}")
+        return excel_file
+    else:
+        print("\n❌ Nenhum arquivo pôde ser analisado.")
+        return None
 
 if __name__ == "__main__":
     print("=" * 70)
     print("📈 SISTEMA DE ANÁLISE ESTATÍSTICA AVANÇADA")
     print("=" * 70)
-    print("Versão: 1.0 | Uma aba por arquivo CSV | Tukey completo")
+    print("Versão: 1.0")
     print("\n⚙️  Verificando dependências...")
     
     # Verificar dependências
