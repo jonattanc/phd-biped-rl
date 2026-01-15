@@ -1,0 +1,23 @@
+{
+  "metadata": {
+    "timestamp": "20260115_183801",
+    "num_episodes": 100,
+    "total_transfers": 30,
+    "circuits_order": [
+      "PR",
+      "PBA",
+      "PRA",
+      "PRD",
+      "PG",
+      "PRB"
+    ]
+  },
+  "summary": {
+    "ascendente_count": 15,
+    "descendente_count": 15
+  },
+  "csv_files": {
+    "generalization": "C:\\Users\\GianeCAC\\Documents\\GitHub\\phd-biped-rl\\data\\Cruzada\\generalizacao_20260115_183801.csv",
+    "directionality": "C:\\Users\\GianeCAC\\Documents\\GitHub\\phd-biped-rl\\data\\Cruzada\\direcionalidade_20260115_183801.csv"
+  }
+}
