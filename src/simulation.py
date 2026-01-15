@@ -29,6 +29,7 @@ class Simulation(gym.Env):
         num_episodes=1,
         initial_episode=0,
         is_fast_td3=True,
+        is_evaluation_mode=False
     ):
         super(Simulation, self).__init__()
 
@@ -48,6 +49,7 @@ class Simulation(gym.Env):
         self.num_episodes = num_episodes
         self.episode_count = initial_episode
         self.is_fast_td3 = is_fast_td3
+        self.is_evaluation_mode = is_evaluation_mode
         self.total_steps = 0
 
         self.logger = logger
@@ -65,7 +67,12 @@ class Simulation(gym.Env):
         self.fall_threshold = 0.5  # m
         self.success_distance = 9.0  # m
         self.yaw_threshold = math.radians(60)  # rad
-        self.episode_training_timeout_s = 15  # s
+        if self.is_evaluation_mode:
+            self.episode_training_timeout_s = 25
+            self.logger.info(f"Modo avaliação: Timeout aumentado para {self.episode_training_timeout_s}s")
+        else:
+            self.episode_training_timeout_s = 15
+
         self.episode_pre_fill_timeout_s = 10  # s
         self.episode_timeout_s = self.episode_training_timeout_s
         self.physics_step_s = 1 / 240.0  # 240 Hz, ~4.16 ms

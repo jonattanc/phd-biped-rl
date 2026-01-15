@@ -54,6 +54,8 @@ def process_runner(
 
         robot = Robot(logger, name=selected_robot)
         environment = Environment(logger, name=selected_environment, robot=robot, is_fast_td3=is_fast_td3)
+        is_evaluation_mode = (algorithm is None)
+
         sim = Simulation(
             logger,
             robot,
@@ -69,6 +71,7 @@ def process_runner(
             config_changed_value,
             initial_episode=initial_episode,
             is_fast_td3=is_fast_td3,
+            is_evaluation_mode=is_evaluation_mode
         )
 
         agent = Agent(logger, env=sim, model_path=model_path, algorithm=algorithm, device=device, initial_episode=initial_episode, seed=seed, is_fast_td3=is_fast_td3)
