@@ -256,6 +256,34 @@ class Simulation(gym.Env):
     
         return {"episodes": self.metrics}
 
+    def evaluate_cross(self, episodes, deterministic):
+        """Função específica para avaliação cruzada"""
+        self.metrics = {}
+        obs, _ = self.reset()
+        self.metrics[str(self.episode_count + 1)] = {"step_data": {}}
+
+        episode_counter = 0
+        while episode_counter < episodes and not self.exit_value.value:
+            obs = self.wrapped_env.normalize_obs(obs)
+            action, _ = self.agent.model.predict(obs, deterministic=deterministic)
+
+            next_obs, reward, episode_terminated, episode_truncated, info = self.step(action, evaluation=True)
+            done = episode_terminated or episode_truncated
+
+            if done:
+                obs, _ = self.reset()
+                episode_counter += 1
+                self.metrics[str(self.episode_count + 1)] = {"step_data": {}}  # Criar espaço para próximo episódio
+            else:
+                obs = next_obs
+
+        # Remover espaço para o próximo episódio que não foi executado
+        if str(self.episode_count + 1) in self.metrics:
+            self.metrics.pop(str(self.episode_count + 1))
+
+        self.logger.info(f"Avaliação cruzada concluída: {episode_counter} episódios")
+        return {"episodes": self.metrics}
+    
     def soft_env_reset(self):
         # Remover corpos antigos se existirem
         if hasattr(self, "robot") and self.robot.id is not None:

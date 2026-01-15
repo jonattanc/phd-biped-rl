@@ -23,7 +23,7 @@ class EvaluationTab(common_tab.GUITab):
 
         self.frame = ttk.Frame(notebook)
         self.device = device
-
+        self.is_fast_td3 = False
         self.setup_ui()
         self.setup_ipc()
 
@@ -78,7 +78,9 @@ class EvaluationTab(common_tab.GUITab):
 
         self.eval_start_btn = ttk.Button(row3_frame, text="Executar Avaliação", command=self.start_evaluation, width=20, state=tk.DISABLED)
         self.eval_start_btn.grid(row=0, column=0)
-
+        # Verifica se há um modelo carregado inicialmente
+        if self.eval_model_path.get() and self.eval_model_path.get().endswith('.zip'):
+            self.eval_start_btn.config(state=tk.NORMAL)
         self.eval_deterministic_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(row3_frame, text="Modo Determinístico", variable=self.eval_deterministic_var).grid(row=0, column=1, padx=5)
 
@@ -181,23 +183,58 @@ class EvaluationTab(common_tab.GUITab):
             self.logger.exception("Erro ao inicializar gráficos de avaliação")
 
     def browse_evaluation_model(self):
-        """Abre diálogo para selecionar modelo para avaliação"""
-        session_dir = filedialog.askdirectory(title="Selecione a pasta do treinamento", initialdir=utils.TRAINING_DATA_PATH)
+        """Abre diálogo para selecionar modelo .zip para avaliação"""
+        # Altere de askdirectory para askopenfilename
+        model_file = filedialog.askopenfilename(
+            title="Selecione o arquivo do modelo (.zip)",
+            initialdir=utils.MODELS_DATA_PATH,
+            filetypes=[("Model files", "*.zip"), ("All files", "*.*")]
+        )
 
-        if not session_dir:
+        if not model_file:
             return
 
-        self.eval_model_path.set(session_dir)
-        self.logger.info(f"Modelo selecionado para avaliação: {os.path.basename(session_dir)}")
+        # Agora salva o caminho do arquivo, não da pasta
+        self.eval_model_path.set(model_file)
 
-        # Carregar dados do treinamento
-        training_data = self._load_training_data_file(session_dir)
+        # Tenta encontrar a pasta correspondente para carregar os dados de treinamento
+        session_dir = os.path.dirname(model_file)
 
-        # Restaurar dados do treinamento
-        self._restore_training_data(training_data, session_dir)
+        # Carregar dados do treinamento se existirem - com tratamento de erro
+        training_data = None
+        try:
+            training_data = self._load_training_data_file(session_dir)
+        except FileNotFoundError:
+            self.logger.info("Arquivo de dados de treinamento não encontrado. Apenas o modelo será carregado.")
+        except Exception as e:
+            self.logger.warning(f"Erro ao carregar dados de treinamento: {e}")
+
+        if training_data:
+            # Restaurar dados do treinamento
+            self._restore_training_data(training_data, session_dir)
+        else:
+            # Se não encontrar dados de treinamento, apenas loga o modelo
+            model_name = os.path.basename(model_file)
+            self.model_description_label.config(text=f"Modelo: {model_name}")
+            self.logger.info(f"Modelo carregado para avaliação: {model_name}")
+            self.is_fast_td3 = False
 
         self.unlock_gui()
 
+    def _find_agent_model(self, model_path):
+        """Retorna o caminho do arquivo .zip"""
+        # Se já for um arquivo .zip, retorna ele mesmo
+        if model_path.endswith('.zip') and os.path.isfile(model_path):
+            return model_path
+
+        # Se for uma pasta, procura por .zip dentro
+        if os.path.isdir(model_path):
+            for file in os.listdir(model_path):
+                if file.endswith('.zip'):
+                    return os.path.join(model_path, file)
+
+        raise ValueError(f"Nenhum arquivo .zip encontrado em: {model_path}")
+    
     def _restore_training_data(self, training_data, session_dir):
         """Restaura dados do treinamento carregado"""
         session_info = training_data["session_info"]
@@ -219,14 +256,20 @@ class EvaluationTab(common_tab.GUITab):
         self.model_description_label.config(text=model_description)
 
     def start_evaluation(self):
-        """Inicia a avaliação do modelo selecionado usando validação do utils"""
-        agent_model_folder = self.eval_model_path.get()
+        """Inicia a avaliação do modelo .zip selecionado"""
+        agent_model_file = self.eval_model_path.get()
 
         try:
-            if not agent_model_folder or not os.path.exists(agent_model_folder):
-                raise ValueError("Selecione um modelo válido para avaliação.")
+            # Verifica se é um arquivo .zip válido
+            if not agent_model_file or not os.path.exists(agent_model_file):
+                raise ValueError("Selecione um arquivo .zip válido para avaliação.")
 
-            agent_model_path = self._find_agent_model(agent_model_folder)
+            if not agent_model_file.endswith('.zip'):
+                raise ValueError("O arquivo selecionado deve ser um arquivo .zip")
+
+            # Verifica se o arquivo de modelo existe diretamente
+            if not os.path.isfile(agent_model_file):
+                raise ValueError(f"Arquivo de modelo não encontrado: {agent_model_file}")
 
         except ValueError as e:
             self.logger.exception("Erro ao iniciar avaliação")
@@ -238,9 +281,9 @@ class EvaluationTab(common_tab.GUITab):
         self.export_plot_btn.config(state=tk.DISABLED)
         self.episode_count = self.update_episode_count(0)
         self.desired_successes = 100
-        self._run_evaluation(agent_model_path)
+        self._run_evaluation(agent_model_file)
 
-    def _run_evaluation(self, agent_model_path):
+    def _run_evaluation(self, agent_model_file):
         """Executa a avaliação em thread separada"""
         try:
             self.current_env = self.env_var.get()
@@ -268,7 +311,7 @@ class EvaluationTab(common_tab.GUITab):
 
             initial_episode = 0
 
-            self.logger.info(f"Iniciando avaliação: {agent_model_path} no ambiente {self.current_env}")
+            self.logger.info(f"Iniciando avaliação: {agent_model_file} no ambiente {self.current_env}")
             self.logger.info(f"Configuração: {episodes} episódios, modo {'determinístico' if deterministic else 'estocástico'}")
 
             p = multiprocessing.Process(
@@ -290,9 +333,10 @@ class EvaluationTab(common_tab.GUITab):
                     self.seed_var.get(),
                     self.device,
                     initial_episode,
-                    agent_model_path,
+                    agent_model_file,
                     episodes,
                     deterministic,
+                    False,
                 ),
             )
             p.start()
@@ -580,7 +624,7 @@ class EvaluationTab(common_tab.GUITab):
                 title="Selecione o arquivo JSON para carregar os dados",
                 defaultextension=".json",
                 filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
-                initialdir=os.path.join(os.path.expanduser("~"), "Desktop"),
+                initialdir=utils.ESPECIALISTA_DATA_PATH,
             )
 
             if not self.metrics_path:
@@ -826,9 +870,25 @@ class EvaluationTab(common_tab.GUITab):
 
         self.update_dynamic_plot()
 
+    def unlock_gui(self):
+        """Desbloqueia a interface após carregar modelo"""
+        super().unlock_gui()  # Chama o método da classe base
+
+        # Habilita o botão de avaliação se um modelo .zip foi carregado
+        model_path = self.eval_model_path.get()
+        if model_path and model_path.endswith('.zip') and os.path.isfile(model_path):
+            self.eval_start_btn.config(state=tk.NORMAL)
+        else:
+            self.eval_start_btn.config(state=tk.DISABLED)
+
     def start(self):
         """Inicializa a aba de avaliação"""
         self.logger.info("Aba de avaliação inicializada")
+        # Verifica se há um modelo carregado ao iniciar
+        if self.eval_model_path.get() and self.eval_model_path.get().endswith('.zip'):
+            self.eval_start_btn.config(state=tk.NORMAL)
+        else:
+            self.eval_start_btn.config(state=tk.DISABLED)
 
     @property
     def root(self):

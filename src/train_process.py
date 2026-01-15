@@ -34,6 +34,7 @@ def process_runner(
     model_path=None,
     episodes=1000,
     deterministic=False,
+    cross_evaluation=False
 ):
     logger = utils.get_logger([selected_environment, selected_robot, algorithm], ipc_queue)
     logger.info(f"Iniciando simulação: {selected_environment} + {selected_robot} + {algorithm}")
@@ -51,7 +52,7 @@ def process_runner(
         torch.cuda.manual_seed_all(seed)
 
         reward_system.set_is_fast_td3(is_fast_td3)
-
+        
         robot = Robot(logger, name=selected_robot)
         environment = Environment(logger, name=selected_environment, robot=robot, is_fast_td3=is_fast_td3)
         is_evaluation_mode = (algorithm is None)
@@ -71,7 +72,7 @@ def process_runner(
             config_changed_value,
             initial_episode=initial_episode,
             is_fast_td3=is_fast_td3,
-            is_evaluation_mode=is_evaluation_mode
+            is_evaluation_mode=is_evaluation_mode,
         )
 
         agent = Agent(logger, env=sim, model_path=model_path, algorithm=algorithm, device=device, initial_episode=initial_episode, seed=seed, is_fast_td3=is_fast_td3)
@@ -80,8 +81,12 @@ def process_runner(
         callback = TrainingCallback(logger)
 
         if algorithm is None:
-            logger.info("Modo de avaliação")
-            metrics_data = sim.evaluate(episodes, deterministic)
+            if cross_evaluation:
+                logger.info("Modo de avaliação cruzada (executando N episódios fixos)")
+                metrics_data = sim.evaluate_cross(episodes, deterministic)
+            else:
+                logger.info("Modo de avaliação normal (até alcançar 100 sucessos)")
+                metrics_data = sim.evaluate(episodes, deterministic)
 
             if exit_value.value:
                 ipc_queue.put({"type": "done"})

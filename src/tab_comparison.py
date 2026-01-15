@@ -49,14 +49,14 @@ class ComparisonTab:
         settings_frame.pack(fill=tk.X, pady=1)
 
         # Diretório de modelos
-        ttk.Label(settings_frame, text="Diretório de Modelos Especialistas:").grid(row=0, column=0, sticky=tk.W, padx=5)
-        self.models_dir_var = tk.StringVar(value=utils.TRAINING_DATA_PATH)
+        ttk.Label(settings_frame, text="Diretório de Modelos:").grid(row=0, column=0, sticky=tk.W, padx=5)
+        self.models_dir_var = tk.StringVar(value=utils.MODELS_DATA_PATH)
         ttk.Entry(settings_frame, textvariable=self.models_dir_var, width=40).grid(row=0, column=1, padx=5)
         ttk.Button(settings_frame, text="Procurar", command=self.browse_models_dir, width=10).grid(row=0, column=2, padx=5)
 
         # Parâmetros de avaliação
         ttk.Label(settings_frame, text="Episódios por avaliação:").grid(row=1, column=0, sticky=tk.W, padx=5)
-        self.cross_episodes_var = tk.StringVar(value="20")
+        self.cross_episodes_var = tk.StringVar(value="2")
         ttk.Entry(settings_frame, textvariable=self.cross_episodes_var, width=8).grid(row=1, column=1, padx=5, sticky=tk.W)
 
         self.cross_deterministic_var = tk.BooleanVar(value=True)
@@ -141,7 +141,7 @@ class ComparisonTab:
 
     def browse_models_dir(self):
         """Seleciona diretório com modelos especialistas"""
-        directory = filedialog.askdirectory(title="Selecionar Diretório de Modelos Especialistas", initialdir=utils.TRAINING_DATA_PATH)
+        directory = filedialog.askdirectory(title="Selecionar Diretório de Modelos Especialistas", initialdir=utils.MODELS_DATA_PATH)
         if directory:
             self.models_dir_var.set(directory)
             self.cross_evaluator = CrossEvaluation(self.logger, directory)
@@ -200,9 +200,8 @@ class ComparisonTab:
 
         except Exception as e:
             self.logger.exception("Erro na avaliação cruzada")
-            self.root.after(0, lambda: messagebox.showerror("Erro", f"Erro na avaliação cruzada: {e}"))
-        finally:
-            self.root.after(0, lambda: self.run_evaluation_btn.config(state=tk.NORMAL, text="Executar Avaliação Cruzada Completa"))
+            error_msg = str(e)  # Salvar a mensagem de erro em uma variável
+            self.root.after(0, lambda: messagebox.showerror("Erro", f"Erro na avaliação cruzada: {error_msg}"))
 
     def _display_cross_evaluation_results(self, report, report_path):
         """Exibe resultados da avaliação cruzada"""
