@@ -42,7 +42,7 @@ class EvaluationTab(common_tab.GUITab):
         row1_frame.pack(fill=tk.X)
 
         ttk.Label(row1_frame, text="Modelo para Avaliar:").grid(row=0, column=0, sticky=tk.W)
-        self.eval_model_path = tk.StringVar()
+        self.eval_model_path = tk.StringVar(value=utils.MODELS_DATA_PATH)
         ttk.Entry(row1_frame, textvariable=self.eval_model_path, width=120).grid(row=0, column=1, padx=5)
         self.load_model_btn = ttk.Button(row1_frame, text="Carregar modelo", command=self.browse_evaluation_model)
         self.load_model_btn.grid(row=0, column=2, padx=5)
