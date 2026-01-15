@@ -17,25 +17,52 @@ class CrossEvaluation:
         self.models_directory = models_directory
         self.complexity_order = ["PR", "PBA", "PRA", "PRD", "PG", "PRB"]
         self.session_output_dir = utils.CRUZADA_DATA_PATH
+        os.makedirs(self.session_output_dir, exist_ok=True)
+        os.makedirs(utils.TEMP_EVALUATION_SAVE_PATH, exist_ok=True)
 
     def run_complete_evaluation(self, num_episodes=100, deterministic=True):
         """Executa toda a avaliação cruzada automaticamente"""
-        self.logger.info("Iniciando avaliação cruzada completa")
+        self.logger.info("=" * 60)
+        self.logger.info("INICIANDO AVALIAÇÃO CRUZADA COMPLETA")
+        self.logger.info(f"Episódios por avaliação: {num_episodes}")
+        self.logger.info(f"Modo determinístico: {deterministic}")
+        self.logger.info("=" * 60)
+
+        start_time = time.time()
 
         # 1. Avaliação de Complexidade (RF-08)
+        self.logger.info("\n[RF-08] Avaliação de Complexidade...")
         complexity_results = self._run_complexity_analysis(num_episodes, deterministic)
 
         # 2. Avaliação de Generalização (RF-09)
+        self.logger.info("\n[RF-09] Avaliação de Generalização...")
         generalization_results = self._run_generalization_analysis(num_episodes, deterministic)
 
         # 3. Avaliação de Especificidade (RF-10)
+        self.logger.info("\n[RF-10] Avaliação de Especificidade...")
         specificity_results = self._run_specificity_analysis(num_episodes, deterministic)
 
         # 4. Classificação Direcional (RF-11)
+        self.logger.info("\n[RF-11] Classificação Direcional...")
         directional_analysis = self._classify_directional_transfers(generalization_results)
 
         # 5. Gerar relatório completo
-        comprehensive_report = self._generate_comprehensive_report(complexity_results, generalization_results, specificity_results, directional_analysis, num_episodes)
+        self.logger.info("\nGerando relatório consolidado...")
+        comprehensive_report = self._generate_comprehensive_report(
+            complexity_results, generalization_results, 
+            specificity_results, directional_analysis, num_episodes
+        )
+
+        # 6. Exportar relatório para CRUZADA_DATA_PATH
+        self.logger.info("\nExportando resultados para CRUZADA_DATA_PATH...")
+        export_info = self.export_report(comprehensive_report)
+
+        elapsed_time = time.time() - start_time
+        self.logger.info("=" * 60)
+        self.logger.info("AVALIAÇÃO CRUZADA CONCLUÍDA!")
+        self.logger.info(f"Tempo total: {elapsed_time:.1f}s")
+        self.logger.info(f"Resultados salvos em: {export_info['output_dir']}")
+        self.logger.info("=" * 60)
 
         return comprehensive_report
 
@@ -181,20 +208,20 @@ class CrossEvaluation:
             enable_real_time_val = multiprocessing.Value("b", 0)
             camera_selection_val = multiprocessing.Value("i", 0)
             config_changed_value = multiprocessing.Value("i", 0)
-            
+
             # Criar filas IPC
             ipc_queue = multiprocessing.Queue()
             ipc_queue_main_to_process = multiprocessing.Queue()
-            
+
             # Importar aqui para evitar dependências circulares
             from reward_system import RewardSystem
             reward_system = RewardSystem(self.logger)
-            
+
             eval_logger = self.logger
-            
+
             # Criar e executar processo de avaliação
             from train_process import process_runner
-            
+
             # Configurar processo
             eval_process = multiprocessing.Process(
                 target=process_runner,
@@ -222,15 +249,15 @@ class CrossEvaluation:
                 ),
                 daemon=True
             )
-            
+
             # Iniciar processo
             eval_logger.info(f"Iniciando avaliação cruzada: {circuit_name} com {robot_name}")
             eval_process.start()
-            
+
             # Coletar resultados
             metrics_data = None
             metrics_path = None
-            
+
             # Aguardar conclusão (timeout de 2 minutos)
             timeout = time.time() + (num_episodes * 30)
             while eval_process.is_alive() and time.time() < timeout:
@@ -241,91 +268,86 @@ class CrossEvaluation:
                         break
                 except:
                     continue
-            
+                
             # Forçar término se demorar muito
             if eval_process.is_alive():
                 eval_logger.warning(f"Avaliação de {circuit_name} excedeu o timeout, terminando...")
                 exit_val.value = True
                 eval_process.join(timeout=5)
-            
+
             # Aguardar processo terminar normalmente
             eval_process.join(timeout=10)
-            
-            # Salvar cópia dos dados detalhados
-            if self.session_output_dir:
-                model_name = os.path.basename(model_path).replace('.zip', '')
-                detailed_filename = f"{model_name}_{circuit_name}{int(time.time())}.json"
-                detailed_path = os.path.join(self.session_output_dir, detailed_filename)
 
-                with open(detailed_path, "w", encoding="utf-8") as f:
-                    json.dump(metrics_data, f, indent=2, ensure_ascii=False)
+            temp_data_path = None
+            if metrics_path and os.path.exists(metrics_path):
+                # Copiar arquivo de métricas para o diretório temporário
+                temp_data_path = metrics_path  
 
-                self.logger.info(f"Dados detalhados salvos em: {detailed_path}")
+                # Carregar métricas para processamento
+                with open(temp_data_path, "r", encoding="utf-8") as f:
+                    metrics_data = json.load(f)
 
-                # Carregar métricas
-                if metrics_path and os.path.exists(metrics_path):
-                    with open(metrics_path, "r", encoding="utf-8") as f:
-                        metrics_data = json.load(f)
+                # Extrair métricas relevantes
+                if "episodes" in metrics_data:
+                    total_times = []
+                    success_count = 0
+                    total_distance = 0
+                    total_velocity = 0
 
-                    # Extrair métricas relevantes
-                    if "episodes" in metrics_data:
-                        total_times = []
-                        success_count = 0
-                        total_distance = 0
-                        total_velocity = 0
+                    for episode_num, episode_data in metrics_data["episodes"].items():
+                        if "episode_data" in episode_data:
+                            ep_data = episode_data["episode_data"]
+                            episode_time = ep_data.get("time", ep_data.get("times", 0))
+                            episode_distance = ep_data.get("distance", ep_data.get("distances", 0))
 
-                        for episode_num, episode_data in metrics_data["episodes"].items():
-                            if "episode_data" in episode_data:
-                                ep_data = episode_data["episode_data"]
-                                episode_time = ep_data.get("time", 0)
-                                episode_distance = ep_data.get("distance", 0)
-                                episode_velocity = ep_data.get("velocity", 0)
+                            # Calcular velocidade
+                            episode_velocity = episode_distance / episode_time if episode_time > 0 else 0
 
-                                if episode_time > 0:  # Filtrar episódios com tempo zero
-                                    total_times.append(episode_time)
-                                    total_distance += episode_distance
-                                    total_velocity += episode_velocity
-                                    if ep_data.get("success", False):
-                                        success_count += 1
+                            if episode_time > 0:  # Filtrar episódios com tempo zero
+                                total_times.append(episode_time)
+                                total_distance += episode_distance
+                                total_velocity += episode_velocity
+                                if ep_data.get("success", False):
+                                    success_count += 1
 
-                        if total_times:
-                            avg_time = np.mean(total_times)
-                            std_time = np.std(total_times)
-                            success_rate = success_count / len(total_times)
-                            avg_distance = total_distance / len(total_times)
-                            avg_velocity = total_velocity / len(total_times)
-                        else:
-                            avg_time = 0
-                            std_time = 0
-                            success_rate = 0
-                            avg_distance = 0
-                            avg_velocity = 0
+                    if total_times:
+                        avg_time = np.mean(total_times)
+                        std_time = np.std(total_times)
+                        success_rate = success_count / len(total_times)
+                        avg_distance = total_distance / len(total_times)
+                        avg_velocity = total_velocity / len(total_times)
+                    else:
+                        avg_time = 0
+                        std_time = 0
+                        success_rate = 0
+                        avg_distance = 0
+                        avg_velocity = 0
 
-                        eval_logger.info(f"Avaliação concluída: Tempo médio={avg_time:.2f}s, Distância={avg_distance:.2f}m, Velocidade={avg_velocity:.2f}m/s, Sucesso={success_rate:.1%}")
+                    eval_logger.info(f"Avaliação concluída: Tempo médio={avg_time:.2f}s, Distância={avg_distance:.2f}m, Sucesso={success_rate:.1%}")
 
-                        return {
-                            "avg_time": avg_time,
-                            "std_time": std_time,
-                            "success_rate": success_rate,
-                            "success_count": success_count,
-                            "avg_distance": avg_distance,
-                            "avg_velocity": avg_velocity,
-                            "num_episodes": len(total_times),
-                            "total_times": total_times,
-                            "raw_data_path": detailed_path if self.session_output_dir else None,
-                            "expected_episodes": num_episodes
-                        }
-            
+                    return {
+                        "avg_time": avg_time,
+                        "std_time": std_time,
+                        "success_rate": success_rate,
+                        "success_count": success_count,
+                        "avg_distance": avg_distance,
+                        "avg_velocity": avg_velocity,
+                        "num_episodes": len(total_times),
+                        "total_times": total_times,
+                        "temp_data_path": temp_data_path,  
+                        "expected_episodes": num_episodes
+                    }
+
             eval_logger.warning(f"Não foi possível obter métricas para {circuit_name}")
             return self._create_default_metrics()
-            
+
         except Exception as e:
             self.logger.error(f"Erro na avaliação cruzada: {e}")
             return self._create_default_metrics()
-        
+         
     def _create_default_metrics(self):
         """Métricas padrão em caso de erro"""
-        return {"avg_time": 0, "std_time": 0, "success_rate": 0, "success_count": 0, "avg_distance": 0, "avg_velocity": 0,"num_episodes": 0, "total_times": []}
+        return {"avg_time": 0, "std_time": 0, "success_rate": 0, "success_count": 0, "avg_distance": 0, "avg_velocity": 0,"num_episodes": 0, "total_times": [], "temp_data_path": None }
 
     def _generate_comprehensive_report(self, complexity, generalization, specificity, directional, num_episodes):
         """Gera relatório completo da avaliação cruzada"""
@@ -406,81 +428,174 @@ class CrossEvaluation:
 
         return gap_stats
 
-    def _export_episode_details(self, report, output_dir, timestamp):
-        """Exporta detalhes de todos os episódios"""
+    def _export_episodes_csv(self, report, output_dir, timestamp):
+        """Exporta apenas os dados dos episódios em formato simplificado"""
+
+        all_episode_data = []
+
+        # Processar dados de complexidade
+        for item in report.get("raw_data", {}).get("complexity", []):
+            if "temp_data_path" in item and item["temp_data_path"] and os.path.exists(item["temp_data_path"]):
+                episode_data = self._extract_episode_data_from_file(item["temp_data_path"], item.get("circuit", ""))
+                all_episode_data.extend(episode_data)
+
+        # Processar dados de generalização
+        for item in report.get("raw_data", {}).get("generalization", []):
+            if "temp_data_path" in item and item["temp_data_path"] and os.path.exists(item["temp_data_path"]):
+                origin = item.get("origin_circuit", "")
+                target = item.get("target_circuit", "")
+                circuit_label = f"{origin}_para_{target}"
+                episode_data = self._extract_episode_data_from_file(item["temp_data_path"], circuit_label)
+                all_episode_data.extend(episode_data)
+
+        if all_episode_data:
+            # Ordenar por circuito e episódio
+            all_episode_data.sort(key=lambda x: (x["Circuito"], int(x["Episódio"])))
+
+            df_episodes = pd.DataFrame(all_episode_data)
+            episodes_path = os.path.join(output_dir, f"episodios_detalhados_{timestamp}.csv")
+            df_episodes.to_csv(episodes_path, index=False, encoding='utf-8-sig')
+
+            self.logger.info(f"CSV de episódios detalhados salvo: {episodes_path}")
+            self.logger.info(f"Total de episódios registrados: {len(all_episode_data)}")
+
+        else:
+            self.logger.warning("Nenhum dado de episódio encontrado para exportar")
+    
+    def _extract_episode_data_from_file(self, file_path, circuito_label):
+        """Extrai dados simplificados de um arquivo JSON"""
+        episode_data = []
+
         try:
-            episodes_dir = os.path.join(output_dir, "episode_details")
-            os.makedirs(episodes_dir, exist_ok=True)
+            with open(file_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
 
-            # Coletar todos os caminhos de dados brutos
-            all_raw_paths = []
+            if "episodes" in data:
+                for ep_num, ep_info in data["episodes"].items():
+                    if "episode_data" in ep_info:
+                        ep_data = ep_info["episode_data"]
 
-            # Adicionar caminhos da complexidade
-            for item in report["raw_data"]["complexity"]:
-                if "raw_data_path" in item and item["raw_data_path"]:
-                    all_raw_paths.append(item["raw_data_path"])
+                        # Extrair dados (com fallback para nomes antigos)
+                        tempo = ep_data.get("time", ep_data.get("times", 0))
+                        distancia = ep_data.get("distance", ep_data.get("distances", 0))
+                        sucesso = ep_data.get("success", False)
 
-            # Adicionar caminhos da generalização
-            for item in report["raw_data"]["generalization"]:
-                if "raw_data_path" in item and item["raw_data_path"]:
-                    all_raw_paths.append(item["raw_data_path"])
+                        if tempo > 0:  # Só processar episódios válidos
+                            velocidade = distancia / tempo if tempo > 0 else 0
 
-            # Consolidar todos os episódios
-            all_episodes = []
-
-            for raw_path in all_raw_paths:
-                if os.path.exists(raw_path):
-                    try:
-                        with open(raw_path, "r", encoding="utf-8") as f:
-                            data = json.load(f)
-
-                        if "episodes" in data:
-                            for ep_num, ep_data in data["episodes"].items():
-                                if isinstance(ep_data, dict) and "episode_data" in ep_data:
-                                    episode_info = ep_data["episode_data"].copy()
-                                    episode_info["evaluation_file"] = os.path.basename(raw_path)
-                                    all_episodes.append(episode_info)
-                    except Exception as e:
-                        self.logger.warning(f"Erro ao processar {raw_path}: {e}")
-
-            # Salvar todos os episódios consolidados
-            if all_episodes:
-                episodes_df = pd.DataFrame(all_episodes)
-                episodes_csv_path = os.path.join(episodes_dir, f"all_episodes_{timestamp}.csv")
-                episodes_df.to_csv(episodes_csv_path, index=False)
-
-                self.logger.info(f"Detalhes de {len(all_episodes)} episódios salvos em: {episodes_csv_path}")
+                            episode_data.append({
+                                "Episódio": int(ep_num),
+                                "Circuito": circuito_label,
+                                "Sucesso": "Sim" if sucesso else "Não",
+                                "Distância_m": round(distancia, 2),
+                                "Tempo_s": round(tempo, 2),
+                                "Velocidade_ms": round(velocidade, 2),
+                                "Recompensa": round(ep_data.get("rewards", 0), 2)
+                            })
 
         except Exception as e:
-            self.logger.error(f"Erro ao exportar detalhes dos episódios: {e}")
+            self.logger.warning(f"Erro ao extrair dados de {file_path}: {e}")
 
-    def export_report(self, report, output_dir="logs/cross_evaluation"):
+        return episode_data
+    
+    def export_report(self, report, output_dir=None):
         """Exporta relatório completo"""
+        if output_dir is None:
+            output_dir = self.session_output_dir
+
         os.makedirs(output_dir, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-        # Salvar JSON completo
-        json_path = os.path.join(output_dir, f"cross_evaluation_report_{timestamp}.json")
+        # 1. Salvar JSON completo (opcional, para referência)
+        json_path = os.path.join(output_dir, f"cross_evaluation_summary_{timestamp}.json")
         with open(json_path, "w", encoding="utf-8") as f:
-            json.dump(report, f, indent=2, ensure_ascii=False)
+            # Remover dados brutos do relatório para economizar espaço
+            filtered_report = {
+                "metadata": report["metadata"],
+                "complexity_ranking": report["complexity_ranking"],
+                "best_specialists": report["best_specialists"],
+                "generalization_analysis": report["generalization_analysis"],
+                "directional_insights": report["directional_insights"],
+                "specificity_gaps": report["specificity_gaps"],
+                "timestamp": timestamp
+            }
+            json.dump(filtered_report, f, indent=2, ensure_ascii=False)
 
-        # Salvar CSV resumido
-        self._export_csv_report(report, output_dir, timestamp)
+        # 2. Salvar CSVs principais
+        self._export_main_csvs(report, output_dir, timestamp)
 
-        self.logger.info(f"Relatório exportado: {json_path}")
-        return json_path
+        # 3. Salvar dados dos episódios em formato CSV simplificado
+        self._export_episodes_csv(report, output_dir, timestamp)
 
-    def _export_csv_report(self, report, output_dir, timestamp):
-        """Exporta relatório em formato CSV para análise"""
+        self.logger.info(f"Relatório exportado para: {output_dir}")
+        return {
+            "json_path": json_path,
+            "output_dir": output_dir,
+            "timestamp": timestamp
+        }
 
-        # CSV de complexidade
-        complexity_df = pd.DataFrame(report["raw_data"]["complexity"])
-        complexity_df.to_csv(os.path.join(output_dir, f"complexity_{timestamp}.csv"), index=False)
+    def _export_main_csvs(self, report, output_dir, timestamp):
+        """Exporta os CSVs principais (complexity, generalization, specificity)"""
 
-        # CSV de generalização
-        generalization_df = pd.DataFrame(report["raw_data"]["generalization"])
-        generalization_df.to_csv(os.path.join(output_dir, f"generalization_{timestamp}.csv"), index=False)
+        # 1. CSV de Complexidade (RF-08)
+        if report.get("raw_data", {}).get("complexity"):
+            complexity_data = []
+            for item in report["raw_data"]["complexity"]:
+                complexity_data.append({
+                    "Circuito": item.get("circuit", ""),
+                    "Modelo": os.path.basename(item.get("model_path", "")).replace('.zip', ''),
+                    "Tempo_Medio_s": round(item.get("avg_time", 0), 2),
+                    "Desvio_Tempo_s": round(item.get("std_time", 0), 2),
+                    "Taxa_Sucesso": round(item.get("success_rate", 0) * 100, 1),
+                    "Sucessos": item.get("success_count", 0),
+                    "Episodios_Validados": item.get("num_episodes", 0),
+                    "Episodios_Esperados": item.get("expected_episodes", 0),
+                    "Distancia_Media_m": round(item.get("avg_distance", 0), 2),
+                    "Velocidade_Media_ms": round(item.get("avg_velocity", 0), 2)
+                })
 
-        # CSV de especificidade
-        specificity_df = pd.DataFrame(report["raw_data"]["specificity"])
-        specificity_df.to_csv(os.path.join(output_dir, f"specificity_{timestamp}.csv"), index=False)
+            df_complexity = pd.DataFrame(complexity_data)
+            # Ordenar por tempo médio (complexidade)
+            df_complexity = df_complexity.sort_values("Tempo_Medio_s", ascending=True)
+            complexity_path = os.path.join(output_dir, f"complexidade_{timestamp}.csv")
+            df_complexity.to_csv(complexity_path, index=False, encoding='utf-8-sig')
+            self.logger.info(f"CSV de complexidade salvo: {complexity_path}")
+
+        # 2. CSV de Generalização (RF-09)
+        if report.get("raw_data", {}).get("generalization"):
+            generalization_data = []
+            for item in report["raw_data"]["generalization"]:
+                generalization_data.append({
+                    "Origem": item.get("origin_circuit", ""),
+                    "Destino": item.get("target_circuit", ""),
+                    "Tempo_Medio_Destino_s": round(item.get("avg_time_target", 0), 2),
+                    "Taxa_Sucesso_Destino": round(item.get("success_rate_target", 0) * 100, 1),
+                    "Direcao": item.get("direction", ""),
+                    "Dificuldade": item.get("difficulty", ""),
+                    "Modelo": os.path.basename(item.get("model_path", "")).replace('.zip', '')
+                })
+
+            df_generalization = pd.DataFrame(generalization_data)
+            generalization_path = os.path.join(output_dir, f"generalizacao_{timestamp}.csv")
+            df_generalization.to_csv(generalization_path, index=False, encoding='utf-8-sig')
+            self.logger.info(f"CSV de generalização salvo: {generalization_path}")
+
+        # 3. CSV de Especificidade (RF-10)
+        if report.get("raw_data", {}).get("specificity"):
+            specificity_data = []
+            for item in report["raw_data"]["specificity"]:
+                specificity_data.append({
+                    "Circuito_Alvo": item.get("target_circuit", ""),
+                    "Modelo_Origem": item.get("origin_circuit", ""),
+                    "Tempo_AE_s": round(item.get("ae_avg_time", 0), 2),
+                    "Tempo_AG_s": round(item.get("ag_avg_time", 0), 2),
+                    "Delta_Tm_s": round(item.get("delta_tm", 0), 2),
+                    "Taxa_Sucesso_AE": round(item.get("ae_success_rate", 0) * 100, 1),
+                    "Taxa_Sucesso_AG": round(item.get("ag_success_rate", 0) * 100, 1),
+                    "Penalidade_Especificidade": round(abs(item.get("delta_tm", 0)), 2)
+                })
+
+            df_specificity = pd.DataFrame(specificity_data)
+            specificity_path = os.path.join(output_dir, f"especificidade_{timestamp}.csv")
+            df_specificity.to_csv(specificity_path, index=False, encoding='utf-8-sig')
+            self.logger.info(f"CSV de especificidade salvo: {specificity_path}")
