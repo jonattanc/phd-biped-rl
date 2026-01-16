@@ -1,14 +1,24 @@
 import pandas as pd
 import numpy as np
 import scipy.stats as stats
-from scipy.stats import f_oneway, shapiro, levene
+from scipy.stats import f_oneway, levene
 from scipy.stats import f as f_dist
 import os
 import warnings
 from openpyxl import Workbook, load_workbook
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.styles import Font, Alignment
 from openpyxl.utils import get_column_letter
 import datetime
+import locale
+
+# Configurar locale para Português Brasil
+try:
+    locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')
+except:
+    try:
+        locale.setlocale(locale.LC_ALL, 'Portuguese_Brazil.1252')
+    except:
+        pass
 
 warnings.filterwarnings('ignore')
 
@@ -111,75 +121,38 @@ def games_howell(data_groups, group_names):
     
     return results
 
-def formatar_valor(valor, formato='geral'):
-    """Formata valores para exibição"""
+def formatar_numero_br(valor, casas_decimais=4):
+    """Formata números no formato brasileiro (vírgula como separador decimal)"""
     if pd.isna(valor):
         return "N/A"
     
-    if formato == 'pvalor':
-        if valor < 0.001:
-            return "< 0.001"
-        elif valor < 0.01:
-            return f"{valor:.3f}"
-        else:
-            return f"{valor:.4f}"
-    elif formato == 'numero':
-        return f"{valor:.4f}"
-    elif formato == 'inteiro':
-        return f"{int(valor)}"
-    elif formato == 'porcentagem':
-        return f"{valor:.1f}%"
-    else:
+    try:
+        # Formatar com vírgula como separador decimal
+        formato = f"{{:,.{casas_decimais}f}}"
+        numero_formatado = formato.format(float(valor))
+        # Substituir ponto por vírgula
+        return numero_formatado.replace('.', ',')
+    except:
         return str(valor)
 
-def identificar_colunas_numericas(df):
-    """
-    Identifica colunas numéricas e ignora colunas de identificação
-    """
-    # Padrões de colunas para ignorar (identificadores)
-    padroes_ignorar = [
-        'episódio', 'episodio', 'episode',
-        'id', 'codigo', 'código', 'code',
-        'numero', 'número', 'num', 'n°',
-        'paciente', 'patient',
-        'amostra', 'sample',
-        'data', 'date',
-        'hora', 'time',
-        'observacao', 'observação', 'obs',
-        'nota', 'note',
-        'grupo', 'group', 'categoria', 'category',
-        'nome', 'name'
-    ]
+def formatar_pvalor_br(valor):
+    """Formata p-valores no formato brasileiro"""
+    if pd.isna(valor):
+        return "N/A"
     
-    colunas_numericas = []
-    
-    for coluna in df.columns:
-        # Verificar se o nome da coluna corresponde a um padrão de identificador
-        coluna_lower = str(coluna).strip().lower()
-        ignorar = False
-        
-        for padrao in padroes_ignorar:
-            if padrao in coluna_lower:
-                ignorar = True
-                print(f"  ⚠️  Ignorando coluna identificadora: '{coluna}'")
-                break
-        
-        if ignorar:
-            continue
-        
-        # Tentar converter para numérico para verificar se é numérica
-        try:
-            dados_convertidos = pd.to_numeric(df[coluna].astype(str).str.replace(',', '.'), errors='coerce')
-            # Considerar numérica se pelo menos 50% dos valores forem numéricos
-            if dados_convertidos.notna().sum() / len(dados_convertidos) >= 0.5:
-                colunas_numericas.append(coluna)
-        except:
-            continue
-    
-    return colunas_numericas
+    try:
+        valor_float = float(valor)
+        if valor_float < 0.001:
+            return "< 0,001"
+        elif valor_float < 0.01:
+            return f"{valor_float:.3f}".replace('.', ',')
+        else:
+            return f"{valor_float:.4f}".replace('.', ',')
+    except:
+        return str(valor)
 
 def analisar_dataframe_completo(df, nome_arquivo):
-    """Analisa um DataFrame e retorna todos os resultados detalhados"""
+    """Analisa um DataFrame e retorna todos os resultados detalhados seguindo o fluxo especificado"""
     resultados_detalhados = []
     resultados_posthoc_completo = []
     
@@ -187,23 +160,29 @@ def analisar_dataframe_completo(df, nome_arquivo):
     df = df.dropna(axis=1, how='all')
     df.columns = df.columns.str.strip()
     
-    print(f"  📋 Colunas originais: {list(df.columns)}")
-    
     # Identificar colunas numéricas (ignorando identificadores)
-    colunas_numericas = identificar_colunas_numericas(df)
+    padroes_ignorar = ['episódio', 'episodio', 'episode', 'id', 'codigo', 'código', 'code']
+    colunas_numericas = []
+    
+    for coluna in df.columns:
+        coluna_lower = str(coluna).strip().lower()
+        ignorar = any(padrao in coluna_lower for padrao in padroes_ignorar)
+        
+        if not ignorar:
+            try:
+                dados_convertidos = pd.to_numeric(df[coluna].astype(str).str.replace(',', '.'), errors='coerce')
+                if dados_convertidos.notna().sum() / len(dados_convertidos) >= 0.5:
+                    colunas_numericas.append(coluna)
+            except:
+                continue
     
     if not colunas_numericas:
-        print(f"  ✗ Nenhuma coluna numérica encontrada no arquivo {nome_arquivo}")
         return {
             'estatisticas': [],
-            'normalidade': [],
             'comparacoes': [],
             'posthoc': [],
-            'correlacoes': [],
-            'testes_t': []
+            'correlacoes': []
         }
-    
-    print(f"  ✓ Colunas numéricas identificadas: {colunas_numericas}")
     
     # Converter apenas as colunas numéricas
     for coluna in colunas_numericas:
@@ -213,72 +192,65 @@ def analisar_dataframe_completo(df, nome_arquivo):
     colunas_validas = [col for col in colunas_numericas if len(df[col].dropna()) >= 3]
     
     if len(colunas_validas) < 1:
-        print(f"  ✗ Nenhuma coluna com dados suficientes para análise (mínimo 3 observações)")
         return {
             'estatisticas': [],
-            'normalidade': [],
             'comparacoes': [],
             'posthoc': [],
-            'correlacoes': [],
-            'testes_t': []
+            'correlacoes': []
         }
-    
-    print(f"  ✓ Colunas válidas para análise (≥3 obs): {colunas_validas}")
     
     # --- SEÇÃO 1: ESTATÍSTICAS DESCRITIVAS COMPLETAS ---
     estatisticas_detalhadas = []
     for coluna in colunas_validas:
         dados = df[coluna].dropna()
         
+        # Para amostras grandes (>100), usar intervalo de confiança baseado na distribuição normal
+        n = len(dados)
+        if n > 0:
+            mean_val = dados.mean()
+            std_val = dados.std()
+            se = std_val / np.sqrt(n)
+            
+            # Para n > 30, usar distribuição normal; para n <= 30, usar t-student
+            if n > 30:
+                ci_lower = mean_val - 1.96 * se
+                ci_upper = mean_val + 1.96 * se
+            else:
+                t_crit = stats.t.ppf(0.975, n-1)
+                ci_lower = mean_val - t_crit * se
+                ci_upper = mean_val + t_crit * se
+        else:
+            mean_val = std_val = se = ci_lower = ci_upper = np.nan
+        
         estatisticas = {
             'Arquivo': nome_arquivo,
             'Variável': coluna,
             'Tipo': 'Estatística Descritiva',
-            'Média': dados.mean(),
-            'DP': dados.std(),
+            'Média': mean_val,
+            'DP': std_val,
             'Mediana': dados.median(),
-            'IC 95% Inferior': dados.mean() - 1.96 * dados.std() / np.sqrt(len(dados)) if len(dados) > 0 else np.nan,
-            'IC 95% Superior': dados.mean() + 1.96 * dados.std() / np.sqrt(len(dados)) if len(dados) > 0 else np.nan,
+            'IC 95% Inferior': ci_lower,
+            'IC 95% Superior': ci_upper,
             'Mínimo': dados.min(),
             'Máximo': dados.max(),
-            'CV (%)': (dados.std() / dados.mean() * 100) if dados.mean() != 0 else np.nan,
-            'N': len(dados)
+            'CV (%)': (std_val / mean_val * 100) if mean_val != 0 else np.nan,
+            'N': n
         }
         estatisticas_detalhadas.append(estatisticas)
     
-    # --- SEÇÃO 2: TESTES DE NORMALIDADE ---
-    testes_normalidade = []
-    for coluna in colunas_validas:
-        dados = df[coluna].dropna()
-        if 3 <= len(dados) <= 5000:
-            try:
-                stat, p_valor = shapiro(dados)
-                testes_normalidade.append({
-                    'Arquivo': nome_arquivo,
-                    'Variável': coluna,
-                    'Tipo': 'Normalidade',
-                    'Teste': 'Shapiro-Wilk',
-                    'Estatística': stat,
-                    'p-valor': p_valor,
-                    'Resultado': 'Normal' if p_valor > 0.05 else 'Não Normal'
-                })
-            except:
-                pass
-    
-    # --- SEÇÃO 3: COMPARAÇÃO ENTRE GRUPOS ---
+    # --- SEÇÃO 2: COMPARAÇÃO ENTRE GRUPOS (FLUXO ESPECIFICADO) ---
     comparacoes_grupos = []
+    
     if len(colunas_validas) >= 2:
         grupos_dados = [df[col].dropna().values for col in colunas_validas]
         N_total = sum(len(g) for g in grupos_dados)
         k = len(grupos_dados)
-        homogeneo = True
-        p_levene = 1.0
-
-        # TESTE DE LEVENE
+        
+        # TESTE DE LEVENE (Homogeneidade de variâncias)
         try:
             stat_levene, p_levene = levene(*grupos_dados)
             homogeneo = p_levene >= 0.05  # p ≥ 0.05 = homogêneo, p < 0.05 = não homogêneo
-
+            
             comparacoes_grupos.append({
                 'Arquivo': nome_arquivo,
                 'Variável': 'Todas',
@@ -286,8 +258,128 @@ def analisar_dataframe_completo(df, nome_arquivo):
                 'Teste': 'Levene',
                 'Estatística': stat_levene,
                 'p-valor': p_levene,
-                'Resultado': 'Homogêneas' if homogeneo else 'Não Homogêneas'
+                'Resultado': 'Homogêneas' if homogeneo else 'Não Homogêneas',
+                'Decisão': 'ANOVA Clássica + Tukey' if homogeneo else 'ANOVA Welch + Games-Howell'
             })
+            
+            # FLUXO DECISIONAL BASEADO NO LEVENE
+            if homogeneo:  # p ≥ 0,05
+                # ANOVA CLÁSSICA
+                try:
+                    f_stat, p_anova = f_oneway(*grupos_dados)
+                    df_between = k - 1
+                    df_within = N_total - k
+                    
+                    if df_within > 0:
+                        comparacoes_grupos.append({
+                            'Arquivo': nome_arquivo,
+                            'Variável': 'ANOVA',
+                            'Tipo': 'Comparação',
+                            'Teste': 'ANOVA Clássica',
+                            'Estatística': f_stat,
+                            'gl entre': df_between,
+                            'gl dentro': df_within,
+                            'p-valor': p_anova,
+                            'Resultado': 'Significativa' if p_anova < 0.05 else 'Não Significativa',
+                            'Decisão': 'Prosseguir com Tukey HSD' if p_anova < 0.05 else 'Não necessário'
+                        })
+                        
+                        # TUKEY HSD (apenas se ANOVA for significativa)
+                        if p_anova < 0.05 and STATSMODELS_AVAILABLE:
+                            try:
+                                tukey_data = []
+                                tukey_groups = []
+                                
+                                for i, dados in enumerate(grupos_dados):
+                                    tukey_data.extend(dados)
+                                    tukey_groups.extend([colunas_validas[i]] * len(dados))
+                                
+                                tukey_result = pairwise_tukeyhsd(tukey_data, tukey_groups, alpha=0.05)
+                                
+                                if hasattr(tukey_result, 'summary') and tukey_result.summary() is not None:
+                                    for i in range(len(tukey_result.summary().data) - 1):
+                                        row = tukey_result.summary().data[i + 1]
+                                        if len(row) > 6:
+                                            comparacao = {
+                                                'Arquivo': nome_arquivo,
+                                                'Grupo 1': str(row[0]),
+                                                'Grupo 2': str(row[1]),
+                                                'Média 1': df[colunas_validas[colunas_validas.index(str(row[0]))]].mean() if str(row[0]) in colunas_validas else np.nan,
+                                                'Média 2': df[colunas_validas[colunas_validas.index(str(row[1]))]].mean() if str(row[1]) in colunas_validas else np.nan,
+                                                'Diferença': float(row[2]),
+                                                'Erro Padrão': float(row[3]),
+                                                'IC 95% Inferior': float(row[4]),
+                                                'IC 95% Superior': float(row[5]),
+                                                'p-valor': float(row[6]) if len(row) > 6 else np.nan,
+                                                'Significativo': bool(row[7]) if len(row) > 7 else False,
+                                                'Tipo': 'Tukey HSD'
+                                            }
+                                            resultados_posthoc_completo.append(comparacao)
+                            except Exception as e:
+                                resultados_posthoc_completo.append({
+                                    'Arquivo': nome_arquivo,
+                                    'Grupo 1': 'Erro',
+                                    'Grupo 2': str(e)[:50],
+                                    'Tipo': 'Erro Tukey'
+                                })
+                except Exception as e:
+                    comparacoes_grupos.append({
+                        'Arquivo': nome_arquivo,
+                        'Variável': 'ANOVA',
+                        'Tipo': 'Comparação',
+                        'Teste': 'ANOVA Clássica (Erro)',
+                        'Estatística': np.nan,
+                        'gl entre': np.nan,
+                        'gl dentro': np.nan,
+                        'p-valor': np.nan,
+                        'Resultado': f'Erro: {str(e)[:50]}'
+                    })
+            
+            else:  # p < 0,05
+                # ANOVA DE WELCH
+                try:
+                    F_welch, df1_welch, df2_welch, p_welch = welch_anova(grupos_dados)
+                    
+                    comparacoes_grupos.append({
+                        'Arquivo': nome_arquivo,
+                        'Variável': 'ANOVA',
+                        'Tipo': 'Comparação',
+                        'Teste': 'ANOVA de Welch',
+                        'Estatística': F_welch,
+                        'gl entre': df1_welch,
+                        'gl dentro': df2_welch,
+                        'p-valor': p_welch,
+                        'Resultado': 'Significativa' if p_welch < 0.05 else 'Não Significativa',
+                        'Decisão': 'Prosseguir com Games-Howell' if p_welch < 0.05 else 'Não necessário'
+                    })
+                    
+                    # GAMES-HOWELL (apenas se ANOVA de Welch for significativa)
+                    if p_welch < 0.05:
+                        try:
+                            gh_results = games_howell(grupos_dados, colunas_validas)
+                            for gh in gh_results:
+                                gh['Arquivo'] = nome_arquivo
+                                resultados_posthoc_completo.append(gh)
+                        except Exception as e:
+                            resultados_posthoc_completo.append({
+                                'Arquivo': nome_arquivo,
+                                'Grupo 1': 'Erro',
+                                'Grupo 2': str(e)[:50],
+                                'Tipo': 'Erro Games-Howell'
+                            })
+                except Exception as e:
+                    comparacoes_grupos.append({
+                        'Arquivo': nome_arquivo,
+                        'Variável': 'ANOVA',
+                        'Tipo': 'Comparação',
+                        'Teste': 'ANOVA de Welch (Erro)',
+                        'Estatística': np.nan,
+                        'gl entre': np.nan,
+                        'gl dentro': np.nan,
+                        'p-valor': np.nan,
+                        'Resultado': f'Erro: {str(e)[:50]}'
+                    })
+        
         except Exception as e:
             comparacoes_grupos.append({
                 'Arquivo': nome_arquivo,
@@ -298,181 +390,8 @@ def analisar_dataframe_completo(df, nome_arquivo):
                 'p-valor': np.nan,
                 'Resultado': f'Erro: {str(e)[:50]}'
             })
-            homogeneo = True  # Default para homogêneo em caso de erro
-
-        # DECISÃO BASEADA EXCLUSIVAMENTE NO RESULTADO DO LEVENE
-        # SE p_levene < 0.05 (NÃO HOMOGÊNEO) → SEMPRE usar Welch + Games-Howell
-        # SE p_levene ≥ 0.05 (HOMOGÊNEO) → usar ANOVA Clássica + Tukey
-
-        if not homogeneo:  # Variâncias NÃO homogêneas (p < 0.05)
-            # --- ANOVA DE WELCH (PARA VARIÂNCIAS HETEROGÊNEAS) ---
-            try:
-                F_welch, df1_welch, df2_welch, p_welch = welch_anova(grupos_dados)
-
-                comparacoes_grupos.append({
-                    'Arquivo': nome_arquivo,
-                    'Variável': 'ANOVA',
-                    'Tipo': 'Comparação',
-                    'Teste': 'ANOVA de Welch',
-                    'Estatística': F_welch,
-                    'gl entre': df1_welch,
-                    'gl dentro': df2_welch,
-                    'p-valor': p_welch,
-                    'η² (eta)': np.nan,
-                    'ω² (omega)': np.nan,
-                    'Resultado': 'Significativa' if p_welch < 0.05 else 'Não Significativa',
-                    'n': N_total
-                })
-
-                # --- GAMES-HOWELL SEMPRE quando usar Welch ---
-                try:
-                    gh_results = games_howell(grupos_dados, colunas_validas)
-                    for gh in gh_results:
-                        gh['Arquivo'] = nome_arquivo
-                        resultados_posthoc_completo.append(gh)
-                except Exception as e:
-                    resultados_posthoc_completo.append({
-                        'Arquivo': nome_arquivo,
-                        'Grupo 1': 'Erro',
-                        'Grupo 2': str(e)[:50],
-                        'Tipo': 'Erro Games-Howell'
-                    })
-            except Exception as e:
-                comparacoes_grupos.append({
-                    'Arquivo': nome_arquivo,
-                    'Variável': 'ANOVA',
-                    'Tipo': 'Comparação',
-                    'Teste': 'ANOVA de Welch (Erro)',
-                    'Estatística': np.nan,
-                    'gl entre': np.nan,
-                    'gl dentro': np.nan,
-                    'p-valor': np.nan,
-                    'Resultado': f'Erro: {str(e)[:50]}',
-                    'n': N_total
-                })
-
-        else:  # Variâncias homogêneas (p ≥ 0.05 ou erro no Levene)
-            # --- ANOVA CLÁSSICA (PARA VARIÂNCIAS HOMOGÊNEAS) ---
-            try:
-                f_stat, p_anova = f_oneway(*grupos_dados)
-                df_between = k - 1
-                df_within = N_total - k
-
-                if df_within > 0:
-                    eta2 = (f_stat * df_between) / (f_stat * df_between + df_within)
-                    omega2 = max(0, (f_stat - 1) * df_between / (f_stat * df_between + df_within + 1))
-
-                    comparacoes_grupos.append({
-                        'Arquivo': nome_arquivo,
-                        'Variável': 'ANOVA',
-                        'Tipo': 'Comparação',
-                        'Teste': 'ANOVA Clássica',
-                        'Estatística': f_stat,
-                        'gl entre': df_between,
-                        'gl dentro': df_within,
-                        'p-valor': p_anova,
-                        'η² (eta)': eta2,
-                        'ω² (omega)': omega2,
-                        'Resultado': 'Significativa' if p_anova < 0.05 else 'Não Significativa',
-                        'n': N_total
-                    })
-
-                    # --- TUKEY HSD SOMENTE quando usar ANOVA Clássica ---
-                    if p_anova < 0.05 and STATSMODELS_AVAILABLE:
-                        try:
-                            tukey_data = []
-                            tukey_groups = []
-
-                            for i, dados in enumerate(grupos_dados):
-                                tukey_data.extend(dados)
-                                tukey_groups.extend([colunas_validas[i]] * len(dados))
-
-                            tukey_result = pairwise_tukeyhsd(tukey_data, tukey_groups, alpha=0.05)
-
-                            # Extrair TODAS as comparações
-                            if hasattr(tukey_result, 'summary') and tukey_result.summary() is not None:
-                                for i in range(len(tukey_result.summary().data) - 1):
-                                    row = tukey_result.summary().data[i + 1]
-                                    if len(row) > 6:
-                                        comparacao = {
-                                            'Arquivo': nome_arquivo,
-                                            'Grupo 1': str(row[0]),
-                                            'Grupo 2': str(row[1]),
-                                            'Média 1': df[colunas_validas[colunas_validas.index(str(row[0]))]].mean() if str(row[0]) in colunas_validas else np.nan,
-                                            'Média 2': df[colunas_validas[colunas_validas.index(str(row[1]))]].mean() if str(row[1]) in colunas_validas else np.nan,
-                                            'Diferença': float(row[2]),
-                                            'Erro Padrão': float(row[3]),
-                                            'IC 95% Inferior': float(row[4]),
-                                            'IC 95% Superior': float(row[5]),
-                                            'p-valor': float(row[6]) if len(row) > 6 else np.nan,
-                                            'Significativo': bool(row[7]) if len(row) > 7 else False,
-                                            'Tipo': 'Tukey HSD'
-                                        }
-                                        resultados_posthoc_completo.append(comparacao)
-                        except Exception as e:
-                            resultados_posthoc_completo.append({
-                                'Arquivo': nome_arquivo,
-                                'Grupo 1': 'Erro',
-                                'Grupo 2': str(e)[:50],
-                                'Tipo': 'Erro Tukey'
-                            })
-                else:
-                    comparacoes_grupos.append({
-                        'Arquivo': nome_arquivo,
-                        'Variável': 'ANOVA',
-                        'Tipo': 'Comparação',
-                        'Teste': 'ANOVA Clássica',
-                        'Estatística': np.nan,
-                        'gl entre': df_between,
-                        'gl dentro': df_within,
-                        'p-valor': np.nan,
-                        'η² (eta)': np.nan,
-                        'ω² (omega)': np.nan,
-                        'Resultado': 'Não Aplicável',
-                        'n': N_total
-                    })
-            except Exception as e:
-                comparacoes_grupos.append({
-                    'Arquivo': nome_arquivo,
-                    'Variável': 'ANOVA',
-                    'Tipo': 'Comparação',
-                    'Teste': 'ANOVA Clássica (Erro)',
-                    'Estatística': np.nan,
-                    'gl entre': np.nan,
-                    'gl dentro': np.nan,
-                    'p-valor': np.nan,
-                    'Resultado': f'Erro: {str(e)[:50]}',
-                    'n': N_total
-                })
-
-        # --- KRUSKAL-WALLIS (SEMPRE calculado, independente de homogeneidade) ---
-        try:
-            h_stat, p_kw = stats.kruskal(*grupos_dados)
-            comparacoes_grupos.append({
-                'Arquivo': nome_arquivo,
-                'Variável': 'Kruskal-Wallis',
-                'Tipo': 'Comparação',
-                'Teste': 'Kruskal-Wallis',
-                'Estatística': h_stat,
-                'gl': k - 1,
-                'p-valor': p_kw,
-                'Resultado': 'Significativa' if p_kw < 0.05 else 'Não Significativa',
-                'n': N_total
-            })
-        except Exception as e:
-            comparacoes_grupos.append({
-                'Arquivo': nome_arquivo,
-                'Variável': 'Kruskal-Wallis',
-                'Tipo': 'Comparação',
-                'Teste': 'Kruskal-Wallis',
-                'Estatística': np.nan,
-                'gl': np.nan,
-                'p-valor': np.nan,
-                'Resultado': f'Erro: {str(e)[:50]}',
-                'n': N_total
-            })
     
-    # --- SEÇÃO 4: MATRIZ DE CORRELAÇÃO ---
+    # --- SEÇÃO 3: MATRIZ DE CORRELAÇÃO (Pearson) ---
     matriz_correlacao = []
     if len(colunas_validas) >= 2:
         # Calcular correlação de Pearson
@@ -504,45 +423,18 @@ def analisar_dataframe_completo(df, nome_arquivo):
                     'Tipo': 'Correlação'
                 })
     
-    # --- SEÇÃO 5: TESTE T PAR A PAR (se apenas 2 grupos) ---
-    testes_t = []
-    if len(colunas_validas) == 2:
-        var1, var2 = colunas_validas[0], colunas_validas[1]
-        dados1 = df[var1].dropna()
-        dados2 = df[var2].dropna()
-        
-        # Teste t para amostras independentes
-        t_stat, p_t = stats.ttest_ind(dados1, dados2, equal_var=True)
-        
-        # Tamanho do efeito (Cohen's d)
-        n1, n2 = len(dados1), len(dados2)
-        pooled_std = np.sqrt(((n1-1)*dados1.std()**2 + (n2-1)*dados2.std()**2) / (n1+n2-2))
-        cohens_d = abs((dados1.mean() - dados2.mean()) / pooled_std) if pooled_std != 0 else np.nan
-        
-        testes_t.append({
-            'Arquivo': nome_arquivo,
-            'Variável 1': var1,
-            'Variável 2': var2,
-            'Teste': 'Teste t',
-            'Estatística t': t_stat,
-            'gl': n1 + n2 - 2,
-            'p-valor': p_t,
-            "Cohen's d": cohens_d,
-            'Interpretação d': interpretar_cohens_d(cohens_d),
-            'Tipo': 'Teste t'
-        })
-    
     return {
         'estatisticas': estatisticas_detalhadas,
-        'normalidade': testes_normalidade,
         'comparacoes': comparacoes_grupos,
         'posthoc': resultados_posthoc_completo,
-        'correlacoes': matriz_correlacao,
-        'testes_t': testes_t
+        'correlacoes': matriz_correlacao
     }
 
 def interpretar_correlacao(r):
     """Interpreta o valor da correlação"""
+    if pd.isna(r):
+        return "N/A"
+    
     r_abs = abs(r)
     if r_abs >= 0.9:
         return "Muito forte"
@@ -557,19 +449,6 @@ def interpretar_correlacao(r):
     else:
         return "Desprezível"
 
-def interpretar_cohens_d(d):
-    """Interpreta o tamanho do efeito de Cohen"""
-    if pd.isna(d):
-        return "N/A"
-    elif d >= 0.8:
-        return "Grande"
-    elif d >= 0.5:
-        return "Médio"
-    elif d >= 0.2:
-        return "Pequeno"
-    else:
-        return "Muito pequeno"
-
 def criar_excel_por_arquivo(arquivos_resultados):
     """Cria um Excel com uma aba para cada arquivo CSV"""
     
@@ -583,10 +462,7 @@ def criar_excel_por_arquivo(arquivos_resultados):
     ws_indice.append(["RELATÓRIO DE ANÁLISE ESTATÍSTICA"])
     ws_indice.append([f"Gerado em: {datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')}"])
     ws_indice.append([])
-    ws_indice.append(["Arquivo", "Variáveis", "Observações", "ANOVA", "Kruskal-Wallis", "Aba"])
-    
-    # Dicionário para armazenar resumo
-    resumo_arquivos = []
+    ws_indice.append(["Arquivo", "Variáveis", "Observações", "Teste ANOVA", "p-valor ANOVA", "Teste Post-Hoc", "Aba"])
     
     for nome_arquivo, resultados in arquivos_resultados.items():
         # Criar aba para este arquivo
@@ -602,143 +478,93 @@ def criar_excel_por_arquivo(arquivos_resultados):
         ws.append(["1. ESTATÍSTICAS DESCRITIVAS"])
         ws.append(["Variável", "Média", "DP", "Mediana", 
                   "IC 95% Inferior", "IC 95% Superior", "Mínimo", "Máximo", 
-                  "CV (%)", "N"])
+                  "CV (%)"])
         
         for estat in resultados['estatisticas']:
             ws.append([
                 estat['Variável'],
-                estat['Média'],
-                estat['DP'],
-                estat['Mediana'],
-                estat['IC 95% Inferior'],
-                estat['IC 95% Superior'],
-                estat['Mínimo'],
-                estat['Máximo'],
-                estat['CV (%)'],
-                estat['N']
+                formatar_numero_br(estat['Média']),
+                formatar_numero_br(estat['DP']),
+                formatar_numero_br(estat['Mediana']),
+                formatar_numero_br(estat['IC 95% Inferior']),
+                formatar_numero_br(estat['IC 95% Superior']),
+                formatar_numero_br(estat['Mínimo']),
+                formatar_numero_br(estat['Máximo']),
+                formatar_numero_br(estat['CV (%)'], 1) if not pd.isna(estat['CV (%)']) else "N/A"
             ])
         
         ws.append([])
         ws.append([])
         
-        # --- 2. TESTES DE NORMALIDADE ---
-        if resultados['normalidade']:
-            ws.append(["2. TESTES DE NORMALIDADE (Shapiro-Wilk)"])
-            ws.append(["Variável", "Estatística W", "p-valor", "Resultado"])
-            
-            for teste in resultados['normalidade']:
-                ws.append([
-                    teste['Variável'],
-                    teste['Estatística'],
-                    teste['p-valor'],
-                    teste['Resultado']
-                ])
-            
-            ws.append([])
-            ws.append([])
-        
-        # --- 3. COMPARAÇÕES ENTRE GRUPOS ---
+        # --- 2. ANÁLISE DE HOMOGENEIDADE - TESTE DE LEVENE ---
         if resultados['comparacoes']:
-            ws.append(["3. COMPARAÇÕES ENTRE GRUPOS"])
-            
-            for comp in resultados['comparacoes']:
-                if comp['Teste'] == 'Levene':
-                    ws.append(["Teste de Levene"])
-                    ws.append(["Estatística F", "p-valor", "Resultado"])
-                    ws.append([
-                        comp['Estatística'],
-                        comp['p-valor'],
-                        comp['Resultado']
-                    ])
-                    ws.append([])
+            # Encontrar resultado do Levene
+            levene_results = [c for c in resultados['comparacoes'] if c.get('Teste') == 'Levene']
+            if levene_results:
+                ws.append(["2. TESTE DE LEVENE"])
+                ws.append(["Estatística F", "p-valor", "Resultado"])
                 
-                elif comp['Teste'] == 'ANOVA':
-                    ws.append(["ANOVA Paramétrica"])
-                    ws.append(["F", "gl entre", "gl dentro", "p-valor", "η²", "ω²", "Resultado"])
+                for levene in levene_results:
                     ws.append([
-                        comp['Estatística'],
-                        comp['gl entre'],
-                        comp['gl dentro'],
-                        comp['p-valor'],
-                        comp['η² (eta)'],
-                        comp['ω² (omega)'],
-                        comp['Resultado']
+                        formatar_numero_br(levene['Estatística']),
+                        formatar_pvalor_br(levene['p-valor']),
+                        levene['Resultado']
                     ])
-                    ws.append([])
                 
-                elif comp['Teste'] == 'Kruskal-Wallis':
-                    ws.append(["Kruskal-Wallis (Não Paramétrico)"])
-                    ws.append(["H", "gl", "p-valor", "Resultado"])
+                ws.append([])
+                ws.append([])
+                
+                # --- 3. ANOVA ---
+                anova_results = [c for c in resultados['comparacoes'] if 'ANOVA' in c.get('Teste', '')]
+                for anova in anova_results:
+                    if 'Clássica' in anova['Teste']:
+                        ws.append(["3. ANOVA CLÁSSICA"])
+                    elif 'Welch' in anova['Teste']:
+                        ws.append(["3. ANOVA DE WELCH"])
+                    else:
+                        ws.append(["3. ANOVA"])
+                    
+                    ws.append(["F", "gl entre", "gl dentro", "p-valor", "Resultado"])
                     ws.append([
-                        comp['Estatística'],
-                        comp['gl'],
-                        comp['p-valor'],
-                        comp['Resultado']
+                        formatar_numero_br(anova['Estatística']),
+                        formatar_numero_br(anova.get('gl entre', np.nan), 0),
+                        formatar_numero_br(anova.get('gl dentro', np.nan), 0),
+                        formatar_pvalor_br(anova['p-valor']),
+                        anova['Resultado']
                     ])
+                    
                     ws.append([])
-            ws.append([])
+                    ws.append([])
+                    
+                    # --- 4. TESTE POST-HOC ---
+                    if resultados['posthoc']:
+                        posthoc_tipo = 'Tukey HSD' if 'Tukey' in str(resultados['posthoc'][0].get('Tipo', '')) else 'Games-Howell'
+                        ws.append([f"4. TESTE POST-HOC - {posthoc_tipo}"])
+                        
+                        # Filtrar apenas resultados válidos
+                        valid_posthoc = [p for p in resultados['posthoc'] if 'Erro' not in str(p.get('Tipo', ''))]
+                        
+                        if valid_posthoc:
+                            ws.append(["Grupo 1", "Grupo 2", "Diferença", "Erro Padrão", 
+                                      "IC 95% Inferior", "IC 95% Superior", "p-valor", "Significativo"])
+                            
+                            for posthoc in valid_posthoc:
+                                ws.append([
+                                    posthoc['Grupo 1'],
+                                    posthoc['Grupo 2'],
+                                    formatar_numero_br(posthoc.get('Diferença', np.nan)),
+                                    formatar_numero_br(posthoc.get('Erro Padrão', np.nan)),
+                                    formatar_numero_br(posthoc.get('IC 95% Inferior', np.nan)),
+                                    formatar_numero_br(posthoc.get('IC 95% Superior', np.nan)),
+                                    formatar_pvalor_br(posthoc.get('p-valor', np.nan)),
+                                    "SIM" if posthoc.get('Significativo', False) else "NÃO"
+                                ])
+                        else:
+                            ws.append(["Não foram encontradas comparações post-hoc válidas"])
+                        
+                        ws.append([])
+                        ws.append([])
 
-        # --- 4. TESTE TUKEY HSD (TODAS COMPARAÇÕES) ---
-        if resultados['posthoc'] and any(r['Tipo'] in ['Tukey HSD', 'Games-Howell'] for r in resultados['posthoc']):
-            ws.append(["4. TESTE POST-HOC"])
-            
-            # Determinar qual teste foi usado
-            teste_usado = 'Tukey HSD' if any(r['Tipo'] == 'Tukey HSD' for r in resultados['posthoc']) else 'Games-Howell'
-            ws.append([f"Teste utilizado: {teste_usado} (baseado no resultado do teste de Levene)"])
-            
-            ws.append(["Grupo 1", "Grupo 2", "Diferença", "Erro Padrão", 
-                      "IC 95% Inferior", "IC 95% Superior", "p-valor", "Significativo"])
-            
-            posthoc_rows = [r for r in resultados['posthoc'] if r['Tipo'] in ['Tukey HSD', 'Games-Howell']]
-            for posthoc in posthoc_rows:
-                ws.append([
-                    posthoc['Grupo 1'],
-                    posthoc['Grupo 2'],
-                    posthoc.get('Diferença', np.nan),
-                    posthoc.get('Erro Padrão', posthoc.get('Erro Padrão', np.nan)),
-                    posthoc.get('IC 95% Inferior', np.nan),
-                    posthoc.get('IC 95% Superior', np.nan),
-                    posthoc.get('p-valor', posthoc.get('p-valor ajustado', np.nan)),
-                    "SIM" if posthoc.get('Significativo', False) else "NÃO"
-                ])
-            
-            ws.append([])
-            ws.append([])
-        
-        # --- 5. CORRELAÇÕES ---
-        if resultados['correlacoes']:
-            ws.append(["5. MATRIZ DE CORRELAÇÃO (Pearson)"])
-            ws.append(["Variável 1", "Variável 2", "r", "r²", "p-valor", "Interpretação"])
-            
-            for corr in resultados['correlacoes']:
-                ws.append([
-                    corr['Variável 1'],
-                    corr['Variável 2'],
-                    corr['Correlação (r)'],
-                    corr['r²'],
-                    corr['p-valor'],
-                    corr['Interpretação']
-                ])
-            
-            ws.append([])
-            ws.append([])
-        
-        # --- 6. TESTE T (se aplicável) ---
-        if resultados['testes_t']:
-            ws.append(["6. TESTE T PARA AMOSTRAS INDEPENDENTES"])
-            ws.append(["Variável 1", "Variável 2", "t", "gl", "p-valor", "Cohen's d", "Interpretação"])
-            
-            for teste_t in resultados['testes_t']:
-                ws.append([
-                    teste_t['Variável 1'],
-                    teste_t['Variável 2'],
-                    teste_t['Estatística t'],
-                    teste_t['gl'],
-                    teste_t['p-valor'],
-                    teste_t["Cohen's d"],
-                    teste_t['Interpretação d']
-                ])
-        
         # Formatar esta aba
         formatar_aba_excel(ws)
         
@@ -746,194 +572,85 @@ def criar_excel_por_arquivo(arquivos_resultados):
         var_count = len(resultados['estatisticas'])
         obs_count = sum(estat['N'] for estat in resultados['estatisticas'])
         
-        # Determinar teste de variâncias usado
-        teste_variancias = "N/A"
+        # Determinar teste ANOVA usado
+        teste_anova = "N/A"
+        p_anova = "N/A"
+        teste_posthoc = "Nenhum"
+        
         for comp in resultados['comparacoes']:
-            if comp.get('Teste') == 'Levene':
-                if comp.get('Resultado') == 'Homogêneas':
-                    teste_variancias = "Homogêneas (p≥0.05)"
-                else:
-                    teste_variancias = "Heterogêneas (p<0.05)"
+            if 'ANOVA' in comp.get('Teste', ''):
+                teste_anova = comp['Teste']
+                p_anova = formatar_pvalor_br(comp['p-valor'])
                 break
         
-        # Determinar teste post-hoc usado
-        teste_posthoc = "Nenhum"
         if resultados['posthoc']:
-            if any(r['Tipo'] == 'Tukey HSD' for r in resultados['posthoc']):
-                teste_posthoc = "Tukey"
-            elif any(r['Tipo'] == 'Games-Howell' for r in resultados['posthoc']):
+            if any('Tukey' in str(p.get('Tipo', '')) for p in resultados['posthoc']):
+                teste_posthoc = "Tukey HSD"
+            elif any('Games' in str(p.get('Tipo', '')) for p in resultados['posthoc']):
                 teste_posthoc = "Games-Howell"
-        
-        # Adicionar ao índice
-        anova_sig = any(comp.get('Resultado') == 'Significativa' for comp in resultados['comparacoes'] 
-                      if comp.get('Teste') in ['ANOVA Clássica', 'ANOVA de Welch'])
-        kw_sig = any(comp.get('Resultado') == 'Significativa' for comp in resultados['comparacoes'] 
-                    if comp.get('Teste') == 'Kruskal-Wallis')
         
         ws_indice.append([
             nome_arquivo,
             var_count,
             obs_count,
-            "✓" if anova_sig else "✗",
-            "✓" if kw_sig else "✗",
+            teste_anova,
+            p_anova,
             teste_posthoc,
             nome_aba
         ])
-        
-        # Armazenar para resumo geral
-        resumo_arquivos.append({
-            'arquivo': nome_arquivo,
-            'variaveis': var_count,
-            'observacoes': obs_count,
-            'anova_sig': anova_sig,
-            'kw_sig': kw_sig,
-            'teste_variancias': teste_variancias,
-            'teste_posthoc': teste_posthoc
-        })
     
     # Formatar aba de índice
     formatar_aba_excel(ws_indice)
     
-    # Criar aba de resumo consolidado
-    criar_aba_resumo(wb, resumo_arquivos)
-    
-    # Criar aba com todos os resultados posthoc consolidados
-    criar_aba_posthoc_consolidado(wb, arquivos_resultados)
-    
     # Salvar arquivo
-    nome_excel = 'Analise_Estatistica_Individual.xlsx'
+    nome_excel = 'Analise_Estatistica.xlsx'
     wb.save(nome_excel)
     
-    # Aplicar formatação avançada
-    formatar_excel_completo(nome_excel)
-    
-    return nome_excel, resumo_arquivos
-
-def criar_aba_resumo(wb, resumo_arquivos):
-    """Cria aba de resumo geral"""
-    ws_resumo = wb.create_sheet(title="RESUMO GERAL")
-    
-    ws_resumo.append(["RESUMO GERAL DA ANÁLISE"])
-    ws_resumo.append([f"Data: {datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')}"])
-    ws_resumo.append([])
-    
-    # Estatísticas gerais
-    total_arquivos = len(resumo_arquivos)
-    total_variaveis = sum(r['variaveis'] for r in resumo_arquivos)
-    total_observacoes = sum(r['observacoes'] for r in resumo_arquivos)
-    arquivos_anova_sig = sum(1 for r in resumo_arquivos if r['anova_sig'])
-    arquivos_kw_sig = sum(1 for r in resumo_arquivos if r['kw_sig'])
-    
-    ws_resumo.append(["ESTATÍSTICAS GERAIS"])
-    ws_resumo.append(["Total de Arquivos", total_arquivos])
-    ws_resumo.append(["Total de Variáveis", total_variaveis])
-    ws_resumo.append(["Total de Observações", total_observacoes])
-    ws_resumo.append(["Arquivos com ANOVA Significativa", arquivos_anova_sig])
-    ws_resumo.append(["Arquivos com Kruskal-Wallis Significativo", arquivos_kw_sig])
-    ws_resumo.append([])
-    
-    # Tabela detalhada
-    ws_resumo.append(["DETALHAMENTO POR ARQUIVO"])
-    ws_resumo.append(["Arquivo", "Variáveis", "Observações", "ANOVA Sig.", "K-W Sig.", "Teste Post-Hoc"])
-    
-    for resumo in resumo_arquivos:
-        ws_resumo.append([
-            resumo['arquivo'],
-            resumo['variaveis'],
-            resumo['observacoes'],
-            "✓" if resumo['anova_sig'] else "✗",
-            "✓" if resumo['kw_sig'] else "✗",
-            resumo['teste_posthoc']
-        ])
-    
-    ws_resumo.append([])
-    ws_resumo.append(["LEGENDA"])
-    ws_resumo.append(["✓ = Significativo (p < 0.05)", "✗ = Não Significativo"])
-    
-    formatar_aba_excel(ws_resumo)
-
-def criar_aba_posthoc_consolidado(wb, arquivos_resultados):
-    """Cria aba com todos os resultados posthoc consolidados"""
-    ws_posthoc = wb.create_sheet(title="POSTHOC CONSOLIDADO")
-    
-    ws_posthoc.append(["RESULTADOS POST-HOC CONSOLIDADOS (Tukey HSD e Games-Howell)"])
-    ws_posthoc.append([f"Data: {datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')}"])
-    ws_posthoc.append([])
-    ws_posthoc.append(["Arquivo", "Teste", "Grupo 1", "Grupo 2", "Diferença", "Erro Padrão", 
-                      "IC 95% Inferior", "IC 95% Superior", "p-valor", "Significativo"])
-    
-    # Coletar todos os resultados posthoc
-    todos_posthoc = []
-    for nome_arquivo, resultados in arquivos_resultados.items():
-        for posthoc in resultados['posthoc']:
-            if posthoc['Tipo'] in ['Tukey HSD', 'Games-Howell']:
-                posthoc['Arquivo'] = nome_arquivo
-                todos_posthoc.append(posthoc)
-    
-    # Ordenar por significância
-    todos_posthoc.sort(key=lambda x: (not x.get('Significativo', False), 
-                                    x.get('p-valor', 1)))
-    
-    for posthoc in todos_posthoc:
-        ws_posthoc.append([
-            posthoc['Arquivo'],
-            posthoc['Tipo'],
-            posthoc['Grupo 1'],
-            posthoc['Grupo 2'],
-            posthoc.get('Diferença', np.nan),
-            posthoc.get('Erro Padrão', posthoc.get('Erro Padrão', np.nan)),
-            posthoc.get('IC 95% Inferior', np.nan),
-            posthoc.get('IC 95% Superior', np.nan),
-            posthoc.get('p-valor', posthoc.get('p-valor ajustado', np.nan)),
-            "SIM" if posthoc.get('Significativo', False) else "NÃO"
-        ])
-    
-    formatar_aba_excel(ws_posthoc)
+    return nome_excel
 
 def formatar_aba_excel(ws):
-    """Aplica formatação básica a uma aba"""
+    """Aplica formatação personalizada a uma aba - sem sombreamento, sem bordas"""
     # Definir estilos
-    estilo_titulo = Font(name='Calibri', size=14, bold=True, color='FFFFFF')
-    fill_titulo = PatternFill(start_color='366092', end_color='366092', fill_type='solid')
-    
-    estilo_subtitulo = Font(name='Calibri', size=12, bold=True, color='FFFFFF')
-    fill_subtitulo = PatternFill(start_color='4F81BD', end_color='4F81BD', fill_type='solid')
-    
-    estilo_cabecalho = Font(name='Calibri', size=11, bold=True, color='FFFFFF')
-    fill_cabecalho = PatternFill(start_color='95B3D7', end_color='95B3D7', fill_type='solid')
-    
-    estilo_borda = Border(
-        left=Side(style='thin', color='000000'),
-        right=Side(style='thin', color='000000'),
-        top=Side(style='thin', color='000000'),
-        bottom=Side(style='thin', color='000000')
-    )
+    fonte_normal = Font(name='Arial', size=10, color='000000')
+    fonte_negrito = Font(name='Arial', size=10, bold=True, color='000000')
+    fonte_titulo = Font(name='Arial', size=12, bold=True, color='000000')
     
     # Aplicar estilos
     for row in ws.iter_rows():
         for cell in row:
-            cell.border = estilo_borda
+            cell.font = fonte_normal
             
-            # Verificar se é título (linha 1)
-            if cell.row == 1 and cell.value:
-                cell.font = estilo_titulo
-                cell.fill = fill_titulo
+            # Célula vazia ou sem valor
+            if cell.value is None:
+                continue
+            
+            # Título principal (linha 1)
+            if cell.row == 1:
+                cell.font = fonte_titulo
                 cell.alignment = Alignment(horizontal='center', vertical='center')
             
-            # Verificar se é subtítulo (linhas com ESTATÍSTICAS, TESTES, etc.)
-            elif cell.value and any(keyword in str(cell.value) for keyword in 
-                                   ['ESTATÍSTICAS', 'TESTES', 'COMPARAÇÕES', 'TUKEY', 'CORRELAÇÃO', 'RESUMO']):
-                if cell.column == 1:  # Apenas primeira coluna
-                    cell.font = estilo_subtitulo
-                    cell.fill = fill_subtitulo
+            # Títulos das seções (linhas que começam com número)
+            elif isinstance(cell.value, str) and cell.column == 1:
+                if (cell.value.startswith("1.") or 
+                    cell.value.startswith("2.") or 
+                    cell.value.startswith("3.") or 
+                    cell.value.startswith("4.") or 
+                    cell.value.startswith("5.")):
+                    cell.font = fonte_negrito
             
-            # Verificar se é cabeçalho de tabela (primeira linha após título)
-            elif cell.value and cell.row > 1:
-                # Verificar se esta linha tem muitos valores não vazios (provavelmente cabeçalho)
+            # Cabeçalhos de tabela (linha após título da seção)
+            elif cell.row > 1:
+                # Verificar se é cabeçalho de tabela
                 row_vals = [ws.cell(row=cell.row, column=c).value for c in range(1, ws.max_column + 1)]
-                if sum(1 for val in row_vals if val and str(val).strip()) > 3:
-                    cell.font = estilo_cabecalho
-                    cell.fill = fill_cabecalho
+                non_empty = sum(1 for val in row_vals if val and str(val).strip())
+                
+                # Se a linha tem muitos valores (provavelmente é cabeçalho)
+                if non_empty > 2 and cell.row < ws.max_row:
+                    # Verificar se a linha anterior era título de seção
+                    prev_row_val = ws.cell(row=cell.row-1, column=1).value
+                    if prev_row_val and any(prev_row_val.startswith(f"{i}.") for i in range(1, 6)):
+                        cell.font = fonte_negrito
+                        cell.alignment = Alignment(horizontal='center', vertical='center')
     
     # Ajustar largura das colunas
     for column in ws.columns:
@@ -947,41 +664,8 @@ def formatar_aba_excel(ws):
             except:
                 pass
         
-        adjusted_width = min(max_length + 2, 50)
+        adjusted_width = min(max_length + 2, 30)
         ws.column_dimensions[column_letter].width = adjusted_width
-
-def formatar_excel_completo(nome_arquivo):
-    """Aplica formatação avançada ao Excel"""
-    wb = load_workbook(nome_arquivo)
-    
-    for ws in wb.worksheets:
-        # Adicionar formatação condicional para valores significativos
-        if ws.max_row > 10:  # Apenas em abas com dados
-            # Formatar células com ✓ em verde
-            green_fill = PatternFill(start_color='C6EFCE', end_color='C6EFCE', fill_type='solid')
-            green_font = Font(color='006100')
-            
-            # Formatar células com ✗ em vermelho claro
-            red_fill = PatternFill(start_color='FFC7CE', end_color='FFC7CE', fill_type='solid')
-            red_font = Font(color='9C0006')
-            
-            for row in ws.iter_rows(min_row=2, max_row=ws.max_row, min_col=1, max_col=ws.max_column):
-                for cell in row:
-                    if cell.value and isinstance(cell.value, str):
-                        if '✓' in cell.value or 'SIM' in cell.value:
-                            cell.fill = green_fill
-                            cell.font = green_font
-                        elif '✗' in cell.value or 'NÃO' in cell.value or 'Erro' in cell.value:
-                            cell.fill = red_fill
-                            cell.font = red_font
-                        elif 'Significativa' in cell.value:
-                            cell.fill = green_fill
-                            cell.font = green_font
-                        elif 'Não Significativa' in cell.value or 'Não Normal' in cell.value or 'Não Homogêneas' in cell.value:
-                            cell.fill = red_fill
-                            cell.font = red_font
-    
-    wb.save(nome_arquivo)
 
 def processar_todos_csv():
     """Processa todos os arquivos CSV na pasta"""
@@ -1036,29 +720,29 @@ def processar_todos_csv():
             
             # Mostrar resumo rápido
             var_count = len(resultados['estatisticas'])
-            tukey_count = len([r for r in resultados['posthoc'] if r['Tipo'] == 'Tukey HSD'])
-            gh_count = len([r for r in resultados['posthoc'] if r['Tipo'] == 'Games-Howell'])
-            
             print(f"  ✓ Variáveis analisadas: {var_count}")
-            if tukey_count > 0:
-                print(f"  ✓ Comparações Tukey HSD: {tukey_count}")
-            if gh_count > 0:
-                print(f"  ✓ Comparações Games-Howell: {gh_count}")
+            
+            # Mostrar decisão do teste
+            for comp in resultados['comparacoes']:
+                if comp.get('Teste') == 'Levene':
+                    print(f"  ✓ Levene: {comp.get('Resultado', 'N/A')}")
+                    print(f"  ✓ Decisão: {comp.get('Decisão', 'N/A')}")
+                elif 'ANOVA' in comp.get('Teste', ''):
+                    print(f"  ✓ {comp['Teste']}: {comp.get('Resultado', 'N/A')}")
+            
             print()
             
         except Exception as e:
             print(f"  ✗ Erro no processamento: {str(e)[:50]}")
-            import traceback
-            traceback.print_exc()
             print()
             continue
     
     if arquivos_resultados:
         # Criar Excel com todas as abas
-        excel_file, resumo_arquivos = criar_excel_por_arquivo(arquivos_resultados)
+        excel_file = criar_excel_por_arquivo(arquivos_resultados)
         print(f"\n✅ Análise concluída!")
         print(f"📁 Arquivo Excel gerado: {excel_file}")
-        print(f"📊 Total de arquivos analisados: {len(resumo_arquivos)}")
+        print(f"📊 Total de arquivos analisados: {len(arquivos_resultados)}")
         return excel_file
     else:
         print("\n❌ Nenhum arquivo pôde ser analisado.")
@@ -1066,28 +750,32 @@ def processar_todos_csv():
 
 if __name__ == "__main__":
     print("=" * 70)
-    print("📈 SISTEMA DE ANÁLISE ESTATÍSTICA AVANÇADA")
+    print("📈 SISTEMA DE ANÁLISE ESTATÍSTICA")
     print("=" * 70)
-    print("Versão: 1.0")
-    print("\n⚙️  Verificando dependências...")
+    print("FLUXO ESTATÍSTICO:")
+    print("1. ESTATÍSTICAS DESCRITIVAS")
+    print("2. Teste de Levene (Homogeneidade)")
+    print("   - Se p ≥ 0,05 → ANOVA Clássica + Tukey")
+    print("   - Se p < 0,05 → ANOVA Welch + Games-Howell")
+    print("3. Correlação de Pearson")
+    print("\nESTATÍSTICAS PARA N > 100:")
+    print("• Intervalo de Confiança baseado na distribuição normal")
+    print("• Teste de Levene robusto para grandes amostras")
+    print("• ANOVA válida devido ao Teorema do Limite Central")
+    print("-" * 50)
+    
+    print("⚙️  Verificando dependências...")
     
     # Verificar dependências
-    dependencias = {
-        'pandas': '✓',
-        'numpy': '✓',
-        'scipy': '✓',
-        'openpyxl': '✗',
-        'statsmodels': '✗'
-    }
-    
     try:
         import openpyxl
-        dependencias['openpyxl'] = '✓'
+        print("  ✓ Openpyxl: OK")
     except:
-        print("  ⚠️  Openpyxl não instalado. Instale: pip install openpyxl")
+        print("  ✗ Openpyxl não instalado. Instale: pip install openpyxl")
+        exit()
     
     if STATSMODELS_AVAILABLE:
-        dependencias['statsmodels'] = '✓'
+        print("  ✓ Statsmodels: OK (Tukey disponível)")
     else:
         print("  ⚠️  Statsmodels não instalado. Tukey não disponível.")
         print("      Instale: pip install statsmodels")
