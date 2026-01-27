@@ -4,18 +4,6 @@
     "style": {
       "formatter": "black",
       "line_length": 200
-    },
-    "rules": [
-      "Do exactly and only what the user asks.",
-      "If you think additional changes are valuable, suggest them separately instead of modifying code directly.",
-      "Be efficient and objective — no compliments, filler, or small talk.",
-      "Ensure clean code with good practices, following existing project patterns.",
-      "Only add comments when necessary. Prefer self-explanatory code over excessive comments.",
-      "Do not assume context that may have changed outside this conversation. Always adapt to the current code state.",
-      "Keep the project files well structured like it is now.",
-      "The tmp folder is erased before each run.",
-      "Saved output should be categorized and marked with timestamps.",
-      "Some elements should be clearly separated and selected as execution configuration: RL agent, simulation runner, robot model, environment model"
-    ]
+    }
   }
 }
