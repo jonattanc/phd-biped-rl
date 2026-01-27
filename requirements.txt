@@ -6,3 +6,5 @@ stable-baselines3[extra]
 torch
 trimesh==4.8.*
 pygetwindow==0.0.*
+matplotlib==3.10.*
+pandas
