@@ -8,10 +8,10 @@ Treinar 6 agentes especialistas (AE), cada um em um circuito distinto (PR, P<μ,
 # Circuitos de Perturbação
 PR: Piso Regular (baseline)
 PBA: Piso Plano Baixo Atrito (μ=0.1)
-PRA: Rampa Ascendente (4.16°)
-PRD: Rampa Descendente (-4.16°)
+PRA: Rampa Ascendente (8.33°)
+PRD: Rampa Descendente (-8.33°)
 PG: Piso Granulado (areia, 50mm)
-PRB: Piso Regular com Bloqueio Articular (ativações aleatórias de 1s)
+PRB: Piso Regular com Bloqueio Articular (4 ativações aleatórias de 1.5s)
 
 # Installation
 
